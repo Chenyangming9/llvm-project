@@ -70,3 +70,4 @@ pythonenv*
 /lldb/docs/python_api/
 llvm/cmake-build-debug
 llvm/cmake-build-release
+llvm/cmake-build-release-bak

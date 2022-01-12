@@ -55,6 +55,7 @@
 #include "llvm/Transforms/Obfuscation/Split.h"
 #include "llvm/Transforms/Obfuscation/StringObfuscation.h"
 #include "llvm/Transforms/Obfuscation/Substitution.h"
+#include "llvm/Transforms/DcPass2Clang.h"
 
 using namespace llvm;
 
@@ -205,6 +206,9 @@ static cl::opt<bool> StringObf("sobf", cl::init(false),
                                cl::desc("Enable the string obfuscation"));
 
 extern cl::opt<bool> EnableKnowledgeRetention;
+
+static cl::opt<bool> DcPass2Clang("dc2clang", cl::init(false),
+                                  cl::desc("dc test print func names"));
 
 PassManagerBuilder::PassManagerBuilder() {
     OptLevel = 2;
@@ -570,8 +574,25 @@ void PassManagerBuilder::populateModulePassManager(
             MPM.add(createSampleProfileLoaderPass(PGOSampleUse));
     }
 
+
+
     // Allow forcing function attributes as a debugging and tuning aid.
     MPM.add(createForceFunctionAttrsLegacyPass());
+
+    //MPM.add(createDcPass2Clang(DcPass2Clang));
+    if(DcPass2Clang){
+        MPM.add(createDcPass2Clang());
+    }
+
+    MPM.add(createSplitBasicBlock(Split));
+    MPM.add(createBogus(BogusControlFlow));
+    if (Flattening) {
+        // Lower switch
+        MPM.add(createLowerSwitchPass());
+    }
+    MPM.add(createFlattening(Flattening));
+    MPM.add(createSubstitution(Substitution));
+    MPM.add(createStringObfuscation(StringObf));
 
     // If all optimizations are disabled, just run the always-inline pass and,
     // if enabled, the function merging pass.
@@ -979,16 +1000,6 @@ void PassManagerBuilder::addLTOOptimizationPasses(legacy::PassManagerBase &PM) {
 
     // Infer attributes about declarations if possible.
     PM.add(createInferFunctionAttrsLegacyPass());
-
-    PM.add(createSplitBasicBlock(Split));
-    PM.add(createBogus(BogusControlFlow));
-    if (Flattening) {
-        // Lower switch
-        PM.add(createLowerSwitchPass());
-    }
-    PM.add(createFlattening(Flattening));
-    PM.add(createSubstitution(Substitution));
-    PM.add(createStringObfuscation(StringObf));
 
     if (OptLevel > 1) {
         // Split call-site with more constrained arguments.

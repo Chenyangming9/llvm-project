@@ -70,4 +70,6 @@ add_llvm_component_library(LLVMipo
   TransformUtils
   Vectorize
   Instrumentation
+  Obfuscation
+  DcPass2Clang
   )
