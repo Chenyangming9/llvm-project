@@ -1,4 +1,4 @@
-//===-- CommandObjectPlugin.cpp -------------------------------------------===//
+//===-- CommandObjectPlugin.cpp ---------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "CommandObjectPlugin.h"
+#include "lldb/Host/Host.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Interpreter/CommandReturnObject.h"
 
@@ -36,12 +37,13 @@ public:
 
   ~CommandObjectPluginLoad() override = default;
 
-  void
-  HandleArgumentCompletion(CompletionRequest &request,
-                           OptionElementVector &opt_element_vector) override {
+  int HandleArgumentCompletion(
+      CompletionRequest &request,
+      OptionElementVector &opt_element_vector) override {
     CommandCompletions::InvokeCommonCompletionCallbacks(
         GetCommandInterpreter(), CommandCompletions::eDiskFileCompletion,
         request, nullptr);
+    return request.GetNumberOfMatches();
   }
 
 protected:
@@ -50,18 +52,20 @@ protected:
 
     if (argc != 1) {
       result.AppendError("'plugin load' requires one argument");
+      result.SetStatus(eReturnStatusFailed);
       return false;
     }
 
     Status error;
 
-    FileSpec dylib_fspec(command[0].ref());
+    FileSpec dylib_fspec(command[0].ref);
     FileSystem::Instance().Resolve(dylib_fspec);
 
     if (GetDebugger().LoadPlugin(dylib_fspec, error))
       result.SetStatus(eReturnStatusSuccessFinishResult);
     else {
       result.AppendError(error.AsCString());
+      result.SetStatus(eReturnStatusFailed);
     }
 
     return result.Succeeded();

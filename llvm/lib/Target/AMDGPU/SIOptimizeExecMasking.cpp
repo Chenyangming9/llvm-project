@@ -7,10 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
-#include "GCNSubtarget.h"
+#include "AMDGPUSubtarget.h"
+#include "SIInstrInfo.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/InitializePasses.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/Support/Debug.h"
 
 using namespace llvm;
 
@@ -52,7 +56,7 @@ char SIOptimizeExecMasking::ID = 0;
 char &llvm::SIOptimizeExecMaskingID = SIOptimizeExecMasking::ID;
 
 /// If \p MI is a copy from exec, return the register copied to.
-static Register isCopyFromExec(const MachineInstr &MI, const GCNSubtarget &ST) {
+static unsigned isCopyFromExec(const MachineInstr &MI, const GCNSubtarget &ST) {
   switch (MI.getOpcode()) {
   case AMDGPU::COPY:
   case AMDGPU::S_MOV_B64:
@@ -70,7 +74,7 @@ static Register isCopyFromExec(const MachineInstr &MI, const GCNSubtarget &ST) {
 }
 
 /// If \p MI is a copy to exec, return the register copied from.
-static Register isCopyToExec(const MachineInstr &MI, const GCNSubtarget &ST) {
+static unsigned isCopyToExec(const MachineInstr &MI, const GCNSubtarget &ST) {
   switch (MI.getOpcode()) {
   case AMDGPU::COPY:
   case AMDGPU::S_MOV_B64:
@@ -87,12 +91,12 @@ static Register isCopyToExec(const MachineInstr &MI, const GCNSubtarget &ST) {
     llvm_unreachable("should have been replaced");
   }
 
-  return Register();
+  return AMDGPU::NoRegister;
 }
 
 /// If \p MI is a logical operation on an exec value,
 /// return the register copied to.
-static Register isLogicalOpOnExec(const MachineInstr &MI) {
+static unsigned isLogicalOpOnExec(const MachineInstr &MI) {
   switch (MI.getOpcode()) {
   case AMDGPU::S_AND_B64:
   case AMDGPU::S_OR_B64:
@@ -171,17 +175,13 @@ static unsigned getSaveExecOp(unsigned Opc) {
 }
 
 // These are only terminators to get correct spill code placement during
-// register allocation, so turn them back into normal instructions.
+// register allocation, so turn them back into normal instructions. Only one of
+// these is expected per block.
 static bool removeTerminatorBit(const SIInstrInfo &TII, MachineInstr &MI) {
   switch (MI.getOpcode()) {
+  case AMDGPU::S_MOV_B64_term:
   case AMDGPU::S_MOV_B32_term: {
-    bool RegSrc = MI.getOperand(1).isReg();
-    MI.setDesc(TII.get(RegSrc ? AMDGPU::COPY : AMDGPU::S_MOV_B32));
-    return true;
-  }
-  case AMDGPU::S_MOV_B64_term: {
-    bool RegSrc = MI.getOperand(1).isReg();
-    MI.setDesc(TII.get(RegSrc ? AMDGPU::COPY : AMDGPU::S_MOV_B64));
+    MI.setDesc(TII.get(AMDGPU::COPY));
     return true;
   }
   case AMDGPU::S_XOR_B64_term: {
@@ -194,12 +194,6 @@ static bool removeTerminatorBit(const SIInstrInfo &TII, MachineInstr &MI) {
     // This is only a terminator to get the correct spill code placement during
     // register allocation.
     MI.setDesc(TII.get(AMDGPU::S_XOR_B32));
-    return true;
-  }
-  case AMDGPU::S_OR_B64_term: {
-    // This is only a terminator to get the correct spill code placement during
-    // register allocation.
-    MI.setDesc(TII.get(AMDGPU::S_OR_B64));
     return true;
   }
   case AMDGPU::S_OR_B32_term: {
@@ -220,46 +214,24 @@ static bool removeTerminatorBit(const SIInstrInfo &TII, MachineInstr &MI) {
     MI.setDesc(TII.get(AMDGPU::S_ANDN2_B32));
     return true;
   }
-  case AMDGPU::S_AND_B64_term: {
-    // This is only a terminator to get the correct spill code placement during
-    // register allocation.
-    MI.setDesc(TII.get(AMDGPU::S_AND_B64));
-    return true;
-  }
-  case AMDGPU::S_AND_B32_term: {
-    // This is only a terminator to get the correct spill code placement during
-    // register allocation.
-    MI.setDesc(TII.get(AMDGPU::S_AND_B32));
-    return true;
-  }
   default:
     return false;
   }
 }
 
-// Turn all pseudoterminators in the block into their equivalent non-terminator
-// instructions. Returns the reverse iterator to the first non-terminator
-// instruction in the block.
 static MachineBasicBlock::reverse_iterator fixTerminators(
   const SIInstrInfo &TII,
   MachineBasicBlock &MBB) {
   MachineBasicBlock::reverse_iterator I = MBB.rbegin(), E = MBB.rend();
-
-  bool Seen = false;
-  MachineBasicBlock::reverse_iterator FirstNonTerm = I;
   for (; I != E; ++I) {
     if (!I->isTerminator())
-      return Seen ? FirstNonTerm : I;
+      return I;
 
-    if (removeTerminatorBit(TII, *I)) {
-      if (!Seen) {
-        FirstNonTerm = I;
-        Seen = true;
-      }
-    }
+    if (removeTerminatorBit(TII, *I))
+      return I;
   }
 
-  return FirstNonTerm;
+  return E;
 }
 
 static MachineBasicBlock::reverse_iterator findExecCopy(
@@ -272,8 +244,8 @@ static MachineBasicBlock::reverse_iterator findExecCopy(
 
   auto E = MBB.rend();
   for (unsigned N = 0; N <= InstLimit && I != E; ++I, ++N) {
-    Register CopyFromExec = isCopyFromExec(*I, ST);
-    if (CopyFromExec.isValid())
+    unsigned CopyFromExec = isCopyFromExec(*I, ST);
+    if (CopyFromExec != AMDGPU::NoRegister)
       return I;
   }
 
@@ -299,7 +271,7 @@ bool SIOptimizeExecMasking::runOnMachineFunction(MachineFunction &MF) {
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   const SIRegisterInfo *TRI = ST.getRegisterInfo();
   const SIInstrInfo *TII = ST.getInstrInfo();
-  MCRegister Exec = ST.isWave32() ? AMDGPU::EXEC_LO : AMDGPU::EXEC;
+  unsigned Exec = ST.isWave32() ? AMDGPU::EXEC_LO : AMDGPU::EXEC;
 
   // Optimize sequences emitted for control flow lowering. They are originally
   // emitted as the separate operations because spill code may need to be
@@ -318,20 +290,8 @@ bool SIOptimizeExecMasking::runOnMachineFunction(MachineFunction &MF) {
     if (I == E)
       continue;
 
-    // It's possible to see other terminator copies after the exec copy. This
-    // can happen if control flow pseudos had their outputs used by phis.
-    Register CopyToExec;
-
-    unsigned SearchCount = 0;
-    const unsigned SearchLimit = 5;
-    while (I != E && SearchCount++ < SearchLimit) {
-      CopyToExec = isCopyToExec(*I, ST);
-      if (CopyToExec)
-        break;
-      ++I;
-    }
-
-    if (!CopyToExec)
+    unsigned CopyToExec = isCopyToExec(*I, ST);
+    if (CopyToExec == AMDGPU::NoRegister)
       continue;
 
     // Scan backwards to find the def.
@@ -362,7 +322,7 @@ bool SIOptimizeExecMasking::runOnMachineFunction(MachineFunction &MF) {
       continue;
     }
 
-    Register CopyFromExec = CopyFromExecInst->getOperand(0).getReg();
+    unsigned CopyFromExec = CopyFromExecInst->getOperand(0).getReg();
     MachineInstr *SaveExecInst = nullptr;
     SmallVector<MachineInstr *, 4> OtherUseInsts;
 

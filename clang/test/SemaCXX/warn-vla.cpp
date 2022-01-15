@@ -1,27 +1,27 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -Wvla %s
 
-void test1(int n) { // expected-note {{here}}
-  int v[n]; // expected-warning {{variable length array}} expected-note {{parameter 'n'}}
+void test1(int n) {
+  int v[n]; // expected-warning {{variable length array used}}
 }
 
-void test2(int n, int v[n]) { // expected-warning {{variable length array}} expected-note {{parameter 'n'}} expected-note {{here}}
+void test2(int n, int v[n]) { // expected-warning {{variable length array used}}
 }
 
-void test3(int n, int v[n]); // expected-warning {{variable length array}} expected-note {{parameter 'n'}} expected-note {{here}}
+void test3(int n, int v[n]); // expected-warning {{variable length array used}}
 
 template<typename T>
-void test4(int n) { // expected-note {{here}}
-  int v[n]; // expected-warning {{variable length array}} expected-note {{parameter 'n'}}
-}
-
-template<typename T>
-void test5(int n, int v[n]) { // expected-warning {{variable length array}} expected-note {{parameter 'n'}} expected-note {{here}}
+void test4(int n) {
+  int v[n]; // expected-warning {{variable length array used}}
 }
 
 template<typename T>
-void test6(int n, int v[n]); // expected-warning {{variable length array}} expected-note {{parameter 'n'}} expected-note {{here}}
+void test5(int n, int v[n]) { // expected-warning {{variable length array used}}
+}
 
 template<typename T>
-void test7(int n, T v[n]) { // expected-warning {{variable length array}} expected-note {{parameter 'n'}} expected-note {{here}}
+void test6(int n, int v[n]); // expected-warning {{variable length array used}}
+
+template<typename T>
+void test7(int n, T v[n]) { // expected-warning {{variable length array used}}
 }
 

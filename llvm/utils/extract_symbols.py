@@ -42,18 +42,13 @@ def dumpbin_get_symbols(lib):
     process.wait()
 
 def nm_get_symbols(lib):
-    if sys.platform.startswith('aix'):
-        process = subprocess.Popen(['nm','-P','-Xany','-C','-p',lib], bufsize=1,
-                                   stdout=subprocess.PIPE, stdin=subprocess.PIPE,
-                                   universal_newlines=True)
-    else:
-        process = subprocess.Popen(['nm','-P',lib], bufsize=1,
-                                   stdout=subprocess.PIPE, stdin=subprocess.PIPE,
-                                   universal_newlines=True)
+    process = subprocess.Popen(['nm',lib], bufsize=1,
+                               stdout=subprocess.PIPE, stdin=subprocess.PIPE,
+                               universal_newlines=True)
     process.stdin.close()
     for line in process.stdout:
         # Look for external symbols that are defined in some section
-        match = re.match("^(\S+)\s+[BDGRSTVW]\s+\S+\s+\S+$", line)
+        match = re.match("^\S+\s+[BDGRSTVW]\s+(\S+)$", line)
         if match:
             yield match.group(1)
     process.wait()

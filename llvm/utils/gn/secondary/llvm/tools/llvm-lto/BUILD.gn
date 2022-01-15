@@ -11,5 +11,7 @@ executable("llvm-lto") {
     "//llvm/lib/Target",
     "//llvm/lib/Target:TargetsToBuild",
   ]
-  sources = [ "llvm-lto.cpp" ]
+  sources = [
+    "llvm-lto.cpp",
+  ]
 }

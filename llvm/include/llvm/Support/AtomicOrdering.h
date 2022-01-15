@@ -21,7 +21,7 @@
 
 namespace llvm {
 
-/// Atomic ordering for C11 / C++11's memory models.
+/// Atomic ordering for C11 / C++11's memody models.
 ///
 /// These values cannot change because they are shared with standard library
 /// implementations as well as with other compilers.
@@ -53,7 +53,7 @@ template <typename Int> inline bool isValidAtomicOrderingCABI(Int I) {
 ///
 /// not_atomic-->unordered-->relaxed-->release--------------->acq_rel-->seq_cst
 ///                                   \-->consume-->acquire--/
-enum class AtomicOrdering : unsigned {
+enum class AtomicOrdering {
   NotAtomic = 0,
   Unordered = 1,
   Monotonic = 2, // Equivalent to C++'s relaxed.
@@ -61,8 +61,7 @@ enum class AtomicOrdering : unsigned {
   Acquire = 4,
   Release = 5,
   AcquireRelease = 6,
-  SequentiallyConsistent = 7,
-  LAST = SequentiallyConsistent
+  SequentiallyConsistent = 7
 };
 
 bool operator<(AtomicOrdering, AtomicOrdering) = delete;
@@ -87,7 +86,7 @@ inline const char *toIRString(AtomicOrdering ao) {
 
 /// Returns true if ao is stronger than other as defined by the AtomicOrdering
 /// lattice, which is based on C++'s definition.
-inline bool isStrongerThan(AtomicOrdering AO, AtomicOrdering Other) {
+inline bool isStrongerThan(AtomicOrdering ao, AtomicOrdering other) {
   static const bool lookup[8][8] = {
       //               NA     UN     RX     CO     AC     RE     AR     SC
       /* NotAtomic */ {false, false, false, false, false, false, false, false},
@@ -99,10 +98,10 @@ inline bool isStrongerThan(AtomicOrdering AO, AtomicOrdering Other) {
       /* acq_rel   */ { true,  true,  true,  true,  true,  true, false, false},
       /* seq_cst   */ { true,  true,  true,  true,  true,  true,  true, false},
   };
-  return lookup[static_cast<size_t>(AO)][static_cast<size_t>(Other)];
+  return lookup[static_cast<size_t>(ao)][static_cast<size_t>(other)];
 }
 
-inline bool isAtLeastOrStrongerThan(AtomicOrdering AO, AtomicOrdering Other) {
+inline bool isAtLeastOrStrongerThan(AtomicOrdering ao, AtomicOrdering other) {
   static const bool lookup[8][8] = {
       //               NA     UN     RX     CO     AC     RE     AR     SC
       /* NotAtomic */ { true, false, false, false, false, false, false, false},
@@ -114,26 +113,26 @@ inline bool isAtLeastOrStrongerThan(AtomicOrdering AO, AtomicOrdering Other) {
       /* acq_rel   */ { true,  true,  true,  true,  true,  true,  true, false},
       /* seq_cst   */ { true,  true,  true,  true,  true,  true,  true,  true},
   };
-  return lookup[static_cast<size_t>(AO)][static_cast<size_t>(Other)];
+  return lookup[static_cast<size_t>(ao)][static_cast<size_t>(other)];
 }
 
-inline bool isStrongerThanUnordered(AtomicOrdering AO) {
-  return isStrongerThan(AO, AtomicOrdering::Unordered);
+inline bool isStrongerThanUnordered(AtomicOrdering ao) {
+  return isStrongerThan(ao, AtomicOrdering::Unordered);
 }
 
-inline bool isStrongerThanMonotonic(AtomicOrdering AO) {
-  return isStrongerThan(AO, AtomicOrdering::Monotonic);
+inline bool isStrongerThanMonotonic(AtomicOrdering ao) {
+  return isStrongerThan(ao, AtomicOrdering::Monotonic);
 }
 
-inline bool isAcquireOrStronger(AtomicOrdering AO) {
-  return isAtLeastOrStrongerThan(AO, AtomicOrdering::Acquire);
+inline bool isAcquireOrStronger(AtomicOrdering ao) {
+  return isAtLeastOrStrongerThan(ao, AtomicOrdering::Acquire);
 }
 
-inline bool isReleaseOrStronger(AtomicOrdering AO) {
-  return isAtLeastOrStrongerThan(AO, AtomicOrdering::Release);
+inline bool isReleaseOrStronger(AtomicOrdering ao) {
+  return isAtLeastOrStrongerThan(ao, AtomicOrdering::Release);
 }
 
-inline AtomicOrderingCABI toCABI(AtomicOrdering AO) {
+inline AtomicOrderingCABI toCABI(AtomicOrdering ao) {
   static const AtomicOrderingCABI lookup[8] = {
       /* NotAtomic */ AtomicOrderingCABI::relaxed,
       /* Unordered */ AtomicOrderingCABI::relaxed,
@@ -144,7 +143,7 @@ inline AtomicOrderingCABI toCABI(AtomicOrdering AO) {
       /* acq_rel   */ AtomicOrderingCABI::acq_rel,
       /* seq_cst   */ AtomicOrderingCABI::seq_cst,
   };
-  return lookup[static_cast<size_t>(AO)];
+  return lookup[static_cast<size_t>(ao)];
 }
 
 } // end namespace llvm

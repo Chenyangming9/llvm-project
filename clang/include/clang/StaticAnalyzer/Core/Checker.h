@@ -285,9 +285,9 @@ public:
 
 class NewAllocator {
   template <typename CHECKER>
-  static void _checkNewAllocator(void *checker, const CXXAllocatorCall &Call,
-                                 CheckerContext &C) {
-    ((const CHECKER *)checker)->checkNewAllocator(Call, C);
+  static void _checkNewAllocator(void *checker, const CXXNewExpr *NE,
+                                 SVal Target, CheckerContext &C) {
+    ((const CHECKER *)checker)->checkNewAllocator(NE, Target, C);
   }
 
 public:
@@ -490,12 +490,12 @@ public:
 } // end eval namespace
 
 class CheckerBase : public ProgramPointTag {
-  CheckerNameRef Name;
+  CheckName Name;
   friend class ::clang::ento::CheckerManager;
 
 public:
   StringRef getTagDescription() const override;
-  CheckerNameRef getCheckerName() const;
+  CheckName getCheckName() const;
 
   /// See CheckerManager::runCheckersForPrintState.
   virtual void printState(raw_ostream &Out, ProgramStateRef State,

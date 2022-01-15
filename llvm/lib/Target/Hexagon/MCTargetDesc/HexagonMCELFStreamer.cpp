@@ -10,6 +10,7 @@
 // instructions on to the real streamer.
 //
 //===----------------------------------------------------------------------===//
+#define DEBUG_TYPE "hexagonmcelfstreamer"
 
 #include "MCTargetDesc/HexagonMCELFStreamer.h"
 #include "MCTargetDesc/HexagonMCInstrInfo.h"
@@ -36,8 +37,6 @@
 #include <cassert>
 #include <cstdint>
 
-#define DEBUG_TYPE "hexagonmcelfstreamer"
-
 using namespace llvm;
 
 static cl::opt<unsigned> GPSize
@@ -59,7 +58,7 @@ HexagonMCELFStreamer::HexagonMCELFStreamer(
     : MCELFStreamer(Context, std::move(TAB), std::move(OW), std::move(Emitter)),
       MCII(createHexagonMCInstrInfo()) {}
 
-void HexagonMCELFStreamer::emitInstruction(const MCInst &MCB,
+void HexagonMCELFStreamer::EmitInstruction(const MCInst &MCB,
                                            const MCSubtargetInfo &STI) {
   assert(MCB.getOpcode() == Hexagon::BUNDLE);
   assert(HexagonMCInstrInfo::bundleSize(MCB) <= HEXAGON_PACKET_SIZE);
@@ -72,7 +71,7 @@ void HexagonMCELFStreamer::emitInstruction(const MCInst &MCB,
     EmitSymbol(*MCI);
   }
 
-  MCObjectStreamer::emitInstruction(MCB, STI);
+  MCObjectStreamer::EmitInstruction(MCB, STI);
 }
 
 void HexagonMCELFStreamer::EmitSymbol(const MCInst &Inst) {
@@ -111,14 +110,14 @@ void HexagonMCELFStreamer::HexagonMCEmitCommonSymbol(MCSymbol *Symbol,
     SwitchSection(&Section);
 
     if (ELFSymbol->isUndefined()) {
-      emitValueToAlignment(ByteAlignment, 0, 1, 0);
-      emitLabel(Symbol);
-      emitZeros(Size);
+      EmitValueToAlignment(ByteAlignment, 0, 1, 0);
+      EmitLabel(Symbol);
+      EmitZeros(Size);
     }
 
     // Update the maximum alignment of the section if necessary.
-    if (Align(ByteAlignment) > Section.getAlignment())
-      Section.setAlignment(Align(ByteAlignment));
+    if (ByteAlignment > Section.getAlignment())
+      Section.setAlignment(ByteAlignment);
 
     SwitchSection(P.first, P.second);
   } else {

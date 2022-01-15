@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_API_SBFUNCTION_H
-#define LLDB_API_SBFUNCTION_H
+#ifndef LLDB_SBFunction_h_
+#define LLDB_SBFunction_h_
 
 #include "lldb/API/SBAddress.h"
 #include "lldb/API/SBDefines.h"
@@ -74,9 +74,9 @@ private:
 
   SBFunction(lldb_private::Function *lldb_object_ptr);
 
-  lldb_private::Function *m_opaque_ptr = nullptr;
+  lldb_private::Function *m_opaque_ptr;
 };
 
 } // namespace lldb
 
-#endif // LLDB_API_SBFUNCTION_H
+#endif // LLDB_SBFunction_h_

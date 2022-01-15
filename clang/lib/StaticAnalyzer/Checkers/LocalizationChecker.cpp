@@ -120,12 +120,12 @@ class NonLocalizedStringBRVisitor final : public BugReporterVisitor {
 public:
   NonLocalizedStringBRVisitor(const MemRegion *NonLocalizedString)
       : NonLocalizedString(NonLocalizedString), Satisfied(false) {
-    assert(NonLocalizedString);
+        assert(NonLocalizedString);
   }
 
-  PathDiagnosticPieceRef VisitNode(const ExplodedNode *Succ,
-                                   BugReporterContext &BRC,
-                                   PathSensitiveBugReport &BR) override;
+  std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *Succ,
+                                                 BugReporterContext &BRC,
+                                                 BugReport &BR) override;
 
   void Profile(llvm::FoldingSetNodeID &ID) const override {
     ID.Add(NonLocalizedString);
@@ -761,8 +761,8 @@ void NonLocalizedStringChecker::reportLocalizationError(
     return;
 
   // Generate the bug report.
-  auto R = std::make_unique<PathSensitiveBugReport>(
-      *BT, "User-facing text should use localized string macro", ErrNode);
+  std::unique_ptr<BugReport> R(new BugReport(
+      *BT, "User-facing text should use localized string macro", ErrNode));
   if (argumentNumber) {
     R->addRange(M.getArgExpr(argumentNumber - 1)->getSourceRange());
   } else {
@@ -772,7 +772,7 @@ void NonLocalizedStringChecker::reportLocalizationError(
 
   const MemRegion *StringRegion = S.getAsRegion();
   if (StringRegion)
-    R->addVisitor(std::make_unique<NonLocalizedStringBRVisitor>(StringRegion));
+    R->addVisitor(llvm::make_unique<NonLocalizedStringBRVisitor>(StringRegion));
 
   C.emitReport(std::move(R));
 }
@@ -882,17 +882,18 @@ void NonLocalizedStringChecker::checkPreObjCMessage(const ObjCMethodCall &msg,
 
 void NonLocalizedStringChecker::checkPreCall(const CallEvent &Call,
                                              CheckerContext &C) const {
-  const auto *FD = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
-  if (!FD)
-    return;
-
-  auto formals = FD->parameters();
-  for (unsigned i = 0, ei = std::min(static_cast<unsigned>(formals.size()),
-                                     Call.getNumArgs()); i != ei; ++i) {
-    if (isAnnotatedAsTakingLocalized(formals[i])) {
-      auto actual = Call.getArgSVal(i);
-      if (hasNonLocalizedState(actual, C)) {
-        reportLocalizationError(actual, Call, C, i + 1);
+  const Decl *D = Call.getDecl();
+  if (D && isa<FunctionDecl>(D)) {
+    const FunctionDecl *FD = dyn_cast<FunctionDecl>(D);
+    auto formals = FD->parameters();
+    for (unsigned i = 0,
+                  ei = std::min(unsigned(formals.size()), Call.getNumArgs());
+         i != ei; ++i) {
+      if (isAnnotatedAsTakingLocalized(formals[i])) {
+        auto actual = Call.getArgSVal(i);
+        if (hasNonLocalizedState(actual, C)) {
+          reportLocalizationError(actual, Call, C, i + 1);
+        }
       }
     }
   }
@@ -997,10 +998,9 @@ void NonLocalizedStringChecker::checkPostStmt(const ObjCStringLiteral *SL,
   setNonLocalizedState(sv, C);
 }
 
-PathDiagnosticPieceRef
+std::shared_ptr<PathDiagnosticPiece>
 NonLocalizedStringBRVisitor::VisitNode(const ExplodedNode *Succ,
-                                       BugReporterContext &BRC,
-                                       PathSensitiveBugReport &BR) {
+                                       BugReporterContext &BRC, BugReport &BR) {
   if (Satisfied)
     return nullptr;
 
@@ -1077,10 +1077,7 @@ void EmptyLocalizationContextChecker::checkASTDecl(
     AnalysisDeclContext *DCtx = Mgr.getAnalysisDeclContext(M);
 
     const Stmt *Body = M->getBody();
-    if (!Body) {
-      assert(M->isSynthesizedAccessorStub());
-      continue;
-    }
+    assert(Body);
 
     MethodCrawler MC(M->getCanonicalDecl(), BR, this, Mgr, DCtx);
     MC.VisitStmt(Body);
@@ -1141,9 +1138,10 @@ void EmptyLocalizationContextChecker::MethodCrawler::VisitObjCMessageExpr(
     SE = Mgr.getSourceManager().getSLocEntry(SLInfo.first);
   }
 
-  llvm::Optional<llvm::MemoryBufferRef> BF =
-      Mgr.getSourceManager().getBufferOrNone(SLInfo.first, SL);
-  if (!BF)
+  bool Invalid = false;
+  const llvm::MemoryBuffer *BF =
+      Mgr.getSourceManager().getBuffer(SLInfo.first, SL, &Invalid);
+  if (Invalid)
     return;
 
   Lexer TheLexer(SL, LangOptions(), BF->getBufferStart(),
@@ -1402,7 +1400,7 @@ void ento::registerNonLocalizedStringChecker(CheckerManager &mgr) {
           checker, "AggressiveReport");
 }
 
-bool ento::shouldRegisterNonLocalizedStringChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterNonLocalizedStringChecker(const LangOptions &LO) {
   return true;
 }
 
@@ -1411,7 +1409,7 @@ void ento::registerEmptyLocalizationContextChecker(CheckerManager &mgr) {
 }
 
 bool ento::shouldRegisterEmptyLocalizationContextChecker(
-                                                    const CheckerManager &mgr) {
+                                                        const LangOptions &LO) {
   return true;
 }
 
@@ -1419,6 +1417,6 @@ void ento::registerPluralMisuseChecker(CheckerManager &mgr) {
   mgr.registerChecker<PluralMisuseChecker>();
 }
 
-bool ento::shouldRegisterPluralMisuseChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterPluralMisuseChecker(const LangOptions &LO) {
   return true;
 }

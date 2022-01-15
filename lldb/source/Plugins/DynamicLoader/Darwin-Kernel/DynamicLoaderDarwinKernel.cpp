@@ -1,4 +1,5 @@
-//===-- DynamicLoaderDarwinKernel.cpp -------------------------------------===//
+//===-- DynamicLoaderDarwinKernel.cpp -----------------------------*- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -30,12 +31,12 @@
 
 #include "DynamicLoaderDarwinKernel.h"
 
-#include <algorithm>
 #include <memory>
+#include <algorithm>
 
 //#define ENABLE_DEBUG_PRINTF // COMMENT THIS LINE OUT PRIOR TO CHECKIN
 #ifdef ENABLE_DEBUG_PRINTF
-#include <cstdio>
+#include <stdio.h>
 #define DEBUG_PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #else
 #define DEBUG_PRINTF(fmt, ...)
@@ -43,8 +44,6 @@
 
 using namespace lldb;
 using namespace lldb_private;
-
-LLDB_PLUGIN_DEFINE(DynamicLoaderDarwinKernel)
 
 // Progressively greater amounts of scanning we will allow For some targets
 // very early in startup, we can't do any random reads of memory or we can
@@ -62,38 +61,26 @@ enum KASLRScanType {
 };
 
 static constexpr OptionEnumValueElement g_kaslr_kernel_scan_enum_values[] = {
-    {
-        eKASLRScanNone,
-        "none",
-        "Do not read memory looking for a Darwin kernel when attaching.",
-    },
-    {
-        eKASLRScanLowgloAddresses,
-        "basic",
-        "Check for the Darwin kernel's load addr in the lowglo page "
-        "(boot-args=debug) only.",
-    },
-    {
-        eKASLRScanNearPC,
-        "fast-scan",
-        "Scan near the pc value on attach to find the Darwin kernel's load "
-        "address.",
-    },
-    {
-        eKASLRScanExhaustiveScan,
-        "exhaustive-scan",
-        "Scan through the entire potential address range of Darwin kernel "
-        "(only on 32-bit targets).",
-    },
-};
+    {eKASLRScanNone, "none",
+     "Do not read memory looking for a Darwin kernel when attaching."},
+    {eKASLRScanLowgloAddresses, "basic", "Check for the Darwin kernel's load "
+                                         "addr in the lowglo page "
+                                         "(boot-args=debug) only."},
+    {eKASLRScanNearPC, "fast-scan", "Scan near the pc value on attach to find "
+                                    "the Darwin kernel's load address."},
+    {eKASLRScanExhaustiveScan, "exhaustive-scan",
+     "Scan through the entire potential address range of Darwin kernel (only "
+     "on 32-bit targets)."}};
 
-#define LLDB_PROPERTIES_dynamicloaderdarwinkernel
-#include "DynamicLoaderDarwinKernelProperties.inc"
+static constexpr PropertyDefinition g_properties[] = {
+    {"load-kexts", OptionValue::eTypeBoolean, true, true, nullptr, {},
+     "Automatically loads kext images when attaching to a kernel."},
+    {"scan-type", OptionValue::eTypeEnum, true, eKASLRScanNearPC, nullptr,
+     OptionEnumValues(g_kaslr_kernel_scan_enum_values),
+     "Control how many reads lldb will make while searching for a Darwin "
+     "kernel on attach."}};
 
-enum {
-#define LLDB_PROPERTIES_dynamicloaderdarwinkernel
-#include "DynamicLoaderDarwinKernelPropertiesEnum.inc"
-};
+enum { ePropertyLoadKexts, ePropertyScanType };
 
 class DynamicLoaderDarwinKernelProperties : public Properties {
 public:
@@ -104,23 +91,21 @@ public:
 
   DynamicLoaderDarwinKernelProperties() : Properties() {
     m_collection_sp = std::make_shared<OptionValueProperties>(GetSettingName());
-    m_collection_sp->Initialize(g_dynamicloaderdarwinkernel_properties);
+    m_collection_sp->Initialize(g_properties);
   }
 
-  ~DynamicLoaderDarwinKernelProperties() override = default;
+  ~DynamicLoaderDarwinKernelProperties() override {}
 
   bool GetLoadKexts() const {
     const uint32_t idx = ePropertyLoadKexts;
     return m_collection_sp->GetPropertyAtIndexAsBoolean(
-        nullptr, idx,
-        g_dynamicloaderdarwinkernel_properties[idx].default_uint_value != 0);
+        nullptr, idx, g_properties[idx].default_uint_value != 0);
   }
 
   KASLRScanType GetScanType() const {
     const uint32_t idx = ePropertyScanType;
     return (KASLRScanType)m_collection_sp->GetPropertyAtIndexAsEnumeration(
-        nullptr, idx,
-        g_dynamicloaderdarwinkernel_properties[idx].default_uint_value);
+        nullptr, idx, g_properties[idx].default_uint_value);
   }
 };
 
@@ -245,7 +230,6 @@ DynamicLoaderDarwinKernel::SearchForKernelWithDebugHints(Process *process) {
 
   Status read_err;
   addr_t kernel_addresses_64[] = {
-      0xfffffff000002010ULL,
       0xfffffff000004010ULL, // newest arm64 devices
       0xffffff8000004010ULL, // 2014-2015-ish arm64 devices
       0xffffff8000002010ULL, // oldest arm64 devices
@@ -400,7 +384,7 @@ DynamicLoaderDarwinKernel::ReadMachHeader(addr_t addr, Process *process, llvm::M
     *read_error = false;
 
   // Read the mach header and see whether it looks like a kernel
-  if (process->ReadMemory(addr, &header, sizeof(header), error) !=
+  if (process->DoReadMemory (addr, &header, sizeof(header), error) !=
       sizeof(header)) {
     if (read_error)
       *read_error = true;
@@ -446,10 +430,10 @@ DynamicLoaderDarwinKernel::CheckForKernelImageAtAddress(lldb::addr_t addr,
     return UUID();
   }
 
-  LLDB_LOGF(log,
-            "DynamicLoaderDarwinKernel::CheckForKernelImageAtAddress: "
-            "looking for kernel binary at 0x%" PRIx64,
-            addr);
+  if (log)
+    log->Printf("DynamicLoaderDarwinKernel::CheckForKernelImageAtAddress: "
+                "looking for kernel binary at 0x%" PRIx64,
+                addr);
 
   llvm::MachO::mach_header header;
 
@@ -471,11 +455,11 @@ DynamicLoaderDarwinKernel::CheckForKernelImageAtAddress(lldb::addr_t addr,
 
     ObjectFile *exe_objfile = memory_module_sp->GetObjectFile();
     if (exe_objfile == nullptr) {
-      LLDB_LOGF(log,
-                "DynamicLoaderDarwinKernel::CheckForKernelImageAtAddress "
-                "found a binary at 0x%" PRIx64
-                " but could not create an object file from memory",
-                addr);
+      if (log)
+        log->Printf("DynamicLoaderDarwinKernel::CheckForKernelImageAtAddress "
+                    "found a binary at 0x%" PRIx64
+                    " but could not create an object file from memory",
+                    addr);
       return UUID();
     }
 
@@ -494,8 +478,7 @@ DynamicLoaderDarwinKernel::CheckForKernelImageAtAddress(lldb::addr_t addr,
         } else {
           uuid_str = "and no LC_UUID found in load commands ";
         }
-        LLDB_LOGF(
-            log,
+        log->Printf(
             "DynamicLoaderDarwinKernel::CheckForKernelImageAtAddress: "
             "kernel binary image found at 0x%" PRIx64 " with arch '%s' %s",
             addr, kernel_arch.GetTriple().str().c_str(), uuid_str.c_str());
@@ -517,8 +500,12 @@ DynamicLoaderDarwinKernel::DynamicLoaderDarwinKernel(Process *process,
   Status error;
   PlatformSP platform_sp(
       Platform::Create(PlatformDarwinKernel::GetPluginNameStatic(), error));
-  if (platform_sp.get())
+  // Only select the darwin-kernel Platform if we've been asked to load kexts.
+  // It can take some time to scan over all of the kext info.plists and that
+  // shouldn't be done if kext loading is explicitly disabled.
+  if (platform_sp.get() && GetGlobalProperties()->GetLoadKexts()) {
     process->GetTarget().SetPlatform(platform_sp);
+  }
 }
 
 // Destructor
@@ -693,12 +680,11 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::ReadMemoryModule(
   if (m_uuid.IsValid()) {
     if (m_uuid != memory_module_sp->GetUUID()) {
       if (log) {
-        LLDB_LOGF(log,
-                  "KextImageInfo::ReadMemoryModule the kernel said to find "
-                  "uuid %s at 0x%" PRIx64
-                  " but instead we found uuid %s, throwing it away",
-                  m_uuid.GetAsString().c_str(), m_load_address,
-                  memory_module_sp->GetUUID().GetAsString().c_str());
+        log->Printf("KextImageInfo::ReadMemoryModule the kernel said to find "
+                    "uuid %s at 0x%" PRIx64
+                    " but instead we found uuid %s, throwing it away",
+                    m_uuid.GetAsString().c_str(), m_load_address,
+                    memory_module_sp->GetUUID().GetAsString().c_str());
       }
       return false;
     }
@@ -714,9 +700,8 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::ReadMemoryModule(
   if (is_kernel) {
     if (log) {
       // This is unusual and probably not intended
-      LLDB_LOGF(log,
-                "KextImageInfo::ReadMemoryModule read the kernel binary out "
-                "of memory");
+      log->Printf("KextImageInfo::ReadMemoryModule read the kernel binary out "
+                  "of memory");
     }
     if (memory_module_sp->GetArchitecture().IsValid()) {
       process->GetTarget().SetArchitecture(memory_module_sp->GetArchitecture());
@@ -762,18 +747,21 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::LoadImageUsingMemoryModule(
   if (m_uuid.IsValid() == false) {
     if (ReadMemoryModule(process) == false) {
       Log *log(GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
-      LLDB_LOGF(log,
-                "Unable to read '%s' from memory at address 0x%" PRIx64
-                " to get the segment load addresses.",
-                m_name.c_str(), m_load_address);
+      if (log)
+        log->Printf("Unable to read '%s' from memory at address 0x%" PRIx64
+                    " to get the segment load addresses.",
+                    m_name.c_str(), m_load_address);
       return false;
     }
   }
 
   if (IsKernel() && m_uuid.IsValid()) {
-    Stream &s = target.GetDebugger().GetOutputStream();
-    s.Printf("Kernel UUID: %s\n", m_uuid.GetAsString().c_str());
-    s.Printf("Load Address: 0x%" PRIx64 "\n", m_load_address);
+    Stream *s = target.GetDebugger().GetOutputFile().get();
+    if (s) {
+      s->Printf("Kernel UUID: %s\n",
+                m_uuid.GetAsString().c_str());
+      s->Printf("Load Address: 0x%" PRIx64 "\n", m_load_address);
+    }
   }
 
   if (!m_module_sp) {
@@ -789,14 +777,18 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::LoadImageUsingMemoryModule(
       module_spec.GetArchitecture() = target.GetArchitecture();
 
       // For the kernel, we really do need an on-disk file copy of the binary
-      // to do anything useful. This will force a call to dsymForUUID if it
-      // exists, instead of depending on the DebugSymbols preferences being
-      // set.
+      // to do anything useful. This will force a clal to
       if (IsKernel()) {
         if (Symbols::DownloadObjectAndSymbolFile(module_spec, true)) {
           if (FileSystem::Instance().Exists(module_spec.GetFileSpec())) {
             m_module_sp = std::make_shared<Module>(module_spec.GetFileSpec(),
                                                    target.GetArchitecture());
+            if (m_module_sp.get() &&
+                m_module_sp->MatchesModuleSpec(module_spec)) {
+              ModuleList loaded_module_list;
+              loaded_module_list.Append(m_module_sp);
+              target.ModulesDidLoad(loaded_module_list);
+            }
           }
         }
       }
@@ -804,8 +796,6 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::LoadImageUsingMemoryModule(
       // If the current platform is PlatformDarwinKernel, create a ModuleSpec
       // with the filename set to be the bundle ID for this kext, e.g.
       // "com.apple.filesystems.msdosfs", and ask the platform to find it.
-      // PlatformDarwinKernel does a special scan for kexts on the local
-      // system.
       PlatformSP platform_sp(target.GetPlatform());
       if (!m_module_sp && platform_sp) {
         ConstString platform_name(platform_sp->GetPluginName());
@@ -814,7 +804,7 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::LoadImageUsingMemoryModule(
         if (platform_name == g_platform_name) {
           ModuleSpec kext_bundle_module_spec(module_spec);
           FileSpec kext_filespec(m_name.c_str());
-          FileSpecList search_paths = target.GetExecutableSearchPaths();
+	  FileSpecList search_paths = target.GetExecutableSearchPaths();
           kext_bundle_module_spec.GetFileSpec() = kext_filespec;
           platform_sp->GetSharedModule(kext_bundle_module_spec, process,
                                        m_module_sp, &search_paths, nullptr,
@@ -832,9 +822,11 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::LoadImageUsingMemoryModule(
       }
 
       if (IsKernel() && !m_module_sp) {
-        Stream &s = target.GetDebugger().GetOutputStream();
-        s.Printf("WARNING: Unable to locate kernel binary on the debugger "
-                 "system.\n");
+        Stream *s = target.GetDebugger().GetOutputFile().get();
+        if (s) {
+          s->Printf("WARNING: Unable to locate kernel binary on the debugger "
+                    "system.\n");
+        }
       }
     }
 
@@ -843,7 +835,7 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::LoadImageUsingMemoryModule(
     // UUIDs
     if (m_module_sp) {
       if (m_uuid.IsValid() && m_module_sp->GetUUID() == m_uuid) {
-        target.GetImages().AppendIfNeeded(m_module_sp, false);
+        target.GetImages().AppendIfNeeded(m_module_sp);
         if (IsKernel() &&
             target.GetExecutableModulePointer() != m_module_sp.get()) {
           target.SetExecutableModule(m_module_sp, eLoadDependentsNo);
@@ -923,32 +915,25 @@ bool DynamicLoaderDarwinKernel::KextImageInfo::LoadImageUsingMemoryModule(
   bool is_loaded = IsLoaded();
 
   if (is_loaded && m_module_sp && IsKernel()) {
-    Stream &s = target.GetDebugger().GetOutputStream();
-    ObjectFile *kernel_object_file = m_module_sp->GetObjectFile();
-    if (kernel_object_file) {
-      addr_t file_address =
-          kernel_object_file->GetBaseAddress().GetFileAddress();
-      if (m_load_address != LLDB_INVALID_ADDRESS &&
-          file_address != LLDB_INVALID_ADDRESS) {
-        s.Printf("Kernel slid 0x%" PRIx64 " in memory.\n",
-                 m_load_address - file_address);
+    Stream *s = target.GetDebugger().GetOutputFile().get();
+    if (s) {
+      ObjectFile *kernel_object_file = m_module_sp->GetObjectFile();
+      if (kernel_object_file) {
+        addr_t file_address =
+            kernel_object_file->GetBaseAddress().GetFileAddress();
+        if (m_load_address != LLDB_INVALID_ADDRESS &&
+            file_address != LLDB_INVALID_ADDRESS) {
+          s->Printf("Kernel slid 0x%" PRIx64 " in memory.\n",
+                    m_load_address - file_address);
+        }
       }
+      {
+        s->Printf("Loaded kernel file %s\n",
+                  m_module_sp->GetFileSpec().GetPath().c_str());
+      }
+      s->Flush();
     }
-    {
-      s.Printf("Loaded kernel file %s\n",
-               m_module_sp->GetFileSpec().GetPath().c_str());
-    }
-    s.Flush();
   }
-
-  // Notify the target about the module being added;
-  // set breakpoints, load dSYM scripts, etc. as needed.
-  if (is_loaded && m_module_sp) {
-    ModuleList loaded_module_list;
-    loaded_module_list.Append(m_module_sp);
-    target.ModulesDidLoad(loaded_module_list);
-  }
-
   return is_loaded;
 }
 
@@ -1069,7 +1054,8 @@ bool DynamicLoaderDarwinKernel::BreakpointHit(StoppointCallbackContext *context,
                                               user_id_t break_id,
                                               user_id_t break_loc_id) {
   Log *log(GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
-  LLDB_LOGF(log, "DynamicLoaderDarwinKernel::BreakpointHit (...)\n");
+  if (log)
+    log->Printf("DynamicLoaderDarwinKernel::BreakpointHit (...)\n");
 
   ReadAllKextSummaries();
 
@@ -1093,24 +1079,25 @@ bool DynamicLoaderDarwinKernel::ReadKextSummaryHeader() {
     uint8_t buf[24];
     DataExtractor data(buf, sizeof(buf), byte_order, addr_size);
     const size_t count = 4 * sizeof(uint32_t) + addr_size;
-    const bool force_live_memory = true;
+    const bool prefer_file_cache = false;
     if (m_process->GetTarget().ReadPointerFromMemory(
-            m_kext_summary_header_ptr_addr, error,
-            m_kext_summary_header_addr, force_live_memory)) {
+            m_kext_summary_header_ptr_addr, prefer_file_cache, error,
+            m_kext_summary_header_addr)) {
       // We got a valid address for our kext summary header and make sure it
       // isn't NULL
       if (m_kext_summary_header_addr.IsValid() &&
           m_kext_summary_header_addr.GetFileAddress() != 0) {
         const size_t bytes_read = m_process->GetTarget().ReadMemory(
-            m_kext_summary_header_addr, buf, count, error, force_live_memory);
+            m_kext_summary_header_addr, prefer_file_cache, buf, count, error);
         if (bytes_read == count) {
           lldb::offset_t offset = 0;
           m_kext_summary_header.version = data.GetU32(&offset);
           if (m_kext_summary_header.version > 128) {
-            Stream &s = m_process->GetTarget().GetDebugger().GetOutputStream();
-            s.Printf("WARNING: Unable to read kext summary header, got "
-                     "improbable version number %u\n",
-                     m_kext_summary_header.version);
+            Stream *s =
+                m_process->GetTarget().GetDebugger().GetOutputFile().get();
+            s->Printf("WARNING: Unable to read kext summary header, got "
+                      "improbable version number %u\n",
+                      m_kext_summary_header.version);
             // If we get an improbably large version number, we're probably
             // getting bad memory.
             m_kext_summary_header_addr.Clear();
@@ -1121,11 +1108,11 @@ bool DynamicLoaderDarwinKernel::ReadKextSummaryHeader() {
             if (m_kext_summary_header.entry_size > 4096) {
               // If we get an improbably large entry_size, we're probably
               // getting bad memory.
-              Stream &s =
-                  m_process->GetTarget().GetDebugger().GetOutputStream();
-              s.Printf("WARNING: Unable to read kext summary header, got "
-                       "improbable entry_size %u\n",
-                       m_kext_summary_header.entry_size);
+              Stream *s =
+                  m_process->GetTarget().GetDebugger().GetOutputFile().get();
+              s->Printf("WARNING: Unable to read kext summary header, got "
+                        "improbable entry_size %u\n",
+                        m_kext_summary_header.entry_size);
               m_kext_summary_header_addr.Clear();
               return false;
             }
@@ -1139,10 +1126,11 @@ bool DynamicLoaderDarwinKernel::ReadKextSummaryHeader() {
           if (m_kext_summary_header.entry_count > 10000) {
             // If we get an improbably large number of kexts, we're probably
             // getting bad memory.
-            Stream &s = m_process->GetTarget().GetDebugger().GetOutputStream();
-            s.Printf("WARNING: Unable to read kext summary header, got "
-                     "improbable number of kexts %u\n",
-                     m_kext_summary_header.entry_count);
+            Stream *s =
+                m_process->GetTarget().GetDebugger().GetOutputFile().get();
+            s->Printf("WARNING: Unable to read kext summary header, got "
+                      "improbable number of kexts %u\n",
+                      m_kext_summary_header.entry_count);
             m_kext_summary_header_addr.Clear();
             return false;
           }
@@ -1165,9 +1153,9 @@ bool DynamicLoaderDarwinKernel::ParseKextSummaries(
     const Address &kext_summary_addr, uint32_t count) {
   KextImageInfo::collection kext_summaries;
   Log *log(GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
-  LLDB_LOGF(log,
-            "Kexts-changed breakpoint hit, there are %d kexts currently.\n",
-            count);
+  if (log)
+    log->Printf("Kexts-changed breakpoint hit, there are %d kexts currently.\n",
+                count);
 
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
 
@@ -1243,33 +1231,32 @@ bool DynamicLoaderDarwinKernel::ParseKextSummaries(
       number_of_old_kexts_being_removed == 0)
     return true;
 
-  Stream &s = m_process->GetTarget().GetDebugger().GetOutputStream();
-  if (load_kexts) {
+  Stream *s = m_process->GetTarget().GetDebugger().GetOutputFile().get();
+  if (s && load_kexts) {
     if (number_of_new_kexts_being_added > 0 &&
         number_of_old_kexts_being_removed > 0) {
-      s.Printf("Loading %d kext modules and unloading %d kext modules ",
-               number_of_new_kexts_being_added,
-               number_of_old_kexts_being_removed);
+      s->Printf("Loading %d kext modules and unloading %d kext modules ",
+                number_of_new_kexts_being_added,
+                number_of_old_kexts_being_removed);
     } else if (number_of_new_kexts_being_added > 0) {
-      s.Printf("Loading %d kext modules ", number_of_new_kexts_being_added);
+      s->Printf("Loading %d kext modules ", number_of_new_kexts_being_added);
     } else if (number_of_old_kexts_being_removed > 0) {
-      s.Printf("Unloading %d kext modules ", number_of_old_kexts_being_removed);
+      s->Printf("Unloading %d kext modules ",
+                number_of_old_kexts_being_removed);
     }
   }
 
   if (log) {
     if (load_kexts) {
-      LLDB_LOGF(log,
-                "DynamicLoaderDarwinKernel::ParseKextSummaries: %d kexts "
-                "added, %d kexts removed",
-                number_of_new_kexts_being_added,
-                number_of_old_kexts_being_removed);
+      log->Printf("DynamicLoaderDarwinKernel::ParseKextSummaries: %d kexts "
+                  "added, %d kexts removed",
+                  number_of_new_kexts_being_added,
+                  number_of_old_kexts_being_removed);
     } else {
-      LLDB_LOGF(log,
-                "DynamicLoaderDarwinKernel::ParseKextSummaries kext loading is "
-                "disabled, else would have %d kexts added, %d kexts removed",
-                number_of_new_kexts_being_added,
-                number_of_old_kexts_being_removed);
+      log->Printf(
+          "DynamicLoaderDarwinKernel::ParseKextSummaries kext loading is "
+          "disabled, else would have %d kexts added, %d kexts removed",
+          number_of_new_kexts_being_added, number_of_old_kexts_being_removed);
     }
   }
 
@@ -1299,11 +1286,11 @@ bool DynamicLoaderDarwinKernel::ParseKextSummaries(
             m_process->GetStopID() == image_info.GetProcessStopId())
           loaded_module_list.AppendIfNeeded(image_info.GetModule());
 
-        if (load_kexts) {
+        if (s && load_kexts) {
           if (kext_successfully_added)
-            s.Printf(".");
+            s->Printf(".");
           else
-            s.Printf("-");
+            s->Printf("-");
         }
 
         if (log)
@@ -1325,7 +1312,8 @@ bool DynamicLoaderDarwinKernel::ParseKextSummaries(
           if (image_info.GetModule()) {
             unloaded_module_list.AppendIfNeeded(image_info.GetModule());
           }
-          s.Printf(".");
+          if (s)
+            s->Printf(".");
           image_info.Clear();
           // should pull it out of the KextImageInfos vector but that would
           // mutate the list and invalidate the to_be_removed bool vector;
@@ -1336,12 +1324,12 @@ bool DynamicLoaderDarwinKernel::ParseKextSummaries(
     }
   }
 
-  if (load_kexts) {
-    s.Printf(" done.\n");
+  if (s && load_kexts) {
+    s->Printf(" done.\n");
     if (kexts_failed_to_load.size() > 0 && number_of_new_kexts_being_added > 0) {
-      s.Printf("Failed to load %d of %d kexts:\n",
-               (int)kexts_failed_to_load.size(),
-               number_of_new_kexts_being_added);
+      s->Printf("Failed to load %d of %d kexts:\n",
+                (int)kexts_failed_to_load.size(),
+                number_of_new_kexts_being_added);
       // print a sorted list of <kext-name, uuid> kexts which failed to load
       unsigned longest_name = 0;
       std::sort(kexts_failed_to_load.begin(), kexts_failed_to_load.end());
@@ -1353,10 +1341,10 @@ bool DynamicLoaderDarwinKernel::ParseKextSummaries(
         std::string uuid;
         if (ku.second.IsValid())
           uuid = ku.second.GetAsString();
-        s.Printf(" %-*s %s\n", longest_name, ku.first.c_str(), uuid.c_str());
+        s->Printf (" %-*s %s\n", longest_name, ku.first.c_str(), uuid.c_str());
       }
     }
-    s.Flush();
+    s->Flush();
   }
 
   return true;
@@ -1373,9 +1361,10 @@ uint32_t DynamicLoaderDarwinKernel::ReadKextSummaries(
   DataBufferHeap data(count, 0);
   Status error;
 
-  const bool force_live_memory = true;
+  const bool prefer_file_cache = false;
   const size_t bytes_read = m_process->GetTarget().ReadMemory(
-      kext_summary_addr, data.GetBytes(), data.GetByteSize(), error, force_live_memory);
+      kext_summary_addr, prefer_file_cache, data.GetBytes(), data.GetByteSize(),
+      error);
   if (bytes_read == count) {
 
     DataExtractor extractor(data.GetBytes(), data.GetByteSize(), endian,
@@ -1441,12 +1430,11 @@ void DynamicLoaderDarwinKernel::PutToLog(Log *log) const {
     return;
 
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
-  LLDB_LOGF(log,
-            "gLoadedKextSummaries = 0x%16.16" PRIx64
-            " { version=%u, entry_size=%u, entry_count=%u }",
-            m_kext_summary_header_addr.GetFileAddress(),
-            m_kext_summary_header.version, m_kext_summary_header.entry_size,
-            m_kext_summary_header.entry_count);
+  log->Printf("gLoadedKextSummaries = 0x%16.16" PRIx64
+              " { version=%u, entry_size=%u, entry_count=%u }",
+              m_kext_summary_header_addr.GetFileAddress(),
+              m_kext_summary_header.version, m_kext_summary_header.entry_size,
+              m_kext_summary_header.entry_count);
 
   size_t i;
   const size_t count = m_known_kexts.size();
@@ -1521,7 +1509,8 @@ DynamicLoaderDarwinKernel::GetStepThroughTrampolinePlan(Thread &thread,
                                                         bool stop_others) {
   ThreadPlanSP thread_plan_sp;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
-  LLDB_LOGF(log, "Could not find symbol for step through.");
+  if (log)
+    log->Printf("Could not find symbol for step through.");
   return thread_plan_sp;
 }
 

@@ -18,7 +18,6 @@
 #include "llvm/ADT/StringRef.h"
 #include <cstdint>
 #include <cstring>
-#include <utility>
 
 namespace lldb_private {
 class DataExtractor;
@@ -27,8 +26,7 @@ struct RegisterInfo;
 
 class RegisterValue {
 public:
-  // big enough to support up to 256 byte AArch64 SVE
-  enum { kMaxRegisterByteSize = 256u };
+  enum { kMaxRegisterByteSize = 64u };
 
   enum Type {
     eTypeInvalid,
@@ -43,7 +41,8 @@ public:
     eTypeBytes
   };
 
-  RegisterValue() : m_scalar(static_cast<unsigned long>(0)) {}
+  RegisterValue()
+      : m_type(eTypeInvalid), m_scalar(static_cast<unsigned long>(0)) {}
 
   explicit RegisterValue(uint8_t inst) : m_type(eTypeUInt8) { m_scalar = inst; }
 
@@ -60,7 +59,7 @@ public:
   }
 
   explicit RegisterValue(llvm::APInt inst) : m_type(eTypeUInt128) {
-    m_scalar = llvm::APInt(std::move(inst));
+    m_scalar = llvm::APInt(inst);
   }
 
   explicit RegisterValue(float value) : m_type(eTypeFloat) { m_scalar = value; }
@@ -73,9 +72,9 @@ public:
     m_scalar = value;
   }
 
-  explicit RegisterValue(llvm::ArrayRef<uint8_t> bytes,
+  explicit RegisterValue(uint8_t *bytes, size_t length,
                          lldb::ByteOrder byte_order) {
-    SetBytes(bytes.data(), bytes.size(), byte_order);
+    SetBytes(bytes, length, byte_order);
   }
 
   RegisterValue::Type GetType() const { return m_type; }
@@ -169,7 +168,7 @@ public:
 
   void operator=(llvm::APInt uint) {
     m_type = eTypeUInt128;
-    m_scalar = llvm::APInt(std::move(uint));
+    m_scalar = llvm::APInt(uint);
   }
 
   void operator=(float f) {
@@ -209,7 +208,7 @@ public:
 
   void SetUInt128(llvm::APInt uint) {
     m_type = eTypeUInt128;
-    m_scalar = std::move(uint);
+    m_scalar = uint;
   }
 
   bool SetUInt(uint64_t uint, uint32_t byte_size);
@@ -256,14 +255,13 @@ public:
   void Clear();
 
 protected:
-  RegisterValue::Type m_type = eTypeInvalid;
+  RegisterValue::Type m_type;
   Scalar m_scalar;
 
   struct {
-    mutable uint8_t
-        bytes[kMaxRegisterByteSize]; // This must be big enough to hold any
-                                     // register for any supported target.
-    uint16_t length;
+    uint8_t bytes[kMaxRegisterByteSize]; // This must be big enough to hold any
+                                         // register for any supported target.
+    uint8_t length;
     lldb::ByteOrder byte_order;
   } buffer;
 };

@@ -35,19 +35,19 @@ public:
   void MacroExpands(const Token &MacroNameTok,
                     const MacroDefinition &MD, SourceRange Range,
                     const MacroArgs *Args) override {
-    bool HasFile = false;
-    bool HasLine = false;
+    bool has_file = false;
+    bool has_line = false;
     for (const auto& T : MD.getMacroInfo()->tokens()) {
       if (T.is(tok::identifier)) {
         StringRef IdentName = T.getIdentifierInfo()->getName();
         if (IdentName == "__FILE__") {
-          HasFile = true;
+          has_file = true;
         } else if (IdentName == "__LINE__") {
-          HasLine = true;
+          has_line = true;
         }
       }
     }
-    if (HasFile && HasLine) {
+    if (has_file && has_line) {
       SuppressMacroExpansions->insert(Range);
     }
   }
@@ -66,7 +66,7 @@ void LambdaFunctionNameCheck::registerMatchers(MatchFinder *Finder) {
 
 void LambdaFunctionNameCheck::registerPPCallbacks(
     const SourceManager &SM, Preprocessor *PP, Preprocessor *ModuleExpanderPP) {
-  PP->addPPCallbacks(std::make_unique<MacroExpansionsWithFileAndLine>(
+  PP->addPPCallbacks(llvm::make_unique<MacroExpansionsWithFileAndLine>(
       &SuppressMacroExpansions));
 }
 

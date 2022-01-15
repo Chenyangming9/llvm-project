@@ -10,22 +10,25 @@
 
 // iterator insert(const_iterator p, size_type n, charT c);
 
-// UNSUPPORTED: libcxx-no-debug-mode
-
-// ADDITIONAL_COMPILE_FLAGS: -D_LIBCPP_DEBUG=1
+#if _LIBCPP_DEBUG >= 1
+#define _LIBCPP_ASSERT(x, m) ((x) ? (void)0 : std::exit(0))
+#endif
 
 #include <string>
+#include <cassert>
 
 #include "test_macros.h"
-#include "debug_macros.h"
 
 int main(int, char**)
 {
-    std::string s;
-    std::string s2;
-    TEST_LIBCPP_ASSERT_FAILURE(
-        s.insert(s2.begin(), 1, 'a'),
-        "string::insert(iterator, n, value) called with an iterator not referring to this string");
+#if _LIBCPP_DEBUG >= 1
+    {
+        std::string s;
+        std::string s2;
+        s.insert(s2.begin(), 1, 'a');
+        assert(false);
+    }
+#endif
 
-    return 0;
+  return 0;
 }

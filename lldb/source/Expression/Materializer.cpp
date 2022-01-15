@@ -1,4 +1,4 @@
-//===-- Materializer.cpp --------------------------------------------------===//
+//===-- Materializer.cpp ----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,6 +11,7 @@
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/Core/ValueObjectVariable.h"
 #include "lldb/Expression/ExpressionVariable.h"
+#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/Symbol.h"
 #include "lldb/Symbol/Type.h"
 #include "lldb/Symbol/Variable.h"
@@ -45,6 +46,20 @@ uint32_t Materializer::AddStructMember(Entity &entity) {
   return ret;
 }
 
+void Materializer::Entity::SetSizeAndAlignmentFromType(CompilerType &type) {
+  if (llvm::Optional<uint64_t> size = type.GetByteSize(nullptr))
+    m_size = *size;
+
+  uint32_t bit_alignment = type.GetTypeBitAlign();
+
+  if (bit_alignment % 8) {
+    bit_alignment += 8;
+    bit_alignment &= ~((uint32_t)0x111u);
+  }
+
+  m_alignment = bit_alignment / 8;
+}
+
 class EntityPersistentVariable : public Materializer::Entity {
 public:
   EntityPersistentVariable(lldb::ExpressionVariableSP &persistent_variable_sp,
@@ -67,7 +82,7 @@ public:
     const bool zero_memory = false;
 
     lldb::addr_t mem = map.Malloc(
-        m_persistent_variable_sp->GetByteSize().getValueOr(0), 8,
+        m_persistent_variable_sp->GetByteSize(), 8,
         lldb::ePermissionsReadable | lldb::ePermissionsWritable,
         IRMemoryMap::eAllocationPolicyMirror, zero_memory, allocate_error);
 
@@ -79,8 +94,9 @@ public:
       return;
     }
 
-    LLDB_LOGF(log, "Allocated %s (0x%" PRIx64 ") successfully",
-              m_persistent_variable_sp->GetName().GetCString(), mem);
+    if (log)
+      log->Printf("Allocated %s (0x%" PRIx64 ") successfully",
+                  m_persistent_variable_sp->GetName().GetCString(), mem);
 
     // Put the location of the spare memory into the live data of the
     // ValueObject.
@@ -106,8 +122,7 @@ public:
     Status write_error;
 
     map.WriteMemory(mem, m_persistent_variable_sp->GetValueBytes(),
-                    m_persistent_variable_sp->GetByteSize().getValueOr(0),
-                    write_error);
+                    m_persistent_variable_sp->GetByteSize(), write_error);
 
     if (!write_error.Success()) {
       err.SetErrorStringWithFormat(
@@ -143,12 +158,11 @@ public:
     const lldb::addr_t load_addr = process_address + m_offset;
 
     if (log) {
-      LLDB_LOGF(log,
-                "EntityPersistentVariable::Materialize [address = 0x%" PRIx64
-                ", m_name = %s, m_flags = 0x%hx]",
-                (uint64_t)load_addr,
-                m_persistent_variable_sp->GetName().AsCString(),
-                m_persistent_variable_sp->m_flags);
+      log->Printf("EntityPersistentVariable::Materialize [address = 0x%" PRIx64
+                  ", m_name = %s, m_flags = 0x%hx]",
+                  (uint64_t)load_addr,
+                  m_persistent_variable_sp->GetName().AsCString(),
+                  m_persistent_variable_sp->m_flags);
     }
 
     if (m_persistent_variable_sp->m_flags &
@@ -195,12 +209,12 @@ public:
     const lldb::addr_t load_addr = process_address + m_offset;
 
     if (log) {
-      LLDB_LOGF(log,
-                "EntityPersistentVariable::Dematerialize [address = 0x%" PRIx64
-                ", m_name = %s, m_flags = 0x%hx]",
-                (uint64_t)process_address + m_offset,
-                m_persistent_variable_sp->GetName().AsCString(),
-                m_persistent_variable_sp->m_flags);
+      log->Printf(
+          "EntityPersistentVariable::Dematerialize [address = 0x%" PRIx64
+          ", m_name = %s, m_flags = 0x%hx]",
+          (uint64_t)process_address + m_offset,
+          m_persistent_variable_sp->GetName().AsCString(),
+          m_persistent_variable_sp->m_flags);
     }
 
     if (m_delegate) {
@@ -235,7 +249,7 @@ public:
             map.GetBestExecutionContextScope(),
             m_persistent_variable_sp.get()->GetCompilerType(),
             m_persistent_variable_sp->GetName(), location, eAddressTypeLoad,
-            m_persistent_variable_sp->GetByteSize().getValueOr(0));
+            m_persistent_variable_sp->GetByteSize());
 
         if (frame_top != LLDB_INVALID_ADDRESS &&
             frame_bottom != LLDB_INVALID_ADDRESS && location >= frame_bottom &&
@@ -277,11 +291,11 @@ public:
               ExpressionVariable::EVNeedsFreezeDry ||
           m_persistent_variable_sp->m_flags &
               ExpressionVariable::EVKeepInTarget) {
-        LLDB_LOGF(log, "Dematerializing %s from 0x%" PRIx64 " (size = %llu)",
-                  m_persistent_variable_sp->GetName().GetCString(),
-                  (uint64_t)mem,
-                  (unsigned long long)m_persistent_variable_sp->GetByteSize()
-                      .getValueOr(0));
+        if (log)
+          log->Printf(
+              "Dematerializing %s from 0x%" PRIx64 " (size = %llu)",
+              m_persistent_variable_sp->GetName().GetCString(), (uint64_t)mem,
+              (unsigned long long)m_persistent_variable_sp->GetByteSize());
 
         // Read the contents of the spare memory area
 
@@ -290,7 +304,7 @@ public:
         Status read_error;
 
         map.ReadMemory(m_persistent_variable_sp->GetValueBytes(), mem,
-                       m_persistent_variable_sp->GetByteSize().getValueOr(0), read_error);
+                       m_persistent_variable_sp->GetByteSize(), read_error);
 
         if (!read_error.Success()) {
           err.SetErrorStringWithFormat(
@@ -371,11 +385,10 @@ public:
       if (!err.Success()) {
         dump_stream.Printf("  <could not be read>\n");
       } else {
-        DataBufferHeap data(
-            m_persistent_variable_sp->GetByteSize().getValueOr(0), 0);
+        DataBufferHeap data(m_persistent_variable_sp->GetByteSize(), 0);
 
         map.ReadMemory(data.GetBytes(), target_address,
-                       m_persistent_variable_sp->GetByteSize().getValueOr(0), err);
+                       m_persistent_variable_sp->GetByteSize(), err);
 
         if (!err.Success()) {
           dump_stream.Printf("  <could not be read>\n");
@@ -402,8 +415,7 @@ uint32_t Materializer::AddPersistentVariable(
     lldb::ExpressionVariableSP &persistent_variable_sp,
     PersistentVariableDelegate *delegate, Status &err) {
   EntityVector::iterator iter = m_entities.insert(m_entities.end(), EntityUP());
-  *iter = std::make_unique<EntityPersistentVariable>(persistent_variable_sp,
-                                                     delegate);
+  iter->reset(new EntityPersistentVariable(persistent_variable_sp, delegate));
   uint32_t ret = AddStructMember(**iter);
   (*iter)->SetOffset(ret);
   return ret;
@@ -429,10 +441,9 @@ public:
 
     const lldb::addr_t load_addr = process_address + m_offset;
     if (log) {
-      LLDB_LOGF(log,
-                "EntityVariable::Materialize [address = 0x%" PRIx64
-                ", m_variable_sp = %s]",
-                (uint64_t)load_addr, m_variable_sp->GetName().AsCString());
+      log->Printf("EntityVariable::Materialize [address = 0x%" PRIx64
+                  ", m_variable_sp = %s]",
+                  (uint64_t)load_addr, m_variable_sp->GetName().AsCString());
     }
 
     ExecutionContextScope *scope = frame_sp.get();
@@ -517,7 +528,7 @@ public:
           return;
         }
 
-        if (data.GetByteSize() < m_variable_sp->GetType()->GetByteSize(scope)) {
+        if (data.GetByteSize() < m_variable_sp->GetType()->GetByteSize()) {
           if (data.GetByteSize() == 0 &&
               !m_variable_sp->LocationExpression().IsValid()) {
             err.SetErrorStringWithFormat("the variable '%s' has no location, "
@@ -528,21 +539,18 @@ public:
                 "size of variable %s (%" PRIu64
                 ") is larger than the ValueObject's size (%" PRIu64 ")",
                 m_variable_sp->GetName().AsCString(),
-                m_variable_sp->GetType()->GetByteSize(scope).getValueOr(0),
+                m_variable_sp->GetType()->GetByteSize().getValueOr(0),
                 data.GetByteSize());
           }
           return;
         }
 
-        llvm::Optional<size_t> opt_bit_align =
-            m_variable_sp->GetType()->GetLayoutCompilerType().GetTypeBitAlign(scope);
-        if (!opt_bit_align) {
-          err.SetErrorStringWithFormat("can't get the type alignment for %s",
-                                       m_variable_sp->GetName().AsCString());
-          return;
-        }
+        size_t bit_align =
+            m_variable_sp->GetType()->GetLayoutCompilerType().GetTypeBitAlign();
+        size_t byte_align = (bit_align + 7) / 8;
 
-        size_t byte_align = (*opt_bit_align + 7) / 8;
+        if (!byte_align)
+          byte_align = 1;
 
         Status alloc_error;
         const bool zero_memory = false;
@@ -598,10 +606,9 @@ public:
 
     const lldb::addr_t load_addr = process_address + m_offset;
     if (log) {
-      LLDB_LOGF(log,
-                "EntityVariable::Dematerialize [address = 0x%" PRIx64
-                ", m_variable_sp = %s]",
-                (uint64_t)load_addr, m_variable_sp->GetName().AsCString());
+      log->Printf("EntityVariable::Dematerialize [address = 0x%" PRIx64
+                  ", m_variable_sp = %s]",
+                  (uint64_t)load_addr, m_variable_sp->GetName().AsCString());
     }
 
     if (m_temporary_allocation != LLDB_INVALID_ADDRESS) {
@@ -624,8 +631,8 @@ public:
 
       Status extract_error;
 
-      map.GetMemoryData(data, m_temporary_allocation,
-                        valobj_sp->GetByteSize().getValueOr(0), extract_error);
+      map.GetMemoryData(data, m_temporary_allocation, valobj_sp->GetByteSize(),
+                        extract_error);
 
       if (!extract_error.Success()) {
         err.SetErrorStringWithFormat("couldn't get the data for variable %s",
@@ -702,7 +709,7 @@ public:
 
         lldb::offset_t offset;
 
-        ptr = extractor.GetAddress(&offset);
+        ptr = extractor.GetPointer(&offset);
 
         dump_stream.PutChar('\n');
       }
@@ -756,7 +763,7 @@ private:
 
 uint32_t Materializer::AddVariable(lldb::VariableSP &variable_sp, Status &err) {
   EntityVector::iterator iter = m_entities.insert(m_entities.end(), EntityUP());
-  *iter = std::make_unique<EntityVariable>(variable_sp);
+  iter->reset(new EntityVariable(variable_sp));
   uint32_t ret = AddStructMember(**iter);
   (*iter)->SetOffset(ret);
   return ret;
@@ -788,25 +795,18 @@ public:
 
       const lldb::addr_t load_addr = process_address + m_offset;
 
-      ExecutionContextScope *exe_scope = frame_sp.get();
-      if (!exe_scope)
-        exe_scope = map.GetBestExecutionContextScope();
+      ExecutionContextScope *exe_scope = map.GetBestExecutionContextScope();
 
       llvm::Optional<uint64_t> byte_size = m_type.GetByteSize(exe_scope);
       if (!byte_size) {
-        err.SetErrorStringWithFormat("can't get size of type \"%s\"",
-                                     m_type.GetTypeName().AsCString());
+        err.SetErrorString("can't get size of type");
         return;
       }
+      size_t bit_align = m_type.GetTypeBitAlign();
+      size_t byte_align = (bit_align + 7) / 8;
 
-      llvm::Optional<size_t> opt_bit_align = m_type.GetTypeBitAlign(exe_scope);
-      if (!opt_bit_align) {
-        err.SetErrorStringWithFormat("can't get the alignment of type  \"%s\"",
-                                     m_type.GetTypeName().AsCString());
-        return;
-      }
-
-      size_t byte_align = (*opt_bit_align + 7) / 8;
+      if (!byte_align)
+        byte_align = 1;
 
       Status alloc_error;
       const bool zero_memory = true;
@@ -842,9 +842,7 @@ public:
                      lldb::addr_t frame_bottom, Status &err) override {
     err.Clear();
 
-    ExecutionContextScope *exe_scope = frame_sp.get();
-    if (!exe_scope)
-      exe_scope = map.GetBestExecutionContextScope();
+    ExecutionContextScope *exe_scope = map.GetBestExecutionContextScope();
 
     if (!exe_scope) {
       err.SetErrorString("Couldn't dematerialize a result variable: invalid "
@@ -871,18 +869,20 @@ public:
       return;
     }
 
-    auto type_system_or_err =
-        target_sp->GetScratchTypeSystemForLanguage(m_type.GetMinimumLanguage());
+    Status type_system_error;
+    TypeSystem *type_system = target_sp->GetScratchTypeSystemForLanguage(
+        &type_system_error, m_type.GetMinimumLanguage());
 
-    if (auto error = type_system_or_err.takeError()) {
+    if (!type_system) {
       err.SetErrorStringWithFormat("Couldn't dematerialize a result variable: "
                                    "couldn't get the corresponding type "
                                    "system: %s",
-                                   llvm::toString(std::move(error)).c_str());
+                                   type_system_error.AsCString());
       return;
     }
+
     PersistentExpressionState *persistent_state =
-        type_system_or_err->GetPersistentExpressionState();
+        type_system->GetPersistentExpressionState();
 
     if (!persistent_state) {
       err.SetErrorString("Couldn't dematerialize a result variable: "
@@ -891,9 +891,11 @@ public:
       return;
     }
 
-    ConstString name = m_delegate
-                           ? m_delegate->GetName()
-                           : persistent_state->GetNextPersistentVariableName();
+    ConstString name =
+        m_delegate
+            ? m_delegate->GetName()
+            : persistent_state->GetNextPersistentVariableName(
+                  *target_sp, persistent_state->GetPersistentVariablePrefix());
 
     lldb::ExpressionVariableSP ret = persistent_state->CreatePersistentVariable(
         exe_scope, name, m_type, map.GetByteOrder(), map.GetAddressByteSize());
@@ -924,7 +926,7 @@ public:
 
     ret->ValueUpdated();
 
-    const size_t pvar_byte_size = ret->GetByteSize().getValueOr(0);
+    const size_t pvar_byte_size = ret->GetByteSize();
     uint8_t *pvar_data = ret->GetValueBytes();
 
     map.ReadMemory(pvar_data, address, pvar_byte_size, read_error);
@@ -980,7 +982,7 @@ public:
 
         lldb::offset_t offset;
 
-        ptr = extractor.GetAddress(&offset);
+        ptr = extractor.GetPointer(&offset);
 
         dump_stream.PutChar('\n');
       }
@@ -1040,8 +1042,8 @@ uint32_t Materializer::AddResultVariable(const CompilerType &type,
                                          PersistentVariableDelegate *delegate,
                                          Status &err) {
   EntityVector::iterator iter = m_entities.insert(m_entities.end(), EntityUP());
-  *iter = std::make_unique<EntityResultVariable>(type, is_program_reference,
-                                                 keep_in_memory, delegate);
+  iter->reset(new EntityResultVariable(type, is_program_reference,
+                                       keep_in_memory, delegate));
   uint32_t ret = AddStructMember(**iter);
   (*iter)->SetOffset(ret);
   return ret;
@@ -1062,17 +1064,14 @@ public:
     const lldb::addr_t load_addr = process_address + m_offset;
 
     if (log) {
-      LLDB_LOGF(log,
-                "EntitySymbol::Materialize [address = 0x%" PRIx64
-                ", m_symbol = %s]",
-                (uint64_t)load_addr, m_symbol.GetName().AsCString());
+      log->Printf("EntitySymbol::Materialize [address = 0x%" PRIx64
+                  ", m_symbol = %s]",
+                  (uint64_t)load_addr, m_symbol.GetName().AsCString());
     }
 
     const Address sym_address = m_symbol.GetAddress();
 
-    ExecutionContextScope *exe_scope = frame_sp.get();
-    if (!exe_scope)
-      exe_scope = map.GetBestExecutionContextScope();
+    ExecutionContextScope *exe_scope = map.GetBestExecutionContextScope();
 
     lldb::TargetSP target_sp;
 
@@ -1111,10 +1110,9 @@ public:
     const lldb::addr_t load_addr = process_address + m_offset;
 
     if (log) {
-      LLDB_LOGF(log,
-                "EntitySymbol::Dematerialize [address = 0x%" PRIx64
-                ", m_symbol = %s]",
-                (uint64_t)load_addr, m_symbol.GetName().AsCString());
+      log->Printf("EntitySymbol::Dematerialize [address = 0x%" PRIx64
+                  ", m_symbol = %s]",
+                  (uint64_t)load_addr, m_symbol.GetName().AsCString());
     }
 
     // no work needs to be done
@@ -1159,7 +1157,7 @@ private:
 
 uint32_t Materializer::AddSymbol(const Symbol &symbol_sp, Status &err) {
   EntityVector::iterator iter = m_entities.insert(m_entities.end(), EntityUP());
-  *iter = std::make_unique<EntitySymbol>(symbol_sp);
+  iter->reset(new EntitySymbol(symbol_sp));
   uint32_t ret = AddStructMember(**iter);
   (*iter)->SetOffset(ret);
   return ret;
@@ -1181,10 +1179,9 @@ public:
     const lldb::addr_t load_addr = process_address + m_offset;
 
     if (log) {
-      LLDB_LOGF(log,
-                "EntityRegister::Materialize [address = 0x%" PRIx64
-                ", m_register_info = %s]",
-                (uint64_t)load_addr, m_register_info.name);
+      log->Printf("EntityRegister::Materialize [address = 0x%" PRIx64
+                  ", m_register_info = %s]",
+                  (uint64_t)load_addr, m_register_info.name);
     }
 
     RegisterValue reg_value;
@@ -1244,10 +1241,9 @@ public:
     const lldb::addr_t load_addr = process_address + m_offset;
 
     if (log) {
-      LLDB_LOGF(log,
-                "EntityRegister::Dematerialize [address = 0x%" PRIx64
-                ", m_register_info = %s]",
-                (uint64_t)load_addr, m_register_info.name);
+      log->Printf("EntityRegister::Dematerialize [address = 0x%" PRIx64
+                  ", m_register_info = %s]",
+                  (uint64_t)load_addr, m_register_info.name);
     }
 
     Status extract_error;
@@ -1284,8 +1280,9 @@ public:
 
     m_register_contents.reset();
 
-    RegisterValue register_value(register_data.GetData(),
-                                 register_data.GetByteOrder());
+    RegisterValue register_value(
+        const_cast<uint8_t *>(register_data.GetDataStart()),
+        register_data.GetByteSize(), register_data.GetByteOrder());
 
     if (!reg_context_sp->WriteRegister(&m_register_info, register_value)) {
       err.SetErrorStringWithFormat("couldn't write the value of register %s",
@@ -1335,11 +1332,14 @@ private:
 uint32_t Materializer::AddRegister(const RegisterInfo &register_info,
                                    Status &err) {
   EntityVector::iterator iter = m_entities.insert(m_entities.end(), EntityUP());
-  *iter = std::make_unique<EntityRegister>(register_info);
+  iter->reset(new EntityRegister(register_info));
   uint32_t ret = AddStructMember(**iter);
   (*iter)->SetOffset(ret);
   return ret;
 }
+
+Materializer::Materializer()
+    : m_dematerializer_wp(), m_current_offset(0), m_struct_alignment(8) {}
 
 Materializer::~Materializer() {
   DematerializerSP dematerializer_sp = m_dematerializer_wp.lock();
@@ -1352,6 +1352,7 @@ Materializer::DematerializerSP
 Materializer::Materialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
                           lldb::addr_t process_address, Status &error) {
   ExecutionContextScope *exe_scope = frame_sp.get();
+
   if (!exe_scope)
     exe_scope = map.GetBestExecutionContextScope();
 
@@ -1379,8 +1380,7 @@ Materializer::Materialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
 
   if (Log *log =
           lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS)) {
-    LLDB_LOGF(
-        log,
+    log->Printf(
         "Materializer::Materialize (frame_sp = %p, process_address = 0x%" PRIx64
         ") materialized:",
         static_cast<void *>(frame_sp.get()), process_address);
@@ -1402,9 +1402,7 @@ void Materializer::Dematerializer::Dematerialize(Status &error,
   if (thread_sp)
     frame_sp = thread_sp->GetFrameWithStackID(m_stack_id);
 
-  ExecutionContextScope *exe_scope = frame_sp.get();
-  if (!exe_scope)
-    exe_scope = m_map->GetBestExecutionContextScope();
+  ExecutionContextScope *exe_scope = m_map->GetBestExecutionContextScope();
 
   if (!IsValid()) {
     error.SetErrorToGenericError();
@@ -1417,10 +1415,9 @@ void Materializer::Dematerializer::Dematerialize(Status &error,
   } else {
     if (Log *log =
             lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS)) {
-      LLDB_LOGF(log,
-                "Materializer::Dematerialize (frame_sp = %p, process_address "
-                "= 0x%" PRIx64 ") about to dematerialize:",
-                static_cast<void *>(frame_sp.get()), m_process_address);
+      log->Printf("Materializer::Dematerialize (frame_sp = %p, process_address "
+                  "= 0x%" PRIx64 ") about to dematerialize:",
+                  static_cast<void *>(frame_sp.get()), m_process_address);
       for (EntityUP &entity_up : m_materializer->m_entities)
         entity_up->DumpToLog(*m_map, m_process_address, log);
     }

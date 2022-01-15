@@ -50,6 +50,8 @@ public:
 
   bool hasFeature(StringRef Feature) const override;
 
+  bool hasSjLjLowering() const override { return true; }
+
   ArrayRef<Builtin::Info> getTargetBuiltins() const override {
     // FIXME: Implement!
     return None;
@@ -164,21 +166,16 @@ public:
       PtrDiffType = SignedLong;
       break;
     }
-    // Up to 32 bits (V8) or 64 bits (V9) are lock-free atomic, but we're
-    // willing to do atomic ops on up to 64 bits.
+    // Up to 32 bits are lock-free atomic, but we're willing to do atomic ops
+    // on up to 64 bits.
     MaxAtomicPromoteWidth = 64;
-    if (getCPUGeneration(CPU) == CG_V9)
-      MaxAtomicInlineWidth = 64;
-    else
-      // FIXME: This isn't correct for plain V8 which lacks CAS,
-      // only for LEON 3+ and Myriad.
-      MaxAtomicInlineWidth = 32;
+    MaxAtomicInlineWidth = 32;
   }
 
   void getTargetDefines(const LangOptions &Opts,
                         MacroBuilder &Builder) const override;
 
-  bool hasExtIntType() const override { return true; }
+  bool hasSjLjLowering() const override { return true; }
 };
 
 // SPARCV8el is the 32-bit little-endian mode selected by Triple::sparcel.
@@ -211,7 +208,6 @@ public:
     // aligned. The SPARCv9 SCD 2.4.1 says 16-byte aligned.
     LongDoubleWidth = 128;
     LongDoubleAlign = 128;
-    SuitableAlign = 128;
     LongDoubleFormat = &llvm::APFloat::IEEEquad();
     MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 64;
   }
@@ -230,8 +226,6 @@ public:
       return false;
     return getCPUGeneration(CPU) == CG_V9;
   }
-
-  bool hasExtIntType() const override { return true; }
 };
 } // namespace targets
 } // namespace clang

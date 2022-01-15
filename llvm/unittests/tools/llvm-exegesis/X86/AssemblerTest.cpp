@@ -16,11 +16,12 @@ void InitializeX86ExegesisTarget();
 
 namespace {
 
-using X86::EAX;
-using X86::MOV32ri;
-using X86::MOV64ri32;
-using X86::RAX;
-using X86::XOR32rr;
+using llvm::MCInstBuilder;
+using llvm::X86::EAX;
+using llvm::X86::MOV32ri;
+using llvm::X86::MOV64ri32;
+using llvm::X86::RAX;
+using llvm::X86::XOR32rr;
 
 class X86MachineFunctionGeneratorTest
     : public MachineFunctionGeneratorBaseTest {
@@ -38,11 +39,11 @@ protected:
 };
 
 TEST_F(X86MachineFunctionGeneratorTest, DISABLED_JitFunction) {
-  Check({}, MCInst(), 0xc3);
+  Check({}, llvm::MCInst(), 0xc3);
 }
 
 TEST_F(X86MachineFunctionGeneratorTest, DISABLED_JitFunctionXOR32rr_X86) {
-  Check({{EAX, APInt(32, 1)}},
+  Check({{EAX, llvm::APInt(32, 1)}},
         MCInstBuilder(XOR32rr).addReg(EAX).addReg(EAX).addReg(EAX),
         // mov eax, 1
         0xb8, 0x01, 0x00, 0x00, 0x00,

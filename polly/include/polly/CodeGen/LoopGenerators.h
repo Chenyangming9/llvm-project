@@ -18,17 +18,7 @@
 #include "llvm/ADT/SetVector.h"
 
 namespace polly {
-using llvm::AllocaInst;
-using llvm::BasicBlock;
-using llvm::DataLayout;
-using llvm::DominatorTree;
-using llvm::Function;
-using llvm::ICmpInst;
-using llvm::LoopInfo;
-using llvm::Module;
-using llvm::SetVector;
-using llvm::Type;
-using llvm::Value;
+using namespace llvm;
 
 /// General scheduling types of parallel OpenMP for loops.
 /// Initialization values taken from OpenMP's enum in kmp.h: sched_type.
@@ -128,8 +118,6 @@ public:
             Type::getIntNTy(Builder.getContext(), DL.getPointerSizeInBits())),
         M(Builder.GetInsertBlock()->getParent()->getParent()) {}
 
-  virtual ~ParallelLoopGenerator() {}
-
   /// Create a parallel loop.
   ///
   /// This function is the main function to automatically generate a parallel
@@ -198,7 +186,7 @@ public:
   /// @param LB         The lower bound for the loop we parallelize.
   /// @param UB         The upper bound for the loop we parallelize.
   /// @param Stride     The stride of the loop we parallelize.
-  virtual void deployParallelExecution(Function *SubFn, Value *SubFnParam,
+  virtual void deployParallelExecution(Value *SubFn, Value *SubFnParam,
                                        Value *LB, Value *UB, Value *Stride) = 0;
 
   /// Prepare the definition of the parallel subfunction.

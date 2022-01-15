@@ -37,12 +37,8 @@ class TargetSchedModel {
   const TargetInstrInfo *TII = nullptr;
 
   SmallVector<unsigned, 16> ResourceFactors;
-
-  // Multiply to normalize microops to resource units.
-  unsigned MicroOpFactor = 0;
-
-  // Resource units per cycle. Latency normalization factor.
-  unsigned ResourceLCM = 0;
+  unsigned MicroOpFactor; // Multiply to normalize microops to resource units.
+  unsigned ResourceLCM;   // Resource units per cycle. Latency normalization factor.
 
   unsigned computeInstrLatency(const MCSchedClassDesc &SCDesc) const;
 

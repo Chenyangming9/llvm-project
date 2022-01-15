@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Classes and definitions for preprocessor tracking.
+/// \brief Classes and definitions for preprocessor tracking.
 ///
 /// The core definition is the PPCallbacksTracker class, derived from Clang's
 /// PPCallbacks class from the Lex library, which overrides all the callbacks
@@ -41,7 +41,7 @@ struct Argument {
   std::string Value;
 };
 
-/// This class represents one callback call by name and an array
+/// \brief This class represents one callback call by name and an array
 ///   of arguments.
 class CallbackCall {
 public:
@@ -54,7 +54,7 @@ public:
 
 using FilterType = std::vector<std::pair<llvm::GlobPattern, bool>>;
 
-/// This class overrides the PPCallbacks class for tracking preprocessor
+/// \brief This class overrides the PPCallbacks class for tracking preprocessor
 ///   activity by means of its callback functions.
 ///
 /// This object is given a vector for storing the trace information, built up
@@ -68,12 +68,12 @@ using FilterType = std::vector<std::pair<llvm::GlobPattern, bool>>;
 /// callbacks of no interest that might clutter the output.
 ///
 /// Following the constructor and destructor function declarations, the
-/// overridden callback functions are defined.  The remaining functions are
+/// overidden callback functions are defined.  The remaining functions are
 /// helpers for recording the trace data, to reduce the coupling between it
 /// and the recorded data structure.
 class PPCallbacksTracker : public PPCallbacks {
 public:
-  /// Note that all of the arguments are references, and owned
+  /// \brief Note that all of the arguments are references, and owned
   /// by the caller.
   /// \param Filters - List of (Glob,Enabled) pairs used to filter callbacks.
   /// \param CallbackCalls - Trace buffer.
@@ -84,12 +84,12 @@ public:
 
   ~PPCallbacksTracker() override;
 
-  // Overridden callback functions.
+  // Overidden callback functions.
 
   void FileChanged(SourceLocation Loc, PPCallbacks::FileChangeReason Reason,
                    SrcMgr::CharacteristicKind FileType,
                    FileID PrevFID = FileID()) override;
-  void FileSkipped(const FileEntryRef &SkippedFile, const Token &FilenameTok,
+  void FileSkipped(const FileEntry &SkippedFile, const Token &FilenameTok,
                    SrcMgr::CharacteristicKind FileType) override;
   bool FileNotFound(llvm::StringRef FileName,
                     llvm::SmallVectorImpl<char> &RecoveryPath) override;
@@ -149,76 +149,76 @@ public:
 
   // Helper functions.
 
-  /// Start a new callback.
+  /// \brief Start a new callback.
   void beginCallback(const char *Name);
 
-  /// Append a string to the top trace item.
+  /// \brief Append a string to the top trace item.
   void append(const char *Str);
 
-  /// Append a bool argument to the top trace item.
+  /// \brief Append a bool argument to the top trace item.
   void appendArgument(const char *Name, bool Value);
 
-  /// Append an int argument to the top trace item.
+  /// \brief Append an int argument to the top trace item.
   void appendArgument(const char *Name, int Value);
 
-  /// Append a string argument to the top trace item.
+  /// \brief Append a string argument to the top trace item.
   void appendArgument(const char *Name, const char *Value);
 
-  /// Append a string reference object argument to the top trace item.
+  /// \brief Append a string reference object argument to the top trace item.
   void appendArgument(const char *Name, llvm::StringRef Value);
 
-  /// Append a string object argument to the top trace item.
+  /// \brief Append a string object argument to the top trace item.
   void appendArgument(const char *Name, const std::string &Value);
 
-  /// Append a token argument to the top trace item.
+  /// \brief Append a token argument to the top trace item.
   void appendArgument(const char *Name, const Token &Value);
 
-  /// Append an enum argument to the top trace item.
+  /// \brief Append an enum argument to the top trace item.
   void appendArgument(const char *Name, int Value, const char *const Strings[]);
 
-  /// Append a FileID argument to the top trace item.
+  /// \brief Append a FileID argument to the top trace item.
   void appendArgument(const char *Name, FileID Value);
 
-  /// Append a FileEntry argument to the top trace item.
+  /// \brief Append a FileEntry argument to the top trace item.
   void appendArgument(const char *Name, const FileEntry *Value);
 
-  /// Append a SourceLocation argument to the top trace item.
+  /// \brief Append a SourceLocation argument to the top trace item.
   void appendArgument(const char *Name, SourceLocation Value);
 
-  /// Append a SourceRange argument to the top trace item.
+  /// \brief Append a SourceRange argument to the top trace item.
   void appendArgument(const char *Name, SourceRange Value);
 
-  /// Append a CharSourceRange argument to the top trace item.
+  /// \brief Append a CharSourceRange argument to the top trace item.
   void appendArgument(const char *Name, CharSourceRange Value);
 
-  /// Append a ModuleIdPath argument to the top trace item.
+  /// \brief Append a ModuleIdPath argument to the top trace item.
   void appendArgument(const char *Name, ModuleIdPath Value);
 
-  /// Append an IdentifierInfo argument to the top trace item.
+  /// \brief Append an IdentifierInfo argument to the top trace item.
   void appendArgument(const char *Name, const IdentifierInfo *Value);
 
-  /// Append a MacroDirective argument to the top trace item.
+  /// \brief Append a MacroDirective argument to the top trace item.
   void appendArgument(const char *Name, const MacroDirective *Value);
 
-  /// Append a MacroDefinition argument to the top trace item.
+  /// \brief Append a MacroDefinition argument to the top trace item.
   void appendArgument(const char *Name, const MacroDefinition &Value);
 
-  /// Append a MacroArgs argument to the top trace item.
+  /// \brief Append a MacroArgs argument to the top trace item.
   void appendArgument(const char *Name, const MacroArgs *Value);
 
-  /// Append a Module argument to the top trace item.
+  /// \brief Append a Module argument to the top trace item.
   void appendArgument(const char *Name, const Module *Value);
 
-  /// Append a double-quoted argument to the top trace item.
+  /// \brief Append a double-quoted argument to the top trace item.
   void appendQuotedArgument(const char *Name, const std::string &Value);
 
-  /// Append a double-quoted file path argument to the top trace item.
+  /// \brief Append a double-quoted file path argument to the top trace item.
   void appendFilePathArgument(const char *Name, llvm::StringRef Value);
 
-  /// Get the raw source string of the range.
+  /// \brief Get the raw source string of the range.
   llvm::StringRef getSourceString(CharSourceRange Range);
 
-  /// Callback trace information.
+  /// \brief Callback trace information.
   /// We use a reference so the trace will be preserved for the caller
   /// after this object is destructed.
   std::vector<CallbackCall> &CallbackCalls;
@@ -229,7 +229,7 @@ public:
   // Whether a callback should be printed.
   llvm::StringMap<bool> CallbackIsEnabled;
 
-  /// Inhibit trace while this is set.
+  /// \brief Inhibit trace while this is set.
   bool DisableTrace;
 
   Preprocessor &PP;

@@ -38,10 +38,8 @@ do_libunwind="yes"
 do_test_suite="yes"
 do_openmp="yes"
 do_lld="yes"
-do_lldb="yes"
+do_lldb="no"
 do_polly="yes"
-do_mlir="yes"
-do_flang="yes"
 BuildDir="`pwd`"
 ExtraConfigureFlags=""
 ExportBranch=""
@@ -74,8 +72,6 @@ function usage() {
     echo " -lldb                Enable check-out & build lldb"
     echo " -no-lldb             Disable check-out & build lldb (default)"
     echo " -no-polly            Disable check-out & build Polly"
-    echo " -no-mlir             Disable check-out & build MLIR"
-    echo " -no-flang            Disable check-out & build Flang"
 }
 
 while [ $# -gt 0 ]; do
@@ -171,12 +167,6 @@ while [ $# -gt 0 ]; do
         -no-polly )
             do_polly="no"
             ;;
-        -no-mlir )
-            do_mlir="no"
-            ;;
-        -no-flang )
-            do_flang="no"
-            ;;
         -help | --help | -h | --h | -\? )
             usage
             exit 0
@@ -189,11 +179,6 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
-
-if [ $do_mlir = "no" ] && [ $do_flang = "yes" ]; then
-  echo "error: cannot build Flang without MLIR"
-  exit 1
-fi
 
 # Check required arguments.
 if [ -z "$Release" ]; then
@@ -268,12 +253,6 @@ fi
 if [ $do_polly = "yes" ]; then
   projects="$projects polly"
 fi
-if [ $do_mlir = "yes" ]; then
-  projects="$projects mlir"
-fi
-if [ $do_flang = "yes" ]; then
-  projects="$projects flang"
-fi
 
 # Go to the build directory (may be different from CWD)
 BuildDir=$BuildDir/$RC
@@ -310,11 +289,8 @@ function check_program_exists() {
   fi
 }
 
-if [ "$System" != "Darwin" -a "$System" != "SunOS" ]; then
-  check_program_exists 'chrpath'
-fi
-
 if [ "$System" != "Darwin" ]; then
+  check_program_exists 'chrpath'
   check_program_exists 'file'
   check_program_exists 'objdump'
 fi
@@ -460,7 +436,7 @@ function test_llvmCore() {
 # Clean RPATH. Libtool adds the build directory to the search path, which is
 # not necessary --- and even harmful --- for the binary packages we release.
 function clean_RPATH() {
-  if [ "$System" = "Darwin" -o "$System" = "SunOS" ]; then
+  if [ "$System" = "Darwin" ]; then
     return
   fi
   local InstallPath="$1"
@@ -483,9 +459,9 @@ function package_release() {
     cd $BuildDir/Phase3/Release
     mv llvmCore-$Release-$RC.install/usr/local $Package
     if [ "$use_gzip" = "yes" ]; then
-      tar cf - $Package | gzip -9c > $BuildDir/$Package.tar.gz
+      tar cfz $BuildDir/$Package.tar.gz $Package
     else
-      tar cf - $Package | xz -9ce > $BuildDir/$Package.tar.xz
+      tar cfJ $BuildDir/$Package.tar.xz $Package
     fi
     mv $Package llvmCore-$Release-$RC.install/usr/local
     cd $cwd
@@ -497,10 +473,6 @@ function package_release() {
 set -e
 set -o pipefail
 
-# Turn off core dumps, as some test cases can easily fill up even the largest
-# file systems.
-ulimit -c 0
-
 if [ "$do_checkout" = "yes" ]; then
     export_sources
 fi
@@ -508,15 +480,12 @@ fi
 # Setup the test-suite.  Do this early so we can catch failures before
 # we do the full 3 stage build.
 if [ $do_test_suite = "yes" ]; then
-  check_program_exists 'python3'
-  venv="python3 -m venv"
-
   SandboxDir="$BuildDir/sandbox"
   Lit=$SandboxDir/bin/lit
   TestSuiteBuildDir="$BuildDir/test-suite-build"
   TestSuiteSrcDir="$BuildDir/llvm-test-suite"
 
-  ${venv} $SandboxDir
+  virtualenv $SandboxDir
   $SandboxDir/bin/python $BuildDir/llvm-project/llvm/utils/lit/setup.py install
   mkdir -p $TestSuiteBuildDir
 fi

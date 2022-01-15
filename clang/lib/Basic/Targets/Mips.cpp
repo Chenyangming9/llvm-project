@@ -39,15 +39,15 @@ bool MipsTargetInfo::processorSupportsGPR64() const {
       .Case("mips64r5", true)
       .Case("mips64r6", true)
       .Case("octeon", true)
-      .Case("octeon+", true)
       .Default(false);
+  return false;
 }
 
 static constexpr llvm::StringLiteral ValidCPUNames[] = {
     {"mips1"},  {"mips2"},    {"mips3"},    {"mips4"},    {"mips5"},
     {"mips32"}, {"mips32r2"}, {"mips32r3"}, {"mips32r5"}, {"mips32r6"},
     {"mips64"}, {"mips64r2"}, {"mips64r3"}, {"mips64r5"}, {"mips64r6"},
-    {"octeon"}, {"octeon+"}, {"p5600"}};
+    {"octeon"}, {"p5600"}};
 
 bool MipsTargetInfo::isValidCPUName(StringRef Name) const {
   return llvm::find(ValidCPUNames, Name) != std::end(ValidCPUNames);
@@ -61,7 +61,7 @@ void MipsTargetInfo::fillValidCPUList(
 unsigned MipsTargetInfo::getISARev() const {
   return llvm::StringSwitch<unsigned>(getCPU())
              .Cases("mips32", "mips64", 1)
-             .Cases("mips32r2", "mips64r2", "octeon", "octeon+", 2)
+             .Cases("mips32r2", "mips64r2", 2)
              .Cases("mips32r3", "mips64r3", 3)
              .Cases("mips32r5", "mips64r5", 5)
              .Cases("mips32r6", "mips64r6", 6)
@@ -187,13 +187,7 @@ void MipsTargetInfo::getTargetDefines(const LangOptions &Opts,
   Builder.defineMacro("_MIPS_SZLONG", Twine(getLongWidth()));
 
   Builder.defineMacro("_MIPS_ARCH", "\"" + CPU + "\"");
-  if (CPU == "octeon+")
-    Builder.defineMacro("_MIPS_ARCH_OCTEONP");
-  else
-    Builder.defineMacro("_MIPS_ARCH_" + StringRef(CPU).upper());
-
-  if (StringRef(CPU).startswith("octeon"))
-    Builder.defineMacro("__OCTEON__");
+  Builder.defineMacro("_MIPS_ARCH_" + StringRef(CPU).upper());
 
   // These shouldn't be defined for MIPS-I but there's no need to check
   // for that since MIPS-I isn't supported.
@@ -212,10 +206,7 @@ void MipsTargetInfo::getTargetDefines(const LangOptions &Opts,
 bool MipsTargetInfo::hasFeature(StringRef Feature) const {
   return llvm::StringSwitch<bool>(Feature)
       .Case("mips", true)
-      .Case("dsp", DspRev >= DSP1)
-      .Case("dspr2", DspRev >= DSP2)
       .Case("fp64", FPMode == FP64)
-      .Case("msa", HasMSA)
       .Default(false);
 }
 

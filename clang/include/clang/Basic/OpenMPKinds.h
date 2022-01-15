@@ -15,15 +15,44 @@
 #define LLVM_CLANG_BASIC_OPENMPKINDS_H
 
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Frontend/OpenMP/OMPConstants.h"
 
 namespace clang {
 
 /// OpenMP directives.
-using OpenMPDirectiveKind = llvm::omp::Directive;
+enum OpenMPDirectiveKind {
+#define OPENMP_DIRECTIVE(Name) \
+  OMPD_##Name,
+#define OPENMP_DIRECTIVE_EXT(Name, Str) \
+  OMPD_##Name,
+#include "clang/Basic/OpenMPKinds.def"
+  OMPD_unknown
+};
 
 /// OpenMP clauses.
-using OpenMPClauseKind = llvm::omp::Clause;
+enum OpenMPClauseKind {
+#define OPENMP_CLAUSE(Name, Class) \
+  OMPC_##Name,
+#include "clang/Basic/OpenMPKinds.def"
+  OMPC_threadprivate,
+  OMPC_uniform,
+  OMPC_unknown
+};
+
+/// OpenMP attributes for 'default' clause.
+enum OpenMPDefaultClauseKind {
+#define OPENMP_DEFAULT_KIND(Name) \
+  OMPC_DEFAULT_##Name,
+#include "clang/Basic/OpenMPKinds.def"
+  OMPC_DEFAULT_unknown
+};
+
+/// OpenMP attributes for 'proc_bind' clause.
+enum OpenMPProcBindClauseKind {
+#define OPENMP_PROC_BIND_KIND(Name) \
+  OMPC_PROC_BIND_##Name,
+#include "clang/Basic/OpenMPKinds.def"
+  OMPC_PROC_BIND_unknown
+};
 
 /// OpenMP attributes for 'schedule' clause.
 enum OpenMPScheduleClauseKind {
@@ -40,13 +69,6 @@ enum OpenMPScheduleClauseModifier {
   OMPC_SCHEDULE_MODIFIER_##Name,
 #include "clang/Basic/OpenMPKinds.def"
   OMPC_SCHEDULE_MODIFIER_last
-};
-
-/// OpenMP modifiers for 'device' clause.
-enum OpenMPDeviceClauseModifier {
-#define OPENMP_DEVICE_MODIFIER(Name) OMPC_DEVICE_##Name,
-#include "clang/Basic/OpenMPKinds.def"
-  OMPC_DEVICE_unknown,
 };
 
 /// OpenMP attributes for 'depend' clause.
@@ -82,21 +104,21 @@ enum OpenMPMapModifierKind {
   OMPC_MAP_MODIFIER_last
 };
 
-  /// Number of allowed map-type-modifiers.
-static constexpr unsigned NumberOfOMPMapClauseModifiers =
-    OMPC_MAP_MODIFIER_last - OMPC_MAP_MODIFIER_unknown - 1;
-
-/// OpenMP modifier kind for 'to' or 'from' clause.
-enum OpenMPMotionModifierKind {
-#define OPENMP_MOTION_MODIFIER_KIND(Name) \
-  OMPC_MOTION_MODIFIER_##Name,
+/// OpenMP modifier kind for 'to' clause.
+enum OpenMPToModifierKind {
+#define OPENMP_TO_MODIFIER_KIND(Name) \
+  OMPC_TO_MODIFIER_##Name,
 #include "clang/Basic/OpenMPKinds.def"
-  OMPC_MOTION_MODIFIER_unknown
+  OMPC_TO_MODIFIER_unknown
 };
 
-/// Number of allowed motion-modifiers.
-static constexpr unsigned NumberOfOMPMotionModifiers =
-    OMPC_MOTION_MODIFIER_unknown;
+/// OpenMP modifier kind for 'from' clause.
+enum OpenMPFromModifierKind {
+#define OPENMP_FROM_MODIFIER_KIND(Name) \
+  OMPC_FROM_MODIFIER_##Name,
+#include "clang/Basic/OpenMPKinds.def"
+  OMPC_FROM_MODIFIER_unknown
+};
 
 /// OpenMP attributes for 'dist_schedule' clause.
 enum OpenMPDistScheduleClauseKind {
@@ -130,28 +152,6 @@ enum OpenMPAtomicDefaultMemOrderClauseKind {
   OMPC_ATOMIC_DEFAULT_MEM_ORDER_unknown
 };
 
-/// OpenMP device type for 'device_type' clause.
-enum OpenMPDeviceType {
-#define OPENMP_DEVICE_TYPE_KIND(Name) \
-  OMPC_DEVICE_TYPE_##Name,
-#include "clang/Basic/OpenMPKinds.def"
-  OMPC_DEVICE_TYPE_unknown
-};
-
-/// OpenMP 'lastprivate' clause modifier.
-enum OpenMPLastprivateModifier {
-#define OPENMP_LASTPRIVATE_KIND(Name) OMPC_LASTPRIVATE_##Name,
-#include "clang/Basic/OpenMPKinds.def"
-  OMPC_LASTPRIVATE_unknown,
-};
-
-/// OpenMP attributes for 'order' clause.
-enum OpenMPOrderClauseKind {
-#define OPENMP_ORDER_KIND(Name) OMPC_ORDER_##Name,
-#include "clang/Basic/OpenMPKinds.def"
-  OMPC_ORDER_unknown,
-};
-
 /// Scheduling data for loop-based OpenMP directives.
 struct OpenMPScheduleTy final {
   OpenMPScheduleClauseKind Schedule = OMPC_SCHEDULE_unknown;
@@ -159,16 +159,17 @@ struct OpenMPScheduleTy final {
   OpenMPScheduleClauseModifier M2 = OMPC_SCHEDULE_MODIFIER_unknown;
 };
 
-/// OpenMP modifiers for 'reduction' clause.
-enum OpenMPReductionClauseModifier {
-#define OPENMP_REDUCTION_MODIFIER(Name) OMPC_REDUCTION_##Name,
-#include "clang/Basic/OpenMPKinds.def"
-  OMPC_REDUCTION_unknown,
-};
+OpenMPDirectiveKind getOpenMPDirectiveKind(llvm::StringRef Str);
+const char *getOpenMPDirectiveName(OpenMPDirectiveKind Kind);
 
-unsigned getOpenMPSimpleClauseType(OpenMPClauseKind Kind, llvm::StringRef Str,
-                                   unsigned OpenMPVersion);
+OpenMPClauseKind getOpenMPClauseKind(llvm::StringRef Str);
+const char *getOpenMPClauseName(OpenMPClauseKind Kind);
+
+unsigned getOpenMPSimpleClauseType(OpenMPClauseKind Kind, llvm::StringRef Str);
 const char *getOpenMPSimpleClauseTypeName(OpenMPClauseKind Kind, unsigned Type);
+
+bool isAllowedClauseForDirective(OpenMPDirectiveKind DKind,
+                                 OpenMPClauseKind CKind);
 
 /// Checks if the specified directive is a directive with an associated
 /// loop construct.
@@ -258,19 +259,13 @@ bool isOpenMPPrivate(OpenMPClauseKind Kind);
 bool isOpenMPThreadPrivate(OpenMPClauseKind Kind);
 
 /// Checks if the specified directive kind is one of tasking directives - task,
-/// taskloop, taksloop simd, master taskloop, parallel master taskloop, master
-/// taskloop simd, or parallel master taskloop simd.
+/// taskloop or taksloop simd.
 bool isOpenMPTaskingDirective(OpenMPDirectiveKind Kind);
 
 /// Checks if the specified directive kind is one of the composite or combined
 /// directives that need loop bound sharing across loops outlined in nested
 /// functions
 bool isOpenMPLoopBoundSharingDirective(OpenMPDirectiveKind Kind);
-
-/// Checks if the specified directive is a loop transformation directive.
-/// \param DKind Specified directive.
-/// \return True iff the directive is a loop transformation.
-bool isOpenMPLoopTransformationDirective(OpenMPDirectiveKind DKind);
 
 /// Return the captured regions of an OpenMP directive.
 void getOpenMPCaptureRegions(

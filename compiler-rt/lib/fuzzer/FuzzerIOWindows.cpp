@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 // IO functions implementation for Windows.
 //===----------------------------------------------------------------------===//
-#include "FuzzerPlatform.h"
+#include "FuzzerDefs.h"
 #if LIBFUZZER_WINDOWS
 
 #include "FuzzerExtFunctions.h"
@@ -74,18 +74,6 @@ bool IsFile(const std::string &Path) {
 static bool IsDir(DWORD FileAttrs) {
   if (FileAttrs == INVALID_FILE_ATTRIBUTES) return false;
   return FileAttrs & FILE_ATTRIBUTE_DIRECTORY;
-}
-
-bool IsDirectory(const std::string &Path) {
-  DWORD Att = GetFileAttributesA(Path.c_str());
-
-  if (Att == INVALID_FILE_ATTRIBUTES) {
-    Printf("GetFileAttributesA() failed for \"%s\" (Error code: %lu).\n",
-           Path.c_str(), GetLastError());
-    return false;
-  }
-
-  return IsDir(Att);
 }
 
 std::string Basename(const std::string &Path) {
@@ -235,11 +223,19 @@ void RenameFile(const std::string &OldPath, const std::string &NewPath) {
   rename(OldPath.c_str(), NewPath.c_str());
 }
 
+void DiscardOutput(int Fd) {
+  FILE* Temp = fopen("nul", "w");
+  if (!Temp)
+    return;
+  _dup2(_fileno(Temp), Fd);
+  fclose(Temp);
+}
+
 intptr_t GetHandleFromFd(int fd) {
   return _get_osfhandle(fd);
 }
 
-bool IsSeparator(char C) {
+static bool IsSeparator(char C) {
   return C == '\\' || C == '/';
 }
 

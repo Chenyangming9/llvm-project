@@ -4,8 +4,9 @@
 ; format profile.
 ; It is expected to fail on certain architectures as gcc profile reader does
 ; not work.
+; XFAIL: host-byteorder-big-endian
 
-define void @test(void ()*) #0 !dbg !3 {
+define void @test(void ()*) !dbg !3 {
   %2 = alloca void ()*
   store void ()* %0, void ()** %2
   %3 = load void ()*, void ()** %2
@@ -13,8 +14,6 @@ define void @test(void ()*) #0 !dbg !3 {
   call void %3(), !dbg !4
   ret void
 }
-
-attributes #0 = {"use-sample-profile"}
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2}

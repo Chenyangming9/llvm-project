@@ -52,6 +52,9 @@ void ExceptionEscapeCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
 }
 
 void ExceptionEscapeCheck::registerMatchers(MatchFinder *Finder) {
+  if (!getLangOpts().CPlusPlus || !getLangOpts().CXXExceptions)
+    return;
+
   Finder->addMatcher(
       functionDecl(anyOf(isNoThrow(), cxxDestructorDecl(),
                          cxxConstructorDecl(isMoveConstructor()),
@@ -72,8 +75,10 @@ void ExceptionEscapeCheck::check(const MatchFinder::MatchResult &Result) {
       utils::ExceptionAnalyzer::State::Throwing)
     // FIXME: We should provide more information about the exact location where
     // the exception is thrown, maybe the full path the exception escapes
-    diag(MatchedDecl->getLocation(), "an exception may be thrown in function "
-                                     "%0 which should not throw exceptions")
+    diag(MatchedDecl->getLocation(),
+         "an exception may be thrown in function %0 "
+
+         "which should not throw exceptions")
         << MatchedDecl;
 }
 

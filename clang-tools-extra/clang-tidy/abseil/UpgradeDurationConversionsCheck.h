@@ -9,10 +9,9 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_ABSEIL_UPGRADEDURATIONCONVERSIONSCHECK_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_ABSEIL_UPGRADEDURATIONCONVERSIONSCHECK_H
 
-#include "../ClangTidyCheck.h"
+#include "../ClangTidy.h"
 
-#include "clang/Basic/SourceLocation.h"
-#include "llvm/ADT/DenseSet.h"
+#include <unordered_set>
 
 namespace clang {
 namespace tidy {
@@ -26,14 +25,11 @@ class UpgradeDurationConversionsCheck : public ClangTidyCheck {
 public:
   UpgradeDurationConversionsCheck(StringRef Name, ClangTidyContext *Context)
       : ClangTidyCheck(Name, Context) {}
-  bool isLanguageVersionSupported(const LangOptions &LangOpts) const override {
-    return LangOpts.CPlusPlus;
-  }
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 
 private:
-  llvm::DenseSet<SourceLocation> MatchedTemplateLocations;
+  std::unordered_set<unsigned> MatchedTemplateLocations;
 };
 
 } // namespace abseil

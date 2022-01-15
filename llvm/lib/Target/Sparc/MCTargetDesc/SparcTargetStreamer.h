@@ -13,9 +13,6 @@
 #include "llvm/MC/MCStreamer.h"
 
 namespace llvm {
-
-class formatted_raw_ostream;
-
 class SparcTargetStreamer : public MCTargetStreamer {
   virtual void anchor();
 

@@ -8,7 +8,7 @@ struct B2 {
   B2(int); // expected-note {{candidate}}
 };
 
-struct D1 : B1, B2 {
+struct D1 : B1, B2 { // expected-note 2{{candidate}}
   using B1::B1; // expected-note {{inherited here}}
   using B2::B2; // expected-note {{inherited here}}
 };
@@ -35,11 +35,11 @@ namespace default_ctor {
     operator D&&();
   };
 
-  struct A {
-    A();
+  struct A { // expected-note 2{{candidate}}
+    A(); // expected-note {{candidate}}
 
-    A(C &&);
-    C &operator=(C&&);
+    A(C &&); // expected-note {{candidate}}
+    C &operator=(C&&); // expected-note {{candidate}}
 
     A(D &&);
     D &operator=(D&&); // expected-note {{candidate}}
@@ -47,11 +47,11 @@ namespace default_ctor {
     A(convert_to_D2); // expected-note {{candidate}}
   };
 
-  struct B {
-    B();
+  struct B { // expected-note 2{{candidate}}
+    B(); // expected-note {{candidate}}
 
-    B(C &&);
-    C &operator=(C&&);
+    B(C &&); // expected-note {{candidate}}
+    C &operator=(C&&); // expected-note {{candidate}}
 
     B(D &&);
     D &operator=(D&&); // expected-note {{candidate}}
@@ -66,14 +66,14 @@ namespace default_ctor {
     using B::operator=;
   };
   struct D : A, B {
-    using A::A; // expected-note {{inherited here}}
+    using A::A; // expected-note 3{{inherited here}}
     using A::operator=;
-    using B::B; // expected-note {{inherited here}}
+    using B::B; // expected-note 3{{inherited here}}
     using B::operator=;
 
     D(int);
-    D(const D&);
-    D &operator=(const D&);
+    D(const D&); // expected-note {{candidate}}
+    D &operator=(const D&); // expected-note {{candidate}}
   };
 
   C c;
@@ -84,9 +84,7 @@ namespace default_ctor {
 
   // D does not declare D(), D(D&&), nor operator=(D&&), so the base class
   // versions are inherited.
-  // Exception: we implicitly declare a default constructor so that we can
-  // reason about its properties.
-  D d; // ok, implicitly declared
+  D d; // expected-error {{ambiguous}}
   void f(D d) {
     D d2(static_cast<D&&>(d)); // ok, ignores inherited constructors
     D d3(convert_to_D1{}); // ok, ignores inherited constructors

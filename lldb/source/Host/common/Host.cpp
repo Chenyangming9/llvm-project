@@ -1,4 +1,4 @@
-//===-- Host.cpp ----------------------------------------------------------===//
+//===-- Host.cpp ------------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,9 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 // C includes
-#include <cerrno>
-#include <climits>
-#include <cstdlib>
+#include <errno.h>
+#include <limits.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #ifndef _WIN32
 #include <dlfcn.h>
@@ -28,7 +28,7 @@
 
 #if defined(__linux__) || defined(__FreeBSD__) ||                              \
     defined(__FreeBSD_kernel__) || defined(__APPLE__) ||                       \
-    defined(__NetBSD__) || defined(__OpenBSD__) || defined(__EMSCRIPTEN__)
+    defined(__NetBSD__) || defined(__OpenBSD__)
 #if !defined(__ANDROID__)
 #include <spawn.h>
 #endif
@@ -60,7 +60,6 @@
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Predicate.h"
-#include "lldb/Utility/ReproducerProvider.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/lldb-private-forward.h"
 #include "llvm/ADT/SmallString.h"
@@ -165,7 +164,8 @@ static bool CheckForMonitorCancellation() {
 static thread_result_t MonitorChildProcessThreadFunction(void *arg) {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
   const char *function = __FUNCTION__;
-  LLDB_LOGF(log, "%s (arg = %p) thread starting...", function, arg);
+  if (log)
+    log->Printf("%s (arg = %p) thread starting...", function, arg);
 
   MonitorInfo *info = (MonitorInfo *)arg;
 
@@ -193,8 +193,9 @@ static thread_result_t MonitorChildProcessThreadFunction(void *arg) {
 
   while (1) {
     log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS);
-    LLDB_LOGF(log, "%s ::waitpid (pid = %" PRIi32 ", &status, options = %i)...",
-              function, pid, options);
+    if (log)
+      log->Printf("%s ::waitpid (pid = %" PRIi32 ", &status, options = %i)...",
+                  function, pid, options);
 
     if (CheckForMonitorCancellation())
       break;
@@ -244,12 +245,12 @@ static thread_result_t MonitorChildProcessThreadFunction(void *arg) {
 #endif
 
         log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS);
-        LLDB_LOGF(log,
-                  "%s ::waitpid (pid = %" PRIi32
-                  ", &status, options = %i) => pid = %" PRIi32
-                  ", status = 0x%8.8x (%s), signal = %i, exit_state = %i",
-                  function, pid, options, wait_pid, status, status_cstr, signal,
-                  exit_status);
+        if (log)
+          log->Printf("%s ::waitpid (pid = %" PRIi32
+                      ", &status, options = %i) => pid = %" PRIi32
+                      ", status = 0x%8.8x (%s), signal = %i, exit_state = %i",
+                      function, pid, options, wait_pid, status, status_cstr,
+                      signal, exit_status);
 
         if (exited || (signal != 0 && monitor_signals)) {
           bool callback_return = false;
@@ -258,18 +259,18 @@ static thread_result_t MonitorChildProcessThreadFunction(void *arg) {
 
           // If our process exited, then this thread should exit
           if (exited && wait_pid == abs(pid)) {
-            LLDB_LOGF(log,
-                      "%s (arg = %p) thread exiting because pid received "
-                      "exit signal...",
-                      __FUNCTION__, arg);
+            if (log)
+              log->Printf("%s (arg = %p) thread exiting because pid received "
+                          "exit signal...",
+                          __FUNCTION__, arg);
             break;
           }
           // If the callback returns true, it means this process should exit
           if (callback_return) {
-            LLDB_LOGF(log,
-                      "%s (arg = %p) thread exiting because callback "
-                      "returned true...",
-                      __FUNCTION__, arg);
+            if (log)
+              log->Printf("%s (arg = %p) thread exiting because callback "
+                          "returned true...",
+                          __FUNCTION__, arg);
             break;
           }
         }
@@ -278,7 +279,8 @@ static thread_result_t MonitorChildProcessThreadFunction(void *arg) {
   }
 
   log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS);
-  LLDB_LOGF(log, "%s (arg = %p) thread exiting...", __FUNCTION__, arg);
+  if (log)
+    log->Printf("%s (arg = %p) thread exiting...", __FUNCTION__, arg);
 
   return nullptr;
 }
@@ -294,21 +296,10 @@ void Host::SystemLog(SystemLogType type, const char *format, va_list args) {
 #endif
 
 void Host::SystemLog(SystemLogType type, const char *format, ...) {
-  {
-    va_list args;
-    va_start(args, format);
-    SystemLog(type, format, args);
-    va_end(args);
-  }
-
-  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST));
-  if (log && log->GetVerbose()) {
-    // Log to log channel. This allows testcases to grep for log output.
-    va_list args;
-    va_start(args, format);
-    log->VAPrintf(format, args);
-    va_end(args);
-  }
+  va_list args;
+  va_start(args, format);
+  SystemLog(type, format, args);
+  va_end(args);
 }
 
 lldb::pid_t Host::GetCurrentProcessID() { return ::getpid(); }
@@ -442,12 +433,14 @@ bool Host::FindProcessThreads(const lldb::pid_t pid, TidMap &tids_to_attach) {
 #endif
 
 struct ShellInfo {
-  ShellInfo() : process_reaped(false) {}
+  ShellInfo()
+      : process_reaped(false), pid(LLDB_INVALID_PROCESS_ID), signo(-1),
+        status(-1) {}
 
   lldb_private::Predicate<bool> process_reaped;
-  lldb::pid_t pid = LLDB_INVALID_PROCESS_ID;
-  int signo = -1;
-  int status = -1;
+  lldb::pid_t pid;
+  int signo;
+  int status;
 };
 
 static bool
@@ -465,24 +458,14 @@ MonitorShellCommand(std::shared_ptr<ShellInfo> shell_info, lldb::pid_t pid,
   return true;
 }
 
-Status Host::RunShellCommand(llvm::StringRef command,
-                             const FileSpec &working_dir, int *status_ptr,
-                             int *signo_ptr, std::string *command_output_ptr,
+Status Host::RunShellCommand(const char *command, const FileSpec &working_dir,
+                             int *status_ptr, int *signo_ptr,
+                             std::string *command_output_ptr,
                              const Timeout<std::micro> &timeout,
-                             bool run_in_shell, bool hide_stderr) {
-  return RunShellCommand(llvm::StringRef(), Args(command), working_dir,
-                         status_ptr, signo_ptr, command_output_ptr, timeout,
-                         run_in_shell, hide_stderr);
-}
-
-Status Host::RunShellCommand(llvm::StringRef shell_path,
-                             llvm::StringRef command,
-                             const FileSpec &working_dir, int *status_ptr,
-                             int *signo_ptr, std::string *command_output_ptr,
-                             const Timeout<std::micro> &timeout,
-                             bool run_in_shell, bool hide_stderr) {
-  return RunShellCommand(shell_path, Args(command), working_dir, status_ptr,
-                         signo_ptr, command_output_ptr, timeout, run_in_shell,
+                             bool run_in_default_shell,
+                             bool hide_stderr) {
+  return RunShellCommand(Args(command), working_dir, status_ptr, signo_ptr,
+                         command_output_ptr, timeout, run_in_default_shell,
                          hide_stderr);
 }
 
@@ -490,39 +473,25 @@ Status Host::RunShellCommand(const Args &args, const FileSpec &working_dir,
                              int *status_ptr, int *signo_ptr,
                              std::string *command_output_ptr,
                              const Timeout<std::micro> &timeout,
-                             bool run_in_shell, bool hide_stderr) {
-  return RunShellCommand(llvm::StringRef(), args, working_dir, status_ptr,
-                         signo_ptr, command_output_ptr, timeout, run_in_shell,
-                         hide_stderr);
-}
-
-Status Host::RunShellCommand(llvm::StringRef shell_path, const Args &args,
-                             const FileSpec &working_dir, int *status_ptr,
-                             int *signo_ptr, std::string *command_output_ptr,
-                             const Timeout<std::micro> &timeout,
-                             bool run_in_shell, bool hide_stderr) {
+                             bool run_in_default_shell,
+                             bool hide_stderr) {
   Status error;
   ProcessLaunchInfo launch_info;
   launch_info.SetArchitecture(HostInfo::GetArchitecture());
-  if (run_in_shell) {
+  if (run_in_default_shell) {
     // Run the command in a shell
-    FileSpec shell = HostInfo::GetDefaultShell();
-    if (!shell_path.empty())
-      shell.SetPath(shell_path);
-
-    launch_info.SetShell(shell);
+    launch_info.SetShell(HostInfo::GetDefaultShell());
     launch_info.GetArguments().AppendArguments(args);
+    const bool localhost = true;
     const bool will_debug = false;
     const bool first_arg_is_full_shell_command = false;
     launch_info.ConvertArgumentsForLaunchingInShell(
-        error, will_debug, first_arg_is_full_shell_command, 0);
+        error, localhost, will_debug, first_arg_is_full_shell_command, 0);
   } else {
     // No shell, just run it
     const bool first_arg_is_executable = true;
     launch_info.SetArguments(args, first_arg_is_executable);
   }
-
-  launch_info.GetEnvironment() = Host::GetEnvironment();
 
   if (working_dir)
     launch_info.SetWorkingDirectory(working_dir);
@@ -542,7 +511,7 @@ Status Host::RunShellCommand(llvm::StringRef shell_path, const Args &args,
     }
   }
 
-  FileSpec output_file_spec(output_file_path.str());
+  FileSpec output_file_spec(output_file_path.c_str());
   // Set up file descriptors.
   launch_info.AppendSuppressFileAction(STDIN_FILENO, true, false);
   if (output_file_spec)
@@ -700,24 +669,4 @@ void llvm::format_provider<WaitStatus>::format(const WaitStatus &WS,
     break;
   }
   OS << desc << " " << int(WS.status);
-}
-
-uint32_t Host::FindProcesses(const ProcessInstanceInfoMatch &match_info,
-                             ProcessInstanceInfoList &process_infos) {
-
-  if (llvm::Optional<ProcessInstanceInfoList> infos =
-          repro::GetReplayProcessInstanceInfoList()) {
-    process_infos = *infos;
-    return process_infos.size();
-  }
-
-  uint32_t result = FindProcessesImpl(match_info, process_infos);
-
-  if (repro::Generator *g = repro::Reproducer::Instance().GetGenerator()) {
-    g->GetOrCreate<repro::ProcessInfoProvider>()
-        .GetNewProcessInfoRecorder()
-        ->Record(process_infos);
-  }
-
-  return result;
 }

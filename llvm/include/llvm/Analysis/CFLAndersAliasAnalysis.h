@@ -41,8 +41,7 @@ class CFLAndersAAResult : public AAResultBase<CFLAndersAAResult> {
   class FunctionInfo;
 
 public:
-  explicit CFLAndersAAResult(
-      std::function<const TargetLibraryInfo &(Function &F)> GetTLI);
+  explicit CFLAndersAAResult(const TargetLibraryInfo &TLI);
   CFLAndersAAResult(CFLAndersAAResult &&RHS);
   ~CFLAndersAAResult();
 
@@ -75,7 +74,7 @@ private:
   /// Build summary for a given function
   FunctionInfo buildInfoFrom(const Function &);
 
-  std::function<const TargetLibraryInfo &(Function &F)> GetTLI;
+  const TargetLibraryInfo &TLI;
 
   /// Cached mapping of Functions to their StratifiedSets.
   /// If a function's sets are currently being built, it is marked

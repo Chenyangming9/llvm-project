@@ -17,8 +17,7 @@ JITLinkMemoryManager::~JITLinkMemoryManager() = default;
 JITLinkMemoryManager::Allocation::~Allocation() = default;
 
 Expected<std::unique_ptr<JITLinkMemoryManager::Allocation>>
-InProcessMemoryManager::allocate(const JITLinkDylib *JD,
-                                 const SegmentsRequestMap &Request) {
+InProcessMemoryManager::allocate(const SegmentsRequestMap &Request) {
 
   using AllocationMap = DenseMap<unsigned, sys::MemoryBlock>;
 
@@ -33,27 +32,15 @@ InProcessMemoryManager::allocate(const JITLinkDylib *JD,
     }
     JITTargetAddress getTargetMemory(ProtectionFlags Seg) override {
       assert(SegBlocks.count(Seg) && "No allocation for segment");
-      return pointerToJITTargetAddress(SegBlocks[Seg].base());
+      return reinterpret_cast<JITTargetAddress>(SegBlocks[Seg].base());
     }
     void finalizeAsync(FinalizeContinuation OnFinalize) override {
       OnFinalize(applyProtections());
     }
     Error deallocate() override {
-      if (SegBlocks.empty())
-        return Error::success();
-      void *SlabStart = SegBlocks.begin()->second.base();
-      char *SlabEnd = (char *)SlabStart;
-      for (auto &KV : SegBlocks) {
-        SlabStart = std::min(SlabStart, KV.second.base());
-        SlabEnd = std::max(SlabEnd, (char *)(KV.second.base()) +
-                                        KV.second.allocatedSize());
-      }
-      size_t SlabSize = SlabEnd - (char *)SlabStart;
-      assert((SlabSize % sys::Process::getPageSizeEstimate()) == 0 &&
-             "Slab size is not a multiple of page size");
-      sys::MemoryBlock Slab(SlabStart, SlabSize);
-      if (auto EC = sys::Memory::releaseMappedMemory(Slab))
-        return errorCodeToError(EC);
+      for (auto &KV : SegBlocks)
+        if (auto EC = sys::Memory::releaseMappedMemory(KV.second))
+          return errorCodeToError(EC);
       return Error::success();
     }
 
@@ -74,60 +61,42 @@ InProcessMemoryManager::allocate(const JITLinkDylib *JD,
     AllocationMap SegBlocks;
   };
 
-  if (!isPowerOf2_64((uint64_t)sys::Process::getPageSizeEstimate()))
-    return make_error<StringError>("Page size is not a power of 2",
-                                   inconvertibleErrorCode());
-
   AllocationMap Blocks;
   const sys::Memory::ProtectionFlags ReadWrite =
       static_cast<sys::Memory::ProtectionFlags>(sys::Memory::MF_READ |
                                                 sys::Memory::MF_WRITE);
 
-  // Compute the total number of pages to allocate.
-  size_t TotalSize = 0;
   for (auto &KV : Request) {
-    const auto &Seg = KV.second;
+    auto &Seg = KV.second;
 
-    if (Seg.getAlignment() > sys::Process::getPageSizeEstimate())
+    if (Seg.getContentAlignment() > sys::Process::getPageSizeEstimate())
       return make_error<StringError>("Cannot request higher than page "
                                      "alignment",
                                      inconvertibleErrorCode());
 
-    TotalSize = alignTo(TotalSize, sys::Process::getPageSizeEstimate());
-    TotalSize += Seg.getContentSize();
-    TotalSize += Seg.getZeroFillSize();
-  }
+    if (sys::Process::getPageSizeEstimate() % Seg.getContentAlignment() != 0)
+      return make_error<StringError>("Page size is not a multiple of "
+                                     "alignment",
+                                     inconvertibleErrorCode());
 
-  // Allocate one slab to cover all the segments.
-  std::error_code EC;
-  auto SlabRemaining =
-      sys::Memory::allocateMappedMemory(TotalSize, nullptr, ReadWrite, EC);
+    uint64_t ZeroFillStart =
+        alignTo(Seg.getContentSize(), Seg.getZeroFillAlignment());
+    uint64_t SegmentSize = ZeroFillStart + Seg.getZeroFillSize();
 
-  if (EC)
-    return errorCodeToError(EC);
+    std::error_code EC;
+    auto SegMem =
+        sys::Memory::allocateMappedMemory(SegmentSize, nullptr, ReadWrite, EC);
 
-  // Allocate segment memory from the slab.
-  for (auto &KV : Request) {
-
-    const auto &Seg = KV.second;
-
-    uint64_t SegmentSize = alignTo(Seg.getContentSize() + Seg.getZeroFillSize(),
-                                   sys::Process::getPageSizeEstimate());
-    assert(SlabRemaining.allocatedSize() >= SegmentSize &&
-           "Mapping exceeds allocation");
-
-    sys::MemoryBlock SegMem(SlabRemaining.base(), SegmentSize);
-    SlabRemaining = sys::MemoryBlock((char *)SlabRemaining.base() + SegmentSize,
-                                     SlabRemaining.allocatedSize() - SegmentSize);
+    if (EC)
+      return errorCodeToError(EC);
 
     // Zero out the zero-fill memory.
-    memset(static_cast<char *>(SegMem.base()) + Seg.getContentSize(), 0,
+    memset(static_cast<char *>(SegMem.base()) + ZeroFillStart, 0,
            Seg.getZeroFillSize());
 
     // Record the block for this segment.
     Blocks[KV.first] = std::move(SegMem);
   }
-
   return std::unique_ptr<InProcessMemoryManager::Allocation>(
       new IPMMAlloc(std::move(Blocks)));
 }

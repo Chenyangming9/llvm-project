@@ -18,7 +18,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Triple.h"
-#include "llvm/Config/config.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
@@ -77,48 +76,43 @@ static cl::opt<unsigned> StaticFuncStripDirNamePrefix(
 static std::string getInstrProfErrString(instrprof_error Err) {
   switch (Err) {
   case instrprof_error::success:
-    return "success";
+    return "Success";
   case instrprof_error::eof:
-    return "end of File";
+    return "End of File";
   case instrprof_error::unrecognized_format:
-    return "unrecognized instrumentation profile encoding format";
+    return "Unrecognized instrumentation profile encoding format";
   case instrprof_error::bad_magic:
-    return "invalid instrumentation profile data (bad magic)";
+    return "Invalid instrumentation profile data (bad magic)";
   case instrprof_error::bad_header:
-    return "invalid instrumentation profile data (file header is corrupt)";
+    return "Invalid instrumentation profile data (file header is corrupt)";
   case instrprof_error::unsupported_version:
-    return "unsupported instrumentation profile format version";
+    return "Unsupported instrumentation profile format version";
   case instrprof_error::unsupported_hash_type:
-    return "unsupported instrumentation profile hash type";
+    return "Unsupported instrumentation profile hash type";
   case instrprof_error::too_large:
-    return "too much profile data";
+    return "Too much profile data";
   case instrprof_error::truncated:
-    return "truncated profile data";
+    return "Truncated profile data";
   case instrprof_error::malformed:
-    return "malformed instrumentation profile data";
-  case instrprof_error::invalid_prof:
-    return "invalid profile created. Please file a bug "
-           "at: " BUG_REPORT_URL
-           " and include the profraw files that caused this error.";
+    return "Malformed instrumentation profile data";
   case instrprof_error::unknown_function:
-    return "no profile data available for function";
+    return "No profile data available for function";
   case instrprof_error::hash_mismatch:
-    return "function control flow change detected (hash mismatch)";
+    return "Function control flow change detected (hash mismatch)";
   case instrprof_error::count_mismatch:
-    return "function basic block count change detected (counter mismatch)";
+    return "Function basic block count change detected (counter mismatch)";
   case instrprof_error::counter_overflow:
-    return "counter overflow";
+    return "Counter overflow";
   case instrprof_error::value_site_count_mismatch:
-    return "function value site count change detected (counter mismatch)";
+    return "Function value site count change detected (counter mismatch)";
   case instrprof_error::compress_failed:
-    return "failed to compress data (zlib)";
+    return "Failed to compress data (zlib)";
   case instrprof_error::uncompress_failed:
-    return "failed to uncompress data (zlib)";
+    return "Failed to uncompress data (zlib)";
   case instrprof_error::empty_raw_profile:
-    return "empty raw profile file";
+    return "Empty raw profile file";
   case instrprof_error::zlib_unavailable:
-    return "profile uses zlib compression but the profile reader was built "
-           "without zlib support";
+    return "Profile uses zlib compression but the profile reader was built without zlib support";
   }
   llvm_unreachable("A value of instrprof_error has no message.");
 }
@@ -167,10 +161,6 @@ const char *InstrProfSectNamePrefix[] = {
 } // namespace
 
 namespace llvm {
-
-cl::opt<bool> DoInstrProfNameCompression(
-    "enable-name-compression",
-    cl::desc("Enable name/filename string compression"), cl::init(true));
 
 std::string getInstrProfSectionName(InstrProfSectKind IPSK,
                                     Triple::ObjectFormatType OF,
@@ -296,7 +286,7 @@ StringRef getFuncNameWithoutPrefix(StringRef PGOFuncName, StringRef FileName) {
 // symbol is created to hold the name. Return the legalized symbol name.
 std::string getPGOFuncNameVarName(StringRef FuncName,
                                   GlobalValue::LinkageTypes Linkage) {
-  std::string VarName = std::string(getInstrProfNameVarPrefix());
+  std::string VarName = getInstrProfNameVarPrefix();
   VarName += FuncName;
 
   if (!GlobalValue::isLocalLinkage(Linkage))
@@ -354,29 +344,16 @@ Error InstrProfSymtab::create(Module &M, bool InLTO) {
       return E;
     MD5FuncMap.emplace_back(Function::getGUID(PGOFuncName), &F);
     // In ThinLTO, local function may have been promoted to global and have
-    // suffix ".llvm." added to the function name. We need to add the
-    // stripped function name to the symbol table so that we can find a match
-    // from profile.
-    //
-    // We may have other suffixes similar as ".llvm." which are needed to
-    // be stripped before the matching, but ".__uniq." suffix which is used
-    // to differentiate internal linkage functions in different modules
-    // should be kept. Now this is the only suffix with the pattern ".xxx"
-    // which is kept before matching.
-    const std::string UniqSuffix = ".__uniq.";
-    auto pos = PGOFuncName.find(UniqSuffix);
-    // Search '.' after ".__uniq." if ".__uniq." exists, otherwise
-    // search '.' from the beginning.
-    if (pos != std::string::npos)
-      pos += UniqSuffix.length();
-    else
-      pos = 0;
-    pos = PGOFuncName.find('.', pos);
-    if (pos != std::string::npos && pos != 0) {
-      const std::string &OtherFuncName = PGOFuncName.substr(0, pos);
-      if (Error E = addFuncName(OtherFuncName))
-        return E;
-      MD5FuncMap.emplace_back(Function::getGUID(OtherFuncName), &F);
+    // suffix added to the function name. We need to add the stripped function
+    // name to the symbol table so that we can find a match from profile.
+    if (InLTO) {
+      auto pos = PGOFuncName.find('.');
+      if (pos != std::string::npos) {
+        const std::string &OtherFuncName = PGOFuncName.substr(0, pos);
+        if (Error E = addFuncName(OtherFuncName))
+          return E;
+        MD5FuncMap.emplace_back(Function::getGUID(OtherFuncName), &F);
+      }
     }
   }
   Sorted = false;
@@ -450,7 +427,7 @@ Error collectPGOFuncNameStrings(ArrayRef<GlobalVariable *> NameVars,
                                 std::string &Result, bool doCompression) {
   std::vector<std::string> NameStrs;
   for (auto *NameVar : NameVars) {
-    NameStrs.push_back(std::string(getPGOFuncNameVarInitializer(NameVar)));
+    NameStrs.push_back(getPGOFuncNameVarInitializer(NameVar));
   }
   return collectPGOFuncNameStrings(
       NameStrs, zlib::isAvailable() && doCompression, Result);
@@ -501,7 +478,7 @@ Error readPGOFuncNameStrings(StringRef NameStrings, InstrProfSymtab &Symtab) {
   return Error::success();
 }
 
-void InstrProfRecord::accumulateCounts(CountSumOrPercent &Sum) const {
+void InstrProfRecord::accumuateCounts(CountSumOrPercent &Sum) const {
   uint64_t FuncSum = 0;
   Sum.NumEntries += Counts.size();
   for (size_t F = 0, E = Counts.size(); F < E; ++F)
@@ -575,7 +552,7 @@ void InstrProfRecord::overlap(InstrProfRecord &Other, OverlapStats &Overlap,
                               uint64_t ValueCutoff) {
   // FuncLevel CountSum for other should already computed and nonzero.
   assert(FuncLevelOverlap.Test.CountSum >= 1.0f);
-  accumulateCounts(FuncLevelOverlap.Base);
+  accumuateCounts(FuncLevelOverlap.Base);
   bool Mismatch = (Counts.size() != Other.Counts.size());
 
   // Check if the value profiles mismatch.
@@ -644,11 +621,11 @@ void InstrProfValueSiteRecord::merge(InstrProfValueSiteRecord &Input,
   }
 }
 
-void InstrProfValueSiteRecord::scale(uint64_t N, uint64_t D,
+void InstrProfValueSiteRecord::scale(uint64_t Weight,
                                      function_ref<void(instrprof_error)> Warn) {
   for (auto I = ValueData.begin(), IE = ValueData.end(); I != IE; ++I) {
     bool Overflowed;
-    I->Count = SaturatingMultiply(I->Count, N, &Overflowed) / D;
+    I->Count = SaturatingMultiply(I->Count, Weight, &Overflowed);
     if (Overflowed)
       Warn(instrprof_error::counter_overflow);
   }
@@ -697,23 +674,22 @@ void InstrProfRecord::merge(InstrProfRecord &Other, uint64_t Weight,
 }
 
 void InstrProfRecord::scaleValueProfData(
-    uint32_t ValueKind, uint64_t N, uint64_t D,
+    uint32_t ValueKind, uint64_t Weight,
     function_ref<void(instrprof_error)> Warn) {
   for (auto &R : getValueSitesForKind(ValueKind))
-    R.scale(N, D, Warn);
+    R.scale(Weight, Warn);
 }
 
-void InstrProfRecord::scale(uint64_t N, uint64_t D,
+void InstrProfRecord::scale(uint64_t Weight,
                             function_ref<void(instrprof_error)> Warn) {
-  assert(D != 0 && "D cannot be 0");
   for (auto &Count : this->Counts) {
     bool Overflowed;
-    Count = SaturatingMultiply(Count, N, &Overflowed) / D;
+    Count = SaturatingMultiply(Count, Weight, &Overflowed);
     if (Overflowed)
       Warn(instrprof_error::counter_overflow);
   }
   for (uint32_t Kind = IPVK_First; Kind <= IPVK_Last; ++Kind)
-    scaleValueProfData(Kind, N, D, Warn);
+    scaleValueProfData(Kind, Weight, Warn);
 }
 
 // Map indirect call target name hash to name string.
@@ -1001,8 +977,7 @@ bool getValueProfDataFromInst(const Instruction &Inst,
                               InstrProfValueKind ValueKind,
                               uint32_t MaxNumValueData,
                               InstrProfValueData ValueData[],
-                              uint32_t &ActualNumValueData, uint64_t &TotalC,
-                              bool GetNoICPValue) {
+                              uint32_t &ActualNumValueData, uint64_t &TotalC) {
   MDNode *MD = Inst.getMetadata(LLVMContext::MD_prof);
   if (!MD)
     return false;
@@ -1043,11 +1018,8 @@ bool getValueProfDataFromInst(const Instruction &Inst,
         mdconst::dyn_extract<ConstantInt>(MD->getOperand(I + 1));
     if (!Value || !Count)
       return false;
-    uint64_t CntValue = Count->getZExtValue();
-    if (!GetNoICPValue && (CntValue == NOMORE_ICP_MAGICNUM))
-      continue;
     ValueData[ActualNumValueData].Value = Value->getZExtValue();
-    ValueData[ActualNumValueData].Count = CntValue;
+    ValueData[ActualNumValueData].Count = Count->getZExtValue();
     ActualNumValueData++;
   }
   return true;
@@ -1106,10 +1078,12 @@ bool isIRPGOFlagSet(const Module *M) {
   if (!IRInstrVar->hasInitializer())
     return false;
 
-  auto *InitVal = dyn_cast_or_null<ConstantInt>(IRInstrVar->getInitializer());
+  const Constant *InitVal = IRInstrVar->getInitializer();
   if (!InitVal)
     return false;
-  return (InitVal->getZExtValue() & VARIANT_MASK_IR_PROF) != 0;
+
+  return (dyn_cast<ConstantInt>(InitVal)->getZExtValue() &
+          VARIANT_MASK_IR_PROF) != 0;
 }
 
 // Check if we can safely rename this Comdat function.
@@ -1135,17 +1109,35 @@ bool canRenameComdatFunc(const Function &F, bool CheckAddressTaken) {
   return true;
 }
 
+// Parse the value profile options.
+void getMemOPSizeRangeFromOption(StringRef MemOPSizeRange, int64_t &RangeStart,
+                                 int64_t &RangeLast) {
+  static const int64_t DefaultMemOPSizeRangeStart = 0;
+  static const int64_t DefaultMemOPSizeRangeLast = 8;
+  RangeStart = DefaultMemOPSizeRangeStart;
+  RangeLast = DefaultMemOPSizeRangeLast;
+
+  if (!MemOPSizeRange.empty()) {
+    auto Pos = MemOPSizeRange.find(':');
+    if (Pos != std::string::npos) {
+      if (Pos > 0)
+        MemOPSizeRange.substr(0, Pos).getAsInteger(10, RangeStart);
+      if (Pos < MemOPSizeRange.size() - 1)
+        MemOPSizeRange.substr(Pos + 1).getAsInteger(10, RangeLast);
+    } else
+      MemOPSizeRange.getAsInteger(10, RangeLast);
+  }
+  assert(RangeLast >= RangeStart);
+}
+
 // Create a COMDAT variable INSTR_PROF_RAW_VERSION_VAR to make the runtime
 // aware this is an ir_level profile so it can set the version flag.
-void createIRLevelProfileFlagVar(Module &M, bool IsCS,
-                                 bool InstrEntryBBEnabled) {
+void createIRLevelProfileFlagVar(Module &M, bool IsCS) {
   const StringRef VarName(INSTR_PROF_QUOTE(INSTR_PROF_RAW_VERSION_VAR));
   Type *IntTy64 = Type::getInt64Ty(M.getContext());
   uint64_t ProfileVersion = (INSTR_PROF_RAW_VERSION | VARIANT_MASK_IR_PROF);
   if (IsCS)
     ProfileVersion |= VARIANT_MASK_CSIR_PROF;
-  if (InstrEntryBBEnabled)
-    ProfileVersion |= VARIANT_MASK_INSTR_ENTRY;
   auto IRLevelVersionVariable = new GlobalVariable(
       M, IntTy64, true, GlobalValue::WeakAnyLinkage,
       Constant::getIntegerValue(IntTy64, APInt(64, ProfileVersion)), VarName);
@@ -1174,9 +1166,9 @@ void createProfileFileNameVar(Module &M, StringRef InstrProfileOutput) {
   }
 }
 
-Error OverlapStats::accumulateCounts(const std::string &BaseFilename,
-                                     const std::string &TestFilename,
-                                     bool IsCS) {
+Error OverlapStats::accumuateCounts(const std::string &BaseFilename,
+                                    const std::string &TestFilename,
+                                    bool IsCS) {
   auto getProfileSum = [IsCS](const std::string &Filename,
                               CountSumOrPercent &Sum) -> Error {
     auto ReaderOrErr = InstrProfReader::create(Filename);
@@ -1184,7 +1176,7 @@ Error OverlapStats::accumulateCounts(const std::string &BaseFilename,
       return E;
     }
     auto Reader = std::move(ReaderOrErr.get());
-    Reader->accumulateCounts(Sum, IsCS);
+    Reader->accumuateCounts(Sum, IsCS);
     return Error::success();
   };
   auto Ret = getProfileSum(BaseFilename, Base);

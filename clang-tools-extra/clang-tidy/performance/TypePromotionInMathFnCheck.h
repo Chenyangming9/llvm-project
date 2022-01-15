@@ -36,7 +36,8 @@ public:
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 
 private:
-  utils::IncludeInserter IncludeInserter;
+  std::unique_ptr<utils::IncludeInserter> IncludeInserter;
+  const utils::IncludeSorter::IncludeStyle IncludeStyle;
 };
 
 } // namespace performance

@@ -1,6 +1,5 @@
-; RUN: opt -O2 %s | llvm-dis > %t1
-; RUN: llc -filetype=asm -o - %t1 | FileCheck -check-prefixes=CHECK %s
-; RUN: llc -mattr=+alu32 -filetype=asm -o - %t1 | FileCheck -check-prefixes=CHECK %s
+; RUN: llc -march=bpfel -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK %s
+; RUN: llc -march=bpfeb -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK %s
 ; Source code:
 ;   struct net_device {
 ;     int dev_id;
@@ -20,9 +19,7 @@
 ;     return dev_id;
 ;   }
 ; Compilation flag:
-;   clang -target bpf -O2 -g -S -emit-llvm -Xclang -disable-llvm-passes test.c
-
-target triple = "bpf"
+;   clang -target bpf -O2 -g -S -emit-llvm test.c
 
 %struct.sk_buff = type { i32, %struct.net_device }
 %struct.net_device = type { i32, i32 }
@@ -33,8 +30,8 @@ define dso_local i32 @bpf_prog(%struct.sk_buff*) local_unnamed_addr #0 !dbg !15 
   call void @llvm.dbg.value(metadata %struct.sk_buff* %0, metadata !28, metadata !DIExpression()), !dbg !30
   %3 = bitcast i32* %2 to i8*, !dbg !31
   call void @llvm.lifetime.start.p0i8(i64 4, i8* nonnull %3) #4, !dbg !31
-  %4 = tail call %struct.net_device* @llvm.preserve.struct.access.index.p0s_struct.net_devices.p0s_struct.sk_buffs(%struct.sk_buff* elementtype(%struct.sk_buff) %0, i32 1, i32 1), !dbg !32, !llvm.preserve.access.index !19
-  %5 = tail call i32* @llvm.preserve.struct.access.index.p0i32.p0s_struct.net_devices(%struct.net_device* elementtype(%struct.net_device) %4, i32 0, i32 0), !dbg !32, !llvm.preserve.access.index !23
+  %4 = tail call %struct.net_device* @llvm.preserve.struct.access.index.p0s_struct.net_devices.p0s_struct.sk_buffs(%struct.sk_buff* %0, i32 1, i32 1), !dbg !32, !llvm.preserve.access.index !19
+  %5 = tail call i32* @llvm.preserve.struct.access.index.p0i32.p0s_struct.net_devices(%struct.net_device* %4, i32 0, i32 0), !dbg !32, !llvm.preserve.access.index !23
   %6 = bitcast i32* %5 to i8*, !dbg !32
   %7 = call i32 inttoptr (i64 4 to i32 (i8*, i32, i8*)*)(i8* nonnull %3, i32 4, i8* %6) #4, !dbg !33
   %8 = load i32, i32* %2, align 4, !dbg !34, !tbaa !35
@@ -83,7 +80,7 @@ define dso_local i32 @bpf_prog(%struct.sk_buff*) local_unnamed_addr #0 !dbg !15 
 ; CHECK-NEXT:        .long   44
 ; CHECK-NEXT:        .long   1
 ; CHECK-NEXT:        .long   48                      # BTF_KIND_FUNC(id = 6)
-; CHECK-NEXT:        .long   201326593               # 0xc000001
+; CHECK-NEXT:        .long   201326592               # 0xc000000
 ; CHECK-NEXT:        .long   5
 ; CHECK-NEXT:        .byte   0                       # string offset=0
 ; CHECK-NEXT:        .ascii  "sk_buff"               # string offset=1
@@ -114,22 +111,23 @@ define dso_local i32 @bpf_prog(%struct.sk_buff*) local_unnamed_addr #0 !dbg !15 
 ; CHECK-NEXT:        .short  60319                   # 0xeb9f
 ; CHECK-NEXT:        .byte   1
 ; CHECK-NEXT:        .byte   0
-; CHECK-NEXT:        .long   32
+; CHECK-NEXT:        .long   40
 ; CHECK-NEXT:        .long   0
 ; CHECK-NEXT:        .long   20
 ; CHECK-NEXT:        .long   20
-; CHECK-NEXT:        .long   {{[0-9]+}}
-; CHECK-NEXT:        .long   {{[0-9]+}}
-; CHECK-NEXT:        .long   28
+; CHECK-NEXT:        .long   76
+; CHECK-NEXT:        .long   96
+; CHECK-NEXT:        .long   24
+; CHECK-NEXT:        .long   120
+; CHECK-NEXT:        .long   0
 ; CHECK-NEXT:        .long   8                       # FuncInfo
 
-; CHECK:             .long   16                      # FieldReloc
-; CHECK-NEXT:        .long   57                      # Field reloc section string offset=57
+; CHECK:             .long   12                      # OffsetReloc
+; CHECK-NEXT:        .long   57                      # Offset reloc section string offset=57
 ; CHECK-NEXT:        .long   1
-; CHECK-NEXT:        .long   .Ltmp{{[0-9]+}}
+; CHECK-NEXT:        .long   .Ltmp2
 ; CHECK-NEXT:        .long   2
 ; CHECK-NEXT:        .long   100
-; CHECK-NEXT:        .long   0
 
 ; Function Attrs: argmemonly nounwind
 declare void @llvm.lifetime.start.p0i8(i64 immarg, i8* nocapture) #1
@@ -146,7 +144,7 @@ declare void @llvm.lifetime.end.p0i8(i64 immarg, i8* nocapture) #1
 ; Function Attrs: nounwind readnone speculatable
 declare void @llvm.dbg.value(metadata, metadata, metadata) #3
 
-attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "frame-pointer"="all" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #1 = { argmemonly nounwind }
 attributes #2 = { nounwind readnone }
 attributes #3 = { nounwind readnone speculatable }

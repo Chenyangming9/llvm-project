@@ -6,5 +6,7 @@ executable("llvm-cat") {
     "//llvm/lib/IRReader",
     "//llvm/lib/Support",
   ]
-  sources = [ "llvm-cat.cpp" ]
+  sources = [
+    "llvm-cat.cpp",
+  ]
 }

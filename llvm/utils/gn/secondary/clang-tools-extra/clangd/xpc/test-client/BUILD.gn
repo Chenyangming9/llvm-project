@@ -14,5 +14,7 @@ executable("clangd-xpc-test-client") {
   ]
 
   include_dirs = [ "../.." ]
-  sources = [ "ClangdXPCTestClient.cpp" ]
+  sources = [
+    "ClangdXPCTestClient.cpp",
+  ]
 }

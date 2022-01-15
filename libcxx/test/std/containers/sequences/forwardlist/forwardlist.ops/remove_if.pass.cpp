@@ -18,7 +18,7 @@
 
 #include "test_macros.h"
 #include "min_allocator.h"
-#include "counting_predicates.h"
+#include "counting_predicates.hpp"
 
 
 template <class L, class Predicate>

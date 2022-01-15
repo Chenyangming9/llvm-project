@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TARGET_THREADPLANSTEPRANGE_H
-#define LLDB_TARGET_THREADPLANSTEPRANGE_H
+#ifndef liblldb_ThreadPlanStepRange_h_
+#define liblldb_ThreadPlanStepRange_h_
 
 #include "lldb/Core/AddressRange.h"
 #include "lldb/Target/StackID.h"
@@ -76,20 +76,13 @@ protected:
   lldb::BreakpointSP m_next_branch_bp_sp;
   bool m_use_fast_step;
   bool m_given_ranges_only;
-  bool m_found_calls = false; // When we set the next branch breakpoint for
-                              // step over, we now extend them past call insns
-                              // that directly return.  But if we do that we
-                              // need to run all threads, or we might cause
-                              // deadlocks.  This tells us whether we found
-                              // any calls in setting the next branch breakpoint.
 
 private:
   std::vector<lldb::DisassemblerSP> m_instruction_ranges;
 
-  ThreadPlanStepRange(const ThreadPlanStepRange &) = delete;
-  const ThreadPlanStepRange &operator=(const ThreadPlanStepRange &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(ThreadPlanStepRange);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_TARGET_THREADPLANSTEPRANGE_H
+#endif // liblldb_ThreadPlanStepRange_h_

@@ -62,19 +62,19 @@ class Token {
   /// The actual kind of the token.
   tok::TokenKind Kind;
 
-  /// Integer value associated with a token.
-  ///
-  /// If the token is a known command, contains command ID and TextPtr is
-  /// unused (command spelling can be found with CommandTraits).  Otherwise,
-  /// contains the length of the string that starts at TextPtr.
-  unsigned IntVal;
-
   /// Length of the token spelling in comment.  Can be 0 for synthenized
   /// tokens.
   unsigned Length;
 
   /// Contains text value associated with a token.
   const char *TextPtr;
+
+  /// Integer value associated with a token.
+  ///
+  /// If the token is a known command, contains command ID and TextPtr is
+  /// unused (command spelling can be found with CommandTraits).  Otherwise,
+  /// contains the length of the string that starts at TextPtr.
+  unsigned IntVal;
 
 public:
   SourceLocation getLocation() const LLVM_READONLY { return Loc; }
@@ -232,6 +232,7 @@ private:
 
   const char *const BufferStart;
   const char *const BufferEnd;
+  SourceLocation FileLoc;
 
   const char *BufferPtr;
 
@@ -239,14 +240,7 @@ private:
   /// to newline or BufferEnd, for C comments points to star in '*/'.
   const char *CommentEnd;
 
-  SourceLocation FileLoc;
-
-  /// If true, the commands, html tags, etc will be parsed and reported as
-  /// separate tokens inside the comment body. If false, the comment text will
-  /// be parsed into text and newline tokens.
-  bool ParseCommands;
-
-  enum LexerCommentState : uint8_t {
+  enum LexerCommentState {
     LCS_BeforeComment,
     LCS_InsideBCPLComment,
     LCS_InsideCComment,
@@ -256,7 +250,7 @@ private:
   /// Low-level lexer state, track if we are inside or outside of comment.
   LexerCommentState CommentState;
 
-  enum LexerState : uint8_t {
+  enum LexerState {
     /// Lexing normal comment text
     LS_Normal,
 
@@ -285,6 +279,11 @@ private:
   /// If State is LS_VerbatimBlock, contains the name of verbatim end
   /// command, including command marker.
   SmallString<16> VerbatimBlockEndCommandName;
+
+  /// If true, the commands, html tags, etc will be parsed and reported as
+  /// separate tokens inside the comment body. If false, the comment text will
+  /// be parsed into text and newline tokens.
+  bool ParseCommands;
 
   /// Given a character reference name (e.g., "lt"), return the character that
   /// it stands for (e.g., "<").
@@ -353,7 +352,8 @@ public:
 
   void lex(Token &T);
 
-  StringRef getSpelling(const Token &Tok, const SourceManager &SourceMgr) const;
+  StringRef getSpelling(const Token &Tok, const SourceManager &SourceMgr,
+                        bool *Invalid = nullptr) const;
 };
 
 } // end namespace comments

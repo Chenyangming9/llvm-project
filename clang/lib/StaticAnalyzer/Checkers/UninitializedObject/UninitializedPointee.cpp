@@ -18,7 +18,7 @@
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/DynamicType.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
 
 using namespace clang;
 using namespace clang::ento;
@@ -260,13 +260,12 @@ static llvm::Optional<DereferenceInfo> dereference(ProgramStateRef State,
       break;
   }
 
-  while (isa<CXXBaseObjectRegion>(R)) {
+  while (R->getAs<CXXBaseObjectRegion>()) {
     NeedsCastBack = true;
-    const auto *SuperR = dyn_cast<TypedValueRegion>(R->getSuperRegion());
-    if (!SuperR)
-      break;
 
-    R = SuperR;
+    if (!isa<TypedValueRegion>(R->getSuperRegion()))
+      break;
+    R = R->getSuperRegion()->getAs<TypedValueRegion>();
   }
 
   return DereferenceInfo{R, NeedsCastBack, /*IsCyclic*/ false};

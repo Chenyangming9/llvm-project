@@ -7,17 +7,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 // UNSUPPORTED: windows
 
-// ADDITIONAL_COMPILE_FLAGS: -D_LIBCPP_DEBUG=1
-// UNSUPPORTED: libcxx-no-debug-mode
+// Can't test the system lib because this test enables debug mode
+// UNSUPPORTED: with_system_cxx_lib
+
+// MODULES_DEFINES: _LIBCPP_DEBUG=1
+
+#define _LIBCPP_DEBUG 1
 
 #include <__debug>
-#include "debug_mode_helper.h"
-
-#include <cstdio>
 #include "test_macros.h"
+#include "debug_mode_helper.h"
 
 
 template <class Func>
@@ -25,12 +27,14 @@ inline bool TestDeathTest(const char* stmt, Func&& func, DeathTest::ResultKind E
   DeathTest DT(Matcher);
   DeathTest::ResultKind RK = DT.Run(func);
   auto OnFailure = [&](std::string msg) {
-    std::fprintf(stderr, "EXPECT_DEATH( %s ) failed! (%s)\n\n", stmt, msg.c_str());
+    std::cerr << "EXPECT_DEATH( " << stmt << " ) failed! (" << msg << ")\n\n";
     if (!DT.getChildStdErr().empty()) {
-      std::fprintf(stderr, "---------- standard err ----------\n%s\n", DT.getChildStdErr().c_str());
+      std::cerr << "---------- standard err ----------\n";
+      std::cerr << DT.getChildStdErr() << "\n";
     }
     if (!DT.getChildStdOut().empty()) {
-      std::fprintf(stderr, "---------- standard out ----------\n%s\n", DT.getChildStdOut().c_str());
+      std::cerr << "---------- standard out ----------\n";
+      std::cerr << DT.getChildStdOut() << "\n";
     }
     return false;
   };

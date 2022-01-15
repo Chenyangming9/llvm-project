@@ -25,10 +25,9 @@ class MipsLegalizerInfo : public LegalizerInfo {
 public:
   MipsLegalizerInfo(const MipsSubtarget &ST);
 
-  bool legalizeCustom(LegalizerHelper &Helper, MachineInstr &MI) const override;
-
-  bool legalizeIntrinsic(LegalizerHelper &Helper,
-                         MachineInstr &MI) const override;
+  bool legalizeCustom(MachineInstr &MI, MachineRegisterInfo &MRI,
+                      MachineIRBuilder &MIRBuilder,
+                      GISelChangeObserver &Observer) const override;
 };
 } // end namespace llvm
 #endif

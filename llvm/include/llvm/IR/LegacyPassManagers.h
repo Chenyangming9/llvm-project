@@ -53,6 +53,10 @@
 // a place to implement common pass manager APIs. All pass managers derive from
 // PMDataManager.
 //
+// [o] class BBPassManager : public FunctionPass, public PMDataManager;
+//
+// BBPassManager manages BasicBlockPasses.
+//
 // [o] class FunctionPassManager;
 //
 // This is a external interface used to manage FunctionPasses. This
@@ -88,6 +92,7 @@
 namespace llvm {
 template <typename T> class ArrayRef;
 class Module;
+class Pass;
 class StringRef;
 class Value;
 class Timer;
@@ -98,6 +103,7 @@ enum PassDebuggingString {
   EXECUTION_MSG, // "Executing Pass '" + PassName
   MODIFICATION_MSG, // "Made Modification '" + PassName
   FREEING_MSG, // " Freeing Pass '" + PassName
+  ON_BASICBLOCK_MSG, // "' on BasicBlock '" + InstructionName + "'...\n"
   ON_FUNCTION_MSG, // "' on Function '" + FunctionName + "'...\n"
   ON_MODULE_MSG, // "' on Module '" + ModuleName + "'...\n"
   ON_REGION_MSG, // "' on Region '" + Msg + "'...\n'"
@@ -230,11 +236,11 @@ private:
 
   // Map to keep track of last user of the analysis pass.
   // LastUser->second is the last user of Lastuser->first.
-  // This is kept in sync with InversedLastUser.
   DenseMap<Pass *, Pass *> LastUser;
 
   // Map to keep track of passes that are last used by a pass.
-  // This is kept in sync with LastUser.
+  // This inverse map is initialized at PM->run() based on
+  // LastUser map.
   DenseMap<Pass *, SmallPtrSet<Pass *, 8> > InversedLastUser;
 
   /// Immutable passes are managed by top level manager.
@@ -329,14 +335,13 @@ public:
   /// through getAnalysis interface.
   virtual void addLowerLevelRequiredPass(Pass *P, Pass *RequiredPass);
 
-  virtual std::tuple<Pass *, bool> getOnTheFlyPass(Pass *P, AnalysisID PI,
-                                                   Function &F);
+  virtual Pass *getOnTheFlyPass(Pass *P, AnalysisID PI, Function &F);
 
   /// Initialize available analysis information.
   void initializeAnalysisInfo() {
     AvailableAnalysis.clear();
-    for (auto &IA : InheritedAnalysis)
-      IA = nullptr;
+    for (unsigned i = 0; i < PMT_Last; ++i)
+      InheritedAnalysis[i] = nullptr;
   }
 
   // Return true if P preserves high level analysis used by other
@@ -392,8 +397,9 @@ public:
   // Collect AvailableAnalysis from all the active Pass Managers.
   void populateInheritedAnalysis(PMStack &PMS) {
     unsigned Index = 0;
-    for (PMDataManager *PMDM : PMS)
-      InheritedAnalysis[Index++] = PMDM->getAvailableAnalysis();
+    for (PMStack::iterator I = PMS.begin(), E = PMS.end();
+         I != E; ++I)
+      InheritedAnalysis[Index++] = (*I)->getAvailableAnalysis();
   }
 
   /// Set the initial size of the module if the user has specified that they

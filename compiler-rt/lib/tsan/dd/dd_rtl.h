@@ -30,7 +30,7 @@ struct Thread {
   bool ignore_interceptors;
 };
 
-struct Callback final : public DDCallback {
+struct Callback : DDCallback {
   Thread *thr;
 
   Callback(Thread *thr);

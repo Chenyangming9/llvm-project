@@ -4,6 +4,7 @@
 ; PR1557
 
 ; Bug: PR31336
+; XFAIL: avr
 
 define i32 @stuff(i32, ...) {
         %foo = alloca i8*

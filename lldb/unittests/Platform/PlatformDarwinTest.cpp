@@ -1,4 +1,4 @@
-//===-- PlatformDarwinTest.cpp --------------------------------------------===//
+//===-- PlatformDarwinTest.cpp ----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -18,8 +18,10 @@ using namespace lldb;
 using namespace lldb_private;
 
 struct PlatformDarwinTester : public PlatformDarwin {
-public:
-  using PlatformDarwin::FindComponentInPath;
+  static bool SDKSupportsModules(SDKType desired_type,
+                                 const lldb_private::FileSpec &sdk_path) {
+    return PlatformDarwin::SDKSupportsModules(desired_type, sdk_path);
+  }
 };
 
 TEST(PlatformDarwinTest, TestParseVersionBuildDir) {
@@ -48,21 +50,22 @@ TEST(PlatformDarwinTest, TestParseVersionBuildDir) {
 
   std::tie(V, D) = PlatformDarwin::ParseVersionBuildDir("3.4.5");
   EXPECT_EQ(llvm::VersionTuple(3, 4, 5), V);
-}
 
-TEST(PlatformDarwinTest, FindComponentInPath) {
-  EXPECT_EQ("/path/to/foo",
-            PlatformDarwinTester::FindComponentInPath("/path/to/foo/", "foo"));
-
-  EXPECT_EQ("/path/to/foo",
-            PlatformDarwinTester::FindComponentInPath("/path/to/foo", "foo"));
-
-  EXPECT_EQ("/path/to/foobar", PlatformDarwinTester::FindComponentInPath(
-                                   "/path/to/foobar", "foo"));
-
-  EXPECT_EQ("/path/to/foobar", PlatformDarwinTester::FindComponentInPath(
-                                   "/path/to/foobar", "bar"));
-
-  EXPECT_EQ("",
-            PlatformDarwinTester::FindComponentInPath("/path/to/foo", "bar"));
+  std::string base = "/Applications/Xcode.app/Contents/Developer/Platforms/";
+  EXPECT_TRUE(PlatformDarwinTester::SDKSupportsModules(
+      PlatformDarwin::SDKType::iPhoneSimulator,
+      FileSpec(
+          base +
+          "iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator12.0.sdk")));
+  EXPECT_FALSE(PlatformDarwinTester::SDKSupportsModules(
+      PlatformDarwin::SDKType::iPhoneSimulator,
+      FileSpec(
+          base +
+          "iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator7.2.sdk")));
+  EXPECT_TRUE(PlatformDarwinTester::SDKSupportsModules(
+      PlatformDarwin::SDKType::MacOSX,
+      FileSpec(base + "MacOSX.platform/Developer/SDKs/MacOSX10.10.sdk")));
+  EXPECT_FALSE(PlatformDarwinTester::SDKSupportsModules(
+      PlatformDarwin::SDKType::MacOSX,
+      FileSpec(base + "MacOSX.platform/Developer/SDKs/MacOSX10.9.sdk")));
 }

@@ -1,4 +1,4 @@
-//===-- OptionValueBoolean.cpp --------------------------------------------===//
+//===-- OptionValueBoolean.cpp ----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -67,17 +67,25 @@ Status OptionValueBoolean::SetValueFromString(llvm::StringRef value_str,
   return error;
 }
 
-void OptionValueBoolean::AutoComplete(CommandInterpreter &interpreter,
-                                      CompletionRequest &request) {
-  llvm::StringRef autocomplete_entries[] = {"true", "false", "on", "off",
-                                            "yes",  "no",    "1",  "0"};
+lldb::OptionValueSP OptionValueBoolean::DeepCopy() const {
+  return OptionValueSP(new OptionValueBoolean(*this));
+}
 
-  auto entries = llvm::makeArrayRef(autocomplete_entries);
+size_t OptionValueBoolean::AutoComplete(CommandInterpreter &interpreter,
+                                        CompletionRequest &request) {
+  request.SetWordComplete(false);
+  static const llvm::StringRef g_autocomplete_entries[] = {
+      "true", "false", "on", "off", "yes", "no", "1", "0"};
+
+  auto entries = llvm::makeArrayRef(g_autocomplete_entries);
 
   // only suggest "true" or "false" by default
   if (request.GetCursorArgumentPrefix().empty())
     entries = entries.take_front(2);
 
-  for (auto entry : entries)
-    request.TryCompleteCurrentArg(entry);
+  for (auto entry : entries) {
+    if (entry.startswith_lower(request.GetCursorArgumentPrefix()))
+      request.AddCompletion(entry);
+  }
+  return request.GetNumberOfMatches();
 }

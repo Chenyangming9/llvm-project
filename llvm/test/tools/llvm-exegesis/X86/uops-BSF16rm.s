@@ -1,5 +1,4 @@
-# RUN: llvm-exegesis -mode=uops -opcode-name=BSF16rm -repetition-mode=duplicate | FileCheck %s
-# RUN: llvm-exegesis -mode=uops -opcode-name=BSF16rm -repetition-mode=loop | FileCheck %s
+# RUN: llvm-exegesis -mode=uops -opcode-name=BSF16rm | FileCheck %s
 
 CHECK:      mode:            uops
 CHECK-NEXT: key:

@@ -7,20 +7,22 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUMachineFunction.h"
-#include "AMDGPUPerfHintAnalysis.h"
 #include "AMDGPUSubtarget.h"
+#include "AMDGPUPerfHintAnalysis.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
-#include "llvm/Target/TargetMachine.h"
 
 using namespace llvm;
 
-AMDGPUMachineFunction::AMDGPUMachineFunction(const MachineFunction &MF)
-    : MachineFunctionInfo(), Mode(MF.getFunction()),
-      IsEntryFunction(
-          AMDGPU::isEntryFunctionCC(MF.getFunction().getCallingConv())),
-      IsModuleEntryFunction(
-          AMDGPU::isModuleEntryFunctionCC(MF.getFunction().getCallingConv())),
-      NoSignedZerosFPMath(MF.getTarget().Options.NoSignedZerosFPMath) {
+AMDGPUMachineFunction::AMDGPUMachineFunction(const MachineFunction &MF) :
+  MachineFunctionInfo(),
+  LocalMemoryObjects(),
+  ExplicitKernArgSize(0),
+  MaxKernArgAlign(0),
+  LDSSize(0),
+  IsEntryFunction(AMDGPU::isEntryFunctionCC(MF.getFunction().getCallingConv())),
+  NoSignedZerosFPMath(MF.getTarget().Options.NoSignedZerosFPMath),
+  MemoryBound(false),
+  WaveLimiter(false) {
   const AMDGPUSubtarget &ST = AMDGPUSubtarget::get(MF);
 
   // FIXME: Should initialize KernArgSize based on ExplicitKernelArgOffset,
@@ -28,10 +30,12 @@ AMDGPUMachineFunction::AMDGPUMachineFunction(const MachineFunction &MF)
   const Function &F = MF.getFunction();
 
   Attribute MemBoundAttr = F.getFnAttribute("amdgpu-memory-bound");
-  MemoryBound = MemBoundAttr.getValueAsBool();
+  MemoryBound = MemBoundAttr.isStringAttribute() &&
+                MemBoundAttr.getValueAsString() == "true";
 
   Attribute WaveLimitAttr = F.getFnAttribute("amdgpu-wave-limiter");
-  WaveLimiter = WaveLimitAttr.getValueAsBool();
+  WaveLimiter = WaveLimitAttr.isStringAttribute() &&
+                WaveLimitAttr.getValueAsString() == "true";
 
   CallingConv::ID CC = F.getCallingConv();
   if (CC == CallingConv::AMDGPU_KERNEL || CC == CallingConv::SPIR_KERNEL)
@@ -39,50 +43,22 @@ AMDGPUMachineFunction::AMDGPUMachineFunction(const MachineFunction &MF)
 }
 
 unsigned AMDGPUMachineFunction::allocateLDSGlobal(const DataLayout &DL,
-                                                  const GlobalVariable &GV) {
+                                                  const GlobalValue &GV) {
   auto Entry = LocalMemoryObjects.insert(std::make_pair(&GV, 0));
   if (!Entry.second)
     return Entry.first->second;
 
-  Align Alignment =
-      DL.getValueOrABITypeAlignment(GV.getAlign(), GV.getValueType());
+  unsigned Align = GV.getAlignment();
+  if (Align == 0)
+    Align = DL.getABITypeAlignment(GV.getValueType());
 
   /// TODO: We should sort these to minimize wasted space due to alignment
   /// padding. Currently the padding is decided by the first encountered use
   /// during lowering.
-  unsigned Offset = StaticLDSSize = alignTo(StaticLDSSize, Alignment);
+  unsigned Offset = LDSSize = alignTo(LDSSize, Align);
 
   Entry.first->second = Offset;
-  StaticLDSSize += DL.getTypeAllocSize(GV.getValueType());
-
-  // Update the LDS size considering the padding to align the dynamic shared
-  // memory.
-  LDSSize = alignTo(StaticLDSSize, DynLDSAlign);
+  LDSSize += DL.getTypeAllocSize(GV.getValueType());
 
   return Offset;
-}
-
-void AMDGPUMachineFunction::allocateModuleLDSGlobal(const Module *M) {
-  if (isModuleEntryFunction()) {
-    const GlobalVariable *GV = M->getNamedGlobal("llvm.amdgcn.module.lds");
-    if (GV) {
-      unsigned Offset = allocateLDSGlobal(M->getDataLayout(), *GV);
-      (void)Offset;
-      assert(Offset == 0 &&
-             "Module LDS expected to be allocated before other LDS");
-    }
-  }
-}
-
-void AMDGPUMachineFunction::setDynLDSAlign(const DataLayout &DL,
-                                           const GlobalVariable &GV) {
-  assert(DL.getTypeAllocSize(GV.getValueType()).isZero());
-
-  Align Alignment =
-      DL.getValueOrABITypeAlignment(GV.getAlign(), GV.getValueType());
-  if (Alignment <= DynLDSAlign)
-    return;
-
-  LDSSize = alignTo(StaticLDSSize, Alignment);
-  DynLDSAlign = Alignment;
 }

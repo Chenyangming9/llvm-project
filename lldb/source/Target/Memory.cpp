@@ -1,4 +1,4 @@
-//===-- Memory.cpp --------------------------------------------------------===//
+//===-- Memory.cpp ----------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -26,7 +26,7 @@ MemoryCache::MemoryCache(Process &process)
       m_L2_cache_line_byte_size(process.GetMemoryCacheLineSize()) {}
 
 // Destructor
-MemoryCache::~MemoryCache() = default;
+MemoryCache::~MemoryCache() {}
 
 void MemoryCache::Clear(bool clear_invalid_ranges) {
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
@@ -116,7 +116,7 @@ bool MemoryCache::RemoveInvalidRange(lldb::addr_t base_addr,
       const InvalidRanges::Entry *entry = m_invalid_ranges.GetEntryAtIndex(idx);
       if (entry->GetRangeBase() == base_addr &&
           entry->GetByteSize() == byte_size)
-        return m_invalid_ranges.RemoveEntryAtIndex(idx);
+        return m_invalid_ranges.RemoveEntrtAtIndex(idx);
     }
   }
   return false;
@@ -232,13 +232,8 @@ size_t MemoryCache::Read(addr_t addr, void *dst, size_t dst_len,
         if (process_bytes_read == 0)
           return dst_len - bytes_left;
 
-        if (process_bytes_read != cache_line_byte_size) {
-          if (process_bytes_read < data_buffer_heap_up->GetByteSize()) {
-            dst_len -= data_buffer_heap_up->GetByteSize() - process_bytes_read;
-            bytes_left = process_bytes_read;
-          }
+        if (process_bytes_read != cache_line_byte_size)
           data_buffer_heap_up->SetByteSize(process_bytes_read);
-        }
         m_L2_cache[curr_addr] = DataBufferSP(data_buffer_heap_up.release());
         // We have read data and put it into the cache, continue through the
         // loop again to get the data out of the cache...
@@ -259,7 +254,7 @@ AllocatedBlock::AllocatedBlock(lldb::addr_t addr, uint32_t byte_size,
   assert(byte_size > chunk_size);
 }
 
-AllocatedBlock::~AllocatedBlock() = default;
+AllocatedBlock::~AllocatedBlock() {}
 
 lldb::addr_t AllocatedBlock::ReserveBlock(uint32_t size) {
   // We must return something valid for zero bytes.
@@ -329,7 +324,7 @@ bool AllocatedBlock::FreeBlock(addr_t addr) {
 AllocatedMemoryCache::AllocatedMemoryCache(Process &process)
     : m_process(process), m_mutex(), m_memory_map() {}
 
-AllocatedMemoryCache::~AllocatedMemoryCache() = default;
+AllocatedMemoryCache::~AllocatedMemoryCache() {}
 
 void AllocatedMemoryCache::Clear() {
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
@@ -353,11 +348,10 @@ AllocatedMemoryCache::AllocatePage(uint32_t byte_size, uint32_t permissions,
 
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
   if (log) {
-    LLDB_LOGF(log,
-              "Process::DoAllocateMemory (byte_size = 0x%8.8" PRIx32
-              ", permissions = %s) => 0x%16.16" PRIx64,
-              (uint32_t)page_byte_size, GetPermissionsAsCString(permissions),
-              (uint64_t)addr);
+    log->Printf("Process::DoAllocateMemory (byte_size = 0x%8.8" PRIx32
+                ", permissions = %s) => 0x%16.16" PRIx64,
+                (uint32_t)page_byte_size, GetPermissionsAsCString(permissions),
+                (uint64_t)addr);
   }
 
   if (addr != LLDB_INVALID_ADDRESS) {
@@ -391,11 +385,12 @@ lldb::addr_t AllocatedMemoryCache::AllocateMemory(size_t byte_size,
       addr = block_sp->ReserveBlock(byte_size);
   }
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
-  LLDB_LOGF(log,
-            "AllocatedMemoryCache::AllocateMemory (byte_size = 0x%8.8" PRIx32
-            ", permissions = %s) => 0x%16.16" PRIx64,
-            (uint32_t)byte_size, GetPermissionsAsCString(permissions),
-            (uint64_t)addr);
+  if (log)
+    log->Printf(
+        "AllocatedMemoryCache::AllocateMemory (byte_size = 0x%8.8" PRIx32
+        ", permissions = %s) => 0x%16.16" PRIx64,
+        (uint32_t)byte_size, GetPermissionsAsCString(permissions),
+        (uint64_t)addr);
   return addr;
 }
 
@@ -411,9 +406,9 @@ bool AllocatedMemoryCache::DeallocateMemory(lldb::addr_t addr) {
     }
   }
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
-  LLDB_LOGF(log,
-            "AllocatedMemoryCache::DeallocateMemory (addr = 0x%16.16" PRIx64
-            ") => %i",
-            (uint64_t)addr, success);
+  if (log)
+    log->Printf("AllocatedMemoryCache::DeallocateMemory (addr = 0x%16.16" PRIx64
+                ") => %i",
+                (uint64_t)addr, success);
   return success;
 }

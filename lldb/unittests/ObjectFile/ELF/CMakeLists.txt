@@ -3,7 +3,7 @@ add_lldb_unittest(ObjectFileELFTests
 
   LINK_LIBS
     lldbPluginObjectFileELF
-    lldbPluginSymbolFileSymtab
+    lldbPluginSymbolVendorELF
     lldbCore
     lldbUtilityHelpers
     LLVMTestingSupport
@@ -11,5 +11,7 @@ add_lldb_unittest(ObjectFileELFTests
 
 set(test_inputs
   early-section-headers.so
+  debug-info-relocations.pcm.yaml
+  sections-resolve-consistently.yaml
   )
 add_unittest_inputs(ObjectFileELFTests "${test_inputs}")

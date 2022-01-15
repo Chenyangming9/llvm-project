@@ -1,6 +1,7 @@
 // RUN: %clang_cc1 -std=c++11 -fsyntax-only -verify %s
 // RUN: %clang_cc1 -std=c++14 -fsyntax-only -verify %s
-// RUN: %clang_cc1 -std=c++1z -fsyntax-only -verify %s
+// FIXME: Remove the triple when PR27098 is fixed.
+// RUN: %clang_cc1 -std=c++1z -fsyntax-only -verify %s -triple %itanium_abi_triple
 
 namespace std {
   typedef decltype(sizeof(int)) size_t;
@@ -85,20 +86,6 @@ namespace bullet6 {
   const int& i1 = { 1 };
   const int& i2 = { 1.1 };  // expected-error {{type 'double' cannot be narrowed to 'int' in initializer list}} expected-note {{silence}} expected-warning {{implicit conversion}}
   const int (&iar)[2] = { 1, 2 };
-
-  // We interpret "class type with a default constructor" as including the case
-  // where a default constructor is inherited.
-  struct X {
-    X();
-    X(std::initializer_list<int>) = delete;
-  };
-  struct Y : X {
-    using X::X;
-    Y(int);
-  };
-  Y y1{};
-  void use() { Y y; }
-  Y y2{};
 }
 
 namespace bullet7 {

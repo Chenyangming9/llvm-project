@@ -26,11 +26,8 @@
 #include "ObjCARC.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/PassManager.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Transforms/ObjCARC.h"
 
 using namespace llvm;
 using namespace llvm::objcarc;
@@ -38,20 +35,50 @@ using namespace llvm::objcarc;
 #define DEBUG_TYPE "objc-arc-ap-elim"
 
 namespace {
+  /// Autorelease pool elimination.
+  class ObjCARCAPElim : public ModulePass {
+    void getAnalysisUsage(AnalysisUsage &AU) const override;
+    bool runOnModule(Module &M) override;
+
+    static bool MayAutorelease(ImmutableCallSite CS, unsigned Depth = 0);
+    static bool OptimizeBB(BasicBlock *BB);
+
+  public:
+    static char ID;
+    ObjCARCAPElim() : ModulePass(ID) {
+      initializeObjCARCAPElimPass(*PassRegistry::getPassRegistry());
+    }
+  };
+}
+
+char ObjCARCAPElim::ID = 0;
+INITIALIZE_PASS(ObjCARCAPElim,
+                "objc-arc-apelim",
+                "ObjC ARC autorelease pool elimination",
+                false, false)
+
+Pass *llvm::createObjCARCAPElimPass() {
+  return new ObjCARCAPElim();
+}
+
+void ObjCARCAPElim::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.setPreservesCFG();
+}
 
 /// Interprocedurally determine if calls made by the given call site can
 /// possibly produce autoreleases.
-bool MayAutorelease(const CallBase &CB, unsigned Depth = 0) {
-  if (const Function *Callee = CB.getCalledFunction()) {
+bool ObjCARCAPElim::MayAutorelease(ImmutableCallSite CS, unsigned Depth) {
+  if (const Function *Callee = CS.getCalledFunction()) {
     if (!Callee->hasExactDefinition())
       return true;
     for (const BasicBlock &BB : *Callee) {
       for (const Instruction &I : BB)
-        if (const CallBase *JCB = dyn_cast<CallBase>(&I))
+        if (ImmutableCallSite JCS = ImmutableCallSite(&I))
           // This recursion depth limit is arbitrary. It's just great
           // enough to cover known interesting testcases.
-          if (Depth < 3 && !JCB->onlyReadsMemory() &&
-              MayAutorelease(*JCB, Depth + 1))
+          if (Depth < 3 &&
+              !JCS.onlyReadsMemory() &&
+              MayAutorelease(JCS, Depth + 1))
             return true;
     }
     return false;
@@ -60,7 +87,7 @@ bool MayAutorelease(const CallBase &CB, unsigned Depth = 0) {
   return true;
 }
 
-bool OptimizeBB(BasicBlock *BB) {
+bool ObjCARCAPElim::OptimizeBB(BasicBlock *BB) {
   bool Changed = false;
 
   Instruction *Push = nullptr;
@@ -87,7 +114,7 @@ bool OptimizeBB(BasicBlock *BB) {
       Push = nullptr;
       break;
     case ARCInstKind::CallOrUser:
-      if (MayAutorelease(cast<CallBase>(*Inst)))
+      if (MayAutorelease(ImmutableCallSite(Inst)))
         Push = nullptr;
       break;
     default:
@@ -98,13 +125,17 @@ bool OptimizeBB(BasicBlock *BB) {
   return Changed;
 }
 
-bool runImpl(Module &M) {
+bool ObjCARCAPElim::runOnModule(Module &M) {
   if (!EnableARCOpts)
     return false;
 
   // If nothing in the Module uses ARC, don't do anything.
   if (!ModuleHasARC(M))
     return false;
+
+  if (skipModule(M))
+    return false;
+
   // Find the llvm.global_ctors variable, as the first step in
   // identifying the global constructors. In theory, unnecessary autorelease
   // pools could occur anywhere, but in practice it's pretty rare. Global
@@ -143,41 +174,4 @@ bool runImpl(Module &M) {
   }
 
   return Changed;
-}
-
-/// Autorelease pool elimination.
-class ObjCARCAPElim : public ModulePass {
-  void getAnalysisUsage(AnalysisUsage &AU) const override;
-  bool runOnModule(Module &M) override;
-
-public:
-  static char ID;
-  ObjCARCAPElim() : ModulePass(ID) {
-    initializeObjCARCAPElimPass(*PassRegistry::getPassRegistry());
-  }
-};
-} // namespace
-
-char ObjCARCAPElim::ID = 0;
-INITIALIZE_PASS(ObjCARCAPElim, "objc-arc-apelim",
-                "ObjC ARC autorelease pool elimination", false, false)
-
-Pass *llvm::createObjCARCAPElimPass() { return new ObjCARCAPElim(); }
-
-void ObjCARCAPElim::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.setPreservesCFG();
-}
-
-bool ObjCARCAPElim::runOnModule(Module &M) {
-  if (skipModule(M))
-    return false;
-  return runImpl(M);
-}
-
-PreservedAnalyses ObjCARCAPElimPass::run(Module &M, ModuleAnalysisManager &AM) {
-  if (!runImpl(M))
-    return PreservedAnalyses::all();
-  PreservedAnalyses PA;
-  PA.preserveSet<CFGAnalyses>();
-  return PA;
 }

@@ -6,14 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_BREAKPOINT_BREAKPOINTLOCATION_H
-#define LLDB_BREAKPOINT_BREAKPOINTLOCATION_H
+#ifndef liblldb_BreakpointLocation_h_
+#define liblldb_BreakpointLocation_h_
 
 #include <memory>
 #include <mutex>
 
 #include "lldb/Breakpoint/BreakpointOptions.h"
-#include "lldb/Breakpoint/StoppointHitCounter.h"
+#include "lldb/Breakpoint/StoppointLocation.h"
 #include "lldb/Core/Address.h"
 #include "lldb/Utility/UserID.h"
 #include "lldb/lldb-private.h"
@@ -35,14 +35,15 @@ namespace lldb_private {
 /// be useful if you've set options on the locations.
 
 class BreakpointLocation
-    : public std::enable_shared_from_this<BreakpointLocation> {
+    : public std::enable_shared_from_this<BreakpointLocation>,
+      public StoppointLocation {
 public:
-  ~BreakpointLocation();
+  ~BreakpointLocation() override;
 
   /// Gets the load address for this breakpoint location \return
   ///     Returns breakpoint location load address, \b
   ///     LLDB_INVALID_ADDRESS if not yet set.
-  lldb::addr_t GetLoadAddress() const;
+  lldb::addr_t GetLoadAddress() const override;
 
   /// Gets the Address for this breakpoint location \return
   ///     Returns breakpoint location Address.
@@ -62,11 +63,11 @@ public:
   /// \return
   ///     \b true if this breakpoint location thinks we should stop,
   ///     \b false otherwise.
-  bool ShouldStop(StoppointCallbackContext *context);
+  bool ShouldStop(StoppointCallbackContext *context) override;
 
   // The next section deals with various breakpoint options.
 
-  /// If \a enabled is \b true, enable the breakpoint, if \b false disable it.
+  /// If \a enable is \b true, enable the breakpoint, if \b false disable it.
   void SetEnabled(bool enabled);
 
   /// Check the Enable/Disable state.
@@ -84,18 +85,15 @@ public:
   ///     \b true if the breakpoint is set to auto-continue, \b false if not.
   bool IsAutoContinue() const;
 
-  /// Return the current Hit Count.
-  uint32_t GetHitCount() const { return m_hit_counter.GetValue(); }
-
   /// Return the current Ignore Count.
   ///
   /// \return
   ///     The number of breakpoint hits to be ignored.
-  uint32_t GetIgnoreCount() const;
+  uint32_t GetIgnoreCount();
 
   /// Set the breakpoint to ignore the next \a count breakpoint hits.
   ///
-  /// \param[in] n
+  /// \param[in] count
   ///    The number of breakpoint hits to ignore.
   void SetIgnoreCount(uint32_t n);
 
@@ -194,7 +192,7 @@ public:
   void GetDescription(Stream *s, lldb::DescriptionLevel level);
 
   /// Standard "Dump" method.  At present it does nothing.
-  void Dump(Stream *s) const;
+  void Dump(Stream *s) const override;
 
   /// Use this to set location specific breakpoint options.
   ///
@@ -202,8 +200,8 @@ public:
   /// hasn't been done already
   ///
   /// \return
-  ///    A reference to the breakpoint options.
-  BreakpointOptions &GetLocationOptions();
+  ///    A pointer to the breakpoint options.
+  BreakpointOptions *GetLocationOptions();
 
   /// Use this to access breakpoint options from this breakpoint location.
   /// This will return the options that have a setting for the specified
@@ -214,10 +212,10 @@ public:
   /// \return
   ///     A pointer to the containing breakpoint's options if this
   ///     location doesn't have its own copy.
-  const BreakpointOptions &
-  GetOptionsSpecifyingKind(BreakpointOptions::OptionKind kind) const;
+  const BreakpointOptions *GetOptionsSpecifyingKind(
+      BreakpointOptions::OptionKind kind) const;
 
-  bool ValidForThisThread(Thread &thread);
+  bool ValidForThisThread(Thread *thread);
 
   /// Invoke the callback action when the breakpoint is hit.
   ///
@@ -226,16 +224,13 @@ public:
   /// \param[in] context
   ///    Described the breakpoint event.
   ///
+  /// \param[in] bp_loc_id
+  ///    Which breakpoint location hit this breakpoint.
+  ///
   /// \return
   ///     \b true if the target should stop at this breakpoint and \b
   ///     false not.
   bool InvokeCallback(StoppointCallbackContext *context);
-  
-  /// Report whether the callback for this location is synchronous or not.
-  ///
-  /// \return
-  ///     \b true if the callback is synchronous and \b false if not.
-  bool IsCallbackSynchronous();
 
   /// Returns whether we should resolve Indirect functions in setting the
   /// breakpoint site for this location.
@@ -276,9 +271,6 @@ public:
   ///     \b true or \b false as given in the description above.
   bool EquivalentToLocation(BreakpointLocation &location);
 
-  /// Returns the breakpoint location ID.
-  lldb::break_id_t GetID() const { return m_loc_id; }
-
 protected:
   friend class BreakpointSite;
   friend class BreakpointLocationList;
@@ -297,10 +289,6 @@ protected:
 
   void DecrementIgnoreCount();
 
-  /// BreakpointLocation::IgnoreCountShouldStop  can only be called once
-  /// per stop.  This method checks first against the loc and then the owner.
-  /// It also takes care of decrementing the ignore counters.
-  /// If it returns false we should continue, otherwise stop.
   bool IgnoreCountShouldStop();
 
 private:
@@ -353,9 +341,6 @@ private:
                                 /// multiple processes.
   size_t m_condition_hash; ///< For testing whether the condition source code
                            ///changed.
-  lldb::break_id_t m_loc_id; ///< Breakpoint location ID.
-  StoppointHitCounter m_hit_counter; ///< Number of times this breakpoint
-                                     /// location has been hit.
 
   void SetShouldResolveIndirectFunctions(bool do_resolve) {
     m_should_resolve_indirect_functions = do_resolve;
@@ -363,10 +348,9 @@ private:
 
   void SendBreakpointLocationChangedEvent(lldb::BreakpointEventType eventKind);
 
-  BreakpointLocation(const BreakpointLocation &) = delete;
-  const BreakpointLocation &operator=(const BreakpointLocation &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(BreakpointLocation);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_BREAKPOINT_BREAKPOINTLOCATION_H
+#endif // liblldb_BreakpointLocation_h_

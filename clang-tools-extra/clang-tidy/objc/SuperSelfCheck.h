@@ -10,7 +10,7 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OBJC_SUPERSELFCHECK_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_OBJC_SUPERSELFCHECK_H
 
-#include "../ClangTidyCheck.h"
+#include "../ClangTidy.h"
 
 namespace clang {
 namespace tidy {
@@ -25,9 +25,6 @@ class SuperSelfCheck : public ClangTidyCheck {
 public:
   SuperSelfCheck(StringRef Name, ClangTidyContext *Context)
       : ClangTidyCheck(Name, Context) {}
-  bool isLanguageVersionSupported(const LangOptions &LangOpts) const override {
-    return LangOpts.ObjC;
-  }
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 };

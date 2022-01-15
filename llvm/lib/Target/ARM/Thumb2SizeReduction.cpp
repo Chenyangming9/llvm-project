@@ -43,7 +43,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "thumb2-reduce-size"
+#define DEBUG_TYPE "t2-reduce-size"
 #define THUMB2_SIZE_REDUCE_NAME "Thumb2 instruction size reduce pass"
 
 STATISTIC(NumNarrows,  "Number of 32-bit instrs reduced to 16-bit ones");
@@ -300,7 +300,7 @@ Thumb2SizeReduce::canAddPseudoFlagDep(MachineInstr *Use, bool FirstInSelfLoop) {
   for (const MachineOperand &MO : CPSRDef->operands()) {
     if (!MO.isReg() || MO.isUndef() || MO.isUse())
       continue;
-    Register Reg = MO.getReg();
+    unsigned Reg = MO.getReg();
     if (Reg == 0 || Reg == ARM::CPSR)
       continue;
     Defs.insert(Reg);
@@ -309,7 +309,7 @@ Thumb2SizeReduce::canAddPseudoFlagDep(MachineInstr *Use, bool FirstInSelfLoop) {
   for (const MachineOperand &MO : Use->operands()) {
     if (!MO.isReg() || MO.isUndef() || MO.isDef())
       continue;
-    Register Reg = MO.getReg();
+    unsigned Reg = MO.getReg();
     if (Defs.count(Reg))
       return false;
   }
@@ -380,7 +380,7 @@ static bool VerifyLowRegs(MachineInstr *MI) {
     const MachineOperand &MO = MI->getOperand(i);
     if (!MO.isReg() || MO.isImplicit())
       continue;
-    Register Reg = MO.getReg();
+    unsigned Reg = MO.getReg();
     if (Reg == 0 || Reg == ARM::CPSR)
       continue;
     if (isPCOk && Reg == ARM::PC)
@@ -457,18 +457,18 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
       return false;
 
     if (!MI->hasOneMemOperand() ||
-        (*MI->memoperands_begin())->getAlign() < Align(4))
+        (*MI->memoperands_begin())->getAlignment() < 4)
       return false;
 
     // We're creating a completely different type of load/store - LDM from LDR.
     // For this reason we can't reuse the logic at the end of this function; we
     // have to implement the MI building here.
     bool IsStore = Entry.WideOpc == ARM::t2STR_POST;
-    Register Rt = MI->getOperand(IsStore ? 1 : 0).getReg();
-    Register Rn = MI->getOperand(IsStore ? 0 : 1).getReg();
+    unsigned Rt = MI->getOperand(IsStore ? 1 : 0).getReg();
+    unsigned Rn = MI->getOperand(IsStore ? 0 : 1).getReg();
     unsigned Offset = MI->getOperand(3).getImm();
     unsigned PredImm = MI->getOperand(4).getImm();
-    Register PredReg = MI->getOperand(5).getReg();
+    unsigned PredReg = MI->getOperand(5).getReg();
     assert(isARMLowRegister(Rt));
     assert(isARMLowRegister(Rn));
 
@@ -496,7 +496,7 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
     return true;
   }
   case ARM::t2LDMIA: {
-    Register BaseReg = MI->getOperand(0).getReg();
+    unsigned BaseReg = MI->getOperand(0).getReg();
     assert(isARMLowRegister(BaseReg));
 
     // For the non-writeback version (this one), the base register must be
@@ -516,25 +516,15 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
     isLdStMul = true;
     break;
   }
-  case ARM::t2STMIA: {
-    // t2STMIA is reduced to tSTMIA_UPD which has writeback. We can only do this
-    // if the base register is killed, as then it doesn't matter what its value
-    // is after the instruction.
+  case ARM::t2STMIA:
+    // If the base register is killed, we don't care what its value is after the
+    // instruction, so we can use an updating STMIA.
     if (!MI->getOperand(0).isKill())
       return false;
 
-    // If the base register is in the register list and isn't the lowest
-    // numbered register (i.e. it's in operand 4 onwards) then with writeback
-    // the stored value is unknown, so we can't convert to tSTMIA_UPD.
-    Register BaseReg = MI->getOperand(0).getReg();
-    for (unsigned i = 4; i < MI->getNumOperands(); ++i)
-      if (MI->getOperand(i).getReg() == BaseReg)
-        return false;
-
     break;
-  }
   case ARM::t2LDMIA_RET: {
-    Register BaseReg = MI->getOperand(1).getReg();
+    unsigned BaseReg = MI->getOperand(1).getReg();
     if (BaseReg != ARM::SP)
       return false;
     Opc = Entry.NarrowOpc2; // tPOP_RET
@@ -547,7 +537,7 @@ Thumb2SizeReduce::ReduceLoadStore(MachineBasicBlock &MBB, MachineInstr *MI,
   case ARM::t2STMDB_UPD: {
     OpNum = 0;
 
-    Register BaseReg = MI->getOperand(1).getReg();
+    unsigned BaseReg = MI->getOperand(1).getReg();
     if (BaseReg == ARM::SP &&
         (Entry.WideOpc == ARM::t2LDMIA_UPD ||
          Entry.WideOpc == ARM::t2STMDB_UPD)) {
@@ -686,7 +676,7 @@ Thumb2SizeReduce::ReduceSpecial(MachineBasicBlock &MBB, MachineInstr *MI,
   default: break;
   case ARM::t2ADDSri:
   case ARM::t2ADDSrr: {
-    Register PredReg;
+    unsigned PredReg = 0;
     if (getInstrPredicate(*MI, PredReg) == ARMCC::AL) {
       switch (Opc) {
       default: break;
@@ -728,7 +718,7 @@ Thumb2SizeReduce::ReduceSpecial(MachineBasicBlock &MBB, MachineInstr *MI,
     return ReduceToNarrow(MBB, MI, Entry, LiveCPSR, IsSelfLoop);
   }
   case ARM::t2TEQrr: {
-    Register PredReg;
+    unsigned PredReg = 0;
     // Can only convert to eors if we're not in an IT block.
     if (getInstrPredicate(*MI, PredReg) != ARMCC::AL)
       break;
@@ -753,11 +743,11 @@ Thumb2SizeReduce::ReduceTo2Addr(MachineBasicBlock &MBB, MachineInstr *MI,
     // are optimizing for size.
     return false;
 
-  Register Reg0 = MI->getOperand(0).getReg();
-  Register Reg1 = MI->getOperand(1).getReg();
+  unsigned Reg0 = MI->getOperand(0).getReg();
+  unsigned Reg1 = MI->getOperand(1).getReg();
   // t2MUL is "special". The tied source operand is second, not first.
   if (MI->getOpcode() == ARM::t2MUL) {
-    Register Reg2 = MI->getOperand(2).getReg();
+    unsigned Reg2 = MI->getOperand(2).getReg();
     // Early exit if the regs aren't all low regs.
     if (!isARMLowRegister(Reg0) || !isARMLowRegister(Reg1)
         || !isARMLowRegister(Reg2))
@@ -792,14 +782,14 @@ Thumb2SizeReduce::ReduceTo2Addr(MachineBasicBlock &MBB, MachineInstr *MI,
     if (Imm > Limit)
       return false;
   } else {
-    Register Reg2 = MI->getOperand(2).getReg();
+    unsigned Reg2 = MI->getOperand(2).getReg();
     if (Entry.LowRegs2 && !isARMLowRegister(Reg2))
       return false;
   }
 
   // Check if it's possible / necessary to transfer the predicate.
   const MCInstrDesc &NewMCID = TII->get(Entry.NarrowOpc2);
-  Register PredReg;
+  unsigned PredReg = 0;
   ARMCC::CondCodes Pred = getInstrPredicate(*MI, PredReg);
   bool SkipPred = false;
   if (Pred != ARMCC::AL) {
@@ -878,7 +868,7 @@ Thumb2SizeReduce::ReduceToNarrow(MachineBasicBlock &MBB, MachineInstr *MI,
       continue;
     const MachineOperand &MO = MI->getOperand(i);
     if (MO.isReg()) {
-      Register Reg = MO.getReg();
+      unsigned Reg = MO.getReg();
       if (!Reg || Reg == ARM::CPSR)
         continue;
       if (Entry.LowRegs1 && !isARMLowRegister(Reg))
@@ -892,7 +882,7 @@ Thumb2SizeReduce::ReduceToNarrow(MachineBasicBlock &MBB, MachineInstr *MI,
 
   // Check if it's possible / necessary to transfer the predicate.
   const MCInstrDesc &NewMCID = TII->get(Entry.NarrowOpc1);
-  Register PredReg;
+  unsigned PredReg = 0;
   ARMCC::CondCodes Pred = getInstrPredicate(*MI, PredReg);
   bool SkipPred = false;
   if (Pred != ARMCC::AL) {

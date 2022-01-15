@@ -1,4 +1,4 @@
-//===-- ASTStructExtractor.cpp --------------------------------------------===//
+//===-- ASTStructExtractor.cpp ----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,6 +9,7 @@
 #include "ASTStructExtractor.h"
 
 #include "lldb/Utility/Log.h"
+#include "stdlib.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
@@ -20,7 +21,6 @@
 #include "clang/Sema/Sema.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cstdlib>
 
 using namespace llvm;
 using namespace clang;
@@ -30,15 +30,15 @@ ASTStructExtractor::ASTStructExtractor(ASTConsumer *passthrough,
                                        const char *struct_name,
                                        ClangFunctionCaller &function)
     : m_ast_context(nullptr), m_passthrough(passthrough),
-      m_passthrough_sema(nullptr), m_sema(nullptr), m_function(function),
-      m_struct_name(struct_name) {
+      m_passthrough_sema(nullptr), m_sema(nullptr), m_action(nullptr),
+      m_function(function), m_struct_name(struct_name) {
   if (!m_passthrough)
     return;
 
   m_passthrough_sema = dyn_cast<SemaConsumer>(passthrough);
 }
 
-ASTStructExtractor::~ASTStructExtractor() = default;
+ASTStructExtractor::~ASTStructExtractor() {}
 
 void ASTStructExtractor::Initialize(ASTContext &Context) {
   m_ast_context = &Context;
@@ -170,6 +170,7 @@ void ASTStructExtractor::PrintStats() {
 
 void ASTStructExtractor::InitializeSema(Sema &S) {
   m_sema = &S;
+  m_action = reinterpret_cast<Action *>(m_sema);
 
   if (m_passthrough_sema)
     m_passthrough_sema->InitializeSema(S);
@@ -177,6 +178,7 @@ void ASTStructExtractor::InitializeSema(Sema &S) {
 
 void ASTStructExtractor::ForgetSema() {
   m_sema = nullptr;
+  m_action = nullptr;
 
   if (m_passthrough_sema)
     m_passthrough_sema->ForgetSema();

@@ -17,14 +17,13 @@
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/InitializePasses.h"
 
 using namespace llvm;
 
 DiagnosticInfoMIROptimization::MachineArgument::MachineArgument(
     StringRef MKey, const MachineInstr &MI)
     : Argument() {
-  Key = std::string(MKey);
+  Key = MKey;
 
   raw_string_ostream OS(Val);
   MI.print(OS, /*IsStandalone=*/true, /*SkipOpers=*/false,
@@ -77,7 +76,7 @@ bool MachineOptimizationRemarkEmitterPass::runOnMachineFunction(
   else
     MBFI = nullptr;
 
-  ORE = std::make_unique<MachineOptimizationRemarkEmitter>(MF, MBFI);
+  ORE = llvm::make_unique<MachineOptimizationRemarkEmitter>(MF, MBFI);
   return false;
 }
 
@@ -93,7 +92,7 @@ static const char ore_name[] = "Machine Optimization Remark Emitter";
 #define ORE_NAME "machine-opt-remark-emitter"
 
 INITIALIZE_PASS_BEGIN(MachineOptimizationRemarkEmitterPass, ORE_NAME, ore_name,
-                      true, true)
+                      false, true)
 INITIALIZE_PASS_DEPENDENCY(LazyMachineBlockFrequencyInfoPass)
 INITIALIZE_PASS_END(MachineOptimizationRemarkEmitterPass, ORE_NAME, ore_name,
-                    true, true)
+                    false, true)

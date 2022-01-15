@@ -6,16 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ARMBasicBlockInfo.h"
 #include "ARM.h"
 #include "ARMBaseInstrInfo.h"
+#include "ARMBasicBlockInfo.h"
 #include "ARMMachineFunctionInfo.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/IR/GlobalVariable.h"
-#include "llvm/Support/Debug.h"
 #include <vector>
 
 #define DEBUG_TYPE "arm-bb-utils"
@@ -49,7 +47,7 @@ void ARMBasicBlockUtils::computeBlockSize(MachineBasicBlock *MBB) {
   BasicBlockInfo &BBI = BBInfo[MBB->getNumber()];
   BBI.Size = 0;
   BBI.Unalign = 0;
-  BBI.PostAlign = Align(1);
+  BBI.PostAlign = 0;
 
   for (MachineInstr &I : *MBB) {
     BBI.Size += TII->getInstSizeInBytes(I);
@@ -64,8 +62,8 @@ void ARMBasicBlockUtils::computeBlockSize(MachineBasicBlock *MBB) {
 
   // tBR_JTr contains a .align 2 directive.
   if (!MBB->empty() && MBB->back().getOpcode() == ARM::tBR_JTr) {
-    BBI.PostAlign = Align(4);
-    MBB->getParent()->ensureAlignment(Align(4));
+    BBI.PostAlign = 2;
+    MBB->getParent()->ensureAlignment(2);
   }
 }
 
@@ -128,9 +126,9 @@ void ARMBasicBlockUtils::adjustBBOffsetsAfter(MachineBasicBlock *BB) {
   for(unsigned i = BBNum + 1, e = MF.getNumBlockIDs(); i < e; ++i) {
     // Get the offset and known bits at the end of the layout predecessor.
     // Include the alignment of the current block.
-    const Align Align = MF.getBlockNumbered(i)->getAlignment();
-    const unsigned Offset = BBInfo[i - 1].postOffset(Align);
-    const unsigned KnownBits = BBInfo[i - 1].postKnownBits(Align);
+    unsigned LogAlign = MF.getBlockNumbered(i)->getAlignment();
+    unsigned Offset = BBInfo[i - 1].postOffset(LogAlign);
+    unsigned KnownBits = BBInfo[i - 1].postKnownBits(LogAlign);
 
     // This is where block i begins.  Stop if the offset is already correct,
     // and we have updated 2 blocks.  This is the maximum number of blocks

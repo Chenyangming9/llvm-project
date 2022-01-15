@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: LIBCXX-DEBUG-FIXME
-
 // <string>
 
 // template<> struct char_traits<char32_t>
@@ -19,7 +17,7 @@
 
 #include "test_macros.h"
 
-TEST_CONSTEXPR_CXX20 bool test()
+int main(int, char**)
 {
 #ifndef _LIBCPP_HAS_NO_UNICODE_CHARS
     char32_t s1[] = {1, 2, 3};
@@ -30,18 +28,7 @@ TEST_CONSTEXPR_CXX20 bool test()
     assert(s2[2] == char32_t(3));
     assert(std::char_traits<char32_t>::copy(NULL, s1, 0) == NULL);
     assert(std::char_traits<char32_t>::copy(s1, NULL, 0) == s1);
-#endif // _LIBCPP_HAS_NO_UNICODE_CHARS
-
-  return true;
-}
-
-int main(int, char**)
-{
-    test();
-
-#if TEST_STD_VER > 17
-    static_assert(test());
-#endif
+#endif  // _LIBCPP_HAS_NO_UNICODE_CHARS
 
   return 0;
 }

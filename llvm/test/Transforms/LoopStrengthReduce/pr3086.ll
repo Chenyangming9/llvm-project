@@ -1,5 +1,5 @@
 ; RUN: opt < %s -loop-reduce
-; RUN: opt < %s -scalar-evolution
+; RUN: opt < %s -analyze -scalar-evolution
 ; PR 3086
 
 	%struct.Cls = type { i32, i8, [2 x %struct.Cls*], [2 x %struct.Lit*] }

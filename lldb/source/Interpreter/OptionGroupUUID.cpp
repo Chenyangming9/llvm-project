@@ -1,4 +1,4 @@
-//===-- OptionGroupUUID.cpp -----------------------------------------------===//
+//===-- OptionGroupUUID.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,9 +13,13 @@
 using namespace lldb;
 using namespace lldb_private;
 
+OptionGroupUUID::OptionGroupUUID() : m_uuid() {}
+
+OptionGroupUUID::~OptionGroupUUID() {}
+
 static constexpr OptionDefinition g_option_table[] = {
     {LLDB_OPT_SET_1, false, "uuid", 'u', OptionParser::eRequiredArgument,
-     nullptr, {}, 0, eArgTypeModuleUUID, "A module UUID value."},
+     nullptr, {}, 0, eArgTypeNone, "A module UUID value."},
 };
 
 llvm::ArrayRef<OptionDefinition> OptionGroupUUID::GetDefinitions() {
@@ -36,7 +40,8 @@ Status OptionGroupUUID::SetOptionValue(uint32_t option_idx,
     break;
 
   default:
-    llvm_unreachable("Unimplemented option");
+    error.SetErrorStringWithFormat("unrecognized option '%c'", short_option);
+    break;
   }
 
   return error;

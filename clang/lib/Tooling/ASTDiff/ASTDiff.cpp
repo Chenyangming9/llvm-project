@@ -11,9 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Tooling/ASTDiff/ASTDiff.h"
-#include "clang/AST/ParentMapContext.h"
+
 #include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
 #include "llvm/ADT/PriorityQueue.h"
 
@@ -36,8 +35,8 @@ public:
   Mapping &operator=(Mapping &&Other) = default;
 
   Mapping(size_t Size) {
-    SrcToDst = std::make_unique<NodeId[]>(Size);
-    DstToSrc = std::make_unique<NodeId[]>(Size);
+    SrcToDst = llvm::make_unique<NodeId[]>(Size);
+    DstToSrc = llvm::make_unique<NodeId[]>(Size);
   }
 
   void link(NodeId Src, NodeId Dst) {
@@ -117,12 +116,12 @@ public:
   Impl(SyntaxTree *Parent, Stmt *N, ASTContext &AST);
   template <class T>
   Impl(SyntaxTree *Parent,
-       std::enable_if_t<std::is_base_of<Stmt, T>::value, T> *Node,
+       typename std::enable_if<std::is_base_of<Stmt, T>::value, T>::type *Node,
        ASTContext &AST)
       : Impl(Parent, dyn_cast<Stmt>(Node), AST) {}
   template <class T>
   Impl(SyntaxTree *Parent,
-       std::enable_if_t<std::is_base_of<Decl, T>::value, T> *Node,
+       typename std::enable_if<std::is_base_of<Decl, T>::value, T>::type *Node,
        ASTContext &AST)
       : Impl(Parent, dyn_cast<Decl>(Node), AST) {}
 
@@ -398,7 +397,7 @@ static const DeclContext *getEnclosingDeclContext(ASTContext &AST,
 static std::string getInitializerValue(const CXXCtorInitializer *Init,
                                        const PrintingPolicy &TypePP) {
   if (Init->isAnyMemberInitializer())
-    return std::string(Init->getAnyMember()->getName());
+    return Init->getAnyMember()->getName();
   if (Init->isBaseInitializer())
     return QualType(Init->getBaseClass(), 0).getAsString(TypePP);
   if (Init->isDelegatingInitializer())
@@ -435,36 +434,36 @@ std::string SyntaxTree::Impl::getDeclValue(const Decl *D) const {
           T->getTypeForDecl()->getCanonicalTypeInternal().getAsString(TypePP) +
           ";";
   if (auto *U = dyn_cast<UsingDirectiveDecl>(D))
-    return std::string(U->getNominatedNamespace()->getName());
+    return U->getNominatedNamespace()->getName();
   if (auto *A = dyn_cast<AccessSpecDecl>(D)) {
     CharSourceRange Range(A->getSourceRange(), false);
-    return std::string(
-        Lexer::getSourceText(Range, AST.getSourceManager(), AST.getLangOpts()));
+    return Lexer::getSourceText(Range, AST.getSourceManager(),
+                                AST.getLangOpts());
   }
   return Value;
 }
 
 std::string SyntaxTree::Impl::getStmtValue(const Stmt *S) const {
   if (auto *U = dyn_cast<UnaryOperator>(S))
-    return std::string(UnaryOperator::getOpcodeStr(U->getOpcode()));
+    return UnaryOperator::getOpcodeStr(U->getOpcode());
   if (auto *B = dyn_cast<BinaryOperator>(S))
-    return std::string(B->getOpcodeStr());
+    return B->getOpcodeStr();
   if (auto *M = dyn_cast<MemberExpr>(S))
     return getRelativeName(M->getMemberDecl());
   if (auto *I = dyn_cast<IntegerLiteral>(S)) {
     SmallString<256> Str;
     I->getValue().toString(Str, /*Radix=*/10, /*Signed=*/false);
-    return std::string(Str.str());
+    return Str.str();
   }
   if (auto *F = dyn_cast<FloatingLiteral>(S)) {
     SmallString<256> Str;
     F->getValue().toString(Str);
-    return std::string(Str.str());
+    return Str.str();
   }
   if (auto *D = dyn_cast<DeclRefExpr>(S))
     return getRelativeName(D->getDecl(), getEnclosingDeclContext(AST, S));
   if (auto *String = dyn_cast<StringLiteral>(S))
-    return std::string(String->getString());
+    return String->getString();
   if (auto *B = dyn_cast<CXXBoolLiteralExpr>(S))
     return B->getValue() ? "true" : "false";
   return "";
@@ -566,13 +565,13 @@ public:
   ZhangShashaMatcher(const ASTDiff::Impl &DiffImpl, const SyntaxTree::Impl &T1,
                      const SyntaxTree::Impl &T2, NodeId Id1, NodeId Id2)
       : DiffImpl(DiffImpl), S1(T1, Id1), S2(T2, Id2) {
-    TreeDist = std::make_unique<std::unique_ptr<double[]>[]>(
+    TreeDist = llvm::make_unique<std::unique_ptr<double[]>[]>(
         size_t(S1.getSize()) + 1);
-    ForestDist = std::make_unique<std::unique_ptr<double[]>[]>(
+    ForestDist = llvm::make_unique<std::unique_ptr<double[]>[]>(
         size_t(S1.getSize()) + 1);
     for (int I = 0, E = S1.getSize() + 1; I < E; ++I) {
-      TreeDist[I] = std::make_unique<double[]>(size_t(S2.getSize()) + 1);
-      ForestDist[I] = std::make_unique<double[]>(size_t(S2.getSize()) + 1);
+      TreeDist[I] = llvm::make_unique<double[]>(size_t(S2.getSize()) + 1);
+      ForestDist[I] = llvm::make_unique<double[]>(size_t(S2.getSize()) + 1);
     }
   }
 
@@ -684,7 +683,9 @@ private:
   }
 };
 
-ASTNodeKind Node::getType() const { return ASTNode.getNodeKind(); }
+ast_type_traits::ASTNodeKind Node::getType() const {
+  return ASTNode.getNodeKind();
+}
 
 StringRef Node::getTypeLabel() const { return getType().asStringRef(); }
 
@@ -786,7 +787,7 @@ void ASTDiff::Impl::addOptimalMapping(Mapping &M, NodeId Id1,
     return;
   ZhangShashaMatcher Matcher(*this, T1, T2, Id1, Id2);
   std::vector<std::pair<NodeId, NodeId>> R = Matcher.getMatchingNodes();
-  for (const auto &Tuple : R) {
+  for (const auto Tuple : R) {
     NodeId Src = Tuple.first;
     NodeId Dst = Tuple.second;
     if (!M.hasSrc(Src) && !M.hasDst(Dst))
@@ -959,7 +960,7 @@ void ASTDiff::Impl::computeChangeKinds(Mapping &M) {
 
 ASTDiff::ASTDiff(SyntaxTree &T1, SyntaxTree &T2,
                  const ComparisonOptions &Options)
-    : DiffImpl(std::make_unique<Impl>(*T1.TreeImpl, *T2.TreeImpl, Options)) {}
+    : DiffImpl(llvm::make_unique<Impl>(*T1.TreeImpl, *T2.TreeImpl, Options)) {}
 
 ASTDiff::~ASTDiff() = default;
 
@@ -968,7 +969,7 @@ NodeId ASTDiff::getMapped(const SyntaxTree &SourceTree, NodeId Id) const {
 }
 
 SyntaxTree::SyntaxTree(ASTContext &AST)
-    : TreeImpl(std::make_unique<SyntaxTree::Impl>(
+    : TreeImpl(llvm::make_unique<SyntaxTree::Impl>(
           this, AST.getTranslationUnitDecl(), AST)) {}
 
 SyntaxTree::~SyntaxTree() = default;

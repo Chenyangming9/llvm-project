@@ -17,5 +17,7 @@ static_library("AsmParser") {
     "//llvm/lib/Target/SystemZ/TargetInfo",
   ]
   include_dirs = [ ".." ]
-  sources = [ "SystemZAsmParser.cpp" ]
+  sources = [
+    "SystemZAsmParser.cpp",
+  ]
 }

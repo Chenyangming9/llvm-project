@@ -105,7 +105,7 @@ typedef ::testing::Types<DenseMap<uint32_t, uint32_t>,
                          SmallDenseMap<CtorTester, CtorTester, 4,
                                        CtorTesterMapInfo>
                          > DenseMapTestTypes;
-TYPED_TEST_SUITE(DenseMapTest, DenseMapTestTypes, );
+TYPED_TEST_CASE(DenseMapTest, DenseMapTestTypes);
 
 // Empty map tests
 TYPED_TEST(DenseMapTest, EmptyIntMapTest) {
@@ -547,15 +547,6 @@ TEST(DenseMapCustomTest, FindAsTest) {
   EXPECT_TRUE(map.find_as("d") == map.end());
 }
 
-TEST(DenseMapCustomTest, SmallDenseMapInitializerList) {
-  SmallDenseMap<int, int> M = {{0, 0}, {0, 1}, {1, 2}};
-  EXPECT_EQ(2u, M.size());
-  EXPECT_EQ(1u, M.count(0));
-  EXPECT_EQ(0, M[0]);
-  EXPECT_EQ(1u, M.count(1));
-  EXPECT_EQ(2, M[1]);
-}
-
 struct ContiguousDenseMapInfo {
   static inline unsigned getEmptyKey() { return ~0; }
   static inline unsigned getTombstoneKey() { return ~0U - 1; }
@@ -589,24 +580,6 @@ TEST(DenseMapCustomTest, SmallDenseMapGrowTest) {
   EXPECT_TRUE(map.find(32) == map.end());
 }
 
-TEST(DenseMapCustomTest, LargeSmallDenseMapCompaction) {
-  SmallDenseMap<unsigned, unsigned, 128, ContiguousDenseMapInfo> map;
-  // Fill to < 3/4 load.
-  for (unsigned i = 0; i < 95; ++i)
-    map[i] = i;
-  // And erase, leaving behind tombstones.
-  for (unsigned i = 0; i < 95; ++i)
-    map.erase(i);
-  // Fill further, so that less than 1/8 are empty, but still below 3/4 load.
-  for (unsigned i = 95; i < 128; ++i)
-    map[i] = i;
-
-  EXPECT_EQ(33u, map.size());
-  // Similar to the previous test, check for a non-existing element, as an
-  // indirect check that tombstones have been removed.
-  EXPECT_TRUE(map.find(0) == map.end());
-}
-
 TEST(DenseMapCustomTest, TryEmplaceTest) {
   DenseMap<int, std::unique_ptr<int>> Map;
   std::unique_ptr<int> P(new int(2));
@@ -630,29 +603,5 @@ TEST(DenseMapCustomTest, ConstTest) {
   EXPECT_EQ(Map.count(C), 1u);
   EXPECT_NE(Map.find(B), Map.end());
   EXPECT_NE(Map.find(C), Map.end());
-}
-
-struct IncompleteStruct;
-
-TEST(DenseMapCustomTest, OpaquePointerKey) {
-  // Test that we can use a pointer to an incomplete type as a DenseMap key.
-  // This is an important build time optimization, since many classes have
-  // DenseMap members.
-  DenseMap<IncompleteStruct *, int> Map;
-  int Keys[3] = {0, 0, 0};
-  IncompleteStruct *K1 = reinterpret_cast<IncompleteStruct *>(&Keys[0]);
-  IncompleteStruct *K2 = reinterpret_cast<IncompleteStruct *>(&Keys[1]);
-  IncompleteStruct *K3 = reinterpret_cast<IncompleteStruct *>(&Keys[2]);
-  Map.insert({K1, 1});
-  Map.insert({K2, 2});
-  Map.insert({K3, 3});
-  EXPECT_EQ(Map.count(K1), 1u);
-  EXPECT_EQ(Map[K1], 1);
-  EXPECT_EQ(Map[K2], 2);
-  EXPECT_EQ(Map[K3], 3);
-  Map.clear();
-  EXPECT_EQ(Map.find(K1), Map.end());
-  EXPECT_EQ(Map.find(K2), Map.end());
-  EXPECT_EQ(Map.find(K3), Map.end());
 }
 }

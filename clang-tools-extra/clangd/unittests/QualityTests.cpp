@@ -112,7 +112,7 @@ TEST(QualityTests, SymbolRelevanceSignalExtraction) {
   int deprecated() { return 0; }
 
   namespace { struct X { void y() { int z; } }; }
-  struct S{};
+  struct S{}
   )cpp";
   auto AST = Test.build();
 
@@ -196,27 +196,25 @@ TEST(QualityTests, SymbolRelevanceSignalExtraction) {
 // Do the signals move the scores in the direction we expect?
 TEST(QualityTests, SymbolQualitySignalsSanity) {
   SymbolQualitySignals Default;
-  EXPECT_EQ(Default.evaluateHeuristics(), 1);
+  EXPECT_EQ(Default.evaluate(), 1);
 
   SymbolQualitySignals Deprecated;
   Deprecated.Deprecated = true;
-  EXPECT_LT(Deprecated.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_LT(Deprecated.evaluate(), Default.evaluate());
 
   SymbolQualitySignals ReservedName;
   ReservedName.ReservedName = true;
-  EXPECT_LT(ReservedName.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_LT(ReservedName.evaluate(), Default.evaluate());
 
   SymbolQualitySignals ImplementationDetail;
   ImplementationDetail.ImplementationDetail = true;
-  EXPECT_LT(ImplementationDetail.evaluateHeuristics(),
-            Default.evaluateHeuristics());
+  EXPECT_LT(ImplementationDetail.evaluate(), Default.evaluate());
 
   SymbolQualitySignals WithReferences, ManyReferences;
   WithReferences.References = 20;
   ManyReferences.References = 1000;
-  EXPECT_GT(WithReferences.evaluateHeuristics(), Default.evaluateHeuristics());
-  EXPECT_GT(ManyReferences.evaluateHeuristics(),
-            WithReferences.evaluateHeuristics());
+  EXPECT_GT(WithReferences.evaluate(), Default.evaluate());
+  EXPECT_GT(ManyReferences.evaluate(), WithReferences.evaluate());
 
   SymbolQualitySignals Keyword, Variable, Macro, Constructor, Function,
       Destructor, Operator;
@@ -228,44 +226,41 @@ TEST(QualityTests, SymbolQualitySignalsSanity) {
   Destructor.Category = SymbolQualitySignals::Destructor;
   Operator.Category = SymbolQualitySignals::Operator;
   Function.Category = SymbolQualitySignals::Function;
-  EXPECT_GT(Variable.evaluateHeuristics(), Default.evaluateHeuristics());
-  EXPECT_GT(Keyword.evaluateHeuristics(), Variable.evaluateHeuristics());
-  EXPECT_LT(Macro.evaluateHeuristics(), Default.evaluateHeuristics());
-  EXPECT_LT(Operator.evaluateHeuristics(), Default.evaluateHeuristics());
-  EXPECT_LT(Constructor.evaluateHeuristics(), Function.evaluateHeuristics());
-  EXPECT_LT(Destructor.evaluateHeuristics(), Constructor.evaluateHeuristics());
+  EXPECT_GT(Variable.evaluate(), Default.evaluate());
+  EXPECT_GT(Keyword.evaluate(), Variable.evaluate());
+  EXPECT_LT(Macro.evaluate(), Default.evaluate());
+  EXPECT_LT(Operator.evaluate(), Default.evaluate());
+  EXPECT_LT(Constructor.evaluate(), Function.evaluate());
+  EXPECT_LT(Destructor.evaluate(), Constructor.evaluate());
 }
 
 TEST(QualityTests, SymbolRelevanceSignalsSanity) {
   SymbolRelevanceSignals Default;
-  EXPECT_EQ(Default.evaluateHeuristics(), 1);
+  EXPECT_EQ(Default.evaluate(), 1);
 
   SymbolRelevanceSignals Forbidden;
   Forbidden.Forbidden = true;
-  EXPECT_LT(Forbidden.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_LT(Forbidden.evaluate(), Default.evaluate());
 
   SymbolRelevanceSignals PoorNameMatch;
   PoorNameMatch.NameMatch = 0.2f;
-  EXPECT_LT(PoorNameMatch.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_LT(PoorNameMatch.evaluate(), Default.evaluate());
 
   SymbolRelevanceSignals WithSemaFileProximity;
   WithSemaFileProximity.SemaFileProximityScore = 0.2f;
-  EXPECT_GT(WithSemaFileProximity.evaluateHeuristics(),
-            Default.evaluateHeuristics());
+  EXPECT_GT(WithSemaFileProximity.evaluate(), Default.evaluate());
 
   ScopeDistance ScopeProximity({"x::y::"});
 
   SymbolRelevanceSignals WithSemaScopeProximity;
   WithSemaScopeProximity.ScopeProximityMatch = &ScopeProximity;
   WithSemaScopeProximity.SemaSaysInScope = true;
-  EXPECT_GT(WithSemaScopeProximity.evaluateHeuristics(),
-            Default.evaluateHeuristics());
+  EXPECT_GT(WithSemaScopeProximity.evaluate(), Default.evaluate());
 
   SymbolRelevanceSignals WithIndexScopeProximity;
   WithIndexScopeProximity.ScopeProximityMatch = &ScopeProximity;
   WithIndexScopeProximity.SymbolScope = "x::";
-  EXPECT_GT(WithSemaScopeProximity.evaluateHeuristics(),
-            Default.evaluateHeuristics());
+  EXPECT_GT(WithSemaScopeProximity.evaluate(), Default.evaluate());
 
   SymbolRelevanceSignals IndexProximate;
   IndexProximate.SymbolURI = "unittest:/foo/bar.h";
@@ -273,43 +268,40 @@ TEST(QualityTests, SymbolRelevanceSignalsSanity) {
   ProxSources.try_emplace(testPath("foo/baz.h"));
   URIDistance Distance(ProxSources);
   IndexProximate.FileProximityMatch = &Distance;
-  EXPECT_GT(IndexProximate.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_GT(IndexProximate.evaluate(), Default.evaluate());
   SymbolRelevanceSignals IndexDistant = IndexProximate;
   IndexDistant.SymbolURI = "unittest:/elsewhere/path.h";
-  EXPECT_GT(IndexProximate.evaluateHeuristics(),
-            IndexDistant.evaluateHeuristics())
+  EXPECT_GT(IndexProximate.evaluate(), IndexDistant.evaluate())
       << IndexProximate << IndexDistant;
-  EXPECT_GT(IndexDistant.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_GT(IndexDistant.evaluate(), Default.evaluate());
 
   SymbolRelevanceSignals Scoped;
   Scoped.Scope = SymbolRelevanceSignals::FileScope;
-  EXPECT_LT(Scoped.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_LT(Scoped.evaluate(), Default.evaluate());
   Scoped.Query = SymbolRelevanceSignals::CodeComplete;
-  EXPECT_GT(Scoped.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_GT(Scoped.evaluate(), Default.evaluate());
 
   SymbolRelevanceSignals Instance;
   Instance.IsInstanceMember = false;
-  EXPECT_EQ(Instance.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_EQ(Instance.evaluate(), Default.evaluate());
   Instance.Context = CodeCompletionContext::CCC_DotMemberAccess;
-  EXPECT_LT(Instance.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_LT(Instance.evaluate(), Default.evaluate());
   Instance.IsInstanceMember = true;
-  EXPECT_EQ(Instance.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_EQ(Instance.evaluate(), Default.evaluate());
 
   SymbolRelevanceSignals InBaseClass;
   InBaseClass.InBaseClass = true;
-  EXPECT_LT(InBaseClass.evaluateHeuristics(), Default.evaluateHeuristics());
+  EXPECT_LT(InBaseClass.evaluate(), Default.evaluate());
 
   llvm::StringSet<> Words = {"one", "two", "three"};
   SymbolRelevanceSignals WithoutMatchingWord;
   WithoutMatchingWord.ContextWords = &Words;
   WithoutMatchingWord.Name = "four";
-  EXPECT_EQ(WithoutMatchingWord.evaluateHeuristics(),
-            Default.evaluateHeuristics());
+  EXPECT_EQ(WithoutMatchingWord.evaluate(), Default.evaluate());
   SymbolRelevanceSignals WithMatchingWord;
   WithMatchingWord.ContextWords = &Words;
   WithMatchingWord.Name = "TheTwoTowers";
-  EXPECT_GT(WithMatchingWord.evaluateHeuristics(),
-            Default.evaluateHeuristics());
+  EXPECT_GT(WithMatchingWord.evaluate(), Default.evaluate());
 }
 
 TEST(QualityTests, ScopeProximity) {
@@ -318,26 +310,26 @@ TEST(QualityTests, ScopeProximity) {
   Relevance.ScopeProximityMatch = &ScopeProximity;
 
   Relevance.SymbolScope = "other::";
-  float NotMatched = Relevance.evaluateHeuristics();
+  float NotMatched = Relevance.evaluate();
 
   Relevance.SymbolScope = "";
-  float Global = Relevance.evaluateHeuristics();
+  float Global = Relevance.evaluate();
   EXPECT_GT(Global, NotMatched);
 
   Relevance.SymbolScope = "llvm::";
-  float NonParent = Relevance.evaluateHeuristics();
+  float NonParent = Relevance.evaluate();
   EXPECT_GT(NonParent, Global);
 
   Relevance.SymbolScope = "x::";
-  float GrandParent = Relevance.evaluateHeuristics();
+  float GrandParent = Relevance.evaluate();
   EXPECT_GT(GrandParent, Global);
 
   Relevance.SymbolScope = "x::y::";
-  float Parent = Relevance.evaluateHeuristics();
+  float Parent = Relevance.evaluate();
   EXPECT_GT(Parent, GrandParent);
 
   Relevance.SymbolScope = "x::y::z::";
-  float Enclosing = Relevance.evaluateHeuristics();
+  float Enclosing = Relevance.evaluate();
   EXPECT_GT(Enclosing, Parent);
 }
 
@@ -493,8 +485,7 @@ TEST(QualityTests, ItemWithFixItsRankedDown) {
       CodeCompletionResult(&findDecl(AST, "x"), 0, nullptr, false, true, {}));
   EXPECT_FALSE(RelevanceWithoutFixIt.NeedsFixIts);
 
-  EXPECT_LT(RelevanceWithFixIt.evaluateHeuristics(),
-            RelevanceWithoutFixIt.evaluateHeuristics());
+  EXPECT_LT(RelevanceWithFixIt.evaluate(), RelevanceWithoutFixIt.evaluate());
 }
 
 } // namespace

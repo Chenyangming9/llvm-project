@@ -1,5 +1,4 @@
-; RUN: opt < %s -basic-aa -da -analyze -enable-new-pm=0 -delinearize
-; RUN: opt < %s -aa-pipeline=basic-aa -passes='require<da>,print<delinearization>' -disable-output
+; RUN: opt < %s -basicaa -da -analyze -delinearize
 ;
 ; a, b, c, d, g, h;
 ; char *f;

@@ -1,4 +1,4 @@
-//===-- Symbol.cpp --------------------------------------------------------===//
+//===-- Symbol.cpp ----------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -23,15 +23,17 @@ using namespace lldb;
 using namespace lldb_private;
 
 Symbol::Symbol()
-    : SymbolContextScope(), m_type_data_resolved(false), m_is_synthetic(false),
-      m_is_debug(false), m_is_external(false), m_size_is_sibling(false),
+    : SymbolContextScope(), m_uid(UINT32_MAX), m_type_data(0),
+      m_type_data_resolved(false), m_is_synthetic(false), m_is_debug(false),
+      m_is_external(false), m_size_is_sibling(false),
       m_size_is_synthesized(false), m_size_is_valid(false),
       m_demangled_is_synthesized(false), m_contains_linker_annotations(false),
-      m_is_weak(false), m_type(eSymbolTypeInvalid), m_mangled(),
-      m_addr_range() {}
+      m_is_weak(false), m_type(eSymbolTypeInvalid), m_mangled(), m_addr_range(),
+      m_flags() {}
 
-Symbol::Symbol(uint32_t symID, llvm::StringRef name, SymbolType type, bool external,
-               bool is_debug, bool is_trampoline, bool is_artificial,
+Symbol::Symbol(uint32_t symID, const char *name, bool name_is_mangled,
+               SymbolType type, bool external, bool is_debug,
+               bool is_trampoline, bool is_artificial,
                const lldb::SectionSP &section_sp, addr_t offset, addr_t size,
                bool size_is_valid, bool contains_linker_annotations,
                uint32_t flags)
@@ -40,9 +42,9 @@ Symbol::Symbol(uint32_t symID, llvm::StringRef name, SymbolType type, bool exter
       m_is_debug(is_debug), m_is_external(external), m_size_is_sibling(false),
       m_size_is_synthesized(false), m_size_is_valid(size_is_valid || size > 0),
       m_demangled_is_synthesized(false),
-      m_contains_linker_annotations(contains_linker_annotations),
+      m_contains_linker_annotations(contains_linker_annotations), 
       m_is_weak(false), m_type(type),
-      m_mangled(name),
+      m_mangled(ConstString(name), name_is_mangled),
       m_addr_range(section_sp, offset, size), m_flags(flags) {}
 
 Symbol::Symbol(uint32_t symID, const Mangled &mangled, SymbolType type,
@@ -56,8 +58,8 @@ Symbol::Symbol(uint32_t symID, const Mangled &mangled, SymbolType type,
       m_size_is_synthesized(false),
       m_size_is_valid(size_is_valid || range.GetByteSize() > 0),
       m_demangled_is_synthesized(false),
-      m_contains_linker_annotations(contains_linker_annotations),
-      m_is_weak(false), m_type(type), m_mangled(mangled), m_addr_range(range),
+      m_contains_linker_annotations(contains_linker_annotations), 
+      m_is_weak(false), m_type(type), m_mangled(mangled), m_addr_range(range), 
       m_flags(flags) {}
 
 Symbol::Symbol(const Symbol &rhs)
@@ -119,7 +121,7 @@ bool Symbol::ValueIsAddress() const {
 }
 
 ConstString Symbol::GetDisplayName() const {
-  return GetMangled().GetDisplayDemangledName();
+  return m_mangled.GetDisplayDemangledName(GetLanguage());
 }
 
 ConstString Symbol::GetReExportedSymbolName() const {
@@ -202,15 +204,14 @@ void Symbol::GetDescription(Stream *s, lldb::DescriptionLevel level,
       s->Printf(", value = 0x%16.16" PRIx64,
                 m_addr_range.GetBaseAddress().GetOffset());
   }
-  ConstString demangled = GetMangled().GetDemangledName();
+  ConstString demangled = m_mangled.GetDemangledName(GetLanguage());
   if (demangled)
     s->Printf(", name=\"%s\"", demangled.AsCString());
   if (m_mangled.GetMangledName())
     s->Printf(", mangled=\"%s\"", m_mangled.GetMangledName().AsCString());
 }
 
-void Symbol::Dump(Stream *s, Target *target, uint32_t index,
-                  Mangled::NamePreference name_preference) const {
+void Symbol::Dump(Stream *s, Target *target, uint32_t index) const {
   s->Printf("[%5u] %6u %c%c%c %-15s ", index, GetID(), m_is_debug ? 'D' : ' ',
             m_is_synthetic ? 'S' : ' ', m_is_external ? 'X' : ' ',
             GetTypeAsString());
@@ -218,7 +219,7 @@ void Symbol::Dump(Stream *s, Target *target, uint32_t index,
   // Make sure the size of the symbol is up to date before dumping
   GetByteSize();
 
-  ConstString name = GetMangled().GetName(name_preference);
+  ConstString name = m_mangled.GetName(GetLanguage());
   if (ValueIsAddress()) {
     if (!m_addr_range.GetBaseAddress().Dump(s, nullptr,
                                             Address::DumpStyleFileAddress))
@@ -330,11 +331,9 @@ uint32_t Symbol::GetPrologueByteSize() {
 }
 
 bool Symbol::Compare(ConstString name, SymbolType type) const {
-  if (type == eSymbolTypeAny || m_type == type) {
-    const Mangled &mangled = GetMangled();
-    return mangled.GetMangledName() == name ||
-           mangled.GetDemangledName() == name;
-  }
+  if (type == eSymbolTypeAny || m_type == type)
+    return m_mangled.GetMangledName() == name ||
+           m_mangled.GetDemangledName(GetLanguage()) == name;
   return false;
 }
 
@@ -497,10 +496,11 @@ lldb::addr_t Symbol::GetLoadAddress(Target *target) const {
     return LLDB_INVALID_ADDRESS;
 }
 
-ConstString Symbol::GetName() const { return GetMangled().GetName(); }
+ConstString Symbol::GetName() const { return m_mangled.GetName(GetLanguage()); }
 
 ConstString Symbol::GetNameNoArguments() const {
-  return GetMangled().GetName(Mangled::ePreferDemangledWithoutArguments);
+  return m_mangled.GetName(GetLanguage(),
+                           Mangled::ePreferDemangledWithoutArguments);
 }
 
 lldb::addr_t Symbol::ResolveCallableAddress(Target &target) const {
@@ -542,10 +542,11 @@ lldb::DisassemblerSP Symbol::GetInstructions(const ExecutionContext &exe_ctx,
                                              const char *flavor,
                                              bool prefer_file_cache) {
   ModuleSP module_sp(m_addr_range.GetBaseAddress().GetModule());
-  if (module_sp && exe_ctx.HasTargetScope()) {
+  if (module_sp) {
+    const bool prefer_file_cache = false;
     return Disassembler::DisassembleRange(module_sp->GetArchitecture(), nullptr,
-                                          flavor, exe_ctx.GetTargetRef(),
-                                          m_addr_range, !prefer_file_cache);
+                                          flavor, exe_ctx, m_addr_range,
+                                          prefer_file_cache);
   }
   return lldb::DisassemblerSP();
 }
@@ -566,31 +567,4 @@ bool Symbol::GetDisassembly(const ExecutionContext &exe_ctx, const char *flavor,
 
 bool Symbol::ContainsFileAddress(lldb::addr_t file_addr) const {
   return m_addr_range.ContainsFileAddress(file_addr);
-}
-
-bool Symbol::IsSyntheticWithAutoGeneratedName() const {
-  if (!IsSynthetic())
-    return false;
-  if (!m_mangled)
-    return true;
-  ConstString demangled = m_mangled.GetDemangledName();
-  return demangled.GetStringRef().startswith(GetSyntheticSymbolPrefix());
-}
-
-void Symbol::SynthesizeNameIfNeeded() const {
-  if (m_is_synthetic && !m_mangled) {
-    // Synthetic symbol names don't mean anything, but they do uniquely
-    // identify individual symbols so we give them a unique name. The name
-    // starts with the synthetic symbol prefix, followed by a unique number.
-    // Typically the UserID of a real symbol is the symbol table index of the
-    // symbol in the object file's symbol table(s), so it will be the same
-    // every time you read in the object file. We want the same persistence for
-    // synthetic symbols so that users can identify them across multiple debug
-    // sessions, to understand crashes in those symbols and to reliably set
-    // breakpoints on them.
-    llvm::SmallString<256> name;
-    llvm::raw_svector_ostream os(name);
-    os << GetSyntheticSymbolPrefix() << GetID();
-    m_mangled.SetDemangledName(ConstString(os.str()));
-  }
 }

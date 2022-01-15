@@ -45,7 +45,7 @@ void SlicingCheck::registerMatchers(MatchFinder *Finder) {
   const auto IsWithinDerivedCtor =
       hasParent(cxxConstructorDecl(ofClass(equalsBoundNode("DerivedDecl"))));
 
-  // Assignment slicing: "a = b;" and "a = std::move(b);" variants.
+  // Assignement slicing: "a = b;" and "a = std::move(b);" variants.
   const auto SlicesObjectInAssignment =
       callExpr(callee(cxxMethodDecl(anyOf(isCopyAssignmentOperator(),
                                           isMoveAssignmentOperator()),
@@ -62,10 +62,9 @@ void SlicingCheck::registerMatchers(MatchFinder *Finder) {
       // constructor in DerivedDecl's constructors.
       unless(IsWithinDerivedCtor));
 
-  Finder->addMatcher(traverse(TK_AsIs, expr(anyOf(SlicesObjectInAssignment,
-                                                  SlicesObjectInCtor))
-                                           .bind("Call")),
-                     this);
+  Finder->addMatcher(
+      expr(anyOf(SlicesObjectInAssignment, SlicesObjectInCtor)).bind("Call"),
+      this);
 }
 
 /// Warns on methods overridden in DerivedDecl with respect to BaseDecl.
@@ -76,7 +75,7 @@ void SlicingCheck::DiagnoseSlicedOverriddenMethods(
     const CXXRecordDecl &BaseDecl) {
   if (DerivedDecl.getCanonicalDecl() == BaseDecl.getCanonicalDecl())
     return;
-  for (const auto *Method : DerivedDecl.methods()) {
+  for (const auto &Method : DerivedDecl.methods()) {
     // Virtual destructors are OK. We're ignoring constructors since they are
     // tagged as overrides.
     if (isa<CXXConstructorDecl>(Method) || isa<CXXDestructorDecl>(Method))

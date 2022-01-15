@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONGROUPVARIABLE_H
-#define LLDB_INTERPRETER_OPTIONGROUPVARIABLE_H
+#ifndef liblldb_OptionGroupVariable_h_
+#define liblldb_OptionGroupVariable_h_
 
 #include "lldb/Interpreter/OptionValueString.h"
 #include "lldb/Interpreter/Options.h"
@@ -20,12 +20,13 @@ class OptionGroupVariable : public OptionGroup {
 public:
   OptionGroupVariable(bool show_frame_options);
 
-  ~OptionGroupVariable() override = default;
+  ~OptionGroupVariable() override;
 
   llvm::ArrayRef<OptionDefinition> GetDefinitions() override;
 
   Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
                         ExecutionContext *execution_context) override;
+  Status SetOptionValue(uint32_t, const char *, ExecutionContext *) = delete;
 
   void OptionParsingStarting(ExecutionContext *execution_context) override;
 
@@ -40,10 +41,9 @@ public:
   OptionValueString summary_string; // a summary string
 
 private:
-  OptionGroupVariable(const OptionGroupVariable &) = delete;
-  const OptionGroupVariable &operator=(const OptionGroupVariable &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(OptionGroupVariable);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONGROUPVARIABLE_H
+#endif // liblldb_OptionGroupVariable_h_

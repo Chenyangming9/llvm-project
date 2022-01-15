@@ -39,7 +39,7 @@ class CallEvent;
 class CallEventManager;
 
 typedef std::unique_ptr<ConstraintManager>(*ConstraintManagerCreator)(
-    ProgramStateManager &, ExprEngine *);
+    ProgramStateManager &, SubEngine *);
 typedef std::unique_ptr<StoreManager>(*StoreManagerCreator)(
     ProgramStateManager &);
 
@@ -298,19 +298,12 @@ public:
   LLVM_NODISCARD ProgramStateRef enterStackFrame(
       const CallEvent &Call, const StackFrameContext *CalleeCtx) const;
 
-  /// Return the value of 'self' if available in the given context.
-  SVal getSelfSVal(const LocationContext *LC) const;
-
   /// Get the lvalue for a base class object reference.
   Loc getLValue(const CXXBaseSpecifier &BaseSpec, const SubRegion *Super) const;
 
   /// Get the lvalue for a base class object reference.
   Loc getLValue(const CXXRecordDecl *BaseClass, const SubRegion *Super,
                 bool IsVirtual) const;
-
-  /// Get the lvalue for a parameter.
-  Loc getLValue(const Expr *Call, unsigned Index,
-                const LocationContext *LC) const;
 
   /// Get the lvalue for a variable reference.
   Loc getLValue(const VarDecl *D, const LocationContext *LC) const;
@@ -464,8 +457,8 @@ class ProgramStateManager {
   friend class ProgramState;
   friend void ProgramStateRelease(const ProgramState *state);
 private:
-  /// Eng - The ExprEngine that owns this state manager.
-  ExprEngine *Eng; /* Can be null. */
+  /// Eng - The SubEngine that owns this state manager.
+  SubEngine *Eng; /* Can be null. */
 
   EnvironmentManager                   EnvMgr;
   std::unique_ptr<StoreManager>        StoreMgr;
@@ -497,7 +490,7 @@ public:
                  StoreManagerCreator CreateStoreManager,
                  ConstraintManagerCreator CreateConstraintManager,
                  llvm::BumpPtrAllocator& alloc,
-                 ExprEngine *expreng);
+                 SubEngine *subeng);
 
   ~ProgramStateManager();
 
@@ -511,10 +504,6 @@ public:
   }
 
   SValBuilder &getSValBuilder() {
-    return *svalBuilder;
-  }
-
-  const SValBuilder &getSValBuilder() const {
     return *svalBuilder;
   }
 
@@ -538,12 +527,11 @@ public:
 
   StoreManager &getStoreManager() { return *StoreMgr; }
   ConstraintManager &getConstraintManager() { return *ConstraintMgr; }
-  ExprEngine &getOwningEngine() { return *Eng; }
+  SubEngine &getOwningEngine() { return *Eng; }
 
-  ProgramStateRef
-  removeDeadBindingsFromEnvironmentAndStore(ProgramStateRef St,
-                                            const StackFrameContext *LCtx,
-                                            SymbolReaper &SymReaper);
+  ProgramStateRef removeDeadBindings(ProgramStateRef St,
+                                    const StackFrameContext *LCtx,
+                                    SymbolReaper& SymReaper);
 
 public:
 

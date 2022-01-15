@@ -18,11 +18,13 @@
 #include "llvm/ADT/Triple.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/BinaryFormat/Magic.h"
+#include "llvm/MC/SubtargetFeature.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/Error.h"
 #include "llvm/Object/SymbolicFile.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include <cassert>
 #include <cstdint>
@@ -32,7 +34,6 @@
 namespace llvm {
 
 class ARMAttributeParser;
-class SubtargetFeatures;
 
 namespace object {
 
@@ -93,7 +94,7 @@ public:
 
   void moveNext();
 
-  Expected<StringRef> getName() const;
+  std::error_code getName(StringRef &Result) const;
   uint64_t getAddress() const;
   uint64_t getIndex() const;
   uint64_t getSize() const;
@@ -122,9 +123,6 @@ public:
   /// contains data (e.g. PROGBITS), but is not text.
   bool isBerkeleyData() const;
 
-  /// Whether this section is a debug section.
-  bool isDebugSection() const;
-
   bool containsSymbol(SymbolRef S) const;
 
   relocation_iterator relocation_begin() const;
@@ -132,16 +130,18 @@ public:
   iterator_range<relocation_iterator> relocations() const {
     return make_range(relocation_begin(), relocation_end());
   }
-
-  /// Returns the related section if this section contains relocations. The
-  /// returned section may or may not have applied its relocations.
-  Expected<section_iterator> getRelocatedSection() const;
+  section_iterator getRelocatedSection() const;
 
   DataRefImpl getRawDataRefImpl() const;
   const ObjectFile *getObject() const;
 };
 
 struct SectionedAddress {
+  // TODO: constructors could be removed when C++14 would be adopted.
+  SectionedAddress() {}
+  SectionedAddress(uint64_t Addr, uint64_t SectIdx)
+      : Address(Addr), SectionIndex(SectIdx) {}
+
   const static uint64_t UndefSection = UINT64_MAX;
 
   uint64_t Address = 0;
@@ -159,8 +159,6 @@ inline bool operator==(const SectionedAddress &LHS,
   return std::tie(LHS.SectionIndex, LHS.Address) ==
          std::tie(RHS.SectionIndex, RHS.Address);
 }
-
-raw_ostream &operator<<(raw_ostream &OS, const SectionedAddress &Addr);
 
 /// This is a value type class that represents a single symbol in the list of
 /// symbols in the object file.
@@ -190,7 +188,7 @@ public:
 
   /// Return the value of the symbol depending on the object this can be an
   /// offset or a virtual address.
-  Expected<uint64_t> getValue() const;
+  uint64_t getValue() const;
 
   /// Get the alignment of this symbol as the actual value (not log 2).
   uint32_t getAlignment() const;
@@ -277,10 +275,9 @@ protected:
   virtual bool isSectionStripped(DataRefImpl Sec) const;
   virtual bool isBerkeleyText(DataRefImpl Sec) const;
   virtual bool isBerkeleyData(DataRefImpl Sec) const;
-  virtual bool isDebugSection(DataRefImpl Sec) const;
   virtual relocation_iterator section_rel_begin(DataRefImpl Sec) const = 0;
   virtual relocation_iterator section_rel_end(DataRefImpl Sec) const = 0;
-  virtual Expected<section_iterator> getRelocatedSection(DataRefImpl Sec) const;
+  virtual section_iterator getRelocatedSection(DataRefImpl Sec) const;
 
   // Same as above for RelocationRef.
   friend class RelocationRef;
@@ -291,18 +288,14 @@ protected:
   virtual void getRelocationTypeName(DataRefImpl Rel,
                                      SmallVectorImpl<char> &Result) const = 0;
 
-  Expected<uint64_t> getSymbolValue(DataRefImpl Symb) const;
+  uint64_t getSymbolValue(DataRefImpl Symb) const;
 
 public:
   ObjectFile() = delete;
   ObjectFile(const ObjectFile &other) = delete;
 
   uint64_t getCommonSymbolSize(DataRefImpl Symb) const {
-    Expected<uint32_t> SymbolFlagsOrErr = getSymbolFlags(Symb);
-    if (!SymbolFlagsOrErr)
-      // TODO: Actually report errors helpfully.
-      report_fatal_error(SymbolFlagsOrErr.takeError());
-    assert(*SymbolFlagsOrErr & SymbolRef::SF_Common);
+    assert(getSymbolFlags(Symb) & SymbolRef::SF_Common);
     return getCommonSymbolSizeImpl(Symb);
   }
 
@@ -330,7 +323,6 @@ public:
   virtual StringRef getFileFormatName() const = 0;
   virtual Triple::ArchType getArch() const = 0;
   virtual SubtargetFeatures getFeatures() const = 0;
-  virtual Optional<StringRef> tryGetCPUName() const { return None; };
   virtual void setARMSubArch(Triple &TheTriple) const { }
   virtual Expected<uint64_t> getStartAddress() const {
     return errorCodeToError(object_error::parse_failed);
@@ -353,8 +345,7 @@ public:
   createObjectFile(StringRef ObjectPath);
 
   static Expected<std::unique_ptr<ObjectFile>>
-  createObjectFile(MemoryBufferRef Object, llvm::file_magic Type,
-                   bool InitContent = true);
+  createObjectFile(MemoryBufferRef Object, llvm::file_magic Type);
   static Expected<std::unique_ptr<ObjectFile>>
   createObjectFile(MemoryBufferRef Object) {
     return createObjectFile(Object, llvm::file_magic::unknown);
@@ -371,7 +362,7 @@ public:
   createXCOFFObjectFile(MemoryBufferRef Object, unsigned FileType);
 
   static Expected<std::unique_ptr<ObjectFile>>
-  createELFObjectFile(MemoryBufferRef Object, bool InitContent = true);
+  createELFObjectFile(MemoryBufferRef Object);
 
   static Expected<std::unique_ptr<MachOObjectFile>>
   createMachOObjectFile(MemoryBufferRef Object,
@@ -394,7 +385,7 @@ inline Expected<uint64_t> SymbolRef::getAddress() const {
   return getObject()->getSymbolAddress(getRawDataRefImpl());
 }
 
-inline Expected<uint64_t> SymbolRef::getValue() const {
+inline uint64_t SymbolRef::getValue() const {
   return getObject()->getSymbolValue(getRawDataRefImpl());
 }
 
@@ -443,8 +434,12 @@ inline void SectionRef::moveNext() {
   return OwningObject->moveSectionNext(SectionPimpl);
 }
 
-inline Expected<StringRef> SectionRef::getName() const {
-  return OwningObject->getSectionName(SectionPimpl);
+inline std::error_code SectionRef::getName(StringRef &Result) const {
+  Expected<StringRef> NameOrErr = OwningObject->getSectionName(SectionPimpl);
+  if (!NameOrErr)
+    return errorToErrorCode(NameOrErr.takeError());
+  Result = *NameOrErr;
+  return std::error_code();
 }
 
 inline uint64_t SectionRef::getAddress() const {
@@ -507,10 +502,6 @@ inline bool SectionRef::isBerkeleyData() const {
   return OwningObject->isBerkeleyData(SectionPimpl);
 }
 
-inline bool SectionRef::isDebugSection() const {
-  return OwningObject->isDebugSection(SectionPimpl);
-}
-
 inline relocation_iterator SectionRef::relocation_begin() const {
   return OwningObject->section_rel_begin(SectionPimpl);
 }
@@ -519,7 +510,7 @@ inline relocation_iterator SectionRef::relocation_end() const {
   return OwningObject->section_rel_end(SectionPimpl);
 }
 
-inline Expected<section_iterator> SectionRef::getRelocatedSection() const {
+inline section_iterator SectionRef::getRelocatedSection() const {
   return OwningObject->getRelocatedSection(SectionPimpl);
 }
 

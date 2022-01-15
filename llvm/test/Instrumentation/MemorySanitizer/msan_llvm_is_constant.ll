@@ -18,7 +18,7 @@ entry:
 }
 
 ; CHECK-LABEL: bar
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 
 ; Function Attrs: nounwind readnone
 declare i1 @llvm.is.constant.i32(i32)

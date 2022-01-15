@@ -1,4 +1,4 @@
-//===-- SBBlock.cpp -------------------------------------------------------===//
+//===-- SBBlock.cpp ---------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -25,7 +25,9 @@
 using namespace lldb;
 using namespace lldb_private;
 
-SBBlock::SBBlock() { LLDB_RECORD_CONSTRUCTOR_NO_ARGS(SBBlock); }
+SBBlock::SBBlock() : m_opaque_ptr(nullptr) {
+  LLDB_RECORD_CONSTRUCTOR_NO_ARGS(SBBlock);
+}
 
 SBBlock::SBBlock(lldb_private::Block *lldb_object_ptr)
     : m_opaque_ptr(lldb_object_ptr) {}
@@ -69,7 +71,13 @@ const char *SBBlock::GetInlinedName() const {
     const InlineFunctionInfo *inlined_info =
         m_opaque_ptr->GetInlinedFunctionInfo();
     if (inlined_info) {
-      return inlined_info->GetName().AsCString(nullptr);
+      Function *function = m_opaque_ptr->CalculateSymbolContextFunction();
+      LanguageType language;
+      if (function)
+        language = function->GetLanguage();
+      else
+        language = lldb::eLanguageTypeUnknown;
+      return inlined_info->GetName(language).AsCString(nullptr);
     }
   }
   return nullptr;

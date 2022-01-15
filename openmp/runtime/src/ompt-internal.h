@@ -57,6 +57,8 @@ typedef struct {
   ompt_data_t task_data;
   struct kmp_taskdata *scheduling_parent;
   int thread_num;
+  int ndeps;
+  ompt_dependence_t *deps;
 } ompt_task_info_t;
 
 typedef struct {
@@ -79,7 +81,6 @@ typedef struct {
   ompt_state_t state;
   ompt_wait_id_t wait_id;
   int ompt_task_yielded;
-  int parallel_flags; // information for the last parallel region invoked
   void *idle_frame;
 } ompt_thread_info_t;
 
@@ -119,7 +120,7 @@ extern ompt_callbacks_active_t ompt_enabled;
 #endif
 
 #ifdef __cplusplus
-}
+};
 #endif
 
 #endif

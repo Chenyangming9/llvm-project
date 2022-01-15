@@ -1,4 +1,5 @@
-//===-- RegisterContextDarwin_arm64.cpp -----------------------------------===//
+//===-- RegisterContextDarwin_arm64.cpp ---------------------------*- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -24,9 +25,10 @@
 
 #include <memory>
 
-#if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
-#include <sys/types.h>
-#include <sys/sysctl.h>
+// Support building against older versions of LLVM, this macro was added
+// recently.
+#ifndef LLVM_EXTENSION
+#define LLVM_EXTENSION
 #endif
 
 #include "Utility/ARM64_DWARF_Registers.h"
@@ -104,7 +106,7 @@ RegisterContextDarwin_arm64::RegisterContextDarwin_arm64(
   }
 }
 
-RegisterContextDarwin_arm64::~RegisterContextDarwin_arm64() = default;
+RegisterContextDarwin_arm64::~RegisterContextDarwin_arm64() {}
 
 void RegisterContextDarwin_arm64::InvalidateAllRegisters() {
   InvalidateAllRegisterStates();
@@ -283,11 +285,10 @@ int RegisterContextDarwin_arm64::WriteRegisterSet(uint32_t set) {
 void RegisterContextDarwin_arm64::LogDBGRegisters(Log *log, const DBG &dbg) {
   if (log) {
     for (uint32_t i = 0; i < 16; i++)
-      LLDB_LOGF(log,
-                "BVR%-2u/BCR%-2u = { 0x%8.8" PRIu64 ", 0x%8.8" PRIu64
-                " } WVR%-2u/WCR%-2u "
-                "= { 0x%8.8" PRIu64 ", 0x%8.8" PRIu64 " }",
-                i, i, dbg.bvr[i], dbg.bcr[i], i, i, dbg.wvr[i], dbg.wcr[i]);
+      log->Printf("BVR%-2u/BCR%-2u = { 0x%8.8" PRIu64 ", 0x%8.8" PRIu64
+                  " } WVR%-2u/WCR%-2u "
+                  "= { 0x%8.8" PRIu64 ", 0x%8.8" PRIu64 " }",
+                  i, i, dbg.bvr[i], dbg.bcr[i], i, i, dbg.wvr[i], dbg.wcr[i]);
   }
 }
 
@@ -422,7 +423,7 @@ bool RegisterContextDarwin_arm64::ReadRegister(const RegisterInfo *reg_info,
   case fpu_v29:
   case fpu_v30:
   case fpu_v31:
-    value.SetBytes(fpu.v[reg - fpu_v0].bytes, reg_info->byte_size,
+    value.SetBytes(fpu.v[reg - fpu_v0].bytes.buffer, reg_info->byte_size,
                    endian::InlHostByteOrder());
     break;
 
@@ -501,7 +502,7 @@ bool RegisterContextDarwin_arm64::ReadRegister(const RegisterInfo *reg_info,
   case fpu_d31: {
     ProcessSP process_sp(m_thread.GetProcess());
     if (process_sp.get()) {
-      DataExtractor regdata(&fpu.v[reg - fpu_d0], 8, process_sp->GetByteOrder(),
+      DataExtractor regdata(&fpu.v[reg - fpu_s0], 8, process_sp->GetByteOrder(),
                             process_sp->GetAddressByteSize());
       offset_t offset = 0;
       value.SetDouble(regdata.GetDouble(&offset));
@@ -614,7 +615,7 @@ bool RegisterContextDarwin_arm64::WriteRegister(const RegisterInfo *reg_info,
   case fpu_v29:
   case fpu_v30:
   case fpu_v31:
-    ::memcpy(fpu.v[reg - fpu_v0].bytes, value.GetBytes(),
+    ::memcpy(fpu.v[reg - fpu_v0].bytes.buffer, value.GetBytes(),
              value.GetByteSize());
     break;
 

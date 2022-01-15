@@ -5,5 +5,4 @@ add_lldb_library(lldbPluginSymbolVendorELF PLUGIN
     lldbCore
     lldbHost
     lldbSymbol
-    lldbPluginObjectFileELF
   )

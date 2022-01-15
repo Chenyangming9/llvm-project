@@ -17,7 +17,7 @@
 
 #include "test_macros.h"
 #include "min_allocator.h"
-#include "counting_predicates.h"
+#include "counting_predicates.hpp"
 
 bool even(int i)
 {

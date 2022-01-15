@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 // UNSUPPORTED: libcpp-no-deduction-guides
 
 // <string>
@@ -21,7 +21,7 @@
 #include "test_macros.h"
 #include "test_allocator.h"
 #include "test_iterators.h"
-#include "constexpr_char_traits.h"
+#include "constexpr_char_traits.hpp"
 
 template <class T, class Alloc = std::allocator<T>>
 using BStr = std::basic_string<T, std::char_traits<T>, Alloc>;
@@ -50,7 +50,7 @@ int main(int, char**)
 {
   using TestSizeT = test_allocator<char>::size_type;
   { // Testing (1)
-    // Nothing to do. Cannot deduce without any arguments.
+    // Nothing TODO. Cannot deduce without any arguments.
   }
   { // Testing (2)
     // This overload isn't compatible with implicit deduction guides as
@@ -175,7 +175,7 @@ int main(int, char**)
     assert(w == L"abcdef");
   }
   { // (8) w/o allocator
-    using It = cpp17_input_iterator<const char*>;
+    using It = input_iterator<const char*>;
     const char* input = "abcdef";
     std::basic_string s(It(input), It(input + 3), std::allocator<char>{});
     ASSERT_SAME_TYPE(decltype(s), std::string);
@@ -183,7 +183,7 @@ int main(int, char**)
   }
   { // (8) w/ allocator
     using ExpectW = std::basic_string<wchar_t, std::char_traits<wchar_t>, test_allocator<wchar_t>>;
-    using It = cpp17_input_iterator<const wchar_t*>;
+    using It = input_iterator<const wchar_t*>;
     const wchar_t* input = L"abcdef";
     std::basic_string s(It(input), It(input + 3), test_allocator<wchar_t>{});
     ASSERT_SAME_TYPE(decltype(s), ExpectW);

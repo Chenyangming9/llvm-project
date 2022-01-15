@@ -1,7 +1,7 @@
 // RUN: %clang -shared -fPIC -D_DSO -O2 -D_FORTIFY_SOURCE=2 %s -o %t.so
 // RUN: %clang_asan %s -o %t %t.so
 // RUN: not %run %t 2>&1 | FileCheck %s
-// REQUIRES: glibc-2.27
+// UNSUPPORTED: android
 #ifdef _DSO
 #include <stdarg.h>
 #include <stdio.h>

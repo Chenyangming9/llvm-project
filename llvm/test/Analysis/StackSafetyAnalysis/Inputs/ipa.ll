@@ -1,22 +1,20 @@
-target datalayout = "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
-target triple = "aarch64-unknown-linux"
+target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-unknown-linux-gnu"
 
-attributes #0 = { noinline sanitize_memtag "target-features"="+mte,+neon" }
-
-define dso_local void @Write1(i8* %p) #0 {
+define dso_local void @Write1(i8* %p) {
 entry:
   store i8 0, i8* %p, align 1
   ret void
 }
 
-define dso_local void @Write4(i8* %p) #0 {
+define dso_local void @Write4(i8* %p) {
 entry:
   %0 = bitcast i8* %p to i32*
   store i32 0, i32* %0, align 1
   ret void
 }
 
-define dso_local void @Write4_2(i8* %p, i8* %q) #0 {
+define dso_local void @Write4_2(i8* %p, i8* %q) {
 entry:
   %0 = bitcast i8* %p to i32*
   store i32 0, i32* %0, align 1
@@ -25,14 +23,14 @@ entry:
   ret void
 }
 
-define dso_local void @Write8(i8* %p) #0 {
+define dso_local void @Write8(i8* %p) {
 entry:
   %0 = bitcast i8* %p to i64*
   store i64 0, i64* %0, align 1
   ret void
 }
 
-define dso_local i8* @WriteAndReturn8(i8* %p) #0 {
+define dso_local i8* @WriteAndReturn8(i8* %p) {
 entry:
   store i8 0, i8* %p, align 1
   ret i8* %p
@@ -40,26 +38,26 @@ entry:
 
 declare dso_local void @ExternalCall(i8* %p)
 
-define dso_preemptable void @PreemptableWrite1(i8* %p) #0 {
+define dso_preemptable void @PreemptableWrite1(i8* %p) {
 entry:
   store i8 0, i8* %p, align 1
   ret void
 }
 
-define linkonce dso_local void @InterposableWrite1(i8* %p) #0 {
+define linkonce dso_local void @InterposableWrite1(i8* %p) {
 entry:
   store i8 0, i8* %p, align 1
   ret void
 }
 
-define dso_local i8* @ReturnDependent(i8* %p) #0 {
+define dso_local i8* @ReturnDependent(i8* %p) {
 entry:
   %p2 = getelementptr i8, i8* %p, i64 2
   ret i8* %p2
 }
 
 ; access range [2, 6)
-define dso_local void @Rec0(i8* %p) #0 {
+define dso_local void @Rec0(i8* %p) {
 entry:
   %p1 = getelementptr i8, i8* %p, i64 2
   call void @Write4(i8* %p1)
@@ -67,7 +65,7 @@ entry:
 }
 
 ; access range [3, 7)
-define dso_local void @Rec1(i8* %p) #0 {
+define dso_local void @Rec1(i8* %p) {
 entry:
   %p1 = getelementptr i8, i8* %p, i64 1
   call void @Rec0(i8* %p1)
@@ -75,7 +73,7 @@ entry:
 }
 
 ; access range [-2, 2)
-define dso_local void @Rec2(i8* %p) #0 {
+define dso_local void @Rec2(i8* %p) {
 entry:
   %p1 = getelementptr i8, i8* %p, i64 -5
   call void @Rec1(i8* %p1)
@@ -118,50 +116,3 @@ if.end:
 return:
   ret void
 }
-
-define dso_local i64* @ReturnAlloca() {
-entry:
-  %x = alloca i64, align 4
-  ret i64* %x
-}
-
-define dso_local void @Write1Private(i8* %p) #0 {
-entry:
-  call void @Private(i8* %p)
-  ret void
-}
-
-define dso_local void @Write1SameModule(i8* %p) #0 {
-entry:
-  call void @Write1(i8* %p)
-  ret void
-}
-
-declare void @Write1Module0(i8* %p)
-
-define dso_local void @Write1DiffModule(i8* %p) #0 {
-entry:
-  call void @Write1Module0(i8* %p)
-  ret void
-}
-
-define private dso_local void @Private(i8* %p) #0 {
-entry:
-  %p1 = getelementptr i8, i8* %p, i64 -1
-  store i8 0, i8* %p1, align 1
-  ret void
-}
-
-define dso_local void @Write1Weak(i8* %p) #0 {
-entry:
-  call void @Weak(i8* %p)
-  ret void
-}
-
-define weak dso_local void @Weak(i8* %p) #0 {
-entry:
-  %p1 = getelementptr i8, i8* %p, i64 -1
-  store i8 0, i8* %p1, align 1
-  ret void
-}
-

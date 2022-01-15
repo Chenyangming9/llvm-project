@@ -163,8 +163,8 @@ public:
   void getMachineBasicBlocks(const DILocation *DL,
                              SmallPtrSetImpl<const MachineBasicBlock *> &MBBs);
 
-  /// Return true if DebugLoc's lexical scope dominates at least one machine
-  /// instruction's lexical scope in a given machine basic block.
+  /// dominates - Return true if DebugLoc's lexical scope dominates at least one
+  /// machine instruction's lexical scope in a given machine basic block.
   bool dominates(const DILocation *DL, MachineBasicBlock *MBB);
 
   /// findLexicalScope - Find lexical scope, either regular or inlined, for the
@@ -193,6 +193,9 @@ public:
     auto I = LexicalScopeMap.find(N);
     return I != LexicalScopeMap.end() ? &I->second : nullptr;
   }
+
+  /// dump - Print data structures to dbgs().
+  void dump() const;
 
   /// getOrCreateAbstractScope - Find or create an abstract lexical scope.
   LexicalScope *getOrCreateAbstractScope(const DILocalScope *Scope);
@@ -247,11 +250,6 @@ private:
   /// CurrentFnLexicalScope - Top level scope for the current function.
   ///
   LexicalScope *CurrentFnLexicalScope = nullptr;
-
-  /// Map a location to the set of basic blocks it dominates. This is a cache
-  /// for \ref LexicalScopes::getMachineBasicBlocks results.
-  using BlockSetT = SmallPtrSet<const MachineBasicBlock *, 4>;
-  DenseMap<const DILocation *, std::unique_ptr<BlockSetT>> DominatedBlocks;
 };
 
 } // end namespace llvm

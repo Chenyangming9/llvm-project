@@ -1,16 +1,10 @@
-// RUN: %clang_cc1 -verify -fopenmp -fopenmp-version=45 -ast-print %s | FileCheck %s --check-prefix=CHECK --check-prefix=OMP45
-// RUN: %clang_cc1 -fopenmp -fopenmp-version=45 -x c++ -std=c++11 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp -fopenmp-version=45 -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s --check-prefix=CHECK --check-prefix=OMP45
-// RUN: %clang_cc1 -verify -fopenmp -ast-print %s -DOMP5 | FileCheck %s --check-prefix=CHECK --check-prefix=OMP50
-// RUN: %clang_cc1 -fopenmp -x c++ -std=c++11 -emit-pch -o %t %s -DOMP5
-// RUN: %clang_cc1 -fopenmp -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print -DOMP5 | FileCheck %s --check-prefix=CHECK --check-prefix=OMP50
+// RUN: %clang_cc1 -verify -fopenmp -ast-print %s | FileCheck %s
+// RUN: %clang_cc1 -fopenmp -x c++ -std=c++11 -emit-pch -o %t %s
+// RUN: %clang_cc1 -fopenmp -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
 
-// RUN: %clang_cc1 -verify -fopenmp-simd -fopenmp-version=45 -ast-print %s | FileCheck %s --check-prefix=CHECK --check-prefix=OMP45
-// RUN: %clang_cc1 -fopenmp-simd -fopenmp-version=45 -x c++ -std=c++11 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp-simd -fopenmp-version=45 -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s --check-prefix=CHECK --check-prefix=OMP45
-// RUN: %clang_cc1 -verify -fopenmp-simd -ast-print %s -DOMP5 | FileCheck %s --check-prefix=CHECK --check-prefix=OMP50
-// RUN: %clang_cc1 -fopenmp-simd -x c++ -std=c++11 -emit-pch -o %t %s -DOMP5
-// RUN: %clang_cc1 -fopenmp-simd -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print -DOMP5 | FileCheck %s --check-prefix=CHECK --check-prefix=OMP50
+// RUN: %clang_cc1 -verify -fopenmp-simd -ast-print %s | FileCheck %s
+// RUN: %clang_cc1 -fopenmp-simd -x c++ -std=c++11 -emit-pch -o %t %s
+// RUN: %clang_cc1 -fopenmp-simd -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
 // expected-no-diagnostics
 
 #ifndef HEADER
@@ -52,7 +46,7 @@ class S8 : public S7<S1> {
 
 public:
   S8(int v) : S7<S1>(v){
-#pragma omp for simd private(a) private(this->a) private(S7<S1>::a)
+#pragma omp for simd private(a) private(this->a) private(S7<S1>::a) 
     for (int k = 0; k < a.a; ++k)
       ++this->a.a;
   }
@@ -96,13 +90,8 @@ template<class T> struct S {
 // CHECK: T res;
 // CHECK: T val;
 // CHECK: T lin = 0;
-#ifdef OMP5
-    #pragma omp for simd private(val)  safelen(7) linear(lin : -5) lastprivate(res) simdlen(5) allocate(res) if(res) nontemporal(res, val, lin) order(concurrent)
-#else
     #pragma omp for simd private(val)  safelen(7) linear(lin : -5) lastprivate(res) simdlen(5) allocate(res)
-#endif
-// OMP50-NEXT: #pragma omp for simd private(val) safelen(7) linear(lin: -5) lastprivate(res) simdlen(5) allocate(res) if(res) nontemporal(res,val,lin) order(concurrent)
-// OMP45-NEXT: #pragma omp for simd private(val) safelen(7) linear(lin: -5) lastprivate(res) simdlen(5) allocate(res)
+// CHECK-NEXT: #pragma omp for simd private(val) safelen(7) linear(lin: -5) lastprivate(res) simdlen(5)
     for (T i = 7; i < m_a; ++i) {
       val = v[i-7] + m_a;
       res = val;
@@ -180,13 +169,8 @@ int main (int argc, char **argv) {
 // CHECK-NEXT: foo();
   const int CLEN = 4;
 // CHECK-NEXT: const int CLEN = 4;
-#ifdef OMP5
-  #pragma omp for simd aligned(a:CLEN) linear(a:CLEN) safelen(CLEN) collapse( 1 ) simdlen(CLEN) if(simd:a)
-#else
   #pragma omp for simd aligned(a:CLEN) linear(a:CLEN) safelen(CLEN) collapse( 1 ) simdlen(CLEN)
-#endif
-// OMP50-NEXT: #pragma omp for simd aligned(a: CLEN) linear(a: CLEN) safelen(CLEN) collapse(1) simdlen(CLEN) if(simd: a)
-// OMP45-NEXT: #pragma omp for simd aligned(a: CLEN) linear(a: CLEN) safelen(CLEN) collapse(1) simdlen(CLEN)
+// CHECK-NEXT: #pragma omp for simd aligned(a: CLEN) linear(a: CLEN) safelen(CLEN) collapse(1) simdlen(CLEN)
   for (int i = 0; i < 10; ++i)foo();
 // CHECK-NEXT: for (int i = 0; i < 10; ++i)
 // CHECK-NEXT: foo();

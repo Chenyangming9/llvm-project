@@ -30,7 +30,7 @@ struct B
 {
     static int count;
     B() {++count;}
-    B(const B& other) : A(other) {++count;}
+    B(const B&) {++count;}
     virtual ~B() {--count;}
 };
 

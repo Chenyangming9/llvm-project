@@ -1,13 +1,14 @@
 ; RUN: llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -wasm-disable-explicit-locals -mattr=+bulk-memory | FileCheck %s --check-prefixes=CHECK,TLS
 ; RUN: llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -wasm-disable-explicit-locals -mattr=+bulk-memory -fast-isel | FileCheck %s --check-prefixes=CHECK,TLS
 ; RUN: llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -wasm-disable-explicit-locals -mattr=-bulk-memory | FileCheck %s --check-prefixes=CHECK,NO-TLS
+target datalayout = "e-m:e-p:32:32-i64:64-n32:64-S128"
 target triple = "wasm32-unknown-unknown"
 
 ; CHECK-LABEL: address_of_tls:
 ; CHECK-NEXT: .functype  address_of_tls () -> (i32)
 define i32 @address_of_tls() {
   ; TLS-DAG: global.get __tls_base
-  ; TLS-DAG: i32.const tls@TLSREL
+  ; TLS-DAG: i32.const tls
   ; TLS-NEXT: i32.add
   ; TLS-NEXT: return
 
@@ -20,7 +21,7 @@ define i32 @address_of_tls() {
 ; CHECK-NEXT: .functype ptr_to_tls () -> (i32)
 define i32* @ptr_to_tls() {
   ; TLS-DAG: global.get __tls_base
-  ; TLS-DAG: i32.const tls@TLSREL
+  ; TLS-DAG: i32.const tls
   ; TLS-NEXT: i32.add
   ; TLS-NEXT: return
 
@@ -33,7 +34,7 @@ define i32* @ptr_to_tls() {
 ; CHECK-NEXT: .functype tls_load () -> (i32)
 define i32 @tls_load() {
   ; TLS-DAG: global.get __tls_base
-  ; TLS-DAG: i32.const tls@TLSREL
+  ; TLS-DAG: i32.const tls
   ; TLS-NEXT: i32.add
   ; TLS-NEXT: i32.load 0
   ; TLS-NEXT: return
@@ -49,7 +50,7 @@ define i32 @tls_load() {
 ; CHECK-NEXT: .functype tls_store (i32) -> ()
 define void @tls_store(i32 %x) {
   ; TLS-DAG: global.get __tls_base
-  ; TLS-DAG: i32.const tls@TLSREL
+  ; TLS-DAG: i32.const tls
   ; TLS-NEXT: i32.add
   ; TLS-NEXT: i32.store 0
   ; TLS-NEXT: return
@@ -71,7 +72,7 @@ define i32 @tls_size() {
 }
 
 ; CHECK: .type tls,@object
-; TLS-NEXT: .section .tbss.tls,"T",@
+; TLS-NEXT: .section .tbss.tls,"",@
 ; NO-TLS-NEXT: .section .bss.tls,"",@
 ; CHECK-NEXT: .p2align 2
 ; CHECK-NEXT: tls:

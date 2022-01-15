@@ -1,17 +1,6 @@
-add_llvm_component_library(LLVMAMDGPUUtils
-  AMDGPUAsmUtils.cpp
+add_llvm_library(LLVMAMDGPUUtils
   AMDGPUBaseInfo.cpp
-  AMDGPULDSUtils.cpp
-  AMDGPUPALMetadata.cpp
   AMDKernelCodeTUtils.cpp
-
-  LINK_COMPONENTS
-  Analysis
-  Core
-  MC
-  BinaryFormat
-  Support
-
-  ADD_TO_COMPONENT
-  AMDGPU
+  AMDGPUAsmUtils.cpp
+  AMDGPUPALMetadata.cpp
   )

@@ -71,9 +71,7 @@ public:
   uint64_t addr = 0;
   uint32_t shName = 0;
 
-  void recordSection(InputSectionBase *isec);
-  void commitSection(InputSection *isec);
-  void finalizeInputSections();
+  void addSection(InputSection *isec);
 
   // The following members are normally only used in linker scripts.
   MemoryRegion *memRegion = nullptr;
@@ -102,8 +100,6 @@ public:
 
   void finalize();
   template <class ELFT> void writeTo(uint8_t *buf);
-  // Check that the addends for dynamic relocations were written correctly.
-  void checkDynRelAddends(const uint8_t *bufStart);
   template <class ELFT> void maybeCompress();
 
   void sort(llvm::function_ref<int(InputSectionBase *s)> order);
@@ -113,15 +109,14 @@ public:
 private:
   // Used for implementation of --compress-debug-sections option.
   std::vector<uint8_t> zDebugHeader;
-  llvm::SmallVector<char, 0> compressedData;
+  llvm::SmallVector<char, 1> compressedData;
 
   std::array<uint8_t, 4> getFiller();
 };
 
 int getPriority(StringRef s);
 
-InputSection *getFirstInputSection(const OutputSection *os);
-std::vector<InputSection *> getInputSections(const OutputSection *os);
+std::vector<InputSection *> getInputSections(OutputSection* os);
 
 // All output sections that are handled by the linker specially are
 // globally accessible. Writer initializes them, so don't use them
@@ -136,6 +131,12 @@ struct Out {
   static OutputSection *initArray;
   static OutputSection *finiArray;
 };
+
+} // namespace elf
+} // namespace lld
+
+namespace lld {
+namespace elf {
 
 uint64_t getHeaderSize();
 

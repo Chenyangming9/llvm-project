@@ -2,10 +2,6 @@
 // RUN: %clang_cc1 -std=c++1y -verify -fsyntax-only -fblocks -fdelayed-template-parsing %s -DDELAYED_TEMPLATE_PARSING
 // RUN: %clang_cc1 -std=c++1y -verify -fsyntax-only -fblocks -fms-extensions %s -DMS_EXTENSIONS
 // RUN: %clang_cc1 -std=c++1y -verify -fsyntax-only -fblocks -fdelayed-template-parsing -fms-extensions %s -DMS_EXTENSIONS -DDELAYED_TEMPLATE_PARSING
-// RUN: %clang_cc1 -std=c++1y -verify -fsyntax-only -fblocks -triple i386-windows-pc -emit-llvm-only %s
-// RUN: %clang_cc1 -std=c++1y -verify -fsyntax-only -fblocks -triple i386-windows-pc -fdelayed-template-parsing %s -DDELAYED_TEMPLATE_PARSING
-// RUN: %clang_cc1 -std=c++1y -verify -fsyntax-only -fblocks -triple i386-windows-pc -fms-extensions %s -DMS_EXTENSIONS
-// RUN: %clang_cc1 -std=c++1y -verify -fsyntax-only -fblocks -triple i386-windows-pc -fdelayed-template-parsing -fms-extensions %s -DMS_EXTENSIONS -DDELAYED_TEMPLATE_PARSING
 
 template<class F, class ...Rest> struct first_impl { typedef F type; };
 template<class ...Args> using first = typename first_impl<Args...>::type;
@@ -185,7 +181,7 @@ int test() {
     int (*fp2)(int) = [](auto b) -> int {  return b; };
     int (*fp3)(char) = [](auto c) -> int { return c; };
     char (*fp4)(int) = [](auto d) { return d; }; //expected-error{{no viable conversion}}\
-                                                 //expected-note{{candidate function [with d:auto = int]}}
+                                                 //expected-note{{candidate function [with $0 = int]}}
     char (*fp5)(char) = [](auto e) -> int { return e; }; //expected-error{{no viable conversion}}\
                                                  //expected-note{{candidate template ignored}}
 
@@ -258,7 +254,7 @@ int test() {
 {
   int i = 10; //expected-note 3{{declared here}}
   auto L = [](auto a) {
-    return [](auto b) { //expected-note 3{{begins here}} expected-note 6 {{capture 'i' by}} expected-note 6 {{default capture by}}
+    return [](auto b) { //expected-note 3{{begins here}}
       i = b;  //expected-error 3{{cannot be implicitly captured}}
       return b;
     };
@@ -1015,12 +1011,4 @@ namespace PR32638 {
  void test() {
     [](auto x) noexcept(noexcept(x)) { } (0);
  }
-}
-
-namespace PR46637 {
-  auto x = [](auto (*p)()) { return p(); };
-  auto y = [](auto (*p)() -> auto) { return p(); };
-  int f();
-  void *v = x(f); // expected-error {{cannot initialize a variable of type 'void *' with an rvalue of type 'int'}}
-  void *w = y(f); // expected-error {{cannot initialize a variable of type 'void *' with an rvalue of type 'int'}}
 }

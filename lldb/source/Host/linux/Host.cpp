@@ -1,4 +1,4 @@
-//===-- source/Host/linux/Host.cpp ----------------------------------------===//
+//===-- source/Host/linux/Host.cpp ------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,17 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cerrno>
-#include <cstdio>
-#include <cstring>
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 
-#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Object/ELF.h"
 #include "llvm/Support/ScopedPrinter.h"
 
@@ -27,7 +26,6 @@
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
-#include "lldb/Host/linux/Host.h"
 #include "lldb/Host/linux/Support.h"
 #include "lldb/Utility/DataExtractor.h"
 
@@ -37,11 +35,8 @@ using namespace lldb_private;
 namespace {
 enum class ProcessState {
   Unknown,
-  Dead,
   DiskSleep,
-  Idle,
   Paging,
-  Parked,
   Running,
   Sleeping,
   TracedOrStopped,
@@ -54,16 +49,13 @@ class ProcessLaunchInfo;
 }
 
 static bool GetStatusInfo(::pid_t Pid, ProcessInstanceInfo &ProcessInfo,
-                          ProcessState &State, ::pid_t &TracerPid,
-                          ::pid_t &Tgid) {
-  Log *log = GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
-
+                          ProcessState &State, ::pid_t &TracerPid) {
   auto BufferOrError = getProcFile(Pid, "status");
   if (!BufferOrError)
     return false;
 
   llvm::StringRef Rest = BufferOrError.get()->getBuffer();
-  while (!Rest.empty()) {
+  while(!Rest.empty()) {
     llvm::StringRef Line;
     std::tie(Line, Rest) = Rest.split('\n');
 
@@ -92,26 +84,30 @@ static bool GetStatusInfo(::pid_t Pid, ProcessInstanceInfo &ProcessInfo,
       Line.ltrim().consumeInteger(10, PPid);
       ProcessInfo.SetParentProcessID(PPid);
     } else if (Line.consume_front("State:")) {
-      State = llvm::StringSwitch<ProcessState>(Line.ltrim().take_front(1))
-                  .Case("D", ProcessState::DiskSleep)
-                  .Case("I", ProcessState::Idle)
-                  .Case("R", ProcessState::Running)
-                  .Case("S", ProcessState::Sleeping)
-                  .CaseLower("T", ProcessState::TracedOrStopped)
-                  .Case("W", ProcessState::Paging)
-                  .Case("P", ProcessState::Parked)
-                  .Case("X", ProcessState::Dead)
-                  .Case("Z", ProcessState::Zombie)
-                  .Default(ProcessState::Unknown);
-      if (State == ProcessState::Unknown) {
-        LLDB_LOG(log, "Unknown process state {0}", Line);
+      char S = Line.ltrim().front();
+      switch (S) {
+      case 'R':
+        State = ProcessState::Running;
+        break;
+      case 'S':
+        State = ProcessState::Sleeping;
+        break;
+      case 'D':
+        State = ProcessState::DiskSleep;
+        break;
+      case 'Z':
+        State = ProcessState::Zombie;
+        break;
+      case 'T':
+        State = ProcessState::TracedOrStopped;
+        break;
+      case 'W':
+        State = ProcessState::Paging;
+        break;
       }
     } else if (Line.consume_front("TracerPid:")) {
       Line = Line.ltrim();
       Line.consumeInteger(10, TracerPid);
-    } else if (Line.consume_front("Tgid:")) {
-      Line = Line.ltrim();
-      Line.consumeInteger(10, Tgid);
     }
   }
   return true;
@@ -148,13 +144,61 @@ static ArchSpec GetELFProcessCPUType(llvm::StringRef exe_path) {
   }
 }
 
-static void GetProcessArgs(::pid_t pid, ProcessInstanceInfo &process_info) {
-  auto BufferOrError = getProcFile(pid, "cmdline");
+static bool GetProcessAndStatInfo(::pid_t pid,
+                                  ProcessInstanceInfo &process_info,
+                                  ProcessState &State, ::pid_t &tracerpid) {
+  tracerpid = 0;
+  process_info.Clear();
+
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
+
+  // We can't use getProcFile here because proc/[pid]/exe is a symbolic link.
+  llvm::SmallString<64> ProcExe;
+  (llvm::Twine("/proc/") + llvm::Twine(pid) + "/exe").toVector(ProcExe);
+  std::string ExePath(PATH_MAX, '\0');
+
+  ssize_t len = readlink(ProcExe.c_str(), &ExePath[0], PATH_MAX);
+  if (len <= 0) {
+    LLDB_LOG(log, "failed to read link exe link for {0}: {1}", pid,
+             Status(errno, eErrorTypePOSIX));
+    return false;
+  }
+  ExePath.resize(len);
+
+  // If the binary has been deleted, the link name has " (deleted)" appended.
+  // Remove if there.
+  llvm::StringRef PathRef = ExePath;
+  PathRef.consume_back(" (deleted)");
+
+  process_info.SetArchitecture(GetELFProcessCPUType(PathRef));
+
+  // Get the process environment.
+  auto BufferOrError = getProcFile(pid, "environ");
   if (!BufferOrError)
-    return;
+    return false;
+  std::unique_ptr<llvm::MemoryBuffer> Environ = std::move(*BufferOrError);
+
+  // Get the command line used to start the process.
+  BufferOrError = getProcFile(pid, "cmdline");
+  if (!BufferOrError)
+    return false;
   std::unique_ptr<llvm::MemoryBuffer> Cmdline = std::move(*BufferOrError);
 
-  llvm::StringRef Arg0, Rest;
+  // Get User and Group IDs and get tracer pid.
+  if (!GetStatusInfo(pid, process_info, State, tracerpid))
+    return false;
+
+  process_info.SetProcessID(pid);
+  process_info.GetExecutableFile().SetFile(PathRef, FileSpec::Style::native);
+
+  llvm::StringRef Rest = Environ->getBuffer();
+  while (!Rest.empty()) {
+    llvm::StringRef Var;
+    std::tie(Var, Rest) = Rest.split('\0');
+    process_info.GetEnvironment().insert(Var);
+  }
+
+  llvm::StringRef Arg0;
   std::tie(Arg0, Rest) = Cmdline->getBuffer().split('\0');
   process_info.SetArg0(Arg0);
   while (!Rest.empty()) {
@@ -162,72 +206,12 @@ static void GetProcessArgs(::pid_t pid, ProcessInstanceInfo &process_info) {
     std::tie(Arg, Rest) = Rest.split('\0');
     process_info.GetArguments().AppendArgument(Arg);
   }
-}
-
-static void GetExePathAndArch(::pid_t pid, ProcessInstanceInfo &process_info) {
-  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
-  std::string ExePath(PATH_MAX, '\0');
-
-  // We can't use getProcFile here because proc/[pid]/exe is a symbolic link.
-  llvm::SmallString<64> ProcExe;
-  (llvm::Twine("/proc/") + llvm::Twine(pid) + "/exe").toVector(ProcExe);
-
-  ssize_t len = readlink(ProcExe.c_str(), &ExePath[0], PATH_MAX);
-  if (len > 0) {
-    ExePath.resize(len);
-  } else {
-    LLDB_LOG(log, "failed to read link exe link for {0}: {1}", pid,
-             Status(errno, eErrorTypePOSIX));
-    ExePath.resize(0);
-  }
-  // If the binary has been deleted, the link name has " (deleted)" appended.
-  // Remove if there.
-  llvm::StringRef PathRef = ExePath;
-  PathRef.consume_back(" (deleted)");
-
-  if (!PathRef.empty()) {
-    process_info.GetExecutableFile().SetFile(PathRef, FileSpec::Style::native);
-    process_info.SetArchitecture(GetELFProcessCPUType(PathRef));
-  }
-}
-
-static void GetProcessEnviron(::pid_t pid, ProcessInstanceInfo &process_info) {
-  // Get the process environment.
-  auto BufferOrError = getProcFile(pid, "environ");
-  if (!BufferOrError)
-    return;
-
-  std::unique_ptr<llvm::MemoryBuffer> Environ = std::move(*BufferOrError);
-  llvm::StringRef Rest = Environ->getBuffer();
-  while (!Rest.empty()) {
-    llvm::StringRef Var;
-    std::tie(Var, Rest) = Rest.split('\0');
-    process_info.GetEnvironment().insert(Var);
-  }
-}
-
-static bool GetProcessAndStatInfo(::pid_t pid,
-                                  ProcessInstanceInfo &process_info,
-                                  ProcessState &State, ::pid_t &tracerpid) {
-  ::pid_t tgid;
-  tracerpid = 0;
-  process_info.Clear();
-
-  process_info.SetProcessID(pid);
-
-  GetExePathAndArch(pid, process_info);
-  GetProcessArgs(pid, process_info);
-  GetProcessEnviron(pid, process_info);
-
-  // Get User and Group IDs and get tracer pid.
-  if (!GetStatusInfo(pid, process_info, State, tracerpid, tgid))
-    return false;
 
   return true;
 }
 
-uint32_t Host::FindProcessesImpl(const ProcessInstanceInfoMatch &match_info,
-                                 ProcessInstanceInfoList &process_infos) {
+uint32_t Host::FindProcesses(const ProcessInstanceInfoMatch &match_info,
+                             ProcessInstanceInfoList &process_infos) {
   static const char procdir[] = "/proc/";
 
   DIR *dirproc = opendir(procdir);
@@ -267,14 +251,14 @@ uint32_t Host::FindProcessesImpl(const ProcessInstanceInfoMatch &match_info,
         continue;
 
       if (match_info.Matches(process_info)) {
-        process_infos.push_back(process_info);
+        process_infos.Append(process_info);
       }
     }
 
     closedir(dirproc);
   }
 
-  return process_infos.size();
+  return process_infos.GetSize();
 }
 
 bool Host::FindProcessThreads(const lldb::pid_t pid, TidMap &tids_to_attach) {
@@ -313,15 +297,4 @@ Environment Host::GetEnvironment() { return Environment(environ); }
 
 Status Host::ShellExpandArguments(ProcessLaunchInfo &launch_info) {
   return Status("unimplemented");
-}
-
-llvm::Optional<lldb::pid_t> lldb_private::getPIDForTID(lldb::pid_t tid) {
-  ::pid_t tracerpid, tgid = LLDB_INVALID_PROCESS_ID;
-  ProcessInstanceInfo process_info;
-  ProcessState state;
-
-  if (!GetStatusInfo(tid, process_info, state, tracerpid, tgid) ||
-      tgid == LLDB_INVALID_PROCESS_ID)
-    return llvm::None;
-  return tgid;
 }

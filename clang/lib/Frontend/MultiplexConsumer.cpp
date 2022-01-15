@@ -249,11 +249,11 @@ MultiplexConsumer::MultiplexConsumer(
   }
   if (!mutationListeners.empty()) {
     MutationListener =
-        std::make_unique<MultiplexASTMutationListener>(mutationListeners);
+        llvm::make_unique<MultiplexASTMutationListener>(mutationListeners);
   }
   if (!serializationListeners.empty()) {
     DeserializationListener =
-        std::make_unique<MultiplexASTDeserializationListener>(
+        llvm::make_unique<MultiplexASTDeserializationListener>(
             serializationListeners);
   }
 }
@@ -320,11 +320,6 @@ void MultiplexConsumer::HandleImplicitImportDecl(ImportDecl *D) {
 void MultiplexConsumer::CompleteTentativeDefinition(VarDecl *D) {
   for (auto &Consumer : Consumers)
     Consumer->CompleteTentativeDefinition(D);
-}
-
-void MultiplexConsumer::CompleteExternalDeclaration(VarDecl *D) {
-  for (auto &Consumer : Consumers)
-    Consumer->CompleteExternalDeclaration(D);
 }
 
 void MultiplexConsumer::AssignInheritanceModel(CXXRecordDecl *RD) {

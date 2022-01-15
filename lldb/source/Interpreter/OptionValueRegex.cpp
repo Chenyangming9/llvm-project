@@ -1,4 +1,4 @@
-//===-- OptionValueRegex.cpp ----------------------------------------------===//
+//===-- OptionValueRegex.cpp ------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -46,16 +46,22 @@ Status OptionValueRegex::SetValueFromString(llvm::StringRef value,
 
   case eVarSetOperationReplace:
   case eVarSetOperationAssign:
-    m_regex = RegularExpression(value);
-    if (m_regex.IsValid()) {
+    if (m_regex.Compile(value)) {
       m_value_was_set = true;
       NotifyValueChanged();
-    } else if (llvm::Error err = m_regex.GetError()) {
-      error.SetErrorString(llvm::toString(std::move(err)));
     } else {
-      error.SetErrorString("regex error");
+      char regex_error[1024];
+      if (m_regex.GetErrorAsCString(regex_error, sizeof(regex_error)))
+        error.SetErrorString(regex_error);
+      else
+        error.SetErrorStringWithFormat("regex error %u",
+                                       m_regex.GetErrorCode());
     }
     break;
   }
   return error;
+}
+
+lldb::OptionValueSP OptionValueRegex::DeepCopy() const {
+  return OptionValueSP(new OptionValueRegex(m_regex.GetText().str().c_str()));
 }

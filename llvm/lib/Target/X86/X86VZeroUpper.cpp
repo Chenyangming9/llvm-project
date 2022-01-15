@@ -39,11 +39,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "x86-vzeroupper"
 
-static cl::opt<bool>
-UseVZeroUpper("x86-use-vzeroupper", cl::Hidden,
-  cl::desc("Minimize AVX to SSE transition penalty"),
-  cl::init(true));
-
 STATISTIC(NumVZU, "Number of vzeroupper instructions inserted");
 
 namespace {
@@ -182,7 +177,8 @@ static bool callHasRegMask(MachineInstr &MI) {
 /// Insert a vzeroupper instruction before I.
 void VZeroUpperInserter::insertVZeroUpper(MachineBasicBlock::iterator I,
                                           MachineBasicBlock &MBB) {
-  BuildMI(MBB, I, I->getDebugLoc(), TII->get(X86::VZEROUPPER));
+  DebugLoc dl = I->getDebugLoc();
+  BuildMI(MBB, I, dl, TII->get(X86::VZEROUPPER));
   ++NumVZU;
   EverMadeChange = true;
 }
@@ -282,11 +278,8 @@ void VZeroUpperInserter::processBasicBlock(MachineBasicBlock &MBB) {
 /// Loop over all of the basic blocks, inserting vzeroupper instructions before
 /// function calls.
 bool VZeroUpperInserter::runOnMachineFunction(MachineFunction &MF) {
-  if (!UseVZeroUpper)
-    return false;
-
   const X86Subtarget &ST = MF.getSubtarget<X86Subtarget>();
-  if (!ST.hasAVX() || !ST.insertVZEROUPPER())
+  if (!ST.hasAVX() || ST.hasFastPartialYMMorZMMWrite())
     return false;
   TII = ST.getInstrInfo();
   MachineRegisterInfo &MRI = MF.getRegInfo();
@@ -299,7 +292,8 @@ bool VZeroUpperInserter::runOnMachineFunction(MachineFunction &MF) {
   // need to insert any VZEROUPPER instructions.  This is constant-time, so it
   // is cheap in the common case of no ymm/zmm use.
   bool YmmOrZmmUsed = FnHasLiveInYmmOrZmm;
-  for (auto *RC : {&X86::VR256RegClass, &X86::VR512_0_15RegClass}) {
+  const TargetRegisterClass *RCs[2] = {&X86::VR256RegClass, &X86::VR512RegClass};
+  for (auto *RC : RCs) {
     if (!YmmOrZmmUsed) {
       for (TargetRegisterClass::iterator i = RC->begin(), e = RC->end(); i != e;
            i++) {
@@ -310,8 +304,9 @@ bool VZeroUpperInserter::runOnMachineFunction(MachineFunction &MF) {
       }
     }
   }
-  if (!YmmOrZmmUsed)
+  if (!YmmOrZmmUsed) {
     return false;
+  }
 
   assert(BlockStates.empty() && DirtySuccessors.empty() &&
          "X86VZeroUpper state should be clear");

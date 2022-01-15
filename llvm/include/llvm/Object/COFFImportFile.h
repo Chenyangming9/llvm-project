@@ -13,8 +13,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_OBJECT_COFFIMPORTFILE_H
-#define LLVM_OBJECT_COFFIMPORTFILE_H
+#ifndef LLVM_OBJECT_COFF_IMPORT_FILE_H
+#define LLVM_OBJECT_COFF_IMPORT_FILE_H
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Object/COFF.h"
@@ -43,7 +43,7 @@ public:
     return Error::success();
   }
 
-  Expected<uint32_t> getSymbolFlags(DataRefImpl Symb) const override {
+  uint32_t getSymbolFlags(DataRefImpl Symb) const override {
     return SymbolRef::SF_Global;
   }
 

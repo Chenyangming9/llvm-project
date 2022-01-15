@@ -6,9 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_DEBUGINFO_PDB_GENERICERROR_H
-#define LLVM_DEBUGINFO_PDB_GENERICERROR_H
+#ifndef LLVM_DEBUGINFO_PDB_ERROR_H
+#define LLVM_DEBUGINFO_PDB_ERROR_H
 
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
 
 namespace llvm {
@@ -19,7 +20,7 @@ enum class pdb_error_code {
   dia_sdk_not_present,
   dia_failed_loading,
   signature_out_of_date,
-  no_matching_pch,
+  external_cmdline_ref,
   unspecified,
 };
 } // namespace pdb

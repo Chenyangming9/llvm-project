@@ -380,11 +380,6 @@ public:
     }
     Hash.AddBoolean(D->isParameterPack());
 
-    const TypeConstraint *TC = D->getTypeConstraint();
-    Hash.AddBoolean(TC != nullptr);
-    if (TC)
-      AddStmt(TC->getImmediatelyDeclaredConstraint());
-
     Inherited::VisitTemplateTypeParmDecl(D);
   }
 
@@ -440,7 +435,7 @@ public:
 
 // Only allow a small portion of Decl's to be processed.  Remove this once
 // all Decl's can be handled.
-bool ODRHash::isDeclToBeProcessed(const Decl *D, const DeclContext *Parent) {
+bool ODRHash::isWhitelistedDecl(const Decl *D, const DeclContext *Parent) {
   if (D->isImplicit()) return false;
   if (D->getDeclContext() != Parent) return false;
 
@@ -487,7 +482,7 @@ void ODRHash::AddCXXRecordDecl(const CXXRecordDecl *Record) {
   // accurate count of Decl's.
   llvm::SmallVector<const Decl *, 16> Decls;
   for (Decl *SubDecl : Record->decls()) {
-    if (isDeclToBeProcessed(SubDecl, Record)) {
+    if (isWhitelistedDecl(SubDecl, Record)) {
       Decls.push_back(SubDecl);
       if (auto *Function = dyn_cast<FunctionDecl>(SubDecl)) {
         // Compute/Preload ODRHash into FunctionDecl.
@@ -588,7 +583,7 @@ void ODRHash::AddFunctionDecl(const FunctionDecl *Function,
   // accurate count of Decl's.
   llvm::SmallVector<const Decl *, 16> Decls;
   for (Decl *SubDecl : Function->decls()) {
-    if (isDeclToBeProcessed(SubDecl, Function)) {
+    if (isWhitelistedDecl(SubDecl, Function)) {
       Decls.push_back(SubDecl);
     }
   }
@@ -614,7 +609,7 @@ void ODRHash::AddEnumDecl(const EnumDecl *Enum) {
   // accurate count of Decl's.
   llvm::SmallVector<const Decl *, 16> Decls;
   for (Decl *SubDecl : Enum->decls()) {
-    if (isDeclToBeProcessed(SubDecl, Enum)) {
+    if (isWhitelistedDecl(SubDecl, Enum)) {
       assert(isa<EnumConstantDecl>(SubDecl) && "Unexpected Decl");
       Decls.push_back(SubDecl);
     }
@@ -857,13 +852,6 @@ public:
 
   void VisitAutoType(const AutoType *T) {
     ID.AddInteger((unsigned)T->getKeyword());
-    ID.AddInteger(T->isConstrained());
-    if (T->isConstrained()) {
-      AddDecl(T->getTypeConstraintConcept());
-      ID.AddInteger(T->getNumArgs());
-      for (const auto &TA : T->getTypeConstraintArguments())
-        Hash.AddTemplateArgument(TA);
-    }
     VisitDeducedType(T);
   }
 

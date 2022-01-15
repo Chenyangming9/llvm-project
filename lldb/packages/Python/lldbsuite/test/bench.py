@@ -16,6 +16,8 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 import os
+import sys
+import re
 from optparse import OptionParser
 
 # dotest.py invocation with no '-e exe-path' uses lldb as the inferior program,

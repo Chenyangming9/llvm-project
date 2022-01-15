@@ -328,6 +328,10 @@
 #CHECK: ap	0(1,%r1), -1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: ap	0(1,%r1), 4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: ap	0(1,%r0), 0(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: ap	0(1,%r1), 0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: ap	0(%r1,%r2), 0(1,%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -347,6 +351,8 @@
 	ap	4096(1,%r1), 0(1,%r1)
 	ap	0(1,%r1), -1(1,%r1)
 	ap	0(1,%r1), 4096(1,%r1)
+	ap	0(1,%r0), 0(1,%r1)
+	ap	0(1,%r1), 0(1,%r0)
 	ap	0(%r1,%r2), 0(1,%r1)
 	ap	0(1,%r2), 0(%r1,%r2)
 	ap	0(-), 0(1)
@@ -491,23 +497,11 @@
 #CHECK: bras	%r0, 1
 #CHECK: error: offset out of range
 #CHECK: bras	%r0, 0x10000
-#CHECK: error: offset out of range
-#CHECK: jas	%r0, -0x100002
-#CHECK: error: offset out of range
-#CHECK: jas	%r0, -1
-#CHECK: error: offset out of range
-#CHECK: jas	%r0, 1
-#CHECK: error: offset out of range
-#CHECK: jas	%r0, 0x10000
 
 	bras	%r0, -0x100002
 	bras	%r0, -1
 	bras	%r0, 1
 	bras	%r0, 0x10000
-	jas	%r0, -0x100002
-	jas	%r0, -1
-	jas	%r0, 1
-	jas	%r0, 0x10000
 
 #CHECK: error: offset out of range
 #CHECK: brasl	%r0, -0x1000000002
@@ -517,23 +511,11 @@
 #CHECK: brasl	%r0, 1
 #CHECK: error: offset out of range
 #CHECK: brasl	%r0, 0x100000000
-#CHECK: error: offset out of range
-#CHECK: jasl	%r0, -0x1000000002
-#CHECK: error: offset out of range
-#CHECK: jasl	%r0, -1
-#CHECK: error: offset out of range
-#CHECK: jasl	%r0, 1
-#CHECK: error: offset out of range
-#CHECK: jasl	%r0, 0x100000000
 
 	brasl	%r0, -0x1000000002
 	brasl	%r0, -1
 	brasl	%r0, 1
 	brasl	%r0, 0x100000000
-	jasl	%r0, -0x1000000002
-	jasl	%r0, -1
-	jasl	%r0, 1
-	jasl	%r0, 0x100000000
 
 #CHECK: error: offset out of range
 #CHECK: brc	0, -0x100002
@@ -543,82 +525,11 @@
 #CHECK: brc	0, 1
 #CHECK: error: offset out of range
 #CHECK: brc	0, 0x10000
-#CHECK: error: offset out of range
-#CHECK: jnop -0x100002
-#CHECK: error: offset out of range
-#CHECK: jnop    -1
-#CHECK: error: offset out of range
-#CHECK: jnop    1
-#CHECK: error: offset out of range
-#CHECK: jnop    0x10000
 
 	brc	0, -0x100002
 	brc	0, -1
 	brc	0, 1
 	brc	0, 0x10000
-	jnop	-0x100002
-	jnop	-1
-	jnop	1
-	jnop	0x10000
-
-#CHECK: error: invalid instruction
-#CHECK: jlu     label
-#CHECK: error: invalid instruction
-#CHECK: jlne    label
-#CHECK: error: invalid instruction
-#CHECK: jlnh    label
-#CHECK: error: invalid instruction
-#CHECK: jll     label
-#CHECK: error: invalid instruction
-#CHECK: jlnl    label
-#CHECK: error: invalid instruction
-#CHECK: jlhe    label
-#CHECK: error: invalid instruction
-#CHECK: jlnhe   label
-#CHECK: error: invalid instruction
-#CHECK: jlle    label
-#CHECK: error: invalid instruction
-#CHECK: jlnle   label
-#CHECK: error: invalid instruction
-#CHECK: jlz     label
-#CHECK: error: invalid instruction
-#CHECK: jlnz    label
-#CHECK: error: invalid instruction
-#CHECK: jlp     label
-#CHECK: error: invalid instruction
-#CHECK: jlnp    label
-#CHECK: error: invalid instruction
-#CHECK: jlm     label
-#CHECK: error: invalid instruction
-#CHECK: jlnm    label
-#CHECK: error: invalid instruction
-#CHECK: jllh    label
-#CHECK: error: invalid instruction
-#CHECK: jllnlh  label
-#CHECK: error: invalid instruction
-#CHECK: jlo     label
-#CHECK: error: invalid instruction
-#CHECK: jlno    label
-
-	jlu	label
-	jlne	label
-	jlnh	label
-	jll	label
-	jlnl	label
-	jlhe	label
-	jlnhe	label
-	jlle	label
-	jlnle	label
-	jlz	label
-	jlnz	label
-	jlp	label
-	jlnp	label
-	jlm	label
-	jlnm	label
-	jllh	label
-	jllnlh	label
-	jlo	label
-	jlno	label
 
 #CHECK: error: invalid operand
 #CHECK: brc	foo, bar
@@ -639,28 +550,11 @@
 #CHECK: brcl	0, 1
 #CHECK: error: offset out of range
 #CHECK: brcl	0, 0x100000000
-#CHECK: error: offset out of range
-#CHECK: jgnop	-0x1000000002
-#CHECK: error: offset out of range
-#CHECK: jgnop	-1
-#CHECK: error: offset out of range
-#CHECK: jgnop	1
-#CHECK: error: offset out of range
-#CHECK: jgnop	0x100000000
 
 	brcl	0, -0x1000000002
 	brcl	0, -1
 	brcl	0, 1
 	brcl	0, 0x100000000
-	jgnop	-0x1000000002
-	jgnop	-1
-	jgnop	1
-	jgnop	0x100000000
-
-
-#CHECK: error: invalid instruction
-#CHECK: jlnop	label
-	jlnop	label
 
 #CHECK: error: invalid operand
 #CHECK: brcl	foo, bar
@@ -714,23 +608,11 @@
 #CHECK: brxh	%r0, %r2, 1
 #CHECK: error: offset out of range
 #CHECK: brxh	%r0, %r2, 0x10000
-#CHECK: error: offset out of range
-#CHECK: jxh	%r0, %r2, -0x100002
-#CHECK: error: offset out of range
-#CHECK: jxh	%r0, %r2, -1
-#CHECK: error: offset out of range
-#CHECK: jxh	%r0, %r2, 1
-#CHECK: error: offset out of range
-#CHECK: jxh	%r0, %r2, 0x10000
 
 	brxh	%r0, %r2, -0x100002
 	brxh	%r0, %r2, -1
 	brxh	%r0, %r2, 1
 	brxh	%r0, %r2, 0x10000
-	jxh	%r0, %r2, -0x100002
-	jxh	%r0, %r2, -1
-	jxh	%r0, %r2, 1
-	jxh	%r0, %r2, 0x10000
 
 #CHECK: error: offset out of range
 #CHECK: brxhg	%r0, %r2, -0x100002
@@ -740,23 +622,11 @@
 #CHECK: brxhg	%r0, %r2, 1
 #CHECK: error: offset out of range
 #CHECK: brxhg	%r0, %r2, 0x10000
-#CHECK: error: offset out of range
-#CHECK: jxhg	%r0, %r2, -0x100002
-#CHECK: error: offset out of range
-#CHECK: jxhg	%r0, %r2, -1
-#CHECK: error: offset out of range
-#CHECK: jxhg	%r0, %r2, 1
-#CHECK: error: offset out of range
-#CHECK: jxhg	%r0, %r2, 0x10000
 
 	brxhg	%r0, %r2, -0x100002
 	brxhg	%r0, %r2, -1
 	brxhg	%r0, %r2, 1
 	brxhg	%r0, %r2, 0x10000
-	jxhg	%r0, %r2, -0x100002
-	jxhg	%r0, %r2, -1
-	jxhg	%r0, %r2, 1
-	jxhg	%r0, %r2, 0x10000
 
 #CHECK: error: offset out of range
 #CHECK: brxle	%r0, %r2, -0x100002
@@ -766,23 +636,11 @@
 #CHECK: brxle	%r0, %r2, 1
 #CHECK: error: offset out of range
 #CHECK: brxle	%r0, %r2, 0x10000
-#CHECK: error: offset out of range
-#CHECK: jxle	%r0, %r2, -0x100002
-#CHECK: error: offset out of range
-#CHECK: jxle	%r0, %r2, -1
-#CHECK: error: offset out of range
-#CHECK: jxle	%r0, %r2, 1
-#CHECK: error: offset out of range
-#CHECK: jxle	%r0, %r2, 0x10000
 
 	brxle	%r0, %r2, -0x100002
 	brxle	%r0, %r2, -1
 	brxle	%r0, %r2, 1
 	brxle	%r0, %r2, 0x10000
-	jxle	%r0, %r2, -0x100002
-	jxle	%r0, %r2, -1
-	jxle	%r0, %r2, 1
-	jxle	%r0, %r2, 0x10000
 
 #CHECK: error: offset out of range
 #CHECK: brxlg	%r0, %r2, -0x100002
@@ -792,23 +650,11 @@
 #CHECK: brxlg	%r0, %r2, 1
 #CHECK: error: offset out of range
 #CHECK: brxlg	%r0, %r2, 0x10000
-#CHECK: error: offset out of range
-#CHECK: jxleg	%r0, %r2, -0x100002
-#CHECK: error: offset out of range
-#CHECK: jxleg	%r0, %r2, -1
-#CHECK: error: offset out of range
-#CHECK: jxleg	%r0, %r2, 1
-#CHECK: error: offset out of range
-#CHECK: jxleg	%r0, %r2, 0x10000
 
 	brxlg	%r0, %r2, -0x100002
 	brxlg	%r0, %r2, -1
 	brxlg	%r0, %r2, 1
 	brxlg	%r0, %r2, 0x10000
-	jxleg	%r0, %r2, -0x100002
-	jxleg	%r0, %r2, -1
-	jxleg	%r0, %r2, 1
-	jxleg	%r0, %r2, 0x10000
 
 #CHECK: error: invalid operand
 #CHECK: bxh	%r0, %r0, 4096
@@ -1503,7 +1349,7 @@
 #CHECK: clc	0, 0
 #CHECK: error: missing length in address
 #CHECK: clc	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: clc	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: clc	0(0,%r1), 0(%r1)
@@ -1517,6 +1363,10 @@
 #CHECK: clc	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: clc	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: clc	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: clc	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: clc	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -1533,6 +1383,8 @@
 	clc	4096(1,%r1), 0(%r1)
 	clc	0(1,%r1), -1(%r1)
 	clc	0(1,%r1), 4096(%r1)
+	clc	0(1,%r0), 0(%r1)
+	clc	0(1,%r1), 0(%r0)
 	clc	0(%r1,%r2), 0(%r1)
 	clc	0(1,%r2), 0(%r1,%r2)
 	clc	0(-), 0
@@ -2052,6 +1904,10 @@
 #CHECK: cp	0(1,%r1), -1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: cp	0(1,%r1), 4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: cp	0(1,%r0), 0(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: cp	0(1,%r1), 0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: cp	0(%r1,%r2), 0(1,%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -2071,6 +1927,8 @@
 	cp	4096(1,%r1), 0(1,%r1)
 	cp	0(1,%r1), -1(1,%r1)
 	cp	0(1,%r1), 4096(1,%r1)
+	cp	0(1,%r0), 0(1,%r1)
+	cp	0(1,%r1), 0(1,%r0)
 	cp	0(%r1,%r2), 0(1,%r1)
 	cp	0(1,%r2), 0(%r1,%r2)
 	cp	0(-), 0(1)
@@ -2614,6 +2472,10 @@
 #CHECK: dp	0(1,%r1), -1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: dp	0(1,%r1), 4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: dp	0(1,%r0), 0(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: dp	0(1,%r1), 0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: dp	0(%r1,%r2), 0(1,%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -2633,6 +2495,8 @@
 	dp	4096(1,%r1), 0(1,%r1)
 	dp	0(1,%r1), -1(1,%r1)
 	dp	0(1,%r1), 4096(1,%r1)
+	dp	0(1,%r0), 0(1,%r1)
+	dp	0(1,%r1), 0(1,%r0)
 	dp	0(%r1,%r2), 0(1,%r1)
 	dp	0(1,%r2), 0(%r1,%r2)
 	dp	0(-), 0(1)
@@ -2733,7 +2597,7 @@
 #CHECK: ed	0, 0
 #CHECK: error: missing length in address
 #CHECK: ed	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: ed	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: ed	0(0,%r1), 0(%r1)
@@ -2747,6 +2611,10 @@
 #CHECK: ed	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: ed	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: ed	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: ed	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: ed	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -2763,6 +2631,8 @@
 	ed	4096(1,%r1), 0(%r1)
 	ed	0(1,%r1), -1(%r1)
 	ed	0(1,%r1), 4096(%r1)
+	ed	0(1,%r0), 0(%r1)
+	ed	0(1,%r1), 0(%r0)
 	ed	0(%r1,%r2), 0(%r1)
 	ed	0(1,%r2), 0(%r1,%r2)
 	ed	0(-), 0
@@ -2771,7 +2641,7 @@
 #CHECK: edmk	0, 0
 #CHECK: error: missing length in address
 #CHECK: edmk	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: edmk	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: edmk	0(0,%r1), 0(%r1)
@@ -2785,6 +2655,10 @@
 #CHECK: edmk	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: edmk	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: edmk	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: edmk	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: edmk	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -2801,6 +2675,8 @@
 	edmk	4096(1,%r1), 0(%r1)
 	edmk	0(1,%r1), -1(%r1)
 	edmk	0(1,%r1), 4096(%r1)
+	edmk	0(1,%r0), 0(%r1)
+	edmk	0(1,%r1), 0(%r0)
 	edmk	0(%r1,%r2), 0(%r1)
 	edmk	0(1,%r2), 0(%r1,%r2)
 	edmk	0(-), 0
@@ -3228,14 +3104,11 @@
 #CHECK: larl	%r0, 1
 #CHECK: error: offset out of range
 #CHECK: larl	%r0, 0x100000000
-#CHECK: error: offset out of range
-#CHECK: larl	%r1, __unnamed_1+3564822854692
 
 	larl	%r0, -0x1000000002
 	larl	%r0, -1
 	larl	%r0, 1
 	larl	%r0, 0x100000000
-	larl	%r1, __unnamed_1+3564822854692
 
 #CHECK: error: invalid use of indexed addressing
 #CHECK: lasp	160(%r1,%r15),160(%r15)
@@ -3967,14 +3840,11 @@
 #CHECK: lrl	%r0, 1
 #CHECK: error: offset out of range
 #CHECK: lrl	%r0, 0x100000000
-#CHECK: error: offset out of range
-#CHECK: lrl	%r1, __unnamed_1+3564822854692
 
 	lrl	%r0, -0x1000000002
 	lrl	%r0, -1
 	lrl	%r0, 1
 	lrl	%r0, 0x100000000
-	lrl	%r1, __unnamed_1+3564822854692
 
 #CHECK: error: invalid operand
 #CHECK: lrv	%r0, -524289
@@ -4405,6 +4275,10 @@
 #CHECK: mp	0(1,%r1), -1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: mp	0(1,%r1), 4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mp	0(1,%r0), 0(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mp	0(1,%r1), 0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: mp	0(%r1,%r2), 0(1,%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -4424,6 +4298,8 @@
 	mp	4096(1,%r1), 0(1,%r1)
 	mp	0(1,%r1), -1(1,%r1)
 	mp	0(1,%r1), 4096(1,%r1)
+	mp	0(1,%r0), 0(1,%r1)
+	mp	0(1,%r1), 0(1,%r0)
 	mp	0(%r1,%r2), 0(1,%r1)
 	mp	0(1,%r2), 0(%r1,%r2)
 	mp	0(-), 0(1)
@@ -4533,7 +4409,7 @@
 #CHECK: mvc	0, 0
 #CHECK: error: missing length in address
 #CHECK: mvc	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: mvc	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: mvc	0(0,%r1), 0(%r1)
@@ -4547,6 +4423,10 @@
 #CHECK: mvc	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: mvc	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mvc	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mvc	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: mvc	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -4563,6 +4443,8 @@
 	mvc	4096(1,%r1), 0(%r1)
 	mvc	0(1,%r1), -1(%r1)
 	mvc	0(1,%r1), 4096(%r1)
+	mvc	0(1,%r0), 0(%r1)
+	mvc	0(1,%r1), 0(%r0)
 	mvc	0(%r1,%r2), 0(%r1)
 	mvc	0(1,%r2), 0(%r1,%r2)
 	mvc	0(-), 0
@@ -4588,7 +4470,7 @@
 #CHECK: mvcin	0, 0
 #CHECK: error: missing length in address
 #CHECK: mvcin	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: mvcin	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: mvcin	0(0,%r1), 0(%r1)
@@ -4602,6 +4484,10 @@
 #CHECK: mvcin	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: mvcin	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mvcin	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mvcin	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: mvcin	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -4618,11 +4504,13 @@
 	mvcin	4096(1,%r1), 0(%r1)
 	mvcin	0(1,%r1), -1(%r1)
 	mvcin	0(1,%r1), 4096(%r1)
+	mvcin	0(1,%r0), 0(%r1)
+	mvcin	0(1,%r1), 0(%r0)
 	mvcin	0(%r1,%r2), 0(%r1)
 	mvcin	0(1,%r2), 0(%r1,%r2)
 	mvcin	0(-), 0
 
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: mvck	0(%r1,%r1), 0(2,%r1), %r3
 #CHECK: error: invalid operand
 #CHECK: mvck	-1(%r1,%r1), 0(%r1), %r3
@@ -4632,9 +4520,13 @@
 #CHECK: mvck	0(%r1,%r1), -1(%r1), %r3
 #CHECK: error: invalid operand
 #CHECK: mvck	0(%r1,%r1), 4096(%r1), %r3
+#CHECK: error: %r0 used in an address
+#CHECK: mvck	0(%r1,%r0), 0(%r1), %r3
+#CHECK: error: %r0 used in an address
+#CHECK: mvck	0(%r1,%r1), 0(%r0), %r3
 #CHECK: error: invalid use of indexed addressing
 #CHECK: mvck	0(%r1,%r2), 0(%r1,%r2), %r3
-#CHECK: error: unexpected token in address
+#CHECK: error: unknown token in expression
 #CHECK: mvck	0(-), 0, %r3
 
 	mvck	0(%r1,%r1), 0(2,%r1), %r3
@@ -4642,6 +4534,8 @@
 	mvck	4096(%r1,%r1), 0(%r1), %r3
 	mvck	0(%r1,%r1), -1(%r1), %r3
 	mvck	0(%r1,%r1), 4096(%r1), %r3
+	mvck	0(%r1,%r0), 0(%r1), %r3
+	mvck	0(%r1,%r1), 0(%r0), %r3
 	mvck	0(%r1,%r2), 0(%r1,%r2), %r3
 	mvck	0(-), 0, %r3
 
@@ -4698,7 +4592,7 @@
         mvcos	0(%r1), -1(%r15), %r2
         mvcos	0(%r1), 4096(%r15), %r2
 
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: mvcp	0(%r1,%r1), 0(2,%r1), %r3
 #CHECK: error: invalid operand
 #CHECK: mvcp	-1(%r1,%r1), 0(%r1), %r3
@@ -4708,9 +4602,13 @@
 #CHECK: mvcp	0(%r1,%r1), -1(%r1), %r3
 #CHECK: error: invalid operand
 #CHECK: mvcp	0(%r1,%r1), 4096(%r1), %r3
+#CHECK: error: %r0 used in an address
+#CHECK: mvcp	0(%r1,%r0), 0(%r1), %r3
+#CHECK: error: %r0 used in an address
+#CHECK: mvcp	0(%r1,%r1), 0(%r0), %r3
 #CHECK: error: invalid use of indexed addressing
 #CHECK: mvcp	0(%r1,%r2), 0(%r1,%r2), %r3
-#CHECK: error: unexpected token in address
+#CHECK: error: unknown token in expression
 #CHECK: mvcp	0(-), 0, %r3
 
 	mvcp	0(%r1,%r1), 0(2,%r1), %r3
@@ -4718,10 +4616,12 @@
 	mvcp	4096(%r1,%r1), 0(%r1), %r3
 	mvcp	0(%r1,%r1), -1(%r1), %r3
 	mvcp	0(%r1,%r1), 4096(%r1), %r3
+	mvcp	0(%r1,%r0), 0(%r1), %r3
+	mvcp	0(%r1,%r1), 0(%r0), %r3
 	mvcp	0(%r1,%r2), 0(%r1,%r2), %r3
 	mvcp	0(-), 0, %r3
 
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: mvcs	0(%r1,%r1), 0(2,%r1), %r3
 #CHECK: error: invalid operand
 #CHECK: mvcs	-1(%r1,%r1), 0(%r1), %r3
@@ -4731,9 +4631,13 @@
 #CHECK: mvcs	0(%r1,%r1), -1(%r1), %r3
 #CHECK: error: invalid operand
 #CHECK: mvcs	0(%r1,%r1), 4096(%r1), %r3
+#CHECK: error: %r0 used in an address
+#CHECK: mvcs	0(%r1,%r0), 0(%r1), %r3
+#CHECK: error: %r0 used in an address
+#CHECK: mvcs	0(%r1,%r1), 0(%r0), %r3
 #CHECK: error: invalid use of indexed addressing
 #CHECK: mvcs	0(%r1,%r2), 0(%r1,%r2), %r3
-#CHECK: error: unexpected token in address
+#CHECK: error: unknown token in expression
 #CHECK: mvcs	0(-), 0, %r3
 
 	mvcs	0(%r1,%r1), 0(2,%r1), %r3
@@ -4741,6 +4645,8 @@
 	mvcs	4096(%r1,%r1), 0(%r1), %r3
 	mvcs	0(%r1,%r1), -1(%r1), %r3
 	mvcs	0(%r1,%r1), 4096(%r1), %r3
+	mvcs	0(%r1,%r0), 0(%r1), %r3
+	mvcs	0(%r1,%r1), 0(%r0), %r3
 	mvcs	0(%r1,%r2), 0(%r1,%r2), %r3
 	mvcs	0(-), 0, %r3
 
@@ -4850,7 +4756,7 @@
 #CHECK: mvn	0, 0
 #CHECK: error: missing length in address
 #CHECK: mvn	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: mvn	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: mvn	0(0,%r1), 0(%r1)
@@ -4864,6 +4770,10 @@
 #CHECK: mvn	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: mvn	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mvn	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mvn	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: mvn	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -4880,6 +4790,8 @@
 	mvn	4096(1,%r1), 0(%r1)
 	mvn	0(1,%r1), -1(%r1)
 	mvn	0(1,%r1), 4096(%r1)
+	mvn	0(1,%r0), 0(%r1)
+	mvn	0(1,%r1), 0(%r0)
 	mvn	0(%r1,%r2), 0(%r1)
 	mvn	0(1,%r2), 0(%r1,%r2)
 	mvn	0(-), 0
@@ -4908,6 +4820,10 @@
 #CHECK: mvo	0(1,%r1), -1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: mvo	0(1,%r1), 4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mvo	0(1,%r0), 0(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mvo	0(1,%r1), 0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: mvo	0(%r1,%r2), 0(1,%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -4927,6 +4843,8 @@
 	mvo	4096(1,%r1), 0(1,%r1)
 	mvo	0(1,%r1), -1(1,%r1)
 	mvo	0(1,%r1), 4096(1,%r1)
+	mvo	0(1,%r0), 0(1,%r1)
+	mvo	0(1,%r1), 0(1,%r0)
 	mvo	0(%r1,%r2), 0(1,%r1)
 	mvo	0(1,%r2), 0(%r1,%r2)
 	mvo	0(-), 0(1)
@@ -4935,7 +4853,7 @@
 #CHECK: mvz	0, 0
 #CHECK: error: missing length in address
 #CHECK: mvz	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: mvz	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: mvz	0(0,%r1), 0(%r1)
@@ -4949,6 +4867,10 @@
 #CHECK: mvz	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: mvz	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mvz	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: mvz	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: mvz	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -4965,6 +4887,8 @@
 	mvz	4096(1,%r1), 0(%r1)
 	mvz	0(1,%r1), -1(%r1)
 	mvz	0(1,%r1), 4096(%r1)
+	mvz	0(1,%r0), 0(%r1)
+	mvz	0(1,%r1), 0(%r0)
 	mvz	0(%r1,%r2), 0(%r1)
 	mvz	0(1,%r2), 0(%r1,%r2)
 	mvz	0(-), 0
@@ -5077,7 +5001,7 @@
 #CHECK: nc	0, 0
 #CHECK: error: missing length in address
 #CHECK: nc	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: nc	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: nc	0(0,%r1), 0(%r1)
@@ -5091,6 +5015,10 @@
 #CHECK: nc	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: nc	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: nc	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: nc	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: nc	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -5107,6 +5035,8 @@
 	nc	4096(1,%r1), 0(%r1)
 	nc	0(1,%r1), -1(%r1)
 	nc	0(1,%r1), 4096(%r1)
+	nc	0(1,%r0), 0(%r1)
+	nc	0(1,%r1), 0(%r0)
 	nc	0(%r1,%r2), 0(%r1)
 	nc	0(1,%r2), 0(%r1,%r2)
 	nc	0(-), 0
@@ -5231,7 +5161,7 @@
 #CHECK: oc	0, 0
 #CHECK: error: missing length in address
 #CHECK: oc	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: oc	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: oc	0(0,%r1), 0(%r1)
@@ -5245,6 +5175,10 @@
 #CHECK: oc	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: oc	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: oc	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: oc	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: oc	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -5261,6 +5195,8 @@
 	oc	4096(1,%r1), 0(%r1)
 	oc	0(1,%r1), -1(%r1)
 	oc	0(1,%r1), 4096(%r1)
+	oc	0(1,%r0), 0(%r1)
+	oc	0(1,%r1), 0(%r0)
 	oc	0(%r1,%r2), 0(%r1)
 	oc	0(1,%r2), 0(%r1,%r2)
 	oc	0(-), 0
@@ -5397,6 +5333,10 @@
 #CHECK: pack	0(1,%r1), -1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: pack	0(1,%r1), 4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: pack	0(1,%r0), 0(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: pack	0(1,%r1), 0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: pack	0(%r1,%r2), 0(1,%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -5416,6 +5356,8 @@
 	pack	4096(1,%r1), 0(1,%r1)
 	pack	0(1,%r1), -1(1,%r1)
 	pack	0(1,%r1), 4096(1,%r1)
+	pack	0(1,%r0), 0(1,%r1)
+	pack	0(1,%r1), 0(1,%r0)
 	pack	0(%r1,%r2), 0(1,%r1)
 	pack	0(1,%r2), 0(%r1,%r2)
 	pack	0(-), 0(1)
@@ -5479,7 +5421,7 @@
 #CHECK: pka	0, 0
 #CHECK: error: missing length in address
 #CHECK: pka	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: pka	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: pka	0(%r1), 0(0,%r1)
@@ -5493,6 +5435,10 @@
 #CHECK: pka	0(%r1), -1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: pka	0(%r1), 4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: pka	0(%r0), 0(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: pka	0(%r1), 0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: pka	0(%r1,%r2), 0(1,%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -5509,6 +5455,8 @@
 	pka	4096(%r1), 0(1,%r1)
 	pka	0(%r1), -1(1,%r1)
 	pka	0(%r1), 4096(1,%r1)
+	pka	0(%r0), 0(1,%r1)
+	pka	0(%r1), 0(1,%r0)
 	pka	0(%r1,%r2), 0(1,%r1)
 	pka	0(%r2), 0(%r1,%r2)
 	pka	0, 0(-)
@@ -5517,7 +5465,7 @@
 #CHECK: pku	0, 0
 #CHECK: error: missing length in address
 #CHECK: pku	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: pku	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: pku	0(%r1), 0(0,%r1)
@@ -5531,6 +5479,10 @@
 #CHECK: pku	0(%r1), -1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: pku	0(%r1), 4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: pku	0(%r0), 0(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: pku	0(%r1), 0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: pku	0(%r1,%r2), 0(1,%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -5660,22 +5612,28 @@
 #CHECK: rll	%r0,%r0,-524289
 #CHECK: error: invalid operand
 #CHECK: rll	%r0,%r0,524288
+#CHECK: error: %r0 used in an address
+#CHECK: rll	%r0,%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: rll	%r0,%r0,0(%r1,%r2)
 
 	rll	%r0,%r0,-524289
 	rll	%r0,%r0,524288
+	rll	%r0,%r0,0(%r0)
 	rll	%r0,%r0,0(%r1,%r2)
 
 #CHECK: error: invalid operand
 #CHECK: rllg	%r0,%r0,-524289
 #CHECK: error: invalid operand
 #CHECK: rllg	%r0,%r0,524288
+#CHECK: error: %r0 used in an address
+#CHECK: rllg	%r0,%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: rllg	%r0,%r0,0(%r1,%r2)
 
 	rllg	%r0,%r0,-524289
 	rllg	%r0,%r0,524288
+	rllg	%r0,%r0,0(%r0)
 	rllg	%r0,%r0,0(%r1,%r2)
 
 #CHECK: error: invalid operand
@@ -5960,22 +5918,28 @@
 #CHECK: sla	%r0,-1
 #CHECK: error: invalid operand
 #CHECK: sla	%r0,4096
+#CHECK: error: %r0 used in an address
+#CHECK: sla	%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: sla	%r0,0(%r1,%r2)
 
 	sla	%r0,-1
 	sla	%r0,4096
+	sla	%r0,0(%r0)
 	sla	%r0,0(%r1,%r2)
 
 #CHECK: error: invalid operand
 #CHECK: slag	%r0,%r0,-524289
 #CHECK: error: invalid operand
 #CHECK: slag	%r0,%r0,524288
+#CHECK: error: %r0 used in an address
+#CHECK: slag	%r0,%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: slag	%r0,%r0,0(%r1,%r2)
 
 	slag	%r0,%r0,-524289
 	slag	%r0,%r0,524288
+	slag	%r0,%r0,0(%r0)
 	slag	%r0,%r0,0(%r1,%r2)
 
 #CHECK: error: instruction requires: distinct-ops
@@ -6005,12 +5969,15 @@
 #CHECK: slda	%r0,-1
 #CHECK: error: invalid operand
 #CHECK: slda	%r0,4096
+#CHECK: error: %r0 used in an address
+#CHECK: slda	%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: slda	%r0,0(%r1,%r2)
 
 	slda	%r1,0
 	slda	%r0,-1
 	slda	%r0,4096
+	slda	%r0,0(%r0)
 	slda	%r0,0(%r1,%r2)
 
 #CHECK: error: invalid register pair
@@ -6019,12 +5986,15 @@
 #CHECK: sldl	%r0,-1
 #CHECK: error: invalid operand
 #CHECK: sldl	%r0,4096
+#CHECK: error: %r0 used in an address
+#CHECK: sldl	%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: sldl	%r0,0(%r1,%r2)
 
 	sldl	%r1,0
 	sldl	%r0,-1
 	sldl	%r0,4096
+	sldl	%r0,0(%r0)
 	sldl	%r0,0(%r1,%r2)
 
 #CHECK: error: invalid operand
@@ -6086,22 +6056,28 @@
 #CHECK: sll	%r0,-1
 #CHECK: error: invalid operand
 #CHECK: sll	%r0,4096
+#CHECK: error: %r0 used in an address
+#CHECK: sll	%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: sll	%r0,0(%r1,%r2)
 
 	sll	%r0,-1
 	sll	%r0,4096
+	sll	%r0,0(%r0)
 	sll	%r0,0(%r1,%r2)
 
 #CHECK: error: invalid operand
 #CHECK: sllg	%r0,%r0,-524289
 #CHECK: error: invalid operand
 #CHECK: sllg	%r0,%r0,524288
+#CHECK: error: %r0 used in an address
+#CHECK: sllg	%r0,%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: sllg	%r0,%r0,0(%r1,%r2)
 
 	sllg	%r0,%r0,-524289
 	sllg	%r0,%r0,524288
+	sllg	%r0,%r0,0(%r0)
 	sllg	%r0,%r0,0(%r1,%r2)
 
 #CHECK: error: instruction requires: distinct-ops
@@ -6160,6 +6136,10 @@
 #CHECK: sp	0(1,%r1), -1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: sp	0(1,%r1), 4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: sp	0(1,%r0), 0(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: sp	0(1,%r1), 0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: sp	0(%r1,%r2), 0(1,%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -6179,6 +6159,8 @@
 	sp	4096(1,%r1), 0(1,%r1)
 	sp	0(1,%r1), -1(1,%r1)
 	sp	0(1,%r1), 4096(1,%r1)
+	sp	0(1,%r0), 0(1,%r1)
+	sp	0(1,%r1), 0(1,%r0)
 	sp	0(%r1,%r2), 0(1,%r1)
 	sp	0(1,%r2), 0(%r1,%r2)
 	sp	0(-), 0(1)
@@ -6268,6 +6250,8 @@
 #CHECK: sra	%r0,-1
 #CHECK: error: invalid operand
 #CHECK: sra	%r0,4096
+#CHECK: error: %r0 used in an address
+#CHECK: sra	%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: sra	%r0,0(%r1,%r2)
 
@@ -6280,6 +6264,8 @@
 #CHECK: srag	%r0,%r0,-524289
 #CHECK: error: invalid operand
 #CHECK: srag	%r0,%r0,524288
+#CHECK: error: %r0 used in an address
+#CHECK: srag	%r0,%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: srag	%r0,%r0,0(%r1,%r2)
 
@@ -6299,12 +6285,15 @@
 #CHECK: srda	%r0,-1
 #CHECK: error: invalid operand
 #CHECK: srda	%r0,4096
+#CHECK: error: %r0 used in an address
+#CHECK: srda	%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: srda	%r0,0(%r1,%r2)
 
 	srda	%r1,0
 	srda	%r0,-1
 	srda	%r0,4096
+	srda	%r0,0(%r0)
 	srda	%r0,0(%r1,%r2)
 
 #CHECK: error: invalid register pair
@@ -6313,12 +6302,15 @@
 #CHECK: srdl	%r0,-1
 #CHECK: error: invalid operand
 #CHECK: srdl	%r0,4096
+#CHECK: error: %r0 used in an address
+#CHECK: srdl	%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: srdl	%r0,0(%r1,%r2)
 
 	srdl	%r1,0
 	srdl	%r0,-1
 	srdl	%r0,4096
+	srdl	%r0,0(%r0)
 	srdl	%r0,0(%r1,%r2)
 
 #CHECK: error: invalid operand
@@ -6338,22 +6330,28 @@
 #CHECK: srl	%r0,-1
 #CHECK: error: invalid operand
 #CHECK: srl	%r0,4096
+#CHECK: error: %r0 used in an address
+#CHECK: srl	%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: srl	%r0,0(%r1,%r2)
 
 	srl	%r0,-1
 	srl	%r0,4096
+	srl	%r0,0(%r0)
 	srl	%r0,0(%r1,%r2)
 
 #CHECK: error: invalid operand
 #CHECK: srlg	%r0,%r0,-524289
 #CHECK: error: invalid operand
 #CHECK: srlg	%r0,%r0,524288
+#CHECK: error: %r0 used in an address
+#CHECK: srlg	%r0,%r0,0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: srlg	%r0,%r0,0(%r1,%r2)
 
 	srlg	%r0,%r0,-524289
 	srlg	%r0,%r0,524288
+	srlg	%r0,%r0,0(%r0)
 	srlg	%r0,%r0,0(%r1,%r2)
 
 #CHECK: error: instruction requires: distinct-ops
@@ -6392,7 +6390,7 @@
 #CHECK: srp	0, 0, 0
 #CHECK: error: missing length in address
 #CHECK: srp	0(%r1), 0(%r1), 0
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: srp	0(1,%r1), 0(2,%r1), 0
 #CHECK: error: invalid operand
 #CHECK: srp	0(0,%r1), 0(%r1), 0
@@ -6406,6 +6404,10 @@
 #CHECK: srp	0(1,%r1), -1(%r1), 0
 #CHECK: error: invalid operand
 #CHECK: srp	0(1,%r1), 4096(%r1), 0
+#CHECK: error: %r0 used in an address
+#CHECK: srp	0(1,%r0), 0(%r1), 0
+#CHECK: error: %r0 used in an address
+#CHECK: srp	0(1,%r1), 0(%r0), 0
 #CHECK: error: invalid use of indexed addressing
 #CHECK: srp	0(%r1,%r2), 0(%r1), 0
 #CHECK: error: invalid use of indexed addressing
@@ -6426,6 +6428,8 @@
 	srp	4096(1,%r1), 0(%r1), 0
 	srp	0(1,%r1), -1(%r1), 0
 	srp	0(1,%r1), 4096(%r1), 0
+	srp	0(1,%r0), 0(%r1), 0
+	srp	0(1,%r1), 0(%r0), 0
 	srp	0(%r1,%r2), 0(%r1), 0
 	srp	0(1,%r2), 0(%r1,%r2), 0
 	srp	0(1), 0, -1
@@ -7232,6 +7236,8 @@
 #CHECK: tp	-1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: tp	4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: tp	0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: tp	0(%r1,%r2)
 #CHECK: error: unknown token in expression
@@ -7243,6 +7249,7 @@
 	tp	0(17,%r1)
 	tp	-1(1,%r1)
 	tp	4096(1,%r1)
+	tp	0(1,%r0)
 	tp	0(%r1,%r2)
 	tp	0(-)
 
@@ -7278,7 +7285,7 @@
 #CHECK: tr	0, 0
 #CHECK: error: missing length in address
 #CHECK: tr	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: tr	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: tr	0(0,%r1), 0(%r1)
@@ -7292,6 +7299,10 @@
 #CHECK: tr	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: tr	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: tr	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: tr	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: tr	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -7308,6 +7319,8 @@
 	tr	4096(1,%r1), 0(%r1)
 	tr	0(1,%r1), -1(%r1)
 	tr	0(1,%r1), 4096(%r1)
+	tr	0(1,%r0), 0(%r1)
+	tr	0(1,%r1), 0(%r0)
 	tr	0(%r1,%r2), 0(%r1)
 	tr	0(1,%r2), 0(%r1,%r2)
 	tr	0(-), 0
@@ -7376,7 +7389,7 @@
 #CHECK: trt	0, 0
 #CHECK: error: missing length in address
 #CHECK: trt	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: trt	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: trt	0(0,%r1), 0(%r1)
@@ -7390,6 +7403,10 @@
 #CHECK: trt	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: trt	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: trt	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: trt	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: trt	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -7406,6 +7423,8 @@
 	trt	4096(1,%r1), 0(%r1)
 	trt	0(1,%r1), -1(%r1)
 	trt	0(1,%r1), 4096(%r1)
+	trt	0(1,%r0), 0(%r1)
+	trt	0(1,%r1), 0(%r0)
 	trt	0(%r1,%r2), 0(%r1)
 	trt	0(1,%r2), 0(%r1,%r2)
 	trt	0(-), 0
@@ -7436,7 +7455,7 @@
 #CHECK: trtr	0, 0
 #CHECK: error: missing length in address
 #CHECK: trtr	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: trtr	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: trtr	0(0,%r1), 0(%r1)
@@ -7450,6 +7469,10 @@
 #CHECK: trtr	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: trtr	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: trtr	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: trtr	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: trtr	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -7466,6 +7489,8 @@
 	trtr	4096(1,%r1), 0(%r1)
 	trtr	0(1,%r1), -1(%r1)
 	trtr	0(1,%r1), 4096(%r1)
+	trtr	0(1,%r0), 0(%r1)
+	trtr	0(1,%r1), 0(%r0)
 	trtr	0(%r1,%r2), 0(%r1)
 	trtr	0(1,%r2), 0(%r1,%r2)
 	trtr	0(-), 0
@@ -7538,6 +7563,10 @@
 #CHECK: unpk	0(1,%r1), -1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: unpk	0(1,%r1), 4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: unpk	0(1,%r0), 0(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: unpk	0(1,%r1), 0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: unpk	0(%r1,%r2), 0(1,%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -7557,6 +7586,8 @@
 	unpk	4096(1,%r1), 0(1,%r1)
 	unpk	0(1,%r1), -1(1,%r1)
 	unpk	0(1,%r1), 4096(1,%r1)
+	unpk	0(1,%r0), 0(1,%r1)
+	unpk	0(1,%r1), 0(1,%r0)
 	unpk	0(%r1,%r2), 0(1,%r1)
 	unpk	0(1,%r2), 0(%r1,%r2)
 	unpk	0(-), 0(1)
@@ -7565,7 +7596,7 @@
 #CHECK: unpka	0, 0
 #CHECK: error: missing length in address
 #CHECK: unpka	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: unpka	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: unpka	0(0,%r1), 0(%r1)
@@ -7579,6 +7610,10 @@
 #CHECK: unpka	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: unpka	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: unpka	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: unpka	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: unpka	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -7595,6 +7630,8 @@
 	unpka	4096(1,%r1), 0(%r1)
 	unpka	0(1,%r1), -1(%r1)
 	unpka	0(1,%r1), 4096(%r1)
+	unpka	0(1,%r0), 0(%r1)
+	unpka	0(1,%r1), 0(%r0)
 	unpka	0(%r1,%r2), 0(%r1)
 	unpka	0(1,%r2), 0(%r1,%r2)
 	unpka	0(-), 0
@@ -7603,7 +7640,7 @@
 #CHECK: unpku	0, 0
 #CHECK: error: missing length in address
 #CHECK: unpku	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: unpku	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: unpku	0(0,%r1), 0(%r1)
@@ -7617,6 +7654,10 @@
 #CHECK: unpku	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: unpku	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: unpku	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: unpku	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: unpku	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -7633,6 +7674,8 @@
 	unpku	4096(1,%r1), 0(%r1)
 	unpku	0(1,%r1), -1(%r1)
 	unpku	0(1,%r1), 4096(%r1)
+	unpku	0(1,%r0), 0(%r1)
+	unpku	0(1,%r1), 0(%r0)
 	unpku	0(%r1,%r2), 0(%r1)
 	unpku	0(1,%r2), 0(%r1,%r2)
 	unpku	0(-), 0
@@ -7649,7 +7692,7 @@
 #CHECK: xc	0, 0
 #CHECK: error: missing length in address
 #CHECK: xc	0(%r1), 0(%r1)
-#CHECK: error: invalid use of indexed addressing
+#CHECK: error: invalid use of length addressing
 #CHECK: xc	0(1,%r1), 0(2,%r1)
 #CHECK: error: invalid operand
 #CHECK: xc	0(0,%r1), 0(%r1)
@@ -7663,6 +7706,10 @@
 #CHECK: xc	0(1,%r1), -1(%r1)
 #CHECK: error: invalid operand
 #CHECK: xc	0(1,%r1), 4096(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: xc	0(1,%r0), 0(%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: xc	0(1,%r1), 0(%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: xc	0(%r1,%r2), 0(%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -7679,6 +7726,8 @@
 	xc	4096(1,%r1), 0(%r1)
 	xc	0(1,%r1), -1(%r1)
 	xc	0(1,%r1), 4096(%r1)
+	xc	0(1,%r0), 0(%r1)
+	xc	0(1,%r1), 0(%r0)
 	xc	0(%r1,%r2), 0(%r1)
 	xc	0(1,%r2), 0(%r1,%r2)
 	xc	0(-), 0
@@ -7783,6 +7832,10 @@
 #CHECK: zap	0(1,%r1), -1(1,%r1)
 #CHECK: error: invalid operand
 #CHECK: zap	0(1,%r1), 4096(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: zap	0(1,%r0), 0(1,%r1)
+#CHECK: error: %r0 used in an address
+#CHECK: zap	0(1,%r1), 0(1,%r0)
 #CHECK: error: invalid use of indexed addressing
 #CHECK: zap	0(%r1,%r2), 0(1,%r1)
 #CHECK: error: invalid use of indexed addressing
@@ -7802,6 +7855,8 @@
 	zap	4096(1,%r1), 0(1,%r1)
 	zap	0(1,%r1), -1(1,%r1)
 	zap	0(1,%r1), 4096(1,%r1)
+	zap	0(1,%r0), 0(1,%r1)
+	zap	0(1,%r1), 0(1,%r0)
 	zap	0(%r1,%r2), 0(1,%r1)
 	zap	0(1,%r2), 0(%r1,%r2)
 	zap	0(-), 0(1)

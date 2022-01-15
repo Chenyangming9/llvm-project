@@ -6,14 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: no-exceptions
+// UNSUPPORTED: libcxxabi-no-exceptions
 
-// ___cxa_throw_bad_array_new_length is re-exported from libc++ only starting
-// in macosx 10.15
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11|12|13|14}}
-
+#include <iostream>
 #include <cxxabi.h>
-#include <new>
 
 //  If the expression passed to operator new[] would result in an overflow, the
 //  allocation function is not called, and a std::bad_array_new_length exception
@@ -31,10 +27,11 @@ bool bad_array_new_length_test() {
     return false;
 }
 
-int main(int, char**) {
+int main() {
     int ret_val = 0;
 
     if ( !bad_array_new_length_test ()) {
+        std::cerr << "Bad array new length test failed!" << std::endl;
         ret_val = 1;
     }
 

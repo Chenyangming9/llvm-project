@@ -1,4 +1,4 @@
-//===-- ClangPersistentVariables.cpp --------------------------------------===//
+//===-- ClangPersistentVariables.cpp ----------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,11 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "ClangPersistentVariables.h"
-#include "ClangASTImporter.h"
-#include "ClangModulesDeclVendor.h"
 
-#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/Core/Value.h"
+#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/DataExtractor.h"
 #include "lldb/Utility/Log.h"
@@ -24,10 +22,9 @@
 using namespace lldb;
 using namespace lldb_private;
 
-ClangPersistentVariables::ClangPersistentVariables(
-    std::shared_ptr<Target> target_sp)
+ClangPersistentVariables::ClangPersistentVariables()
     : lldb_private::PersistentExpressionState(LLVMCastKind::eKindClang),
-      m_target_sp(target_sp) {}
+      m_next_persistent_variable_id(0) {}
 
 ExpressionVariableSP ClangPersistentVariables::CreatePersistentVariable(
     const lldb::ValueObjectSP &valobj_sp) {
@@ -46,88 +43,52 @@ void ClangPersistentVariables::RemovePersistentVariable(
     lldb::ExpressionVariableSP variable) {
   RemoveVariable(variable);
 
-  // Check if the removed variable was the last one that was created. If yes,
-  // reuse the variable id for the next variable.
+  const char *name = variable->GetName().AsCString();
 
-  // Nothing to do if we have not assigned a variable id so far.
-  if (m_next_persistent_variable_id == 0)
+  if (*name != '$')
     return;
+  name++;
 
-  llvm::StringRef name = variable->GetName().GetStringRef();
-  // Remove the prefix from the variable that only the indes is left.
-  if (!name.consume_front(GetPersistentVariablePrefix(false)))
-    return;
-
-  // Check if the variable contained a variable id.
-  uint32_t variable_id;
-  if (name.getAsInteger(10, variable_id))
-    return;
-  // If it's the most recent variable id that was assigned, make sure that this
-  // variable id will be used for the next persistent variable.
-  if (variable_id == m_next_persistent_variable_id - 1)
+  if (strtoul(name, nullptr, 0) == m_next_persistent_variable_id - 1)
     m_next_persistent_variable_id--;
 }
 
 llvm::Optional<CompilerType>
 ClangPersistentVariables::GetCompilerTypeFromPersistentDecl(
     ConstString type_name) {
-  PersistentDecl p = m_persistent_decls.lookup(type_name.GetCString());
-
-  if (p.m_decl == nullptr)
-    return llvm::None;
-
-  if (clang::TypeDecl *tdecl = llvm::dyn_cast<clang::TypeDecl>(p.m_decl)) {
-    opaque_compiler_type_t t = static_cast<opaque_compiler_type_t>(
-        const_cast<clang::Type *>(tdecl->getTypeForDecl()));
-    return CompilerType(p.m_context, t);
+  CompilerType compiler_type;
+  if (clang::TypeDecl *tdecl = llvm::dyn_cast_or_null<clang::TypeDecl>(
+          GetPersistentDecl(type_name))) {
+    compiler_type.SetCompilerType(
+        ClangASTContext::GetASTContext(&tdecl->getASTContext()),
+        reinterpret_cast<lldb::opaque_compiler_type_t>(
+            const_cast<clang::Type *>(tdecl->getTypeForDecl())));
+    return compiler_type;
   }
   return llvm::None;
 }
 
 void ClangPersistentVariables::RegisterPersistentDecl(ConstString name,
-                                                      clang::NamedDecl *decl,
-                                                      TypeSystemClang *ctx) {
-  PersistentDecl p = {decl, ctx};
-  m_persistent_decls.insert(std::make_pair(name.GetCString(), p));
+                                                      clang::NamedDecl *decl) {
+  m_persistent_decls.insert(
+      std::pair<const char *, clang::NamedDecl *>(name.GetCString(), decl));
 
   if (clang::EnumDecl *enum_decl = llvm::dyn_cast<clang::EnumDecl>(decl)) {
     for (clang::EnumConstantDecl *enumerator_decl : enum_decl->enumerators()) {
-      p = {enumerator_decl, ctx};
-      m_persistent_decls.insert(std::make_pair(
-          ConstString(enumerator_decl->getNameAsString()).GetCString(), p));
+      m_persistent_decls.insert(std::pair<const char *, clang::NamedDecl *>(
+          ConstString(enumerator_decl->getNameAsString()).GetCString(),
+          enumerator_decl));
     }
   }
 }
 
 clang::NamedDecl *
 ClangPersistentVariables::GetPersistentDecl(ConstString name) {
-  return m_persistent_decls.lookup(name.GetCString()).m_decl;
-}
+  PersistentDeclMap::const_iterator i =
+      m_persistent_decls.find(name.GetCString());
 
-std::shared_ptr<ClangASTImporter>
-ClangPersistentVariables::GetClangASTImporter() {
-  if (!m_ast_importer_sp) {
-    m_ast_importer_sp = std::make_shared<ClangASTImporter>();
-  }
-  return m_ast_importer_sp;
-}
-
-std::shared_ptr<ClangModulesDeclVendor>
-ClangPersistentVariables::GetClangModulesDeclVendor() {
-  if (!m_modules_decl_vendor_sp) {
-    m_modules_decl_vendor_sp.reset(
-        ClangModulesDeclVendor::Create(*m_target_sp.get()));
-  }
-  return m_modules_decl_vendor_sp;
-}
-
-ConstString
-ClangPersistentVariables::GetNextPersistentVariableName(bool is_error) {
-  llvm::SmallString<64> name;
-  {
-    llvm::raw_svector_ostream os(name);
-    os << GetPersistentVariablePrefix(is_error)
-       << m_next_persistent_variable_id++;
-  }
-  return ConstString(name);
+  if (i == m_persistent_decls.end())
+    return nullptr;
+  else
+    return i->second;
 }

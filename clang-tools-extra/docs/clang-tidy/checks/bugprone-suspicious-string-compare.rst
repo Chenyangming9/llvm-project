@@ -42,11 +42,11 @@ Options
 
 .. option:: WarnOnImplicitComparison
 
-   When `true`, the check will warn on implicit comparison. `true` by default.
+   When non-zero, the check will warn on implicit comparison. `1` by default.
 
 .. option:: WarnOnLogicalNotComparison
 
-   When `true`, the check will warn on logical not comparison. `false` by default.
+   When non-zero, the check will warn on logical not comparison. `0` by default.
 
 .. option:: StringCompareLikeFunctions
 

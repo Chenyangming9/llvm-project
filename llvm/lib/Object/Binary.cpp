@@ -18,7 +18,6 @@
 #include "llvm/Object/MachOUniversal.h"
 #include "llvm/Object/Minidump.h"
 #include "llvm/Object/ObjectFile.h"
-#include "llvm/Object/TapiUniversal.h"
 #include "llvm/Object/WindowsResource.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -44,8 +43,7 @@ StringRef Binary::getFileName() const { return Data.getBufferIdentifier(); }
 MemoryBufferRef Binary::getMemoryBufferRef() const { return Data; }
 
 Expected<std::unique_ptr<Binary>> object::createBinary(MemoryBufferRef Buffer,
-                                                       LLVMContext *Context,
-                                                       bool InitContent) {
+                                                      LLVMContext *Context) {
   file_magic Type = identify_magic(Buffer.getBuffer());
 
   switch (Type) {
@@ -56,7 +54,6 @@ Expected<std::unique_ptr<Binary>> object::createBinary(MemoryBufferRef Buffer,
   case file_magic::elf_executable:
   case file_magic::elf_shared_object:
   case file_magic::elf_core:
-  case file_magic::goff_object:
   case file_magic::macho_object:
   case file_magic::macho_executable:
   case file_magic::macho_fixed_virtual_memory_shared_lib:
@@ -75,7 +72,7 @@ Expected<std::unique_ptr<Binary>> object::createBinary(MemoryBufferRef Buffer,
   case file_magic::xcoff_object_32:
   case file_magic::xcoff_object_64:
   case file_magic::wasm_object:
-    return ObjectFile::createSymbolicFile(Buffer, Type, Context, InitContent);
+    return ObjectFile::createSymbolicFile(Buffer, Type, Context);
   case file_magic::macho_universal_binary:
     return MachOUniversalBinary::create(Buffer);
   case file_magic::windows_resource:
@@ -89,23 +86,20 @@ Expected<std::unique_ptr<Binary>> object::createBinary(MemoryBufferRef Buffer,
     return errorCodeToError(object_error::invalid_file_type);
   case file_magic::minidump:
     return MinidumpFile::create(Buffer);
-  case file_magic::tapi_file:
-    return TapiUniversal::create(Buffer);
   }
   llvm_unreachable("Unexpected Binary File Type");
 }
 
-Expected<OwningBinary<Binary>>
-object::createBinary(StringRef Path, LLVMContext *Context, bool InitContent) {
+Expected<OwningBinary<Binary>> object::createBinary(StringRef Path) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
-      MemoryBuffer::getFileOrSTDIN(Path, /*IsText=*/false,
+      MemoryBuffer::getFileOrSTDIN(Path, /*FileSize=*/-1,
                                    /*RequiresNullTerminator=*/false);
   if (std::error_code EC = FileOrErr.getError())
     return errorCodeToError(EC);
   std::unique_ptr<MemoryBuffer> &Buffer = FileOrErr.get();
 
   Expected<std::unique_ptr<Binary>> BinOrErr =
-      createBinary(Buffer->getMemBufferRef(), Context, InitContent);
+      createBinary(Buffer->getMemBufferRef());
   if (!BinOrErr)
     return BinOrErr.takeError();
   std::unique_ptr<Binary> &Bin = BinOrErr.get();

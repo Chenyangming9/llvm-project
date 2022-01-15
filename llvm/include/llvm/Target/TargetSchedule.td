@@ -52,6 +52,8 @@
 // Include legacy support for instruction itineraries.
 include "llvm/Target/TargetItinerary.td"
 
+class Instruction; // Forward def
+
 class Predicate; // Forward def
 
 // DAG operator that interprets the DAG args as Instruction defs.
@@ -85,7 +87,7 @@ class SchedMachineModel {
   // Per-cycle resources tables.
   ProcessorItineraries Itineraries = NoItineraries;
 
-  bit PostRAScheduler = false; // Enable Post RegAlloc Scheduler pass.
+  bit PostRAScheduler = 0; // Enable Post RegAlloc Scheduler pass.
 
   // Subtargets that define a model for only a subset of instructions
   // that have a scheduling class (itinerary class or SchedRW list)
@@ -94,13 +96,13 @@ class SchedMachineModel {
   // be an error. This should only be set during initial bringup,
   // or there will be no way to catch simple errors in the model
   // resulting from changes to the instruction definitions.
-  bit CompleteModel = true;
+  bit CompleteModel = 1;
 
   // Indicates that we should do full overlap checking for multiple InstrRWs
-  // defining the same instructions within the same SchedMachineModel.
+  // definining the same instructions within the same SchedMachineModel.
   // FIXME: Remove when all in tree targets are clean with the full check
   // enabled.
-  bit FullInstRWOverlapCheck = true;
+  bit FullInstRWOverlapCheck = 1;
 
   // A processor may only implement part of published ISA, due to either new ISA
   // extensions, (e.g. Pentium 4 doesn't have AVX) or implementation
@@ -116,12 +118,12 @@ class SchedMachineModel {
   // field.
   list<Predicate> UnsupportedFeatures = [];
 
-  bit NoModel = false; // Special tag to indicate missing machine model.
+  bit NoModel = 0; // Special tag to indicate missing machine model.
 }
 
 def NoSchedModel : SchedMachineModel {
-  let NoModel = true;
-  let CompleteModel = false;
+  let NoModel = 1;
+  let CompleteModel = 0;
 }
 
 // Define a kind of processor resource that may be common across
@@ -161,7 +163,7 @@ class ProcResourceKind;
 // differently. Here we refer to stage between decoding into micro-ops
 // and moving them into a reservation station.) Normally NumMicroOps
 // is sufficient to limit dispatch/issue groups. However, some
-// processors can form groups of with only certain combinations of
+// processors can form groups of with only certain combinitions of
 // instruction types. e.g. POWER7.
 //
 // Use BufferSize = 1 for in-order execution units. This is used for
@@ -252,18 +254,14 @@ class ProcWriteResources<list<ProcResourceKind> resources> {
   list<int> ResourceCycles = [];
   int Latency = 1;
   int NumMicroOps = 1;
-  bit BeginGroup = false;
-  bit EndGroup = false;
+  bit BeginGroup = 0;
+  bit EndGroup = 0;
   // Allow a processor to mark some scheduling classes as unsupported
   // for stronger verification.
-  bit Unsupported = false;
+  bit Unsupported = 0;
   // Allow a processor to mark some scheduling classes as single-issue.
   // SingleIssue is an alias for Begin/End Group.
-  bit SingleIssue = false;
-  // An instruction is allowed to retire out-of-order if RetireOOO is
-  // true for at least one of its writes. This field is only used by
-  // MCA for in-order subtargets, and is ignored for other targets.
-  bit RetireOOO = false;
+  bit SingleIssue = 0;
   SchedMachineModel SchedModel = ?;
 }
 
@@ -319,7 +317,7 @@ class ProcReadAdvance<int cycles, list<SchedWrite> writes = []> {
   list<SchedWrite> ValidWrites = writes;
   // Allow a processor to mark some scheduling classes as unsupported
   // for stronger verification.
-  bit Unsupported = false;
+  bit Unsupported = 0;
   SchedMachineModel SchedModel = ?;
 }
 
@@ -397,7 +395,7 @@ class SchedVar<SchedPredicateBase pred, list<SchedReadWrite> selected> {
 // SchedModel silences warnings but is ignored.
 class SchedVariant<list<SchedVar> variants> {
   list<SchedVar> Variants = variants;
-  bit Variadic = false;
+  bit Variadic = 0;
   SchedMachineModel SchedModel = ?;
 }
 
@@ -430,7 +428,7 @@ class InstRW<list<SchedReadWrite> rw, dag instrlist> {
   dag Instrs = instrlist;
   SchedMachineModel SchedModel = ?;
   // Allow a subtarget to mark some instructions as unsupported.
-  bit Unsupported = false;
+  bit Unsupported = 0;
 }
 
 // Map a set of itinerary classes to SchedReadWrite resources. This is
@@ -537,7 +535,7 @@ class SchedAlias<SchedReadWrite match, SchedReadWrite alias> {
 
 class RegisterFile<int numPhysRegs, list<RegisterClass> Classes = [],
                    list<int> Costs = [], list<bit> AllowMoveElim = [],
-                   int MaxMoveElimPerCy = 0, bit AllowZeroMoveElimOnly = false> {
+                   int MaxMoveElimPerCy = 0, bit AllowZeroMoveElimOnly = 0> {
   list<RegisterClass> RegClasses = Classes;
   list<int> RegCosts = Costs;
   list<bit> AllowMoveElimination = AllowMoveElim;
@@ -565,10 +563,10 @@ class RetireControlUnit<int bufferSize, int retirePerCycle> {
 
 // Base class for Load/StoreQueue.  It is used to identify processor resources
 // which describe load/store queues in the LS unit.
-class MemoryQueue<ProcResourceKind PR> {
-  ProcResourceKind QueueDescriptor = PR;
+class MemoryQueue<ProcResource PR> {
+  ProcResource QueueDescriptor = PR;
   SchedMachineModel SchedModel = ?;
 }
 
-class LoadQueue<ProcResourceKind LDQueue> : MemoryQueue<LDQueue>;
-class StoreQueue<ProcResourceKind STQueue> : MemoryQueue<STQueue>;
+class LoadQueue<ProcResource LDQueue> : MemoryQueue<LDQueue>;
+class StoreQueue<ProcResource STQueue> : MemoryQueue<STQueue>;

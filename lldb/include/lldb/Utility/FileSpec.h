@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_UTILITY_FILESPEC_H
-#define LLDB_UTILITY_FILESPEC_H
+#ifndef liblldb_FileSpec_h_
+#define liblldb_FileSpec_h_
 
 #include <functional>
 #include <string>
@@ -18,10 +18,9 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/YAMLTraits.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace lldb_private {
 class Stream;
@@ -38,7 +37,7 @@ template <typename T> class SmallVectorImpl;
 
 namespace lldb_private {
 
-/// \class FileSpec FileSpec.h "lldb/Utility/FileSpec.h"
+/// \class FileSpec FileSpec.h "lldb/Host/FileSpec.h"
 /// A file utility class.
 ///
 /// A file specification class that divides paths up into a directory
@@ -74,11 +73,34 @@ public:
   /// \see FileSpec::SetFile (const char *path)
   explicit FileSpec(llvm::StringRef path, Style style = Style::native);
 
-  explicit FileSpec(llvm::StringRef path, const llvm::Triple &triple);
+  explicit FileSpec(llvm::StringRef path, const llvm::Triple &Triple);
+
+  /// Copy constructor
+  ///
+  /// Makes a copy of the uniqued directory and filename strings from \a rhs
+  /// if it is not nullptr.
+  ///
+  /// \param[in] rhs
+  ///     A const FileSpec object pointer to copy if non-nullptr.
+  FileSpec(const FileSpec *rhs);
+
+  /// Destructor.
+  ~FileSpec();
 
   bool DirectoryEquals(const FileSpec &other) const;
 
   bool FileEquals(const FileSpec &other) const;
+
+  /// Assignment operator.
+  ///
+  /// Makes a copy of the uniqued directory and filename strings from \a rhs.
+  ///
+  /// \param[in] rhs
+  ///     A const FileSpec object reference to assign to this object.
+  ///
+  /// \return
+  ///     A const reference to this object.
+  const FileSpec &operator=(const FileSpec &rhs);
 
   /// Equal to operator
   ///
@@ -178,17 +200,13 @@ public:
   ///     only the filename will be compared, else a full comparison
   ///     is done.
   ///
-  /// \return -1 if \a lhs is less than \a rhs, 0 if \a lhs is equal to \a rhs,
-  ///     1 if \a lhs is greater than \a rhs
+  /// \return
+  ///     \li -1 if \a lhs is less than \a rhs
+  ///     \li 0 if \a lhs is equal to \a rhs
+  ///     \li 1 if \a lhs is greater than \a rhs
   static int Compare(const FileSpec &lhs, const FileSpec &rhs, bool full);
 
   static bool Equal(const FileSpec &a, const FileSpec &b, bool full);
-
-  /// Match FileSpec \a pattern against FileSpec \a file. If \a pattern has a
-  /// directory component, then the \a file must have the same directory
-  /// component. Otherwise, just it matches just the filename. An empty \a
-  /// pattern matches everything.
-  static bool Match(const FileSpec &pattern, const FileSpec &file);
 
   /// Attempt to guess path style for a given path string. It returns a style,
   /// if it was able to make a reasonable guess, or None if it wasn't. The guess
@@ -212,7 +230,7 @@ public:
   ///
   /// \param[in] s
   ///     The stream to which to dump the object description.
-  void Dump(llvm::raw_ostream &s) const;
+  void Dump(Stream *s) const;
 
   Style GetPathStyle() const;
 
@@ -304,6 +322,10 @@ public:
   /// Extract the full path to the file.
   ///
   /// Extract the directory and path into an llvm::SmallVectorImpl<>
+  ///
+  /// \return
+  ///     Returns a std::string with the directory and filename
+  ///     concatenated.
   void GetPath(llvm::SmallVectorImpl<char> &path,
                bool denormalize = true) const;
 
@@ -314,7 +336,8 @@ public:
   /// filename has no extension, ConstString(nullptr) is returned. The dot
   /// ('.') character is not returned as part of the extension
   ///
-  /// \return Returns the extension of the file as a ConstString object.
+  /// \return
+  ///     Returns the extension of the file as a ConstString object.
   ConstString GetFileNameExtension() const;
 
   /// Return the filename without the extension part
@@ -323,7 +346,9 @@ public:
   /// without the extension part (e.g. for a file named "foo.bar", "foo" is
   /// returned)
   ///
-  /// \return Returns the filename without extension as a ConstString object.
+  /// \return
+  ///     Returns the filename without extension
+  ///     as a ConstString object.
   ConstString GetFileNameStrippingExtension() const;
 
   /// Get the memory cost of this object.
@@ -347,22 +372,12 @@ public:
   /// \param[in] path
   ///     A full, partial, or relative path to a file.
   ///
-  /// \param[in] style
-  ///     The style for the given path.
+  /// \param[in] resolve_path
+  ///     If \b true, then we will try to resolve links the path using
+  ///     the static FileSpec::Resolve.
   void SetFile(llvm::StringRef path, Style style);
 
-  /// Change the file specified with a new path.
-  ///
-  /// Update the contents of this object with a new path. The path will be
-  /// split up into a directory and filename and stored as uniqued string
-  /// values for quick comparison and efficient memory usage.
-  ///
-  /// \param[in] path
-  ///     A full, partial, or relative path to a file.
-  ///
-  /// \param[in] triple
-  ///     The triple which is used to set the Path style.
-  void SetFile(llvm::StringRef path, const llvm::Triple &triple);
+  void SetFile(llvm::StringRef path, const llvm::Triple &Triple);
 
   bool IsResolved() const { return m_is_resolved; }
 
@@ -398,8 +413,6 @@ public:
   ConstString GetLastPathComponent() const;
 
 protected:
-  friend struct llvm::yaml::MappingTraits<FileSpec>;
-
   // Convenience method for setting the file without changing the style.
   void SetFile(llvm::StringRef path);
 
@@ -413,8 +426,6 @@ protected:
 /// Dump a FileSpec object to a stream
 Stream &operator<<(Stream &s, const FileSpec &f);
 
-/// Prevent ODR violations with traits for llvm::sys::path::Style.
-LLVM_YAML_STRONG_TYPEDEF(FileSpec::Style, FileSpecStyle)
 } // namespace lldb_private
 
 namespace llvm {
@@ -441,16 +452,6 @@ template <> struct format_provider<lldb_private::FileSpec> {
   static void format(const lldb_private::FileSpec &F, llvm::raw_ostream &Stream,
                      StringRef Style);
 };
-
-namespace yaml {
-template <> struct ScalarEnumerationTraits<lldb_private::FileSpecStyle> {
-  static void enumeration(IO &io, lldb_private::FileSpecStyle &style);
-};
-
-template <> struct MappingTraits<lldb_private::FileSpec> {
-  static void mapping(IO &io, lldb_private::FileSpec &f);
-};
-} // namespace yaml
 } // namespace llvm
 
-#endif // LLDB_UTILITY_FILESPEC_H
+#endif // liblldb_FileSpec_h_

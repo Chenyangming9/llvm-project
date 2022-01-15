@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_UTILITY_LLDBASSERT_H
-#define LLDB_UTILITY_LLDBASSERT_H
+#ifndef utility_LLDBAssert_h_
+#define utility_LLDBAssert_h_
 
 #ifdef LLDB_CONFIGURATION_DEBUG
 #define lldbassert(x) assert(x)
@@ -20,6 +20,6 @@
 namespace lldb_private {
 void lldb_assert(bool expression, const char *expr_text, const char *func,
                  const char *file, unsigned int line);
-} // namespace lldb_private
+}
 
-#endif // LLDB_UTILITY_LLDBASSERT_H
+#endif // utility_LLDBAssert_h_

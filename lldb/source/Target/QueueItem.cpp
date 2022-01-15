@@ -1,4 +1,4 @@
-//===-- QueueItem.cpp -----------------------------------------------------===//
+//===-- QueueItem.cpp -------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -27,7 +27,7 @@ QueueItem::QueueItem(QueueSP queue_sp, ProcessSP process_sp,
   m_process_wp = process_sp;
 }
 
-QueueItem::~QueueItem() = default;
+QueueItem::~QueueItem() {}
 
 QueueItemKind QueueItem::GetKind() {
   FetchEntireItem();

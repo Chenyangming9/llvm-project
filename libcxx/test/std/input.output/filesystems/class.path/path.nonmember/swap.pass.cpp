@@ -6,19 +6,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <filesystem>
 
 // void swap(path& lhs, path& rhs) noexcept;
 
-#include "filesystem_include.h"
+#include "filesystem_include.hpp"
 #include <type_traits>
 #include <cassert>
 
 #include "test_macros.h"
-#include "count_new.h"
-#include "filesystem_test_helper.h"
+#include "count_new.hpp"
+#include "filesystem_test_helper.hpp"
 
 
 // NOTE: this is tested in path.members/path.modifiers via the member swap.
@@ -29,8 +29,6 @@ int main(int, char**)
   const char* value2 = "_THIS_IS_LONG_THIS_IS_LONG_THIS_IS_LONG_THIS_IS_LONG_THIS_IS_LONG_THIS_IS_LONG_THIS_IS_LONG";
   path p1(value1);
   path p2(value2);
-  fs::path::string_type ps1 = p1.native();
-  fs::path::string_type ps2 = p2.native();
   {
     using namespace std; using namespace fs;
     ASSERT_NOEXCEPT(swap(p1, p2));
@@ -41,11 +39,11 @@ int main(int, char**)
     using namespace std;
     using namespace fs;
     swap(p1, p2);
-    assert(p1.native() == ps2);
-    assert(p2.native() == ps1);
+    assert(p1.native() == value2);
+    assert(p2.native() == value1);
     swap(p1, p2);
-    assert(p1.native() == ps1);
-    assert(p2.native() == ps2);
+    assert(p1.native() == value1);
+    assert(p2.native() == value2);
   }
 
   return 0;

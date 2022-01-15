@@ -36,7 +36,7 @@ class FromShortExplicitly { // expected-note{{candidate constructor (the implici
 #endif
 
 public:
-  explicit FromShortExplicitly(short s); // expected-note {{explicit constructor is not a candidate}}
+  explicit FromShortExplicitly(short s);
 };
 
 void explicit_constructor(short s) {

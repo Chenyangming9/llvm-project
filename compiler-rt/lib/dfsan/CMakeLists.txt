@@ -2,24 +2,14 @@ include_directories(..)
 
 # Runtime library sources and build flags.
 set(DFSAN_RTL_SOURCES
-  dfsan.cpp
-  dfsan_allocator.cpp
-  dfsan_chained_origin_depot.cpp
-  dfsan_custom.cpp
-  dfsan_interceptors.cpp
-  dfsan_new_delete.cpp
-  dfsan_thread.cpp
-  )
+  dfsan.cc
+  dfsan_custom.cc
+  dfsan_interceptors.cc)
 
 set(DFSAN_RTL_HEADERS
   dfsan.h
-  dfsan_allocator.h
-  dfsan_chained_origin_depot.h
   dfsan_flags.inc
-  dfsan_flags.h
-  dfsan_platform.h
-  dfsan_thread.h
-  )
+  dfsan_platform.h)
 
 set(DFSAN_COMMON_CFLAGS ${SANITIZER_COMMON_CFLAGS})
 append_rtti_flag(OFF DFSAN_COMMON_CFLAGS)
@@ -39,7 +29,6 @@ foreach(arch ${DFSAN_SUPPORTED_ARCH})
             $<TARGET_OBJECTS:RTInterception.${arch}>
             $<TARGET_OBJECTS:RTSanitizerCommon.${arch}>
             $<TARGET_OBJECTS:RTSanitizerCommonLibc.${arch}>
-            $<TARGET_OBJECTS:RTSanitizerCommonSymbolizer.${arch}>
     ADDITIONAL_HEADERS ${DFSAN_RTL_HEADERS}
     CFLAGS ${DFSAN_CFLAGS}
     PARENT_TARGET dfsan)
@@ -65,4 +54,4 @@ add_custom_command(OUTPUT ${dfsan_abilist_filename}
                    DEPENDS done_abilist.txt libc_ubuntu1404_abilist.txt)
 add_dependencies(dfsan dfsan_abilist)
 install(FILES ${dfsan_abilist_filename}
-        DESTINATION ${COMPILER_RT_INSTALL_DATA_DIR})
+        DESTINATION ${COMPILER_RT_INSTALL_PATH}/share)

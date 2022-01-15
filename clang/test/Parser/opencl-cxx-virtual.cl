@@ -1,32 +1,19 @@
 // RUN: %clang_cc1 %s -triple spir-unknown-unknown -cl-std=clc++ -fsyntax-only -verify
-// RUN: %clang_cc1 %s -triple spir-unknown-unknown -cl-std=clc++ -fsyntax-only -verify -DFUNCPTREXT
 
-#ifdef FUNCPTREXT
-#pragma OPENCL EXTENSION __cl_clang_function_pointers : enable
-//expected-no-diagnostics
-#endif
-
-// Test that virtual functions and abstract classes are rejected
-// unless specific clang extension is used.
+// Test that virtual functions and abstract classes are rejected.
 class virtual_functions {
   virtual void bad1() {}
-#ifndef FUNCPTREXT
-  //expected-error@-2 {{virtual functions are not supported in C++ for OpenCL}}
-#endif
+  //expected-error@-1 {{virtual functions are not supported in C++ for OpenCL}}
 
   virtual void bad2() = 0;
-#ifndef FUNCPTREXT
-  //expected-error@-2 {{virtual functions are not supported in C++ for OpenCL}}
-  //expected-error@-3 {{'bad2' is not virtual and cannot be declared pure}}
-#endif
+  //expected-error@-1 {{virtual functions are not supported in C++ for OpenCL}}
+  //expected-error@-2 {{'bad2' is not virtual and cannot be declared pure}}
 };
 
 template <typename T>
 class X {
   virtual T f();
-#ifndef FUNCPTREXT
-  //expected-error@-2 {{virtual functions are not supported in C++ for OpenCL}}
-#endif
+  //expected-error@-1 {{virtual functions are not supported in C++ for OpenCL}}
 };
 
 // Test that virtual base classes are allowed.

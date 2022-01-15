@@ -21,7 +21,6 @@
 #include <atomic>
 #include <cstdlib>
 #include <cassert>
-#include <vector>
 
 #include "test_macros.h"
 
@@ -50,12 +49,10 @@ void  operator delete(void* p) TEST_NOEXCEPT
 
 bool f_run = false;
 
-struct F {
-    std::vector<int> v_;  // so f's copy-ctor calls operator new
-    explicit F() : v_(10) {}
-    void operator()() const { f_run = true; }
-};
-F f;
+void f()
+{
+    f_run = true;
+}
 
 class G
 {
@@ -136,7 +133,7 @@ void test_throwing_new_during_thread_creation() {
     for (int i=0; i <= numAllocs; ++i) {
         throw_one = i;
         f_run = false;
-        TEST_NOT_WIN32_DLL(unsigned old_outstanding = outstanding_new);
+        unsigned old_outstanding = outstanding_new;
         try {
             std::thread t(f);
             assert(i == numAllocs); // Only final iteration will not throw.
@@ -146,9 +143,7 @@ void test_throwing_new_during_thread_creation() {
             assert(i < numAllocs);
             assert(!f_run); // (2.2)
         }
-        // In DLL builds on Windows, the overridden operators new/delete won't
-        // override calls from within the DLL, so this won't match.
-        TEST_NOT_WIN32_DLL(assert(old_outstanding == outstanding_new)); // (2.3)
+        assert(old_outstanding == outstanding_new); // (2.3)
     }
     f_run = false;
     throw_one = 0xFFF;

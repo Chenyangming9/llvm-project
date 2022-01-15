@@ -1,4 +1,4 @@
-add_llvm_component_library(LLVMHexagonDesc
+add_llvm_library(LLVMHexagonDesc
   HexagonAsmBackend.cpp
   HexagonELFObjectWriter.cpp
   HexagonInstPrinter.cpp
@@ -13,14 +13,6 @@ add_llvm_component_library(LLVMHexagonDesc
   HexagonMCShuffler.cpp
   HexagonMCTargetDesc.cpp
   HexagonShuffler.cpp
-
-  LINK_COMPONENTS
-  HexagonInfo
-  MC
-  Support
-
-  ADD_TO_COMPONENT
-  Hexagon
   )
 
 add_dependencies(LLVMHexagonDesc HexagonCommonTableGen)

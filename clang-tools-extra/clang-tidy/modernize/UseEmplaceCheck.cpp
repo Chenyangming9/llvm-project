@@ -28,8 +28,8 @@ const auto DefaultTupleMakeFunctions = "::std::make_pair; ::std::make_tuple";
 } // namespace
 
 UseEmplaceCheck::UseEmplaceCheck(StringRef Name, ClangTidyContext *Context)
-    : ClangTidyCheck(Name, Context), IgnoreImplicitConstructors(Options.get(
-                                         "IgnoreImplicitConstructors", false)),
+    : ClangTidyCheck(Name, Context),
+      IgnoreImplicitConstructors(Options.get("IgnoreImplicitConstructors", 0)),
       ContainersWithPushBack(utils::options::parseStringList(Options.get(
           "ContainersWithPushBack", DefaultContainersWithPushBack))),
       SmartPointers(utils::options::parseStringList(
@@ -40,6 +40,9 @@ UseEmplaceCheck::UseEmplaceCheck(StringRef Name, ClangTidyContext *Context)
           Options.get("TupleMakeFunctions", DefaultTupleMakeFunctions))) {}
 
 void UseEmplaceCheck::registerMatchers(MatchFinder *Finder) {
+  if (!getLangOpts().CPlusPlus11)
+    return;
+
   // FIXME: Bunch of functionality that could be easily added:
   // + add handling of `push_front` for std::forward_list, std::list
   // and std::deque.
@@ -109,11 +112,10 @@ void UseEmplaceCheck::registerMatchers(MatchFinder *Finder) {
       anyOf(has(MakeTuple), has(MakeTupleCtor),
             HasConstructExpr, has(cxxFunctionalCastExpr(HasConstructExpr))));
 
-  Finder->addMatcher(
-      traverse(TK_AsIs, cxxMemberCallExpr(CallPushBack, has(SoughtParam),
-                                          unless(isInTemplateInstantiation()))
-                            .bind("call")),
-      this);
+  Finder->addMatcher(cxxMemberCallExpr(CallPushBack, has(SoughtParam),
+                                       unless(isInTemplateInstantiation()))
+                         .bind("call"),
+                     this);
 }
 
 void UseEmplaceCheck::check(const MatchFinder::MatchResult &Result) {
@@ -159,7 +161,6 @@ void UseEmplaceCheck::check(const MatchFinder::MatchResult &Result) {
 }
 
 void UseEmplaceCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
-  Options.store(Opts, "IgnoreImplicitConstructors", IgnoreImplicitConstructors);
   Options.store(Opts, "ContainersWithPushBack",
                 utils::options::serializeStringList(ContainersWithPushBack));
   Options.store(Opts, "SmartPointers",

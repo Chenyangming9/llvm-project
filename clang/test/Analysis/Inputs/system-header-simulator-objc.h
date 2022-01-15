@@ -117,10 +117,7 @@ typedef double NSTimeInterval;
 + (id)dataWithBytesNoCopy:(void *)bytes length:(NSUInteger)length freeWhenDone:(BOOL)b;
 - (id)initWithBytesNoCopy:(void *)bytes length:(NSUInteger)length;
 - (id)initWithBytesNoCopy:(void *)bytes length:(NSUInteger)length freeWhenDone:(BOOL)b;
-- (id)initWithBytesNoCopy:(void *)bytes
-                   length:(NSUInteger)length
-              deallocator:(void (^)(void *bytes, NSUInteger length))deallocator;
-- (id)initWithBytes:(void *)bytes length:(NSUInteger)length;
+- (id)initWithBytes:(void *)bytes length:(NSUInteger) length;
 @end
 
 typedef struct {

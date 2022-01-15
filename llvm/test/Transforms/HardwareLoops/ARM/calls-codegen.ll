@@ -1,11 +1,8 @@
-; RUN: llc -mtriple=thumbv8.1m.main-none-none-eabi -mattr=+lob,+mve.fp -disable-arm-loloops=true %s -o - | FileCheck %s --check-prefix=DISABLED
-; RUN: llc -mtriple=thumbv8.1m.main-none-none-eabi -mattr=+lob,+mve.fp %s -o - | FileCheck %s
-
-; DISABLED-NOT: dls lr,
+; RUN: llc -mtriple=thumbv8.1m.main-arm-none-eabi -mattr=+lob,+mve.fp -disable-arm-loloops=false %s -o - | FileCheck %s
 
 ; CHECK-LABEL: test_target_specific:
 ; CHECK:        mov.w lr, #50
-; CHECK-NOT:    dls lr, lr
+; CHECK:        dls lr, lr
 ; CHECK-NOT:    mov lr,
 ; CHECK:      [[LOOP_HEADER:\.LBB[0-9_]+]]:
 ; CHECK:        le lr, [[LOOP_HEADER]]
@@ -32,7 +29,7 @@ exit:
 
 ; CHECK-LABEL: test_fabs:
 ; CHECK:        mov.w lr, #100
-; CHECK-NOT:    dls lr, lr
+; CHECK:        dls lr, lr
 ; CHECK-NOT:    mov lr,
 ; CHECK:      [[LOOP_HEADER:\.LBB[0-9_]+]]:
 ; CHECK-NOT:    bl

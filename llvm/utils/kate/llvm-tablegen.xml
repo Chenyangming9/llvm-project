@@ -5,9 +5,6 @@
     <list name="keywords">
       <item> foreach </item>
       <item> field </item>
-      <item> if </item>
-      <item> then </item>
-      <item> else </item>
     </list>
     <list name="operator-keywords">
       <item> in </item>
@@ -48,7 +45,6 @@
       <item> defm </item>
       <item> defset </item>
       <item> let </item>
-      <item> defvar </item>
       <item> multiclass </item>
     </list>
     <list name="class-like">

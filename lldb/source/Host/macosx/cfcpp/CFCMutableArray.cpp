@@ -1,4 +1,4 @@
-//===-- CFCMutableArray.cpp -----------------------------------------------===//
+//===-- CFCMutableArray.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -29,7 +29,7 @@ CFCMutableArray &CFCMutableArray::operator=(const CFCMutableArray &rhs) {
 }
 
 // Destructor
-CFCMutableArray::~CFCMutableArray() = default;
+CFCMutableArray::~CFCMutableArray() {}
 
 CFIndex CFCMutableArray::GetCount() const {
   CFMutableArrayRef array = get();

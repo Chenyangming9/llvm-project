@@ -18,7 +18,7 @@
 #include "test_macros.h"
 #include "test_iterators.h"
 #include "min_allocator.h"
-#include "count_new.h"
+#include "count_new.hpp"
 
 template <class List>
 void test() {

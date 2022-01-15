@@ -6,12 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SYMBOL_TYPE_H
-#define LLDB_SYMBOL_TYPE_H
+#ifndef liblldb_Type_h_
+#define liblldb_Type_h_
 
-#include "lldb/Core/Declaration.h"
+#include "lldb/Core/ClangForward.h"
 #include "lldb/Symbol/CompilerDecl.h"
 #include "lldb/Symbol/CompilerType.h"
+#include "lldb/Symbol/Declaration.h"
 #include "lldb/Utility/ConstString.h"
 #include "lldb/Utility/UserID.h"
 #include "lldb/lldb-private.h"
@@ -21,27 +22,21 @@
 #include <set>
 
 namespace lldb_private {
-
-/// CompilerContext allows an array of these items to be passed to perform
-/// detailed lookups in SymbolVendor and SymbolFile functions.
+// CompilerContext allows an array of these items to be passed to perform
+// detailed lookups in SymbolVendor and SymbolFile functions.
 struct CompilerContext {
-  CompilerContext(CompilerContextKind t, ConstString n) : kind(t), name(n) {}
+  CompilerContext(CompilerContextKind t, ConstString n)
+      : type(t), name(n) {}
 
   bool operator==(const CompilerContext &rhs) const {
-    return kind == rhs.kind && name == rhs.name;
+    return type == rhs.type && name == rhs.name;
   }
-  bool operator!=(const CompilerContext &rhs) const { return !(*this == rhs); }
 
   void Dump() const;
 
-  CompilerContextKind kind;
+  CompilerContextKind type;
   ConstString name;
 };
-
-/// Match \p context_chain against \p pattern, which may contain "Any"
-/// kinds. The \p context_chain should *not* contain any "Any" kinds.
-bool contextMatches(llvm::ArrayRef<CompilerContext> context_chain,
-                    llvm::ArrayRef<CompilerContext> pattern);
 
 class SymbolFileType : public std::enable_shared_from_this<SymbolFileType>,
                        public UserID {
@@ -51,12 +46,11 @@ public:
 
   SymbolFileType(SymbolFile &symbol_file, const lldb::TypeSP &type_sp);
 
-  ~SymbolFileType() = default;
+  ~SymbolFileType() {}
 
   Type *operator->() { return GetType(); }
 
   Type *GetType();
-  SymbolFile &GetSymbolFile() const { return m_symbol_file; }
 
 protected:
   SymbolFile &m_symbol_file;
@@ -81,55 +75,53 @@ public:
     eEncodingIsLValueReferenceUID, ///< This type is L value reference to a type
                                    /// whose UID is m_encoding_uid
     eEncodingIsRValueReferenceUID, ///< This type is R value reference to a type
-                                   /// whose UID is m_encoding_uid,
-    eEncodingIsAtomicUID,          ///< This type is the type whose UID is
-                                   /// m_encoding_uid as an atomic type.
+                                   /// whose UID is m_encoding_uid
     eEncodingIsSyntheticUID
   };
 
-  enum class ResolveState : unsigned char {
-    Unresolved = 0,
-    Forward = 1,
-    Layout = 2,
-    Full = 3
-  };
+  // We must force the underlying type of the enum to be unsigned here.  Not
+  // all compilers behave the same with regards to the default underlying type
+  // of an enum, but because this enum is used in an enum bitfield and integer
+  // comparisons are done with the value we need to guarantee that it's always
+  // unsigned so that, for example, eResolveStateFull doesn't compare less than
+  // eResolveStateUnresolved when used in a 2-bit bitfield.
+  typedef enum ResolveStateTag : unsigned {
+    eResolveStateUnresolved = 0,
+    eResolveStateForward = 1,
+    eResolveStateLayout = 2,
+    eResolveStateFull = 3
+  } ResolveState;
 
   Type(lldb::user_id_t uid, SymbolFile *symbol_file, ConstString name,
        llvm::Optional<uint64_t> byte_size, SymbolContextScope *context,
        lldb::user_id_t encoding_uid, EncodingDataType encoding_uid_type,
        const Declaration &decl, const CompilerType &compiler_qual_type,
-       ResolveState compiler_type_resolve_state, uint32_t opaque_payload = 0);
+       ResolveState compiler_type_resolve_state);
 
   // This makes an invalid type.  Used for functions that return a Type when
   // they get an error.
   Type();
 
-  void Dump(Stream *s, bool show_context,
-            lldb::DescriptionLevel level = lldb::eDescriptionLevelFull);
+  void Dump(Stream *s, bool show_context);
 
   void DumpTypeName(Stream *s);
 
-  /// Since Type instances only keep a "SymbolFile *" internally, other classes
-  /// like TypeImpl need make sure the module is still around before playing
-  /// with
-  /// Type instances. They can store a weak pointer to the Module;
+  // Since Type instances only keep a "SymbolFile *" internally, other classes
+  // like TypeImpl need make sure the module is still around before playing
+  // with
+  // Type instances. They can store a weak pointer to the Module;
   lldb::ModuleSP GetModule();
 
-  /// GetModule may return module for compile unit's object file.
-  /// GetExeModule returns module for executable object file that contains
-  /// compile unit where type was actualy defined.
-  /// GetModule and GetExeModule may return the same value.
-  lldb::ModuleSP GetExeModule();
-
-  void GetDescription(Stream *s, lldb::DescriptionLevel level, bool show_name,
-                      ExecutionContextScope *exe_scope);
+  void GetDescription(Stream *s, lldb::DescriptionLevel level, bool show_name);
 
   SymbolFile *GetSymbolFile() { return m_symbol_file; }
   const SymbolFile *GetSymbolFile() const { return m_symbol_file; }
 
+  TypeList *GetTypeList();
+
   ConstString GetName();
 
-  llvm::Optional<uint64_t> GetByteSize(ExecutionContextScope *exe_scope);
+  llvm::Optional<uint64_t> GetByteSize();
 
   uint32_t GetNumChildren(bool omit_empty_base_classes);
 
@@ -205,31 +197,38 @@ public:
 
   uint32_t GetEncodingMask();
 
-  typedef uint32_t Payload;
-  /// Return the language-specific payload.
-  Payload GetPayload() { return m_payload; }
-  /// Return the language-specific payload.
-  void SetPayload(Payload opaque_payload) { m_payload = opaque_payload; }
+  bool IsCompleteObjCClass() { return m_flags.is_complete_objc_class; }
+
+  void SetIsCompleteObjCClass(bool is_complete_objc_class) {
+    m_flags.is_complete_objc_class = is_complete_objc_class;
+  }
 
 protected:
   ConstString m_name;
-  SymbolFile *m_symbol_file = nullptr;
-  /// The symbol context in which this type is defined.
-  SymbolContextScope *m_context = nullptr;
-  Type *m_encoding_type = nullptr;
-  lldb::user_id_t m_encoding_uid = LLDB_INVALID_UID;
-  EncodingDataType m_encoding_uid_type = eEncodingInvalid;
+  SymbolFile *m_symbol_file;
+  SymbolContextScope
+      *m_context; // The symbol context in which this type is defined
+  Type *m_encoding_type;
+  lldb::user_id_t m_encoding_uid;
+  EncodingDataType m_encoding_uid_type;
   uint64_t m_byte_size : 63;
   uint64_t m_byte_size_has_value : 1;
   Declaration m_decl;
   CompilerType m_compiler_type;
-  ResolveState m_compiler_type_resolve_state = ResolveState::Unresolved;
-  /// Language-specific flags.
-  Payload m_payload;
+
+  struct Flags {
+#ifdef __GNUC__
+    // using unsigned type here to work around a very noisy gcc warning
+    unsigned compiler_type_resolve_state : 2;
+#else
+    ResolveState compiler_type_resolve_state : 2;
+#endif
+    bool is_complete_objc_class : 1;
+  } m_flags;
 
   Type *GetEncodingType();
 
-  bool ResolveCompilerType(ResolveState compiler_type_resolve_state);
+  bool ResolveClangType(ResolveState compiler_type_resolve_state);
 };
 
 // the two classes here are used by the public API as a backend to the SBType
@@ -239,7 +238,7 @@ class TypeImpl {
 public:
   TypeImpl() = default;
 
-  ~TypeImpl() = default;
+  ~TypeImpl() {}
 
   TypeImpl(const lldb::TypeSP &type_sp);
 
@@ -266,8 +265,6 @@ public:
   explicit operator bool() const;
 
   void Clear();
-
-  lldb::ModuleSP GetModule() const;
 
   ConstString GetName() const;
 
@@ -296,12 +293,8 @@ public:
 
 private:
   bool CheckModule(lldb::ModuleSP &module_sp) const;
-  bool CheckExeModule(lldb::ModuleSP &module_sp) const;
-  bool CheckModuleCommon(const lldb::ModuleWP &input_module_wp,
-                         lldb::ModuleSP &module_sp) const;
 
   lldb::ModuleWP m_module_wp;
-  lldb::ModuleWP m_exe_module_wp;
   CompilerType m_static_type;
   CompilerType m_dynamic_type;
 };
@@ -340,7 +333,8 @@ private:
 class TypeMemberImpl {
 public:
   TypeMemberImpl()
-      : m_type_impl_sp(), m_name()
+      : m_type_impl_sp(), m_bit_offset(0), m_name(), m_bitfield_bit_size(0),
+        m_is_bitfield(false)
 
   {}
 
@@ -375,10 +369,10 @@ public:
 
 protected:
   lldb::TypeImplSP m_type_impl_sp;
-  uint64_t m_bit_offset = 0;
+  uint64_t m_bit_offset;
   ConstString m_name;
-  uint32_t m_bitfield_bit_size = 0; // Bit size for bitfield members only
-  bool m_is_bitfield = false;
+  uint32_t m_bitfield_bit_size; // Bit size for bitfield members only
+  bool m_is_bitfield;
 };
 
 ///
@@ -434,7 +428,9 @@ private:
 
 class TypeMemberFunctionImpl {
 public:
-  TypeMemberFunctionImpl() : m_type(), m_decl(), m_name() {}
+  TypeMemberFunctionImpl()
+      : m_type(), m_decl(), m_name(), m_kind(lldb::eMemberFunctionKindUnknown) {
+  }
 
   TypeMemberFunctionImpl(const CompilerType &type, const CompilerDecl &decl,
                          const std::string &name,
@@ -466,12 +462,13 @@ private:
   CompilerType m_type;
   CompilerDecl m_decl;
   ConstString m_name;
-  lldb::MemberFunctionKind m_kind = lldb::eMemberFunctionKindUnknown;
+  lldb::MemberFunctionKind m_kind;
 };
 
 class TypeEnumMemberImpl {
 public:
-  TypeEnumMemberImpl() : m_integer_type_sp(), m_name("<invalid>"), m_value() {}
+  TypeEnumMemberImpl()
+      : m_integer_type_sp(), m_name("<invalid>"), m_value(), m_valid(false) {}
 
   TypeEnumMemberImpl(const lldb::TypeImplSP &integer_type_sp,
                      ConstString name, const llvm::APSInt &value);
@@ -494,7 +491,7 @@ protected:
   lldb::TypeImplSP m_integer_type_sp;
   ConstString m_name;
   llvm::APSInt m_value;
-  bool m_valid = false;
+  bool m_valid;
 };
 
 class TypeEnumMemberListImpl {
@@ -522,4 +519,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_SYMBOL_TYPE_H
+#endif // liblldb_Type_h_

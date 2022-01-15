@@ -23,7 +23,7 @@ struct promise_void {
 #endif
   void get_return_object();
   suspend_always initial_suspend();
-  suspend_always final_suspend() noexcept;
+  suspend_always final_suspend();
   void return_void();
 };
 

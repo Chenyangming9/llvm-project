@@ -35,7 +35,10 @@ class MachineBranchProbabilityInfo : public ImmutablePass {
 public:
   static char ID;
 
-  MachineBranchProbabilityInfo();
+  MachineBranchProbabilityInfo() : ImmutablePass(ID) {
+    PassRegistry &Registry = *PassRegistry::getPassRegistry();
+    initializeMachineBranchProbabilityInfoPass(Registry);
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesAll();
@@ -54,6 +57,10 @@ public:
   // A 'Hot' edge is an edge which probability is >= 80%.
   bool isEdgeHot(const MachineBasicBlock *Src,
                  const MachineBasicBlock *Dst) const;
+
+  // Return a hot successor for the block BB or null if there isn't one.
+  // NB: This routine's complexity is linear on the number of successors.
+  MachineBasicBlock *getHotSucc(MachineBasicBlock *MBB) const;
 
   // Print value between 0 (0% probability) and 1 (100% probability),
   // however the value is never equal to 0, and can be 1 only iff SRC block

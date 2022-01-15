@@ -22,8 +22,9 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "count_new.h"
+#include "count_new.hpp"
 #include "container_test_types.h"
+#include "assert_checkpoint.h"
 
 
 template <class Container>
@@ -33,7 +34,7 @@ void testSetInsert()
   ConstructController* cc = getConstructController();
   cc->reset();
   {
-    // Testing C::insert(const value_type&)"
+    CHECKPOINT("Testing C::insert(const value_type&)");
     Container c;
     const ValueTp v(42);
     cc->expect<const ValueTp&>();
@@ -46,7 +47,7 @@ void testSetInsert()
     }
   }
   {
-    // Testing C::insert(value_type&)"
+    CHECKPOINT("Testing C::insert(value_type&)");
     Container c;
     ValueTp v(42);
     cc->expect<const ValueTp&>();
@@ -59,7 +60,7 @@ void testSetInsert()
     }
   }
   {
-    // Testing C::insert(value_type&&)"
+    CHECKPOINT("Testing C::insert(value_type&&)");
     Container c;
     ValueTp v(42);
     cc->expect<ValueTp&&>();
@@ -72,7 +73,7 @@ void testSetInsert()
     }
   }
   {
-    // Testing C::insert(const value_type&&)"
+    CHECKPOINT("Testing C::insert(const value_type&&)");
     Container c;
     const ValueTp v(42);
     cc->expect<const ValueTp&>();
@@ -85,7 +86,7 @@ void testSetInsert()
     }
   }
   {
-    // Testing C::insert(std::initializer_list<ValueTp>)"
+    CHECKPOINT("Testing C::insert(std::initializer_list<ValueTp>)");
     Container c;
     std::initializer_list<ValueTp> il = { ValueTp(1), ValueTp(2) };
     cc->expect<ValueTp const&>(2);
@@ -97,7 +98,7 @@ void testSetInsert()
     }
   }
   {
-    // Testing C::insert(Iter, Iter) for *Iter = value_type const&"
+    CHECKPOINT("Testing C::insert(Iter, Iter) for *Iter = value_type const&");
     Container c;
     const ValueTp ValueList[] = { ValueTp(1), ValueTp(2), ValueTp(3) };
     cc->expect<ValueTp const&>(3);
@@ -109,7 +110,7 @@ void testSetInsert()
     }
   }
   {
-    // Testing C::insert(Iter, Iter) for *Iter = value_type&&"
+    CHECKPOINT("Testing C::insert(Iter, Iter) for *Iter = value_type&&");
     Container c;
     ValueTp ValueList[] = { ValueTp(1), ValueTp(2) , ValueTp(3) };
     cc->expect<ValueTp&&>(3);
@@ -124,7 +125,7 @@ void testSetInsert()
     }
   }
   {
-    // Testing C::insert(Iter, Iter) for *Iter = value_type&"
+    CHECKPOINT("Testing C::insert(Iter, Iter) for *Iter = value_type&");
     Container c;
     ValueTp ValueList[] = { ValueTp(1), ValueTp(2) , ValueTp(3) };
     cc->expect<ValueTp const&>(3);
@@ -145,7 +146,7 @@ void testSetEmplace()
   ConstructController* cc = getConstructController();
   cc->reset();
   {
-    // Testing C::emplace(const value_type&)"
+    CHECKPOINT("Testing C::emplace(const value_type&)");
     Container c;
     const ValueTp v(42);
     cc->expect<const ValueTp&>();
@@ -158,7 +159,7 @@ void testSetEmplace()
     }
   }
   {
-    // Testing C::emplace(value_type&)"
+    CHECKPOINT("Testing C::emplace(value_type&)");
     Container c;
     ValueTp v(42);
     cc->expect<ValueTp&>();
@@ -171,7 +172,7 @@ void testSetEmplace()
     }
   }
   {
-    // Testing C::emplace(value_type&&)"
+    CHECKPOINT("Testing C::emplace(value_type&&)");
     Container c;
     ValueTp v(42);
     cc->expect<ValueTp&&>();
@@ -184,7 +185,7 @@ void testSetEmplace()
     }
   }
   {
-    // Testing C::emplace(const value_type&&)"
+    CHECKPOINT("Testing C::emplace(const value_type&&)");
     Container c;
     const ValueTp v(42);
     cc->expect<const ValueTp&&>();
@@ -208,7 +209,7 @@ void testSetEmplaceHint()
   ConstructController* cc = getConstructController();
   cc->reset();
   {
-    // Testing C::emplace_hint(p, const value_type&)"
+    CHECKPOINT("Testing C::emplace_hint(p, const value_type&)");
     Container c;
     const ValueTp v(42);
     cc->expect<const ValueTp&>();
@@ -225,7 +226,7 @@ void testSetEmplaceHint()
     }
   }
   {
-    // Testing C::emplace_hint(p, value_type&)"
+    CHECKPOINT("Testing C::emplace_hint(p, value_type&)");
     Container c;
     ValueTp v(42);
     cc->expect<ValueTp&>();
@@ -242,7 +243,7 @@ void testSetEmplaceHint()
     }
   }
   {
-    // Testing C::emplace_hint(p, value_type&&)"
+    CHECKPOINT("Testing C::emplace_hint(p, value_type&&)");
     Container c;
     ValueTp v(42);
     cc->expect<ValueTp&&>();
@@ -259,7 +260,7 @@ void testSetEmplaceHint()
     }
   }
   {
-    // Testing C::emplace_hint(p, const value_type&&)"
+    CHECKPOINT("Testing C::emplace_hint(p, const value_type&&)");
     Container c;
     const ValueTp v(42);
     cc->expect<const ValueTp&&>();
@@ -285,7 +286,7 @@ void testMultisetInsert()
   ConstructController* cc = getConstructController();
   cc->reset();
   {
-    // Testing C::insert(const value_type&)"
+    CHECKPOINT("Testing C::insert(const value_type&)");
     Container c;
     const ValueTp v(42);
     cc->expect<const ValueTp&>();
@@ -293,7 +294,7 @@ void testMultisetInsert()
     assert(!cc->unchecked());
   }
   {
-    // Testing C::insert(value_type&)"
+    CHECKPOINT("Testing C::insert(value_type&)");
     Container c;
     ValueTp v(42);
     cc->expect<const ValueTp&>();
@@ -301,7 +302,7 @@ void testMultisetInsert()
     assert(!cc->unchecked());
   }
   {
-    // Testing C::insert(value_type&&)"
+    CHECKPOINT("Testing C::insert(value_type&&)");
     Container c;
     ValueTp v(42);
     cc->expect<ValueTp&&>();
@@ -309,7 +310,7 @@ void testMultisetInsert()
     assert(!cc->unchecked());
   }
   {
-    // Testing C::insert(std::initializer_list<ValueTp>)"
+    CHECKPOINT("Testing C::insert(std::initializer_list<ValueTp>)");
     Container c;
     std::initializer_list<ValueTp> il = { ValueTp(1), ValueTp(2) };
     cc->expect<ValueTp const&>(2);
@@ -317,7 +318,7 @@ void testMultisetInsert()
     assert(!cc->unchecked());
   }
   {
-    // Testing C::insert(Iter, Iter) for *Iter = value_type const&"
+    CHECKPOINT("Testing C::insert(Iter, Iter) for *Iter = value_type const&");
     Container c;
     const ValueTp ValueList[] = { ValueTp(1), ValueTp(2), ValueTp(3) };
     cc->expect<ValueTp const&>(3);
@@ -325,7 +326,7 @@ void testMultisetInsert()
     assert(!cc->unchecked());
   }
   {
-    // Testing C::insert(Iter, Iter) for *Iter = value_type&&"
+    CHECKPOINT("Testing C::insert(Iter, Iter) for *Iter = value_type&&");
     Container c;
     ValueTp ValueList[] = { ValueTp(1), ValueTp(2) , ValueTp(3) };
     cc->expect<ValueTp&&>(3);
@@ -334,7 +335,7 @@ void testMultisetInsert()
     assert(!cc->unchecked());
   }
   {
-    // Testing C::insert(Iter, Iter) for *Iter = value_type&"
+    CHECKPOINT("Testing C::insert(Iter, Iter) for *Iter = value_type&");
     Container c;
     ValueTp ValueList[] = { ValueTp(1), ValueTp(2) , ValueTp(1) };
     cc->expect<ValueTp&>(3);
@@ -351,7 +352,7 @@ void testMultisetEmplace()
   ConstructController* cc = getConstructController();
   cc->reset();
   {
-    // Testing C::emplace(const value_type&)"
+    CHECKPOINT("Testing C::emplace(const value_type&)");
     Container c;
     const ValueTp v(42);
     cc->expect<const ValueTp&>();
@@ -359,7 +360,7 @@ void testMultisetEmplace()
     assert(!cc->unchecked());
   }
   {
-    // Testing C::emplace(value_type&)"
+    CHECKPOINT("Testing C::emplace(value_type&)");
     Container c;
     ValueTp v(42);
     cc->expect<ValueTp&>();
@@ -367,7 +368,7 @@ void testMultisetEmplace()
     assert(!cc->unchecked());
   }
   {
-    // Testing C::emplace(value_type&&)"
+    CHECKPOINT("Testing C::emplace(value_type&&)");
     Container c;
     ValueTp v(42);
     cc->expect<ValueTp&&>();
@@ -375,7 +376,7 @@ void testMultisetEmplace()
     assert(!cc->unchecked());
   }
   {
-    // Testing C::emplace(const value_type&&)"
+    CHECKPOINT("Testing C::emplace(const value_type&&)");
     Container c;
     const ValueTp v(42);
     cc->expect<const ValueTp&&>();

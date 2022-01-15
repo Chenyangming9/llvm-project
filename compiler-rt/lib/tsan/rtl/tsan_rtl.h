@@ -84,6 +84,9 @@ typedef Allocator::AllocatorCache AllocatorCache;
 Allocator *allocator();
 #endif
 
+void TsanCheckFailed(const char *file, int line, const char *cond,
+                     u64 v1, u64 v2);
+
 const u64 kShadowRodata = (u64)-1;  // .rodata shadow marker
 
 // FastState (from most significant bit):
@@ -235,7 +238,7 @@ class Shadow : public FastState {
       unsigned kS2AccessSize) {
     bool res = false;
     u64 diff = s1.addr0() - s2.addr0();
-    if ((s64)diff < 0) {  // s1.addr0 < s2.addr0
+    if ((s64)diff < 0) {  // s1.addr0 < s2.addr0  // NOLINT
       // if (s1.addr0() + size1) > s2.addr0()) return true;
       if (s1.size() > -diff)
         res = true;
@@ -400,7 +403,10 @@ struct ThreadState {
   Vector<JmpBuf> jmp_bufs;
   int ignore_interceptors;
 #endif
-  const u32 tid;
+#if TSAN_COLLECT_STATS
+  u64 stat[StatCnt];
+#endif
+  const int tid;
   const int unique_id;
   bool in_symbolizer;
   bool in_ignored_lib;
@@ -414,6 +420,9 @@ struct ThreadState {
   const uptr tls_size;
   ThreadContext *tctx;
 
+#if SANITIZER_DEBUG && !SANITIZER_GO
+  InternalDeadlockDetector internal_deadlock_detector;
+#endif
   DDLogicalThread *dd_lt;
 
   // Current wired Processor, or nullptr. Required to handle any events.
@@ -438,8 +447,9 @@ struct ThreadState {
 
   const ReportDesc *current_report;
 
-  explicit ThreadState(Context *ctx, u32 tid, int unique_id, u64 epoch,
-                       unsigned reuse_count, uptr stk_addr, uptr stk_size,
+  explicit ThreadState(Context *ctx, int tid, int unique_id, u64 epoch,
+                       unsigned reuse_count,
+                       uptr stk_addr, uptr stk_size,
                        uptr tls_addr, uptr tls_size);
 };
 
@@ -448,26 +458,26 @@ struct ThreadState {
 ThreadState *cur_thread();
 void set_cur_thread(ThreadState *thr);
 void cur_thread_finalize();
-inline void cur_thread_init() { }
+INLINE void cur_thread_init() { }
 #else
 __attribute__((tls_model("initial-exec")))
 extern THREADLOCAL char cur_thread_placeholder[];
-inline ThreadState *cur_thread() {
+INLINE ThreadState *cur_thread() {
   return reinterpret_cast<ThreadState *>(cur_thread_placeholder)->current;
 }
-inline void cur_thread_init() {
+INLINE void cur_thread_init() {
   ThreadState *thr = reinterpret_cast<ThreadState *>(cur_thread_placeholder);
   if (UNLIKELY(!thr->current))
     thr->current = thr;
 }
-inline void set_cur_thread(ThreadState *thr) {
+INLINE void set_cur_thread(ThreadState *thr) {
   reinterpret_cast<ThreadState *>(cur_thread_placeholder)->current = thr;
 }
-inline void cur_thread_finalize() { }
+INLINE void cur_thread_finalize() { }
 #endif  // SANITIZER_MAC || SANITIZER_ANDROID
 #endif  // SANITIZER_GO
 
-class ThreadContext final : public ThreadContextBase {
+class ThreadContext : public ThreadContextBase {
  public:
   explicit ThreadContext(int tid);
   ~ThreadContext();
@@ -544,6 +554,7 @@ struct Context {
 
   Flags flags;
 
+  u64 stat[StatCnt];
   u64 int_alloc_cnt[MBlockTypeCount];
   u64 int_alloc_siz[MBlockTypeCount];
 };
@@ -613,7 +624,6 @@ class ScopedReport : public ScopedReportBase {
   ScopedErrorReportLock lock_;
 };
 
-bool ShouldReport(ThreadState *thr, ReportType typ);
 ThreadContext *IsThreadStackOrTls(uptr addr, bool *is_stack);
 void RestoreStack(int tid, const u64 epoch, VarSizeStackTrace *stk,
                   MutexSet *mset, uptr *tag = nullptr);
@@ -651,10 +661,25 @@ void ObtainCurrentStack(ThreadState *thr, uptr toppc, StackTraceTy *stack,
   ObtainCurrentStack(thr, pc, &stack); \
   stack.ReverseOrder();
 
+#if TSAN_COLLECT_STATS
+void StatAggregate(u64 *dst, u64 *src);
+void StatOutput(u64 *stat);
+#endif
+
+void ALWAYS_INLINE StatInc(ThreadState *thr, StatType typ, u64 n = 1) {
+#if TSAN_COLLECT_STATS
+  thr->stat[typ] += n;
+#endif
+}
+void ALWAYS_INLINE StatSet(ThreadState *thr, StatType typ, u64 n) {
+#if TSAN_COLLECT_STATS
+  thr->stat[typ] = n;
+#endif
+}
+
 void MapShadow(uptr addr, uptr size);
 void MapThreadTrace(uptr addr, uptr size, const char *name);
 void DontNeedShadowFor(uptr addr, uptr size);
-void UnmapShadow(ThreadState *thr, uptr addr, uptr size);
 void InitializeShadowMemory();
 void InitializeInterceptors();
 void InitializeLibIgnore();
@@ -734,8 +759,6 @@ void ALWAYS_INLINE MemoryWriteAtomic(ThreadState *thr, uptr pc,
 void MemoryResetRange(ThreadState *thr, uptr pc, uptr addr, uptr size);
 void MemoryRangeFreed(ThreadState *thr, uptr pc, uptr addr, uptr size);
 void MemoryRangeImitateWrite(ThreadState *thr, uptr pc, uptr addr, uptr size);
-void MemoryRangeImitateWriteOrResetRange(ThreadState *thr, uptr pc, uptr addr,
-                                         uptr size);
 
 void ThreadIgnoreBegin(ThreadState *thr, uptr pc, bool save_stack = true);
 void ThreadIgnoreEnd(ThreadState *thr, uptr pc);
@@ -749,7 +772,7 @@ int ThreadCreate(ThreadState *thr, uptr pc, uptr uid, bool detached);
 void ThreadStart(ThreadState *thr, int tid, tid_t os_id,
                  ThreadType thread_type);
 void ThreadFinish(ThreadState *thr);
-int ThreadConsumeTid(ThreadState *thr, uptr pc, uptr uid);
+int ThreadTid(ThreadState *thr, uptr pc, uptr uid);
 void ThreadJoin(ThreadState *thr, uptr pc, int tid);
 void ThreadDetach(ThreadState *thr, uptr pc, int tid);
 void ThreadFinalize(ThreadState *thr);
@@ -787,12 +810,10 @@ void Acquire(ThreadState *thr, uptr pc, uptr addr);
 // approximation of the actual required synchronization.
 void AcquireGlobal(ThreadState *thr, uptr pc);
 void Release(ThreadState *thr, uptr pc, uptr addr);
-void ReleaseStoreAcquire(ThreadState *thr, uptr pc, uptr addr);
 void ReleaseStore(ThreadState *thr, uptr pc, uptr addr);
 void AfterSleep(ThreadState *thr, uptr pc);
 void AcquireImpl(ThreadState *thr, uptr pc, SyncClock *c);
 void ReleaseImpl(ThreadState *thr, uptr pc, SyncClock *c);
-void ReleaseStoreAcquireImpl(ThreadState *thr, uptr pc, SyncClock *c);
 void ReleaseStoreImpl(ThreadState *thr, uptr pc, SyncClock *c);
 void AcquireReleaseImpl(ThreadState *thr, uptr pc, SyncClock *c);
 
@@ -831,6 +852,7 @@ void ALWAYS_INLINE TraceAddEvent(ThreadState *thr, FastState fs,
   DCHECK_GE((int)typ, 0);
   DCHECK_LE((int)typ, 7);
   DCHECK_EQ(GetLsb(addr, kEventPCBits), addr);
+  StatInc(thr, StatEvents);
   u64 pos = fs.GetTracePos();
   if (UNLIKELY((pos % kTracePartSize) == 0)) {
 #if !SANITIZER_GO

@@ -10,9 +10,6 @@
 # RUN: ld.lld %t1 -o %t -z noexecstack
 # RUN: llvm-readobj --program-headers -S %t | FileCheck --check-prefix=RW %s
 
-# RUN: ld.lld %t1 -o %t -z nognustack
-# RUN: llvm-readobj --program-headers -s %t | FileCheck --check-prefix=NOGNUSTACK %s
-
 # RW:      Type: PT_GNU_STACK
 # RW-NEXT: Offset: 0x0
 # RW-NEXT: VirtualAddress: 0x0
@@ -37,8 +34,6 @@
 # RWX-NEXT:   PF_X
 # RWX-NEXT: ]
 # RWX-NEXT: Alignment: 0
-
-# NOGNUSTACK-NOT: Type: PT_GNU_STACK
 
 .globl _start
 _start:

@@ -3,5 +3,7 @@ executable("llvm-bcanalyzer") {
     "//llvm/lib/Bitcode/Reader",
     "//llvm/lib/Support",
   ]
-  sources = [ "llvm-bcanalyzer.cpp" ]
+  sources = [
+    "llvm-bcanalyzer.cpp",
+  ]
 }

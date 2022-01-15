@@ -16,10 +16,10 @@ namespace tidy {
 namespace utils {
 namespace options {
 
-/// Parse a semicolon separated list of strings.
+/// \brief Parse a semicolon separated list of strings.
 std::vector<std::string> parseStringList(StringRef Option);
 
-/// Serialize a sequence of names that can be parsed by
+/// \brief Serialize a sequence of names that can be parsed by
 /// ``parseStringList``.
 std::string serializeStringList(ArrayRef<std::string> Strings);
 

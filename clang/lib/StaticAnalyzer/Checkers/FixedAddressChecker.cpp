@@ -55,8 +55,7 @@ void FixedAddressChecker::checkPreStmt(const BinaryOperator *B,
                          "Using a fixed address is not portable because that "
                          "address will probably not be valid in all "
                          "environments or platforms."));
-    auto R =
-        std::make_unique<PathSensitiveBugReport>(*BT, BT->getDescription(), N);
+    auto R = llvm::make_unique<BugReport>(*BT, BT->getDescription(), N);
     R->addRange(B->getRHS()->getSourceRange());
     C.emitReport(std::move(R));
   }
@@ -66,6 +65,6 @@ void ento::registerFixedAddressChecker(CheckerManager &mgr) {
   mgr.registerChecker<FixedAddressChecker>();
 }
 
-bool ento::shouldRegisterFixedAddressChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterFixedAddressChecker(const LangOptions &LO) {
   return true;
 }

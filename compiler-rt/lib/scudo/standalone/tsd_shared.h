@@ -9,46 +9,47 @@
 #ifndef SCUDO_TSD_SHARED_H_
 #define SCUDO_TSD_SHARED_H_
 
+#include "linux.h" // for getAndroidTlsPtr()
 #include "tsd.h"
 
-#if SCUDO_HAS_PLATFORM_TLS_SLOT
-// This is a platform-provided header that needs to be on the include path when
-// Scudo is compiled. It must declare a function with the prototype:
-//   uintptr_t *getPlatformAllocatorTlsSlot()
-// that returns the address of a thread-local word of storage reserved for
-// Scudo, that must be zero-initialized in newly created threads.
-#include "scudo_platform_tls_slot.h"
-#endif
+#include <pthread.h>
 
 namespace scudo {
 
-template <class Allocator, u32 TSDsArraySize, u32 DefaultTSDCount>
-struct TSDRegistrySharedT {
-  void init(Allocator *Instance) {
-    DCHECK(!Initialized);
-    Instance->init();
-    for (u32 I = 0; I < TSDsArraySize; I++)
-      TSDs[I].init(Instance);
-    const u32 NumberOfCPUs = getNumberOfCPUs();
-    setNumberOfTSDs((NumberOfCPUs == 0) ? DefaultTSDCount
-                                        : Min(NumberOfCPUs, DefaultTSDCount));
+template <class Allocator, u32 MaxTSDCount> struct TSDRegistrySharedT {
+  void initLinkerInitialized(Allocator *Instance) {
+    Instance->initLinkerInitialized();
+    CHECK_EQ(pthread_key_create(&PThreadKey, nullptr), 0); // For non-TLS
+    NumberOfTSDs = Min(Max(1U, getNumberOfCPUs()), MaxTSDCount);
+    TSDs = reinterpret_cast<TSD<Allocator> *>(
+        map(nullptr, sizeof(TSD<Allocator>) * NumberOfTSDs, "scudo:tsd"));
+    for (u32 I = 0; I < NumberOfTSDs; I++)
+      TSDs[I].initLinkerInitialized(Instance);
+    // Compute all the coprimes of NumberOfTSDs. This will be used to walk the
+    // array of TSDs in a random order. For details, see:
+    // https://lemire.me/blog/2017/09/18/visiting-all-values-in-an-array-exactly-once-in-random-order/
+    for (u32 I = 0; I < NumberOfTSDs; I++) {
+      u32 A = I + 1;
+      u32 B = NumberOfTSDs;
+      // Find the GCD between I + 1 and NumberOfTSDs. If 1, they are coprimes.
+      while (B != 0) {
+        const u32 T = A;
+        A = B;
+        B = T % B;
+      }
+      if (A == 1)
+        CoPrimes[NumberOfCoPrimes++] = I + 1;
+    }
     Initialized = true;
   }
-
-  void initOnceMaybe(Allocator *Instance) {
-    ScopedLock L(Mutex);
-    if (LIKELY(Initialized))
-      return;
-    init(Instance); // Sets Initialized.
+  void init(Allocator *Instance) {
+    memset(this, 0, sizeof(*this));
+    initLinkerInitialized(Instance);
   }
 
-  void unmapTestOnly(Allocator *Instance) {
-    for (u32 I = 0; I < TSDsArraySize; I++) {
-      TSDs[I].commitBack(Instance);
-      TSDs[I] = {};
-    }
-    setCurrentTSD(nullptr);
-    Initialized = false;
+  void unmapTestOnly() {
+    unmap(reinterpret_cast<void *>(TSDs),
+          sizeof(TSD<Allocator>) * NumberOfTSDs);
   }
 
   ALWAYS_INLINE void initThreadMaybe(Allocator *Instance,
@@ -66,88 +67,37 @@ struct TSDRegistrySharedT {
     if (TSD->tryLock())
       return TSD;
     // If that fails, go down the slow path.
-    if (TSDsArraySize == 1U) {
-      // Only 1 TSD, not need to go any further.
-      // The compiler will optimize this one way or the other.
-      TSD->lock();
-      return TSD;
-    }
     return getTSDAndLockSlow(TSD);
   }
 
-  void disable() {
-    Mutex.lock();
-    for (u32 I = 0; I < TSDsArraySize; I++)
-      TSDs[I].lock();
-  }
-
-  void enable() {
-    for (s32 I = static_cast<s32>(TSDsArraySize - 1); I >= 0; I--)
-      TSDs[I].unlock();
-    Mutex.unlock();
-  }
-
-  bool setOption(Option O, sptr Value) {
-    if (O == Option::MaxTSDsCount)
-      return setNumberOfTSDs(static_cast<u32>(Value));
-    if (O == Option::ThreadDisableMemInit)
-      setDisableMemInit(Value);
-    // Not supported by the TSD Registry, but not an error either.
-    return true;
-  }
-
-  bool getDisableMemInit() const { return *getTlsPtr() & 1; }
-
 private:
-  ALWAYS_INLINE uptr *getTlsPtr() const {
-#if SCUDO_HAS_PLATFORM_TLS_SLOT
-    return reinterpret_cast<uptr *>(getPlatformAllocatorTlsSlot());
+  ALWAYS_INLINE void setCurrentTSD(TSD<Allocator> *CurrentTSD) {
+#if SCUDO_ANDROID
+    *getAndroidTlsPtr() = reinterpret_cast<uptr>(CurrentTSD);
+#elif SCUDO_LINUX
+    ThreadTSD = CurrentTSD;
 #else
-    static thread_local uptr ThreadTSD;
-    return &ThreadTSD;
+    CHECK_EQ(
+        pthread_setspecific(PThreadKey, reinterpret_cast<void *>(CurrentTSD)),
+        0);
 #endif
   }
 
-  static_assert(alignof(TSD<Allocator>) >= 2, "");
-
-  ALWAYS_INLINE void setCurrentTSD(TSD<Allocator> *CurrentTSD) {
-    *getTlsPtr() &= 1;
-    *getTlsPtr() |= reinterpret_cast<uptr>(CurrentTSD);
-  }
-
   ALWAYS_INLINE TSD<Allocator> *getCurrentTSD() {
-    return reinterpret_cast<TSD<Allocator> *>(*getTlsPtr() & ~1ULL);
+#if SCUDO_ANDROID
+    return reinterpret_cast<TSD<Allocator> *>(*getAndroidTlsPtr());
+#elif SCUDO_LINUX
+    return ThreadTSD;
+#else
+    return reinterpret_cast<TSD<Allocator> *>(pthread_getspecific(PThreadKey));
+#endif
   }
 
-  bool setNumberOfTSDs(u32 N) {
-    ScopedLock L(MutexTSDs);
-    if (N < NumberOfTSDs)
-      return false;
-    if (N > TSDsArraySize)
-      N = TSDsArraySize;
-    NumberOfTSDs = N;
-    NumberOfCoPrimes = 0;
-    // Compute all the coprimes of NumberOfTSDs. This will be used to walk the
-    // array of TSDs in a random order. For details, see:
-    // https://lemire.me/blog/2017/09/18/visiting-all-values-in-an-array-exactly-once-in-random-order/
-    for (u32 I = 0; I < N; I++) {
-      u32 A = I + 1;
-      u32 B = N;
-      // Find the GCD between I + 1 and N. If 1, they are coprimes.
-      while (B != 0) {
-        const u32 T = A;
-        A = B;
-        B = T % B;
-      }
-      if (A == 1)
-        CoPrimes[NumberOfCoPrimes++] = I + 1;
-    }
-    return true;
-  }
-
-  void setDisableMemInit(bool B) {
-    *getTlsPtr() &= ~1ULL;
-    *getTlsPtr() |= B;
+  void initOnceMaybe(Allocator *Instance) {
+    ScopedLock L(Mutex);
+    if (Initialized)
+      return;
+    initLinkerInitialized(Instance); // Sets Initialized.
   }
 
   NOINLINE void initThread(Allocator *Instance) {
@@ -155,27 +105,21 @@ private:
     // Initial context assignment is done in a plain round-robin fashion.
     const u32 Index = atomic_fetch_add(&CurrentIndex, 1U, memory_order_relaxed);
     setCurrentTSD(&TSDs[Index % NumberOfTSDs]);
-    Instance->callPostInitCallback();
   }
 
   NOINLINE TSD<Allocator> *getTSDAndLockSlow(TSD<Allocator> *CurrentTSD) {
-    // Use the Precedence of the current TSD as our random seed. Since we are
-    // in the slow path, it means that tryLock failed, and as a result it's
-    // very likely that said Precedence is non-zero.
-    const u32 R = static_cast<u32>(CurrentTSD->getPrecedence());
-    u32 N, Inc;
-    {
-      ScopedLock L(MutexTSDs);
-      N = NumberOfTSDs;
-      DCHECK_NE(NumberOfCoPrimes, 0U);
-      Inc = CoPrimes[R % NumberOfCoPrimes];
-    }
-    if (N > 1U) {
-      u32 Index = R % N;
+    if (MaxTSDCount > 1U && NumberOfTSDs > 1U) {
+      // Use the Precedence of the current TSD as our random seed. Since we are
+      // in the slow path, it means that tryLock failed, and as a result it's
+      // very likely that said Precedence is non-zero.
+      u32 RandState = static_cast<u32>(CurrentTSD->getPrecedence());
+      const u32 R = getRandomU32(&RandState);
+      const u32 Inc = CoPrimes[R % NumberOfCoPrimes];
+      u32 Index = R % NumberOfTSDs;
       uptr LowestPrecedence = UINTPTR_MAX;
       TSD<Allocator> *CandidateTSD = nullptr;
       // Go randomly through at most 4 contexts and find a candidate.
-      for (u32 I = 0; I < Min(4U, N); I++) {
+      for (u32 I = 0; I < Min(4U, NumberOfTSDs); I++) {
         if (TSDs[Index].tryLock()) {
           setCurrentTSD(&TSDs[Index]);
           return &TSDs[Index];
@@ -187,8 +131,8 @@ private:
           LowestPrecedence = Precedence;
         }
         Index += Inc;
-        if (Index >= N)
-          Index -= N;
+        if (Index >= NumberOfTSDs)
+          Index -= NumberOfTSDs;
       }
       if (CandidateTSD) {
         CandidateTSD->lock();
@@ -201,15 +145,24 @@ private:
     return CurrentTSD;
   }
 
-  atomic_u32 CurrentIndex = {};
-  u32 NumberOfTSDs = 0;
-  u32 NumberOfCoPrimes = 0;
-  u32 CoPrimes[TSDsArraySize] = {};
-  bool Initialized = false;
+  pthread_key_t PThreadKey;
+  atomic_u32 CurrentIndex;
+  u32 NumberOfTSDs;
+  TSD<Allocator> *TSDs;
+  u32 NumberOfCoPrimes;
+  u32 CoPrimes[MaxTSDCount];
+  bool Initialized;
   HybridMutex Mutex;
-  HybridMutex MutexTSDs;
-  TSD<Allocator> TSDs[TSDsArraySize];
+#if SCUDO_LINUX && !SCUDO_ANDROID
+  static THREADLOCAL TSD<Allocator> *ThreadTSD;
+#endif
 };
+
+#if SCUDO_LINUX && !SCUDO_ANDROID
+template <class Allocator, u32 MaxTSDCount>
+THREADLOCAL TSD<Allocator>
+    *TSDRegistrySharedT<Allocator, MaxTSDCount>::ThreadTSD;
+#endif
 
 } // namespace scudo
 

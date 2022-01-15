@@ -1,12 +1,6 @@
-# RUN: llvm-mc -triple=wasm32-unknown-unknown -mattr=+simd128,+nontrapping-fptoint,+exception-handling < %s | FileCheck %s
+# RUN: llvm-mc -triple=wasm32-unknown-unknown -mattr=+unimplemented-simd128,+nontrapping-fptoint,+exception-handling < %s | FileCheck %s
 # Check that it converts to .o without errors:
-# RUN: llvm-mc -triple=wasm32-unknown-unknown -filetype=obj -mattr=+simd128,+nontrapping-fptoint,+exception-handling < %s | obj2yaml | FileCheck -check-prefixes=BIN,BIN32 %s
-
-# Same again for wasm64
-
-# RUN: llvm-mc -triple=wasm64-unknown-unknown -mattr=+simd128,+nontrapping-fptoint,+exception-handling < %s | FileCheck %s
-# Check that it converts to .o without errors:
-# RUN: llvm-mc -triple=wasm64-unknown-unknown -filetype=obj -mattr=+simd128,+nontrapping-fptoint,+exception-handling < %s | obj2yaml | FileCheck -check-prefixes=BIN,BIN64 %s
+# RUN: llvm-mc -triple=wasm32-unknown-unknown -filetype=obj -mattr=+unimplemented-simd128,+nontrapping-fptoint,+exception-handling < %s | obj2yaml | FileCheck -check-prefix=BIN %s
 
 # Minimal test for data sections.
 
@@ -36,22 +30,27 @@ test0:
 
 # BIN:      --- !WASM
 # BIN-NEXT: FileHeader:
-# BIN-NEXT:   Version:         0x1
+# BIN-NEXT:   Version:         0x00000001
 # BIN-NEXT: Sections:
 # BIN-NEXT:   - Type:            TYPE
 # BIN-NEXT:     Signatures:
 # BIN-NEXT:       - Index:           0
+# BIN-NEXT:         ReturnType:      I32
 # BIN-NEXT:         ParamTypes:      []
-# BIN-NEXT:         ReturnTypes:
-# BIN-NEXT:           - I32
 # BIN-NEXT:   - Type:            IMPORT
 # BIN-NEXT:     Imports:
 # BIN-NEXT:       - Module:          env
 # BIN-NEXT:         Field:           __linear_memory
 # BIN-NEXT:         Kind:            MEMORY
 # BIN-NEXT:         Memory:
-# BIN64-NEXT:         Flags:           [ IS_64 ]
-# BIN-NEXT:           Minimum:         0x1
+# BIN-NEXT:           Initial:         0x00000001
+# BIN-NEXT:       - Module:          env
+# BIN-NEXT:         Field:           __indirect_function_table
+# BIN-NEXT:         Kind:            TABLE
+# BIN-NEXT:         Table:
+# BIN-NEXT:           ElemType:        FUNCREF
+# BIN-NEXT:           Limits:
+# BIN-NEXT:             Initial:         0x00000000
 # BIN-NEXT:   - Type:            FUNCTION
 # BIN-NEXT:     FunctionTypes:   [ 0 ]
 # BIN-NEXT:   - Type:            DATACOUNT
@@ -60,7 +59,7 @@ test0:
 # BIN-NEXT:     Relocations:
 # BIN-NEXT:       - Type:            R_WASM_MEMORY_ADDR_SLEB
 # BIN-NEXT:         Index:           1
-# BIN-NEXT:         Offset:          0x4
+# BIN-NEXT:         Offset:          0x00000004
 # BIN-NEXT:     Functions:
 # BIN-NEXT:       - Index:           0
 # BIN-NEXT:         Locals:          []
@@ -70,8 +69,7 @@ test0:
 # BIN-NEXT:       - SectionOffset:   6
 # BIN-NEXT:         InitFlags:       0
 # BIN-NEXT:         Offset:
-# BIN32-NEXT:         Opcode:          I32_CONST
-# BIN64-NEXT:         Opcode:          I64_CONST
+# BIN-NEXT:           Opcode:          I32_CONST
 # BIN-NEXT:           Value:           0
 # BIN-NEXT:         Content:         '64'
 # BIN-NEXT:   - Type:            CUSTOM

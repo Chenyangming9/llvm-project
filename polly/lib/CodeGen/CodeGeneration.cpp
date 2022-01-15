@@ -37,7 +37,6 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -188,8 +187,8 @@ static bool CodeGen(Scop &S, IslAstInfo &AI, LoopInfo &LI, DominatorTree &DT,
   }
 
   // Check if we created an isl_ast root node, otherwise exit.
-  isl::ast_node AstRoot = Ast.getAst();
-  if (AstRoot.is_null())
+  isl_ast_node *AstRoot = Ast.getAst();
+  if (!AstRoot)
     return false;
 
   // Collect statistics. Do it before we modify the IR to avoid having it any
@@ -207,9 +206,7 @@ static bool CodeGen(Scop &S, IslAstInfo &AI, LoopInfo &LI, DominatorTree &DT,
   assert(R->isSimple());
   BasicBlock *EnteringBB = S.getEnteringBlock();
   assert(EnteringBB);
-  PollyIRBuilder Builder(EnteringBB->getContext(), ConstantFolder(),
-                         IRInserter(Annotator));
-  Builder.SetInsertPoint(EnteringBB->getTerminator());
+  PollyIRBuilder Builder = createPollyIRBuilder(EnteringBB, Annotator);
 
   // Only build the run-time condition and parameters _after_ having
   // introduced the conditional branch. This is important as the conditional
@@ -266,9 +263,11 @@ static bool CodeGen(Scop &S, IslAstInfo &AI, LoopInfo &LI, DominatorTree &DT,
     assert(ExitingBB);
     DT.changeImmediateDominator(MergeBlock, ExitingBB);
     DT.eraseNode(ExitingBlock);
+
+    isl_ast_node_free(AstRoot);
   } else {
     NodeBuilder.addParameters(S.getContext().release());
-    Value *RTC = NodeBuilder.createRTC(AI.getRunCondition().release());
+    Value *RTC = NodeBuilder.createRTC(AI.getRunCondition());
 
     Builder.GetInsertBlock()->getTerminator()->setOperand(0, RTC);
 
@@ -280,7 +279,7 @@ static bool CodeGen(Scop &S, IslAstInfo &AI, LoopInfo &LI, DominatorTree &DT,
     // between polly.start and polly.exiting (at this point).
     Builder.SetInsertPoint(StartBlock->getTerminator());
 
-    NodeBuilder.create(AstRoot.release());
+    NodeBuilder.create(AstRoot);
     NodeBuilder.finalize();
     fixRegionInfo(*EnteringBB->getParent(), *R->getParent(), RI);
 

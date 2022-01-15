@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_EXPRESSION_EXPRESSION_H
-#define LLDB_EXPRESSION_EXPRESSION_H
+#ifndef liblldb_Expression_h_
+#define liblldb_Expression_h_
 
 #include <map>
 #include <string>
@@ -32,14 +32,25 @@ class RecordingMemoryManager;
 /// LLVM IR from the expression.
 class Expression {
 public:
+  /// Discriminator for LLVM-style RTTI (dyn_cast<> et al.)
+  enum ExpressionKind {
+    eKindFunctionCaller,
+    eKindClangFunctionCaller,
+    eKindUserExpression,
+    eKindLLVMUserExpression,
+    eKindClangUserExpression,
+    eKindUtilityFunction,
+    eKindClangUtilityFunction,
+  };
+
   enum ResultType { eResultTypeAny, eResultTypeId };
 
-  Expression(Target &target);
+  Expression(Target &target, ExpressionKind kind);
 
-  Expression(ExecutionContextScope &exe_scope);
+  Expression(ExecutionContextScope &exe_scope, ExpressionKind kind);
 
   /// Destructor
-  virtual ~Expression() = default;
+  virtual ~Expression() {}
 
   /// Return the string that the parser should parse.  Must be a full
   /// translation unit.
@@ -51,13 +62,7 @@ public:
 
   /// Return the language that should be used when parsing.  To use the
   /// default, return eLanguageTypeUnknown.
-  virtual lldb::LanguageType Language() const {
-    return lldb::eLanguageTypeUnknown;
-  }
-
-  /// Return the Materializer that the parser should use when registering
-  /// external values.
-  virtual Materializer *GetMaterializer() { return nullptr; }
+  virtual lldb::LanguageType Language() { return lldb::eLanguageTypeUnknown; }
 
   /// Return the desired result type of the function, or eResultTypeAny if
   /// indifferent.
@@ -85,9 +90,12 @@ public:
 
   virtual ExpressionTypeSystemHelper *GetTypeSystemHelper() { return nullptr; }
 
-  // LLVM RTTI support
-  virtual bool isA(const void *ClassID) const = 0;
-
+  /// LLVM-style RTTI support.
+  ExpressionKind getKind() const { return m_kind; }
+  
+private:
+  /// LLVM-style RTTI support.
+  const ExpressionKind m_kind;
 protected:
   lldb::TargetWP m_target_wp; /// Expression's always have to have a target...
   lldb::ProcessWP m_jit_process_wp; /// An expression might have a process, but
@@ -103,4 +111,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_EXPRESSION_EXPRESSION_H
+#endif // liblldb_Expression_h_

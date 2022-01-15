@@ -47,7 +47,7 @@ StringRef SymbolMapTranslator::operator()(StringRef Input) {
     return Translation;
 
   // Objective-C symbols for the MachO symbol table start with a \1. Please see
-  // `MangleContext::mangleObjCMethodName` in clang.
+  // `CGObjCCommonMac::GetNameForMethod` in clang.
   if (Translation[0] == 1)
     return StringRef(Translation).drop_front();
 
@@ -96,7 +96,7 @@ SymbolMapTranslator SymbolMapLoader::Load(StringRef InputFile,
           StringRef UUID(CFStringGetCStringPtr(OldUUID, kCFStringEncodingUTF8));
           SmallString<256> BCSymbolMapPath(SymbolMapPath);
           sys::path::append(BCSymbolMapPath, UUID.str() + ".bcsymbolmap");
-          SymbolMapPath = std::string(BCSymbolMapPath);
+          SymbolMapPath = BCSymbolMapPath.str();
         }
         CFRelease(plist);
       }

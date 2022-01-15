@@ -6,12 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// XFAIL: darwin
+// XFAIL: apple-darwin
 //
 // NetBSD does not support LC_MONETARY at the moment
 // XFAIL: netbsd
-
-// XFAIL: LIBCXX-WINDOWS-FIXME
 
 // REQUIRES: locale.en_US.UTF-8
 // REQUIRES: locale.fr_FR.UTF-8

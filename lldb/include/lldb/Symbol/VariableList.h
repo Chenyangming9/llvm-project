@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SYMBOL_VARIABLELIST_H
-#define LLDB_SYMBOL_VARIABLELIST_H
+#ifndef liblldb_VariableList_h_
+#define liblldb_VariableList_h_
 
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Symbol/Variable.h"
@@ -16,8 +16,6 @@
 namespace lldb_private {
 
 class VariableList {
-  typedef std::vector<lldb::VariableSP> collection;
-
 public:
   // Constructors and Destructors
   //  VariableList(const SymbolContext &symbol_context);
@@ -67,23 +65,18 @@ public:
   size_t GetSize() const;
   bool Empty() const { return m_variables.empty(); }
 
+protected:
+  typedef std::vector<lldb::VariableSP> collection;
   typedef collection::iterator iterator;
   typedef collection::const_iterator const_iterator;
 
-  iterator begin() { return m_variables.begin(); }
-  iterator end() { return m_variables.end(); }
-  const_iterator begin() const { return m_variables.begin(); }
-  const_iterator end() const { return m_variables.end(); }
-
-protected:
   collection m_variables;
 
 private:
   // For VariableList only
-  VariableList(const VariableList &) = delete;
-  const VariableList &operator=(const VariableList &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(VariableList);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_SYMBOL_VARIABLELIST_H
+#endif // liblldb_VariableList_h_

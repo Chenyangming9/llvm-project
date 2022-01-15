@@ -30,7 +30,7 @@ if(${OPENMP_STANDALONE_BUILD})
   # If adding a new architecture, take a look at cmake/LibompGetArchitecture.cmake
   libomp_get_architecture(LIBOMP_DETECTED_ARCH)
   set(LIBOMP_ARCH ${LIBOMP_DETECTED_ARCH} CACHE STRING
-    "The architecture to build for (x86_64/i386/arm/ppc64/ppc64le/aarch64/mic/mips/mips64/riscv64).")
+    "The architecture to build for (x86_64/i386/arm/ppc64/ppc64le/aarch64/mic/mips/mips64).")
   # Should assertions be enabled?  They are on by default.
   set(LIBOMP_ENABLE_ASSERTIONS TRUE CACHE BOOL
     "enable assertions?")
@@ -58,34 +58,18 @@ else() # Part of LLVM build
     set(LIBOMP_ARCH aarch64)
   elseif(LIBOMP_NATIVE_ARCH MATCHES "arm")
     set(LIBOMP_ARCH arm)
-  elseif(LIBOMP_NATIVE_ARCH MATCHES "riscv64")
-    set(LIBOMP_ARCH riscv64)
   else()
     # last ditch effort
     libomp_get_architecture(LIBOMP_ARCH)
   endif ()
   set(LIBOMP_ENABLE_ASSERTIONS ${LLVM_ENABLE_ASSERTIONS})
 endif()
-
-# Time profiling support
-set(LIBOMP_PROFILING_SUPPORT ${OPENMP_ENABLE_LIBOMP_PROFILING})
-
-# FUJITSU A64FX is a special processor because its cache line size is 256.
-# We need to pass this information into kmp_config.h.
-if(LIBOMP_ARCH STREQUAL "aarch64")
-  libomp_is_aarch64_a64fx(LIBOMP_DETECT_AARCH64_A64FX)
-  if (LIBOMP_DETECT_AARCH64_A64FX)
-    set(LIBOMP_ARCH "aarch64_a64fx")
-    set(LIBOMP_ARCH_AARCH64_A64FX TRUE)
-  endif()
-endif()
-
-libomp_check_variable(LIBOMP_ARCH 32e x86_64 32 i386 arm ppc64 ppc64le aarch64 aarch64_a64fx mic mips mips64 riscv64)
+libomp_check_variable(LIBOMP_ARCH 32e x86_64 32 i386 arm ppc64 ppc64le aarch64 mic mips mips64)
 
 set(LIBOMP_LIB_TYPE normal CACHE STRING
   "Performance,Profiling,Stubs library (normal/profile/stubs)")
 libomp_check_variable(LIBOMP_LIB_TYPE normal profile stubs)
-# Set the OpenMP Year and Month associated with version
+# Set the OpenMP Year and Month assiociated with version
 set(LIBOMP_OMP_YEAR_MONTH 201611)
 set(LIBOMP_MIC_ARCH knc CACHE STRING
   "Intel(R) Many Integrated Core Architecture (Intel(R) MIC Architecture) (knf/knc).  Ignored if not Intel(R) MIC Architecture build.")
@@ -111,6 +95,8 @@ if(NOT DEFINED CMAKE_MACOSX_RPATH)
 endif()
 
 # User specified flags.  These are appended to the configured flags.
+set(LIBOMP_CFLAGS "" CACHE STRING
+  "Appended user specified C compiler flags.")
 set(LIBOMP_CXXFLAGS "" CACHE STRING
   "Appended user specified C++ compiler flags.")
 set(LIBOMP_CPPFLAGS "" CACHE STRING
@@ -128,7 +114,7 @@ set(LIBOMP_FFLAGS "" CACHE STRING
 # Turning this to FALSE aids parallel builds to not interfere with each other.
 # Currently, the testsuite module expects the just built OpenMP library to be located inside the exports/
 # directory.  TODO: have testsuite run under llvm-lit directly.  We can then get rid of copying to exports/
-set(LIBOMP_COPY_EXPORTS FALSE CACHE STRING
+set(LIBOMP_COPY_EXPORTS TRUE CACHE STRING
   "Should exports be copied into source exports/ directory?")
 
 # HWLOC-support
@@ -150,14 +136,12 @@ set(IA32 FALSE)
 set(INTEL64 FALSE)
 set(ARM FALSE)
 set(AARCH64 FALSE)
-set(AARCH64_A64FX FALSE)
 set(PPC64BE FALSE)
 set(PPC64LE FALSE)
 set(PPC64 FALSE)
 set(MIC FALSE)
 set(MIPS64 FALSE)
 set(MIPS FALSE)
-set(RISCV64 FALSE)
 if("${LIBOMP_ARCH}" STREQUAL "i386" OR "${LIBOMP_ARCH}" STREQUAL "32")    # IA-32 architecture
   set(IA32 TRUE)
 elseif("${LIBOMP_ARCH}" STREQUAL "x86_64" OR "${LIBOMP_ARCH}" STREQUAL "32e") # Intel(R) 64 architecture
@@ -172,16 +156,12 @@ elseif("${LIBOMP_ARCH}" STREQUAL "ppc64le") # PPC64LE architecture
   set(PPC64 TRUE)
 elseif("${LIBOMP_ARCH}" STREQUAL "aarch64") # AARCH64 architecture
   set(AARCH64 TRUE)
-elseif("${LIBOMP_ARCH}" STREQUAL "aarch64_a64fx") # AARCH64_A64FX architecture
-  set(AARCH64_A64FX TRUE)
 elseif("${LIBOMP_ARCH}" STREQUAL "mic") # Intel(R) Many Integrated Core Architecture
   set(MIC TRUE)
 elseif("${LIBOMP_ARCH}" STREQUAL "mips") # MIPS architecture
     set(MIPS TRUE)
 elseif("${LIBOMP_ARCH}" STREQUAL "mips64") # MIPS64 architecture
     set(MIPS64 TRUE)
-  elseif("${LIBOMP_ARCH}" STREQUAL "riscv64") # RISCV64 architecture
-    set(RISCV64 TRUE)
 endif()
 
 # Set some flags based on build_type
@@ -322,19 +302,11 @@ if(LIBOMP_OMPT_SUPPORT AND (NOT LIBOMP_HAVE_OMPT_SUPPORT))
   libomp_error_say("OpenMP Tools Interface requested but not available in this implementation")
 endif()
 
-# OMPD-support
-# Enable if OMPT SUPPORT is ON
-set(OMPD_DEFAULT FALSE)
-if (LIBOMP_HAVE_OMPT_SUPPORT AND ("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux"))
-  set(OMPD_DEFAULT TRUE)
-endif()
-
-set(LIBOMP_OMPD_SUPPORT ${OMPD_DEFAULT} CACHE BOOL
-  "OMPD-support?")
-
-if(LIBOMP_OMPD_SUPPORT AND ((NOT LIBOMP_OMPT_SUPPORT) OR (NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")))
-  libomp_warning_say("OpenMP Debug Interface(OMPD) requested but not available in this implementation")
-  set(LIBOMP_OMPD_SUPPORT FALSE)
+# TSAN-support
+set(LIBOMP_TSAN_SUPPORT FALSE CACHE BOOL
+  "TSAN-support?")
+if(LIBOMP_TSAN_SUPPORT AND (NOT LIBOMP_HAVE_TSAN_SUPPORT))
+  libomp_error_say("TSAN functionality requested but not available")
 endif()
 
 # Error check hwloc support after config-ix has run
@@ -397,17 +369,11 @@ if(${OPENMP_STANDALONE_BUILD})
   if(${LIBOMP_OMPT_SUPPORT})
     libomp_say("Use OMPT-optional  -- ${LIBOMP_OMPT_OPTIONAL}")
   endif()
-  libomp_say("Use OMPD-support     -- ${LIBOMP_OMPD_SUPPORT}")
   libomp_say("Use Adaptive locks   -- ${LIBOMP_USE_ADAPTIVE_LOCKS}")
   libomp_say("Use quad precision   -- ${LIBOMP_USE_QUAD_PRECISION}")
+  libomp_say("Use TSAN-support     -- ${LIBOMP_TSAN_SUPPORT}")
   libomp_say("Use Hwloc library    -- ${LIBOMP_USE_HWLOC}")
 endif()
 
 add_subdirectory(src)
 add_subdirectory(test)
-
-# make these variables available for tools:
-set(LIBOMP_LIBRARY_DIR ${LIBOMP_LIBRARY_DIR} PARENT_SCOPE)
-set(LIBOMP_INCLUDE_DIR ${LIBOMP_INCLUDE_DIR} PARENT_SCOPE)
-# make these variables available for tools/libompd:
-set(LIBOMP_SRC_DIR ${LIBOMP_SRC_DIR} PARENT_SCOPE)

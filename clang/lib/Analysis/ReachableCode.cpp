@@ -19,7 +19,6 @@
 #include "clang/AST/StmtCXX.h"
 #include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Analysis/CFG.h"
-#include "clang/Basic/Builtins.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/BitVector.h"
@@ -138,10 +137,10 @@ static bool isDeadReturn(const CFGBlock *B, const Stmt *S) {
 static SourceLocation getTopMostMacro(SourceLocation Loc, SourceManager &SM) {
   assert(Loc.isMacroID());
   SourceLocation Last;
-  do {
+  while (Loc.isMacroID()) {
     Last = Loc;
     Loc = SM.getImmediateMacroCallerLoc(Loc);
-  } while (Loc.isMacroID());
+  }
   return Last;
 }
 
@@ -248,7 +247,7 @@ static bool isConfigurationValue(const Stmt *S,
     }
     case Stmt::UnaryOperatorClass: {
       const UnaryOperator *UO = cast<UnaryOperator>(S);
-      if (UO->getOpcode() != UO_LNot && UO->getOpcode() != UO_Minus)
+      if (UO->getOpcode() != UO_LNot)
         return false;
       bool SilenceableCondValNotSet =
           SilenceableCondVal && SilenceableCondVal->getBegin().isInvalid();

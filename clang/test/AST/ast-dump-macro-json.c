@@ -23,14 +23,12 @@ void BLAP(foo, __COUNTER__)(void);
 // CHECK:  "kind": "FunctionDecl",
 // CHECK-NEXT:  "loc": {
 // CHECK-NEXT:   "spellingLoc": {
-// CHECK-NEXT:    "offset": 96,
 // CHECK-NEXT:    "file": "{{.*}}",
 // CHECK-NEXT:    "line": 3,
 // CHECK-NEXT:    "col": 13,
 // CHECK-NEXT:    "tokLen": 7
 // CHECK-NEXT:   },
 // CHECK-NEXT:   "expansionLoc": {
-// CHECK-NEXT:    "offset": 126,
 // CHECK-NEXT:    "line": 6,
 // CHECK-NEXT:    "col": 6,
 // CHECK-NEXT:    "tokLen": 3
@@ -38,18 +36,15 @@ void BLAP(foo, __COUNTER__)(void);
 // CHECK-NEXT:  },
 // CHECK-NEXT:  "range": {
 // CHECK-NEXT:   "begin": {
-// CHECK-NEXT:    "offset": 121,
 // CHECK-NEXT:    "col": 1,
 // CHECK-NEXT:    "tokLen": 4
 // CHECK-NEXT:   },
 // CHECK-NEXT:   "end": {
-// CHECK-NEXT:    "offset": 134,
 // CHECK-NEXT:    "col": 14,
 // CHECK-NEXT:    "tokLen": 1
 // CHECK-NEXT:   }
 // CHECK-NEXT:  },
 // CHECK-NEXT:  "name": "frobble",
-// CHECK-NEXT:  "mangledName": "frobble",
 // CHECK-NEXT:  "type": {
 // CHECK-NEXT:   "qualType": "void (void)"
 // CHECK-NEXT:  }
@@ -59,13 +54,11 @@ void BLAP(foo, __COUNTER__)(void);
 // CHECK:  "kind": "FunctionDecl",
 // CHECK-NEXT:  "loc": {
 // CHECK-NEXT:   "spellingLoc": {
-// CHECK-NEXT:    "offset": 96,
 // CHECK-NEXT:    "line": 3,
 // CHECK-NEXT:    "col": 13,
 // CHECK-NEXT:    "tokLen": 7
 // CHECK-NEXT:   },
 // CHECK-NEXT:   "expansionLoc": {
-// CHECK-NEXT:    "offset": 142,
 // CHECK-NEXT:    "line": 7,
 // CHECK-NEXT:    "col": 6,
 // CHECK-NEXT:    "tokLen": 3
@@ -73,19 +66,16 @@ void BLAP(foo, __COUNTER__)(void);
 // CHECK-NEXT:  },
 // CHECK-NEXT:  "range": {
 // CHECK-NEXT:   "begin": {
-// CHECK-NEXT:    "offset": 137,
 // CHECK-NEXT:    "col": 1,
 // CHECK-NEXT:    "tokLen": 4
 // CHECK-NEXT:   },
 // CHECK-NEXT:   "end": {
-// CHECK-NEXT:    "offset": 150,
 // CHECK-NEXT:    "col": 14,
 // CHECK-NEXT:    "tokLen": 1
 // CHECK-NEXT:   }
 // CHECK-NEXT:  },
 // CHECK-NEXT:  "previousDecl": "0x{{.*}}",
 // CHECK-NEXT:  "name": "frobble",
-// CHECK-NEXT:  "mangledName": "frobble",
 // CHECK-NEXT:  "type": {
 // CHECK-NEXT:   "qualType": "void (void)"
 // CHECK-NEXT:  }
@@ -95,13 +85,11 @@ void BLAP(foo, __COUNTER__)(void);
 // CHECK:  "kind": "FunctionDecl",
 // CHECK-NEXT:  "loc": {
 // CHECK-NEXT:   "spellingLoc": {
-// CHECK-NEXT:    "offset": 183,
 // CHECK-NEXT:    "line": 11,
 // CHECK-NEXT:    "col": 11,
 // CHECK-NEXT:    "tokLen": 4
 // CHECK-NEXT:   },
 // CHECK-NEXT:   "expansionLoc": {
-// CHECK-NEXT:    "offset": 178,
 // CHECK-NEXT:    "col": 6,
 // CHECK-NEXT:    "tokLen": 4,
 // CHECK-NEXT:    "isMacroArgExpansion": true
@@ -109,18 +97,15 @@ void BLAP(foo, __COUNTER__)(void);
 // CHECK-NEXT:  },
 // CHECK-NEXT:  "range": {
 // CHECK-NEXT:   "begin": {
-// CHECK-NEXT:    "offset": 173,
 // CHECK-NEXT:    "col": 1,
 // CHECK-NEXT:    "tokLen": 4
 // CHECK-NEXT:   },
 // CHECK-NEXT:   "end": {
-// CHECK-NEXT:    "offset": 193,
 // CHECK-NEXT:    "col": 21,
 // CHECK-NEXT:    "tokLen": 1
 // CHECK-NEXT:   }
 // CHECK-NEXT:  },
 // CHECK-NEXT:  "name": "quux",
-// CHECK-NEXT:  "mangledName": "quux",
 // CHECK-NEXT:  "type": {
 // CHECK-NEXT:   "qualType": "void (void)"
 // CHECK-NEXT:  }
@@ -130,14 +115,12 @@ void BLAP(foo, __COUNTER__)(void);
 // CHECK:  "kind": "FunctionDecl",
 // CHECK-NEXT:  "loc": {
 // CHECK-NEXT:   "spellingLoc": {
-// CHECK-NEXT:    "offset": 4,
 // CHECK-NEXT:    "file": "<scratch space>",
 // CHECK-NEXT:    "line": 3,
 // CHECK-NEXT:    "col": 1,
 // CHECK-NEXT:    "tokLen": 4
 // CHECK-NEXT:   },
 // CHECK-NEXT:   "expansionLoc": {
-// CHECK-NEXT:    "offset": 259,
 // CHECK-NEXT:    "file": "{{.*}}",
 // CHECK-NEXT:    "line": 16,
 // CHECK-NEXT:    "col": 6,
@@ -146,18 +129,15 @@ void BLAP(foo, __COUNTER__)(void);
 // CHECK-NEXT:  },
 // CHECK-NEXT:  "range": {
 // CHECK-NEXT:   "begin": {
-// CHECK-NEXT:    "offset": 254,
 // CHECK-NEXT:    "col": 1,
 // CHECK-NEXT:    "tokLen": 4
 // CHECK-NEXT:   },
 // CHECK-NEXT:   "end": {
-// CHECK-NEXT:    "offset": 286,
 // CHECK-NEXT:    "col": 33,
 // CHECK-NEXT:    "tokLen": 1
 // CHECK-NEXT:   }
 // CHECK-NEXT:  },
 // CHECK-NEXT:  "name": "foo0",
-// CHECK-NEXT:  "mangledName": "foo0",
 // CHECK-NEXT:  "type": {
 // CHECK-NEXT:   "qualType": "void (void)"
 // CHECK-NEXT:  }
@@ -167,14 +147,12 @@ void BLAP(foo, __COUNTER__)(void);
 // CHECK:  "kind": "FunctionDecl",
 // CHECK-NEXT:  "loc": {
 // CHECK-NEXT:   "spellingLoc": {
-// CHECK-NEXT:    "offset": 13,
 // CHECK-NEXT:    "file": "<scratch space>",
 // CHECK-NEXT:    "line": 5,
 // CHECK-NEXT:    "col": 1,
 // CHECK-NEXT:    "tokLen": 4
 // CHECK-NEXT:   },
 // CHECK-NEXT:   "expansionLoc": {
-// CHECK-NEXT:    "offset": 294,
 // CHECK-NEXT:    "file": "{{.*}}",
 // CHECK-NEXT:    "line": 17,
 // CHECK-NEXT:    "col": 6,
@@ -183,18 +161,15 @@ void BLAP(foo, __COUNTER__)(void);
 // CHECK-NEXT:  },
 // CHECK-NEXT:  "range": {
 // CHECK-NEXT:   "begin": {
-// CHECK-NEXT:    "offset": 289,
 // CHECK-NEXT:    "col": 1,
 // CHECK-NEXT:    "tokLen": 4
 // CHECK-NEXT:   },
 // CHECK-NEXT:   "end": {
-// CHECK-NEXT:    "offset": 321,
 // CHECK-NEXT:    "col": 33,
 // CHECK-NEXT:    "tokLen": 1
 // CHECK-NEXT:   }
 // CHECK-NEXT:  },
 // CHECK-NEXT:  "name": "foo1",
-// CHECK-NEXT:  "mangledName": "foo1",
 // CHECK-NEXT:  "type": {
 // CHECK-NEXT:   "qualType": "void (void)"
 // CHECK-NEXT:  }

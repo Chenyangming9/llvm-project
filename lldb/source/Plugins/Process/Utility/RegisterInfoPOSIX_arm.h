@@ -6,17 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERINFOPOSIX_ARM_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERINFOPOSIX_ARM_H
+#ifndef liblldb_RegisterInfoPOSIX_arm_h_
+#define liblldb_RegisterInfoPOSIX_arm_h_
 
-#include "RegisterInfoAndSetInterface.h"
+#include "RegisterInfoInterface.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/lldb-private.h"
 
-class RegisterInfoPOSIX_arm : public lldb_private::RegisterInfoAndSetInterface {
+class RegisterInfoPOSIX_arm : public lldb_private::RegisterInfoInterface {
 public:
-  enum { GPRegSet = 0, FPRegSet};
-
   struct GPR {
     uint32_t r[16]; // R0-R15
     uint32_t cpsr;  // CPSR
@@ -51,22 +49,13 @@ public:
 
   size_t GetGPRSize() const override;
 
-  size_t GetFPRSize() const override;
-
   const lldb_private::RegisterInfo *GetRegisterInfo() const override;
 
   uint32_t GetRegisterCount() const override;
-
-  const lldb_private::RegisterSet *
-  GetRegisterSet(size_t reg_set) const override;
-
-  size_t GetRegisterSetCount() const override;
-
-  size_t GetRegisterSetFromRegisterIndex(uint32_t reg_index) const override;
 
 private:
   const lldb_private::RegisterInfo *m_register_info_p;
   uint32_t m_register_info_count;
 };
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERINFOPOSIX_ARM_H
+#endif // liblldb_RegisterInfoPOSIX_arm_h_

@@ -142,9 +142,7 @@ struct GlobalEnv {
         CollectDFT(SF);
       }
       auto Time2 = std::chrono::system_clock::now();
-      auto DftTimeInSeconds = duration_cast<seconds>(Time2 - Time1).count();
-      assert(DftTimeInSeconds < std::numeric_limits<int>::max());
-      Job->DftTimeInSeconds = static_cast<int>(DftTimeInSeconds);
+      Job->DftTimeInSeconds = duration_cast<seconds>(Time2 - Time1).count();
     }
     if (!Seeds.empty()) {
       Job->SeedListPath =
@@ -299,7 +297,7 @@ void FuzzWithFork(Random &Rand, const FuzzingOptions &Options,
   for (auto &Dir : CorpusDirs)
     GetSizedFilesFromDir(Dir, &SeedFiles);
   std::sort(SeedFiles.begin(), SeedFiles.end());
-  Env.TempDir = TempPath("FuzzWithFork", ".dir");
+  Env.TempDir = TempPath(".dir");
   Env.DFTDir = DirPlusFile(Env.TempDir, "DFT");
   RmDirRecursive(Env.TempDir);  // in case there is a leftover from old runs.
   MkDir(Env.TempDir);
@@ -311,18 +309,11 @@ void FuzzWithFork(Random &Rand, const FuzzingOptions &Options,
   else
     Env.MainCorpusDir = CorpusDirs[0];
 
-  if (Options.KeepSeed) {
-    for (auto &File : SeedFiles)
-      Env.Files.push_back(File.File);
-  } else {
-    auto CFPath = DirPlusFile(Env.TempDir, "merge.txt");
-    Set<uint32_t> NewFeatures, NewCov;
-    CrashResistantMerge(Env.Args, {}, SeedFiles, &Env.Files, Env.Features,
-                        &NewFeatures, Env.Cov, &NewCov, CFPath, false);
-    Env.Features.insert(NewFeatures.begin(), NewFeatures.end());
-    Env.Cov.insert(NewFeatures.begin(), NewFeatures.end());
-    RemoveFile(CFPath);
-  }
+  auto CFPath = DirPlusFile(Env.TempDir, "merge.txt");
+  CrashResistantMerge(Env.Args, {}, SeedFiles, &Env.Files, {}, &Env.Features,
+                      {}, &Env.Cov,
+                      CFPath, false);
+  RemoveFile(CFPath);
   Printf("INFO: -fork=%d: %zd seed inputs, starting to fuzz in %s\n", NumJobs,
          Env.Files.size(), Env.TempDir.c_str());
 

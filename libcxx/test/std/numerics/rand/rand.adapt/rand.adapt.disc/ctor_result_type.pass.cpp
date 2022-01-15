@@ -13,9 +13,6 @@
 
 // explicit discard_block_engine(result_type s = default_seed);
 
-// Serializing/deserializing the state of the RNG requires iostreams
-// UNSUPPORTED: libcpp-has-no-localization
-
 #include <random>
 #include <sstream>
 #include <cassert>

@@ -111,11 +111,11 @@ unsigned long long LLVMABISizeOfType(LLVMTargetDataRef TD, LLVMTypeRef Ty) {
 }
 
 unsigned LLVMABIAlignmentOfType(LLVMTargetDataRef TD, LLVMTypeRef Ty) {
-  return unwrap(TD)->getABITypeAlign(unwrap(Ty)).value();
+  return unwrap(TD)->getABITypeAlignment(unwrap(Ty));
 }
 
 unsigned LLVMCallFrameAlignmentOfType(LLVMTargetDataRef TD, LLVMTypeRef Ty) {
-  return unwrap(TD)->getABITypeAlign(unwrap(Ty)).value();
+  return unwrap(TD)->getABITypeAlignment(unwrap(Ty));
 }
 
 unsigned LLVMPreferredAlignmentOfType(LLVMTargetDataRef TD, LLVMTypeRef Ty) {
@@ -124,9 +124,7 @@ unsigned LLVMPreferredAlignmentOfType(LLVMTargetDataRef TD, LLVMTypeRef Ty) {
 
 unsigned LLVMPreferredAlignmentOfGlobal(LLVMTargetDataRef TD,
                                         LLVMValueRef GlobalVar) {
-  return unwrap(TD)
-      ->getPreferredAlign(unwrap<GlobalVariable>(GlobalVar))
-      .value();
+  return unwrap(TD)->getPreferredAlignment(unwrap<GlobalVariable>(GlobalVar));
 }
 
 unsigned LLVMElementAtOffset(LLVMTargetDataRef TD, LLVMTypeRef StructTy,

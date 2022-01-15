@@ -952,7 +952,7 @@ class FunctionBenchmark : public Benchmark {
   FunctionBenchmark(const char* name, Function* func)
       : Benchmark(name), func_(func) {}
 
-  void Run(State& st) override;
+  virtual void Run(State& st);
 
  private:
   Function* func_;
@@ -962,7 +962,7 @@ class FunctionBenchmark : public Benchmark {
 template <class Lambda>
 class LambdaBenchmark : public Benchmark {
  public:
-  void Run(State& st) override { lambda_(st); }
+  virtual void Run(State& st) { lambda_(st); }
 
  private:
   template <class OLambda>
@@ -990,7 +990,8 @@ inline internal::Benchmark* RegisterBenchmark(const char* name,
 #ifdef BENCHMARK_HAS_CXX11
 template <class Lambda>
 internal::Benchmark* RegisterBenchmark(const char* name, Lambda&& fn) {
-  using BenchType = internal::LambdaBenchmark<typename std::decay<Lambda>::type>;
+  using BenchType =
+      internal::LambdaBenchmark<typename std::decay<Lambda>::type>;
   return internal::RegisterBenchmarkInternal(
       ::new BenchType(name, std::forward<Lambda>(fn)));
 }
@@ -1013,7 +1014,7 @@ class Fixture : public internal::Benchmark {
  public:
   Fixture() : internal::Benchmark("") {}
 
-  void Run(State& st) override {
+  virtual void Run(State& st) {
     this->SetUp(st);
     this->BenchmarkCase(st);
     this->TearDown(st);
@@ -1399,8 +1400,8 @@ public:
       : output_options_(opts_), name_field_width_(0),
         prev_counters_(), printed_header_(false) {}
 
-  bool ReportContext(const Context& context) override;
-  void ReportRuns(const std::vector<Run>& reports) override;
+  virtual bool ReportContext(const Context& context);
+  virtual void ReportRuns(const std::vector<Run>& reports);
 
  protected:
   virtual void PrintRunData(const Run& report);
@@ -1415,9 +1416,9 @@ public:
 class JSONReporter : public BenchmarkReporter {
  public:
   JSONReporter() : first_report_(true) {}
-  bool ReportContext(const Context& context) override;
-  void ReportRuns(const std::vector<Run>& reports) override;
-  void Finalize() override;
+  virtual bool ReportContext(const Context& context);
+  virtual void ReportRuns(const std::vector<Run>& reports);
+  virtual void Finalize();
 
  private:
   void PrintRunData(const Run& report);
@@ -1428,8 +1429,8 @@ class JSONReporter : public BenchmarkReporter {
 class CSVReporter : public BenchmarkReporter {
  public:
   CSVReporter() : printed_header_(false) {}
-  bool ReportContext(const Context& context) override;
-  void ReportRuns(const std::vector<Run>& reports) override;
+  virtual bool ReportContext(const Context& context);
+  virtual void ReportRuns(const std::vector<Run>& reports);
 
  private:
   void PrintRunData(const Run& report);

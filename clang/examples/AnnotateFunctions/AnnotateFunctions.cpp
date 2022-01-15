@@ -14,7 +14,6 @@
 #include "clang/Frontend/FrontendPluginRegistry.h"
 #include "clang/AST/AST.h"
 #include "clang/AST/ASTConsumer.h"
-#include "clang/AST/Attr.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/LexDiagnostic.h"
 using namespace clang;
@@ -32,8 +31,8 @@ public:
       return true;
     for (auto D : DG)
       if (FunctionDecl *FD = dyn_cast<FunctionDecl>(D))
-        FD->addAttr(AnnotateAttr::CreateImplicit(
-            FD->getASTContext(), "example_annotation", nullptr, 0));
+        FD->addAttr(AnnotateAttr::CreateImplicit(FD->getASTContext(),
+                                                 "example_annotation"));
     return true;
   }
 };
@@ -42,7 +41,7 @@ class AnnotateFunctionsAction : public PluginASTAction {
 public:
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
                                                  llvm::StringRef) override {
-    return std::make_unique<AnnotateFunctionsConsumer>();
+    return llvm::make_unique<AnnotateFunctionsConsumer>();
   }
 
   bool ParseArgs(const CompilerInstance &CI,

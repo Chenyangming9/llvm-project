@@ -1,4 +1,5 @@
-//===-- CoreMedia.cpp -----------------------------------------------------===//
+//===-- CoreMedia.cpp --------------------------------------------*- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,11 +10,10 @@
 #include "CoreMedia.h"
 
 #include "lldb/Utility/Flags.h"
-#include "lldb/Utility/Log.h"
 
 #include "lldb/Symbol/TypeSystem.h"
 #include "lldb/Target/Target.h"
-#include <cinttypes>
+#include <inttypes.h>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -25,7 +25,13 @@ bool lldb_private::formatters::CMTimeSummaryProvider(
   if (!type.IsValid())
     return false;
 
-  TypeSystem *type_system = type.GetTypeSystem();
+  TypeSystem *type_system =
+      valobj.GetExecutionContextRef()
+          .GetTargetSP()
+          ->GetScratchTypeSystemForLanguage(nullptr, lldb::eLanguageTypeC);
+  if (!type_system)
+    return false;
+
   // fetch children by offset to compensate for potential lack of debug info
   auto int64_ty =
       type_system->GetBuiltinTypeForEncodingAndBitSize(eEncodingSint, 64);

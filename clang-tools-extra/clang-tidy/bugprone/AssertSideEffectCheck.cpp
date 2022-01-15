@@ -72,8 +72,7 @@ AssertSideEffectCheck::AssertSideEffectCheck(StringRef Name,
                                              ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
       CheckFunctionCalls(Options.get("CheckFunctionCalls", false)),
-      RawAssertList(Options.get("AssertMacros",
-                                "assert,NSAssert,NSCAssert")) {
+      RawAssertList(Options.get("AssertMacros", "assert")) {
   StringRef(RawAssertList).split(AssertMacros, ",", -1, false);
 }
 
@@ -85,7 +84,7 @@ void AssertSideEffectCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
 
 void AssertSideEffectCheck::registerMatchers(MatchFinder *Finder) {
   auto DescendantWithSideEffect =
-      traverse(TK_AsIs, hasDescendant(expr(hasSideEffect(CheckFunctionCalls))));
+      hasDescendant(expr(hasSideEffect(CheckFunctionCalls)));
   auto ConditionWithSideEffect = hasCondition(DescendantWithSideEffect);
   Finder->addMatcher(
       stmt(
@@ -118,8 +117,7 @@ void AssertSideEffectCheck::check(const MatchFinder::MatchResult &Result) {
   if (AssertMacroName.empty())
     return;
 
-  diag(Loc, "side effect in %0() condition discarded in release builds")
-      << AssertMacroName;
+  diag(Loc, "found %0() with side effect") << AssertMacroName;
 }
 
 } // namespace bugprone

@@ -8,8 +8,8 @@
 
 // Include system time headers, adding missing functions as necessary
 
-#ifndef LLDB_HOST_TIME_H
-#define LLDB_HOST_TIME_H
+#ifndef liblldb_Host_Time_h_
+#define liblldb_Host_Time_h_
 
 #ifdef __ANDROID__
 #include <android/api-level.h>
@@ -19,7 +19,7 @@
 #include <time64.h>
 extern time_t timegm(struct tm *t);
 #else
-#include <ctime>
+#include <time.h>
 #endif
 
-#endif // LLDB_HOST_TIME_H
+#endif // liblldb_Host_Time_h_

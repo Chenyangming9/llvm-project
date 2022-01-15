@@ -19,10 +19,11 @@
 #ifndef LLVM_C_BITREADER_H
 #define LLVM_C_BITREADER_H
 
-#include "llvm-c/ExternC.h"
 #include "llvm-c/Types.h"
 
-LLVM_C_EXTERN_C_BEGIN
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @defgroup LLVMCBitReader Bit Reader
@@ -77,6 +78,8 @@ LLVMBool LLVMGetBitcodeModule2(LLVMMemoryBufferRef MemBuf, LLVMModuleRef *OutM);
  * @}
  */
 
-LLVM_C_EXTERN_C_END
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -1,4 +1,4 @@
-//===-- PythonDataObjectsTests.cpp ----------------------------------------===//
+//===-- PythonDataObjectsTests.cpp ------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,25 +13,24 @@
 #include "llvm/DebugInfo/PDB/PDBSymbolExe.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Testing/Support/Error.h"
 
 #include "Plugins/ObjectFile/PECOFF/ObjectFilePECOFF.h"
 #include "Plugins/SymbolFile/DWARF/SymbolFileDWARF.h"
 #include "Plugins/SymbolFile/PDB/SymbolFilePDB.h"
-#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "TestingSupport/TestUtilities.h"
 #include "lldb/Core/Address.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Host/HostInfo.h"
+#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/CompileUnit.h"
 #include "lldb/Symbol/LineTable.h"
-#include "lldb/Symbol/TypeMap.h"
+#include "lldb/Symbol/SymbolVendor.h"
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/FileSpec.h"
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
 #include "lldb/Host/windows/windows.h"
 #include <objbase.h>
 #endif
@@ -46,7 +45,7 @@ public:
 // Initialize and TearDown the plugin every time, so we get a brand new
 // AST every time so that modifications to the AST from each test don't
 // leak into the next test.
-#if defined(_WIN32)
+#if defined(_MSC_VER)
     ::CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 #endif
 
@@ -54,7 +53,7 @@ public:
     HostInfo::Initialize();
     ObjectFilePECOFF::Initialize();
     SymbolFileDWARF::Initialize();
-    TypeSystemClang::Initialize();
+    ClangASTContext::Initialize();
     SymbolFilePDB::Initialize();
 
     m_pdb_test_exe = GetInputFilePath("test-pdb.exe");
@@ -63,13 +62,13 @@ public:
 
   void TearDown() override {
     SymbolFilePDB::Terminate();
-    TypeSystemClang::Initialize();
+    ClangASTContext::Initialize();
     SymbolFileDWARF::Terminate();
     ObjectFilePECOFF::Terminate();
     HostInfo::Terminate();
     FileSystem::Terminate();
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
     ::CoUninitialize();
 #endif
   }
@@ -109,7 +108,7 @@ protected:
                            const FileSpec &spec) const {
     for (size_t i = 0; i < sc_list.GetSize(); ++i) {
       const SymbolContext &sc = sc_list[i];
-      if (FileSpecMatchesAsBaseOrFull(sc.comp_unit->GetPrimaryFile(), spec))
+      if (FileSpecMatchesAsBaseOrFull(*sc.comp_unit, spec))
         return true;
     }
     return false;
@@ -151,7 +150,9 @@ TEST_F(SymbolFilePDBTests, TestAbilitiesForPDB) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
-  SymbolFile *symfile = module->GetSymbolFile();
+  SymbolVendor *plugin = module->GetSymbolVendor();
+  EXPECT_NE(nullptr, plugin);
+  SymbolFile *symfile = plugin->GetSymbolFile();
   EXPECT_NE(nullptr, symfile);
   EXPECT_EQ(symfile->GetPluginName(), SymbolFilePDB::GetPluginNameStatic());
 
@@ -167,13 +168,14 @@ TEST_F(SymbolFilePDBTests, TestResolveSymbolContextBasename) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
-  SymbolFile *symfile = module->GetSymbolFile();
+  SymbolVendor *plugin = module->GetSymbolVendor();
+  EXPECT_NE(nullptr, plugin);
+  SymbolFile *symfile = plugin->GetSymbolFile();
 
   FileSpec header_spec("test-pdb.cpp");
   SymbolContextList sc_list;
-  SourceLocationSpec location_spec(header_spec, /*line=*/0);
   uint32_t result_count = symfile->ResolveSymbolContext(
-      location_spec, lldb::eSymbolContextCompUnit, sc_list);
+      header_spec, 0, false, lldb::eSymbolContextCompUnit, sc_list);
   EXPECT_EQ(1u, result_count);
   EXPECT_TRUE(ContainsCompileUnit(sc_list, header_spec));
 }
@@ -186,14 +188,15 @@ TEST_F(SymbolFilePDBTests, TestResolveSymbolContextFullPath) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
-  SymbolFile *symfile = module->GetSymbolFile();
+  SymbolVendor *plugin = module->GetSymbolVendor();
+  EXPECT_NE(nullptr, plugin);
+  SymbolFile *symfile = plugin->GetSymbolFile();
 
   FileSpec header_spec(
       R"spec(D:\src\llvm\tools\lldb\unittests\SymbolFile\PDB\Inputs\test-pdb.cpp)spec");
   SymbolContextList sc_list;
-  SourceLocationSpec location_spec(header_spec, /*line=*/0);
   uint32_t result_count = symfile->ResolveSymbolContext(
-      location_spec, lldb::eSymbolContextCompUnit, sc_list);
+      header_spec, 0, false, lldb::eSymbolContextCompUnit, sc_list);
   EXPECT_GE(1u, result_count);
   EXPECT_TRUE(ContainsCompileUnit(sc_list, header_spec));
 }
@@ -208,7 +211,9 @@ TEST_F(SymbolFilePDBTests, TestLookupOfHeaderFileWithInlines) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
-  SymbolFile *symfile = module->GetSymbolFile();
+  SymbolVendor *plugin = module->GetSymbolVendor();
+  EXPECT_NE(nullptr, plugin);
+  SymbolFile *symfile = plugin->GetSymbolFile();
 
   FileSpec header_specs[] = {FileSpec("test-pdb.h"),
                              FileSpec("test-pdb-nested.h")};
@@ -216,10 +221,8 @@ TEST_F(SymbolFilePDBTests, TestLookupOfHeaderFileWithInlines) {
   FileSpec alt_cpp_spec("test-pdb-alt.cpp");
   for (const auto &hspec : header_specs) {
     SymbolContextList sc_list;
-    SourceLocationSpec location_spec(hspec, /*line=*/0, /*column=*/llvm::None,
-                                     /*check_inlines=*/true);
     uint32_t result_count = symfile->ResolveSymbolContext(
-        location_spec, lldb::eSymbolContextCompUnit, sc_list);
+        hspec, 0, true, lldb::eSymbolContextCompUnit, sc_list);
     EXPECT_EQ(2u, result_count);
     EXPECT_TRUE(ContainsCompileUnit(sc_list, main_cpp_spec));
     EXPECT_TRUE(ContainsCompileUnit(sc_list, alt_cpp_spec));
@@ -236,15 +239,16 @@ TEST_F(SymbolFilePDBTests, TestLookupOfHeaderFileWithNoInlines) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
-  SymbolFile *symfile = module->GetSymbolFile();
+  SymbolVendor *plugin = module->GetSymbolVendor();
+  EXPECT_NE(nullptr, plugin);
+  SymbolFile *symfile = plugin->GetSymbolFile();
 
   FileSpec header_specs[] = {FileSpec("test-pdb.h"),
                              FileSpec("test-pdb-nested.h")};
   for (const auto &hspec : header_specs) {
     SymbolContextList sc_list;
-    SourceLocationSpec location_spec(hspec, /*line=*/0);
     uint32_t result_count = symfile->ResolveSymbolContext(
-        location_spec, lldb::eSymbolContextCompUnit, sc_list);
+        hspec, 0, false, lldb::eSymbolContextCompUnit, sc_list);
     EXPECT_EQ(0u, result_count);
   }
 }
@@ -257,7 +261,8 @@ TEST_F(SymbolFilePDBTests, TestLineTablesMatchAll) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
-  SymbolFile *symfile = module->GetSymbolFile();
+  SymbolVendor *plugin = module->GetSymbolVendor();
+  SymbolFile *symfile = plugin->GetSymbolFile();
 
   FileSpec source_file("test-pdb.cpp");
   FileSpec header1("test-pdb.h");
@@ -269,9 +274,8 @@ TEST_F(SymbolFilePDBTests, TestLineTablesMatchAll) {
   lldb::SymbolContextItem scope =
       lldb::eSymbolContextCompUnit | lldb::eSymbolContextLineEntry;
 
-  SourceLocationSpec location_spec(
-      source_file, /*line=*/0, /*column=*/llvm::None, /*check_inlines=*/true);
-  uint32_t count = symfile->ResolveSymbolContext(location_spec, scope, sc_list);
+  uint32_t count =
+      symfile->ResolveSymbolContext(source_file, 0, true, scope, sc_list);
   EXPECT_EQ(1u, count);
   SymbolContext sc;
   EXPECT_TRUE(sc_list.GetContextAtIndex(0, sc));
@@ -307,7 +311,8 @@ TEST_F(SymbolFilePDBTests, TestLineTablesMatchSpecific) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
-  SymbolFile *symfile = module->GetSymbolFile();
+  SymbolVendor *plugin = module->GetSymbolVendor();
+  SymbolFile *symfile = plugin->GetSymbolFile();
 
   FileSpec source_file("test-pdb.cpp");
   FileSpec header1("test-pdb.h");
@@ -320,9 +325,8 @@ TEST_F(SymbolFilePDBTests, TestLineTablesMatchSpecific) {
       lldb::eSymbolContextCompUnit | lldb::eSymbolContextLineEntry;
 
   // First test with line 7, and verify that only line 7 entries are added.
-  SourceLocationSpec location_spec(
-      source_file, /*line=*/7, /*column=*/llvm::None, /*check_inlines=*/true);
-  uint32_t count = symfile->ResolveSymbolContext(location_spec, scope, sc_list);
+  uint32_t count =
+      symfile->ResolveSymbolContext(source_file, 7, true, scope, sc_list);
   EXPECT_EQ(1u, count);
   SymbolContext sc;
   EXPECT_TRUE(sc_list.GetContextAtIndex(0, sc));
@@ -338,9 +342,7 @@ TEST_F(SymbolFilePDBTests, TestLineTablesMatchSpecific) {
 
   sc_list.Clear();
   // Then test with line 9, and verify that only line 9 entries are added.
-  location_spec = SourceLocationSpec(
-      source_file, /*line=*/9, /*column=*/llvm::None, /*check_inlines=*/true);
-  count = symfile->ResolveSymbolContext(location_spec, scope, sc_list);
+  count = symfile->ResolveSymbolContext(source_file, 9, true, scope, sc_list);
   EXPECT_EQ(1u, count);
   EXPECT_TRUE(sc_list.GetContextAtIndex(0, sc));
 
@@ -359,20 +361,21 @@ TEST_F(SymbolFilePDBTests, TestSimpleClassTypes) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
+  SymbolVendor *plugin = module->GetSymbolVendor();
   SymbolFilePDB *symfile =
-      static_cast<SymbolFilePDB *>(module->GetSymbolFile());
+      static_cast<SymbolFilePDB *>(plugin->GetSymbolFile());
   llvm::pdb::IPDBSession &session = symfile->GetPDBSession();
   llvm::DenseSet<SymbolFile *> searched_files;
   TypeMap results;
-  symfile->FindTypes(ConstString("Class"), CompilerDeclContext(), 0,
-                     searched_files, results);
+  EXPECT_EQ(1u, symfile->FindTypes(ConstString("Class"), nullptr, false, 0,
+                                   searched_files, results));
   EXPECT_EQ(1u, results.GetSize());
   lldb::TypeSP udt_type = results.GetTypeAtIndex(0);
   EXPECT_EQ(ConstString("Class"), udt_type->GetName());
   CompilerType compiler_type = udt_type->GetForwardCompilerType();
-  EXPECT_TRUE(TypeSystemClang::IsClassType(compiler_type.GetOpaqueQualType()));
+  EXPECT_TRUE(ClangASTContext::IsClassType(compiler_type.GetOpaqueQualType()));
   EXPECT_EQ(GetGlobalConstantInteger(session, "sizeof_Class"),
-            udt_type->GetByteSize(nullptr));
+            udt_type->GetByteSize());
 }
 
 TEST_F(SymbolFilePDBTests, TestNestedClassTypes) {
@@ -380,22 +383,19 @@ TEST_F(SymbolFilePDBTests, TestNestedClassTypes) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
+  SymbolVendor *plugin = module->GetSymbolVendor();
   SymbolFilePDB *symfile =
-      static_cast<SymbolFilePDB *>(module->GetSymbolFile());
+      static_cast<SymbolFilePDB *>(plugin->GetSymbolFile());
   llvm::pdb::IPDBSession &session = symfile->GetPDBSession();
   llvm::DenseSet<SymbolFile *> searched_files;
   TypeMap results;
 
-  auto clang_ast_ctx_or_err =
-      symfile->GetTypeSystemForLanguage(lldb::eLanguageTypeC_plus_plus);
-  ASSERT_THAT_EXPECTED(clang_ast_ctx_or_err, llvm::Succeeded());
-
-  auto clang_ast_ctx =
-      llvm::dyn_cast_or_null<TypeSystemClang>(&clang_ast_ctx_or_err.get());
+  auto clang_ast_ctx = llvm::dyn_cast_or_null<ClangASTContext>(
+      symfile->GetTypeSystemForLanguage(lldb::eLanguageTypeC_plus_plus));
   EXPECT_NE(nullptr, clang_ast_ctx);
 
-  symfile->FindTypes(ConstString("Class"), CompilerDeclContext(), 0,
-                     searched_files, results);
+  EXPECT_EQ(1u, symfile->FindTypes(ConstString("Class"), nullptr, false, 0,
+                                   searched_files, results));
   EXPECT_EQ(1u, results.GetSize());
 
   auto Class = results.GetTypeAtIndex(0);
@@ -412,21 +412,20 @@ TEST_F(SymbolFilePDBTests, TestNestedClassTypes) {
   // and one is global. We process correctly this case and create the same
   // compiler type for both, but `FindTypes` may return more than one type
   // (with the same compiler type) because the symbols have different IDs.
-
-  TypeMap more_results;
   auto ClassCompilerDeclCtx = CompilerDeclContext(clang_ast_ctx, ClassDeclCtx);
-  symfile->FindTypes(ConstString("NestedClass"), ClassCompilerDeclCtx, 0,
-                     searched_files, more_results);
-  EXPECT_LE(1u, more_results.GetSize());
+  EXPECT_LE(1u, symfile->FindTypes(ConstString("NestedClass"),
+                                   &ClassCompilerDeclCtx, false, 0,
+                                   searched_files, results));
+  EXPECT_LE(1u, results.GetSize());
 
-  lldb::TypeSP udt_type = more_results.GetTypeAtIndex(0);
+  lldb::TypeSP udt_type = results.GetTypeAtIndex(0);
   EXPECT_EQ(ConstString("NestedClass"), udt_type->GetName());
 
   CompilerType compiler_type = udt_type->GetForwardCompilerType();
-  EXPECT_TRUE(TypeSystemClang::IsClassType(compiler_type.GetOpaqueQualType()));
+  EXPECT_TRUE(ClangASTContext::IsClassType(compiler_type.GetOpaqueQualType()));
 
   EXPECT_EQ(GetGlobalConstantInteger(session, "sizeof_NestedClass"),
-            udt_type->GetByteSize(nullptr));
+            udt_type->GetByteSize());
 }
 
 TEST_F(SymbolFilePDBTests, TestClassInNamespace) {
@@ -434,43 +433,41 @@ TEST_F(SymbolFilePDBTests, TestClassInNamespace) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
+  SymbolVendor *plugin = module->GetSymbolVendor();
   SymbolFilePDB *symfile =
-      static_cast<SymbolFilePDB *>(module->GetSymbolFile());
+      static_cast<SymbolFilePDB *>(plugin->GetSymbolFile());
   llvm::pdb::IPDBSession &session = symfile->GetPDBSession();
   llvm::DenseSet<SymbolFile *> searched_files;
   TypeMap results;
 
-  auto clang_ast_ctx_or_err =
-      symfile->GetTypeSystemForLanguage(lldb::eLanguageTypeC_plus_plus);
-  ASSERT_THAT_EXPECTED(clang_ast_ctx_or_err, llvm::Succeeded());
-
-  auto clang_ast_ctx =
-      llvm::dyn_cast_or_null<TypeSystemClang>(&clang_ast_ctx_or_err.get());
+  auto clang_ast_ctx = llvm::dyn_cast_or_null<ClangASTContext>(
+      symfile->GetTypeSystemForLanguage(lldb::eLanguageTypeC_plus_plus));
   EXPECT_NE(nullptr, clang_ast_ctx);
 
-  clang::ASTContext &ast_ctx = clang_ast_ctx->getASTContext();
+  auto ast_ctx = clang_ast_ctx->getASTContext();
+  EXPECT_NE(nullptr, ast_ctx);
 
-  auto tu = ast_ctx.getTranslationUnitDecl();
+  auto tu = ast_ctx->getTranslationUnitDecl();
   EXPECT_NE(nullptr, tu);
 
   symfile->ParseDeclsForContext(CompilerDeclContext(
       clang_ast_ctx, static_cast<clang::DeclContext *>(tu)));
 
-  auto ns_namespace = symfile->FindNamespace(ConstString("NS"), CompilerDeclContext());
+  auto ns_namespace = symfile->FindNamespace(ConstString("NS"), nullptr);
   EXPECT_TRUE(ns_namespace.IsValid());
 
-  symfile->FindTypes(ConstString("NSClass"), ns_namespace, 0, searched_files,
-                     results);
+  EXPECT_EQ(1u, symfile->FindTypes(ConstString("NSClass"), &ns_namespace, false,
+                                   0, searched_files, results));
   EXPECT_EQ(1u, results.GetSize());
 
   lldb::TypeSP udt_type = results.GetTypeAtIndex(0);
   EXPECT_EQ(ConstString("NSClass"), udt_type->GetName());
 
   CompilerType compiler_type = udt_type->GetForwardCompilerType();
-  EXPECT_TRUE(TypeSystemClang::IsClassType(compiler_type.GetOpaqueQualType()));
+  EXPECT_TRUE(ClangASTContext::IsClassType(compiler_type.GetOpaqueQualType()));
 
   EXPECT_EQ(GetGlobalConstantInteger(session, "sizeof_NSClass"),
-            udt_type->GetByteSize(nullptr));
+            udt_type->GetByteSize());
 }
 
 TEST_F(SymbolFilePDBTests, TestEnumTypes) {
@@ -478,21 +475,22 @@ TEST_F(SymbolFilePDBTests, TestEnumTypes) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
+  SymbolVendor *plugin = module->GetSymbolVendor();
   SymbolFilePDB *symfile =
-      static_cast<SymbolFilePDB *>(module->GetSymbolFile());
+      static_cast<SymbolFilePDB *>(plugin->GetSymbolFile());
   llvm::pdb::IPDBSession &session = symfile->GetPDBSession();
   llvm::DenseSet<SymbolFile *> searched_files;
   const char *EnumsToCheck[] = {"Enum", "ShortEnum"};
   for (auto Enum : EnumsToCheck) {
     TypeMap results;
-    symfile->FindTypes(ConstString(Enum), CompilerDeclContext(), 0,
-                       searched_files, results);
+    EXPECT_EQ(1u, symfile->FindTypes(ConstString(Enum), nullptr, false, 0,
+                                     searched_files, results));
     EXPECT_EQ(1u, results.GetSize());
     lldb::TypeSP enum_type = results.GetTypeAtIndex(0);
     EXPECT_EQ(ConstString(Enum), enum_type->GetName());
     CompilerType compiler_type = enum_type->GetFullCompilerType();
-    EXPECT_TRUE(TypeSystemClang::IsEnumType(compiler_type.GetOpaqueQualType()));
-    clang::EnumDecl *enum_decl = TypeSystemClang::GetAsEnumDecl(compiler_type);
+    EXPECT_TRUE(ClangASTContext::IsEnumType(compiler_type.GetOpaqueQualType()));
+    clang::EnumDecl *enum_decl = ClangASTContext::GetAsEnumDecl(compiler_type);
     EXPECT_NE(nullptr, enum_decl);
     EXPECT_EQ(2, std::distance(enum_decl->enumerator_begin(),
                                enum_decl->enumerator_end()));
@@ -500,7 +498,7 @@ TEST_F(SymbolFilePDBTests, TestEnumTypes) {
     std::string sizeof_var = "sizeof_";
     sizeof_var.append(Enum);
     EXPECT_EQ(GetGlobalConstantInteger(session, sizeof_var),
-              enum_type->GetByteSize(nullptr));
+              enum_type->GetByteSize());
   }
 }
 
@@ -523,8 +521,9 @@ TEST_F(SymbolFilePDBTests, TestTypedefs) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
+  SymbolVendor *plugin = module->GetSymbolVendor();
   SymbolFilePDB *symfile =
-      static_cast<SymbolFilePDB *>(module->GetSymbolFile());
+      static_cast<SymbolFilePDB *>(plugin->GetSymbolFile());
   llvm::pdb::IPDBSession &session = symfile->GetPDBSession();
   llvm::DenseSet<SymbolFile *> searched_files;
   TypeMap results;
@@ -534,21 +533,21 @@ TEST_F(SymbolFilePDBTests, TestTypedefs) {
                                    "VariadicFuncPointerTypedef"};
   for (auto Typedef : TypedefsToCheck) {
     TypeMap results;
-    symfile->FindTypes(ConstString(Typedef), CompilerDeclContext(), 0,
-                       searched_files, results);
+    EXPECT_EQ(1u, symfile->FindTypes(ConstString(Typedef), nullptr, false, 0,
+                                     searched_files, results));
     EXPECT_EQ(1u, results.GetSize());
     lldb::TypeSP typedef_type = results.GetTypeAtIndex(0);
     EXPECT_EQ(ConstString(Typedef), typedef_type->GetName());
     CompilerType compiler_type = typedef_type->GetFullCompilerType();
-    TypeSystemClang *clang_type_system =
-        llvm::dyn_cast_or_null<TypeSystemClang>(compiler_type.GetTypeSystem());
+    ClangASTContext *clang_type_system =
+        llvm::dyn_cast_or_null<ClangASTContext>(compiler_type.GetTypeSystem());
     EXPECT_TRUE(
         clang_type_system->IsTypedefType(compiler_type.GetOpaqueQualType()));
 
     std::string sizeof_var = "sizeof_";
     sizeof_var.append(Typedef);
     EXPECT_EQ(GetGlobalConstantInteger(session, sizeof_var),
-              typedef_type->GetByteSize(nullptr));
+              typedef_type->GetByteSize());
   }
 }
 
@@ -557,8 +556,9 @@ TEST_F(SymbolFilePDBTests, TestRegexNameMatch) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
+  SymbolVendor *plugin = module->GetSymbolVendor();
   SymbolFilePDB *symfile =
-      static_cast<SymbolFilePDB *>(module->GetSymbolFile());
+      static_cast<SymbolFilePDB *>(plugin->GetSymbolFile());
   TypeMap results;
 
   symfile->FindTypesByRegex(RegularExpression(".*"), 0, results);
@@ -575,24 +575,25 @@ TEST_F(SymbolFilePDBTests, TestMaxMatches) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
+  SymbolVendor *plugin = module->GetSymbolVendor();
   SymbolFilePDB *symfile =
-      static_cast<SymbolFilePDB *>(module->GetSymbolFile());
+      static_cast<SymbolFilePDB *>(plugin->GetSymbolFile());
   llvm::DenseSet<SymbolFile *> searched_files;
   TypeMap results;
   const ConstString name("ClassTypedef");
-  symfile->FindTypes(name, CompilerDeclContext(), 0, searched_files, results);
-  // Try to limit ourselves from 1 to 10 results, otherwise we could
-  // be doing this thousands of times.  The idea is just to make sure
-  // that for a variety of values, the number of limited results
-  // always comes out to the number we are expecting.
-  uint32_t num_results = results.GetSize();
+  uint32_t num_results =
+      symfile->FindTypes(name, nullptr, false, 0, searched_files, results);
+  // Try to limit ourselves from 1 to 10 results, otherwise we could be doing
+  // this thousands of times.
+  // The idea is just to make sure that for a variety of values, the number of
+  // limited results always
+  // comes out to the number we are expecting.
   uint32_t iterations = std::min(num_results, 10u);
   for (uint32_t i = 1; i <= iterations; ++i) {
-    TypeMap more_results;
-    symfile->FindTypes(name, CompilerDeclContext(), i, searched_files,
-                       more_results);
-    uint32_t num_limited_results = more_results.GetSize();
+    uint32_t num_limited_results =
+        symfile->FindTypes(name, nullptr, false, i, searched_files, results);
     EXPECT_EQ(i, num_limited_results);
+    EXPECT_EQ(num_limited_results, results.GetSize());
   }
 }
 
@@ -601,12 +602,14 @@ TEST_F(SymbolFilePDBTests, TestNullName) {
   ArchSpec aspec("i686-pc-windows");
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
+  SymbolVendor *plugin = module->GetSymbolVendor();
   SymbolFilePDB *symfile =
-      static_cast<SymbolFilePDB *>(module->GetSymbolFile());
+      static_cast<SymbolFilePDB *>(plugin->GetSymbolFile());
   llvm::DenseSet<SymbolFile *> searched_files;
   TypeMap results;
-  symfile->FindTypes(ConstString(), CompilerDeclContext(), 0, searched_files,
-                     results);
+  uint32_t num_results = symfile->FindTypes(ConstString(), nullptr, false, 0,
+                                            searched_files, results);
+  EXPECT_EQ(0u, num_results);
   EXPECT_EQ(0u, results.GetSize());
 }
 
@@ -616,8 +619,9 @@ TEST_F(SymbolFilePDBTests, TestFindSymbolsWithNameAndType) {
   lldb::ModuleSP module = std::make_shared<Module>(fspec, aspec);
 
   SymbolContextList sc_list;
-  module->FindSymbolsWithNameAndType(ConstString("?foo@@YAHH@Z"),
-                                     lldb::eSymbolTypeAny, sc_list);
+  EXPECT_EQ(1u,
+            module->FindSymbolsWithNameAndType(ConstString("?foo@@YAHH@Z"),
+                                               lldb::eSymbolTypeAny, sc_list));
   EXPECT_EQ(1u, sc_list.GetSize());
 
   SymbolContext sc;

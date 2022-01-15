@@ -1,4 +1,4 @@
-//===-- ObjectFileBreakpad.cpp --------------------------------------------===//
+//===-- ObjectFileBreakpad.cpp -------------------------------- -*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -15,8 +15,6 @@
 using namespace lldb;
 using namespace lldb_private;
 using namespace lldb_private::breakpad;
-
-LLDB_PLUGIN_DEFINE(ObjectFileBreakpad)
 
 namespace {
 struct Header {
@@ -43,8 +41,6 @@ llvm::Optional<Header> Header::parse(llvm::StringRef text) {
   UUID uuid = Info && Info->ID ? Info->ID : Module->ID;
   return Header{ArchSpec(triple), std::move(uuid)};
 }
-
-char ObjectFileBreakpad::ID;
 
 void ObjectFileBreakpad::Initialize() {
   PluginManager::RegisterPlugin(GetPluginNameStatic(),
@@ -129,7 +125,7 @@ Symtab *ObjectFileBreakpad::GetSymtab() {
 void ObjectFileBreakpad::CreateSections(SectionList &unified_section_list) {
   if (m_sections_up)
     return;
-  m_sections_up = std::make_unique<SectionList>();
+  m_sections_up = llvm::make_unique<SectionList>();
 
   llvm::Optional<Record::Kind> current_section;
   offset_t section_start;

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_API_SBCOMPILEUNIT_H
-#define LLDB_API_SBCOMPILEUNIT_H
+#ifndef LLDB_SBCompileUnit_h_
+#define LLDB_SBCompileUnit_h_
 
 #include "lldb/API/SBDefines.h"
 #include "lldb/API/SBFileSpec.h"
@@ -87,9 +87,9 @@ private:
 
   void reset(lldb_private::CompileUnit *lldb_object_ptr);
 
-  lldb_private::CompileUnit *m_opaque_ptr = nullptr;
+  lldb_private::CompileUnit *m_opaque_ptr;
 };
 
 } // namespace lldb
 
-#endif // LLDB_API_SBCOMPILEUNIT_H
+#endif // LLDB_SBCompileUnit_h_

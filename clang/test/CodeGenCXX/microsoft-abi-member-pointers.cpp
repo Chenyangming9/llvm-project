@@ -148,16 +148,6 @@ const C table[] = {
 // CHECK-SAME:  %"struct.pr43803::C" { { i32, i32, i32 } { i32 8, i32 0, i32 0 }, [4 x i8] undef }]
 }
 
-namespace pr48687 {
-template <typename T> struct A {
-  T value;
-  static constexpr auto address = &A<T>::value;
-};
-extern template class A<float>;
-template class A<float>;
-// CHECK: @"?address@?$A@M@pr48687@@2QQ12@MQ12@" = weak_odr dso_local constant i32 0, comdat, align 4
-}
-
 struct PR26313_Y;
 typedef void (PR26313_Y::*PR26313_FUNC)();
 struct PR26313_X {
@@ -427,7 +417,7 @@ bool nullTestDataUnspecified(int Unspecified::*mp) {
 
 // Pass this large type indirectly.
 // X64-LABEL: define dso_local zeroext i1 @"?nullTestDataUnspecified@@
-// X64:             ({ i32, i32, i32 }* %0)
+// X64:             ({ i32, i32, i32 }*)
 }
 
 bool nullTestFunctionUnspecified(void (Unspecified::*mp)()) {
@@ -601,7 +591,7 @@ bool unspecFuncMemptrEq(void (Unspecified::*l)(), void (Unspecified::*r)()) {
 // CHECK: }
 
 // X64-LABEL: define dso_local zeroext i1 @"?unspecFuncMemptrEq@@
-// X64:             ({ i8*, i32, i32, i32 }* %0, { i8*, i32, i32, i32 }* %1)
+// X64:             ({ i8*, i32, i32, i32 }*, { i8*, i32, i32, i32 }*)
 }
 
 bool unspecFuncMemptrNeq(void (Unspecified::*l)(), void (Unspecified::*r)()) {
@@ -646,7 +636,7 @@ bool unspecDataMemptrEq(int Unspecified::*l, int Unspecified::*r) {
 // CHECK: }
 
 // X64-LABEL: define dso_local zeroext i1 @"?unspecDataMemptrEq@@
-// X64:             ({ i32, i32, i32 }* %0, { i32, i32, i32 }* %1)
+// X64:             ({ i32, i32, i32 }*, { i32, i32, i32 }*)
 }
 
 void (Multiple::*convertB2FuncToMultiple(void (B2::*mp)()))() {

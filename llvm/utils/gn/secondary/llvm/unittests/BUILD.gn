@@ -20,26 +20,20 @@ group("unittests") {
     "ExecutionEngine/JITLink:JITLinkTests",
     "ExecutionEngine/MCJIT:MCJITTests",
     "ExecutionEngine/Orc:OrcJITTests",
-    "FileCheck:FileCheckTests",
-    "Frontend:LLVMFrontendTests",
     "FuzzMutate:FuzzMutateTests",
     "IR:IRTests",
-    "InterfaceStub:InterfaceStubTests",
     "LineEditor:LineEditorTests",
     "Linker:LinkerTests",
     "MC:MCTests",
     "MI:MITests",
-    "MIR:MIRTests",
     "Object:ObjectTests",
     "ObjectYAML:ObjectYAMLTests",
     "Option:OptionTests",
-    "Passes:PassesBindingsTests",
     "Passes:PluginsTests",
     "ProfileData:ProfileDataTests",
     "Remarks:RemarksTests",
     "Support:SupportTests",
     "Support/DynamicLibrary:DynamicLibraryTests",
-    "TableGen:TableGenTests",
     "TextAPI:TextAPITests",
     "Transforms/IPO:IPOTests",
     "Transforms/Scalar:ScalarTests",
@@ -48,7 +42,6 @@ group("unittests") {
     "XRay:XRayTests",
     "tools/llvm-cfi-verify:CFIVerifyTests",
     "tools/llvm-exegesis:LLVMExegesisTests",
-    "tools/llvm-profgen:LLVMProfgenTests",
   ]
 
   # Target-dependent unit tests.
@@ -61,38 +54,17 @@ group("unittests") {
       "tools/llvm-exegesis/AArch64:LLVMExegesisAArch64Tests",
     ]
   }
-  if (llvm_build_AMDGPU) {
-    deps += [
-      "MC/AMDGPU:AMDGPUDwarfTests",
-      "Target/AMDGPU:AMDGPUTests",
-    ]
-  }
   if (llvm_build_ARM) {
-    deps += [
-      "Target/ARM:ARMTests",
-      "tools/llvm-exegesis/ARM:LLVMExegesisARMTests",
-    ]
-  }
-  if (llvm_build_Mips) {
-    deps += [ "tools/llvm-exegesis/Mips:LLVMExegesisMipsTests" ]
-  }
-  if (llvm_build_PowerPC) {
-    deps += [
-      "Target/PowerPC:PowerPCTests",
-      "tools/llvm-exegesis/PowerPC:LLVMExegesisPowerPCTests",
-    ]
-  }
-  if (llvm_build_SystemZ) {
-    deps += [ "MC/SystemZ:SystemZAsmLexerTests" ]
+    deps += [ "tools/llvm-exegesis/ARM:LLVMExegesisARMTests" ]
   }
   if (llvm_build_WebAssembly) {
     deps += [ "Target/WebAssembly:WebAssemblyTests" ]
   }
+  if (llvm_build_PowerPC) {
+    deps += [ "tools/llvm-exegesis/PowerPC:LLVMExegesisPowerPCTests" ]
+  }
   if (llvm_build_X86) {
-    deps += [
-      "Target/X86:X86Tests",
-      "tools/llvm-exegesis/X86:LLVMExegesisX86Tests",
-    ]
+    deps += [ "tools/llvm-exegesis/X86:LLVMExegesisX86Tests" ]
   }
 
   testonly = true

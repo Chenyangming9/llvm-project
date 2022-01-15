@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_SYSTEMRUNTIME_MACOSX_APPLEGETITEMINFOHANDLER_H
-#define LLDB_SOURCE_PLUGINS_SYSTEMRUNTIME_MACOSX_APPLEGETITEMINFOHANDLER_H
+#ifndef lldb_AppleGetItemInfoHandler_h_
+#define lldb_AppleGetItemInfoHandler_h_
 
 #include <map>
 #include <mutex>
@@ -46,12 +46,13 @@ public:
   ~AppleGetItemInfoHandler();
 
   struct GetItemInfoReturnInfo {
-    lldb::addr_t item_buffer_ptr = LLDB_INVALID_ADDRESS; /* the address of the
-                                     item buffer from libBacktraceRecording */
-    lldb::addr_t item_buffer_size = 0; /* the size of the item buffer from
+    lldb::addr_t item_buffer_ptr;  /* the address of the item buffer from
+                                      libBacktraceRecording */
+    lldb::addr_t item_buffer_size; /* the size of the item buffer from
                                       libBacktraceRecording */
 
-    GetItemInfoReturnInfo() = default;
+    GetItemInfoReturnInfo()
+        : item_buffer_ptr(LLDB_INVALID_ADDRESS), item_buffer_size(0) {}
   };
 
   /// Get the information about a work item by calling
@@ -108,4 +109,4 @@ private:
 
 } // using namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_SYSTEMRUNTIME_MACOSX_APPLEGETITEMINFOHANDLER_H
+#endif // lldb_AppleGetItemInfoHandler_h_

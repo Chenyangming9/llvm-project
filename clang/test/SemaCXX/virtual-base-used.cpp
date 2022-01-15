@@ -67,7 +67,7 @@ D d;
 #if __cplusplus <= 199711L
 // expected-note@-2 2{{implicit default constructor for 'D' first required here}}
 #else
-// expected-error@-4 {{call to implicitly-deleted default constructor of 'D'}}å
+// expected-error@-4 {{call to implicitly-deleted default constructor of 'D'}}
 #endif
 #else
 void D::foo() {
@@ -80,6 +80,7 @@ void D::foo() {
 struct E : public virtual A {
 #if __cplusplus >= 201103L
 // expected-error@-2 {{deleted function '~E' cannot override a non-deleted function}}
+// expected-note@-3 {{overridden virtual function is here}}
 #endif
 
   NoDestroy x;
@@ -103,9 +104,11 @@ struct F : public E {
 // expected-note@-4 {{implicit default constructor for 'E' first required here}}
 #endif
 #else
-// expected-note@-7 {{overridden virtual function is here}}
+// expected-error@-7 {{non-deleted function '~F' cannot override a deleted function}}
+// expected-note@-8 {{while declaring the implicit destructor for 'F'}}
+// expected-note@-9 {{overridden virtual function is here}}
 #ifdef MSABI
-// expected-note@-9 {{default constructor of 'F' is implicitly deleted because base class 'E' has a deleted default constructor}}
+// expected-note@-11 {{default constructor of 'F' is implicitly deleted because base class 'E' has a deleted default constructor}}
 #endif
 #endif
 };

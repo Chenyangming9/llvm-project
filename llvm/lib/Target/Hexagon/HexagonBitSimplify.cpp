@@ -27,7 +27,6 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/DebugLoc.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
@@ -148,11 +147,11 @@ namespace {
     }
 
     static inline unsigned v2x(unsigned v) {
-      return Register::virtReg2Index(v);
+      return TargetRegisterInfo::virtReg2Index(v);
     }
 
     static inline unsigned x2v(unsigned x) {
-      return Register::index2VirtReg(x);
+      return TargetRegisterInfo::index2VirtReg(x);
     }
   };
 
@@ -206,14 +205,14 @@ namespace {
         uint16_t W);
     static bool getConst(const BitTracker::RegisterCell &RC, uint16_t B,
         uint16_t W, uint64_t &U);
-    static bool replaceReg(Register OldR, Register NewR,
-                           MachineRegisterInfo &MRI);
+    static bool replaceReg(unsigned OldR, unsigned NewR,
+        MachineRegisterInfo &MRI);
     static bool getSubregMask(const BitTracker::RegisterRef &RR,
         unsigned &Begin, unsigned &Width, MachineRegisterInfo &MRI);
-    static bool replaceRegWithSub(Register OldR, Register NewR, unsigned NewSR,
-                                  MachineRegisterInfo &MRI);
-    static bool replaceSubWithSub(Register OldR, unsigned OldSR, Register NewR,
-                                  unsigned NewSR, MachineRegisterInfo &MRI);
+    static bool replaceRegWithSub(unsigned OldR, unsigned NewR,
+        unsigned NewSR, MachineRegisterInfo &MRI);
+    static bool replaceSubWithSub(unsigned OldR, unsigned OldSR,
+        unsigned NewR, unsigned NewSR, MachineRegisterInfo &MRI);
     static bool parseRegSequence(const MachineInstr &I,
         BitTracker::RegisterRef &SL, BitTracker::RegisterRef &SH,
         const MachineRegisterInfo &MRI);
@@ -291,8 +290,8 @@ void HexagonBitSimplify::getInstrDefs(const MachineInstr &MI,
   for (auto &Op : MI.operands()) {
     if (!Op.isReg() || !Op.isDef())
       continue;
-    Register R = Op.getReg();
-    if (!R.isVirtual())
+    unsigned R = Op.getReg();
+    if (!TargetRegisterInfo::isVirtualRegister(R))
       continue;
     Defs.insert(R);
   }
@@ -303,8 +302,8 @@ void HexagonBitSimplify::getInstrUses(const MachineInstr &MI,
   for (auto &Op : MI.operands()) {
     if (!Op.isReg() || !Op.isUse())
       continue;
-    Register R = Op.getReg();
-    if (!R.isVirtual())
+    unsigned R = Op.getReg();
+    if (!TargetRegisterInfo::isVirtualRegister(R))
       continue;
     Uses.insert(R);
   }
@@ -352,9 +351,10 @@ bool HexagonBitSimplify::getConst(const BitTracker::RegisterCell &RC,
   return true;
 }
 
-bool HexagonBitSimplify::replaceReg(Register OldR, Register NewR,
-                                    MachineRegisterInfo &MRI) {
-  if (!OldR.isVirtual() || !NewR.isVirtual())
+bool HexagonBitSimplify::replaceReg(unsigned OldR, unsigned NewR,
+      MachineRegisterInfo &MRI) {
+  if (!TargetRegisterInfo::isVirtualRegister(OldR) ||
+      !TargetRegisterInfo::isVirtualRegister(NewR))
     return false;
   auto Begin = MRI.use_begin(OldR), End = MRI.use_end();
   decltype(End) NextI;
@@ -365,10 +365,10 @@ bool HexagonBitSimplify::replaceReg(Register OldR, Register NewR,
   return Begin != End;
 }
 
-bool HexagonBitSimplify::replaceRegWithSub(Register OldR, Register NewR,
-                                           unsigned NewSR,
-                                           MachineRegisterInfo &MRI) {
-  if (!OldR.isVirtual() || !NewR.isVirtual())
+bool HexagonBitSimplify::replaceRegWithSub(unsigned OldR, unsigned NewR,
+      unsigned NewSR, MachineRegisterInfo &MRI) {
+  if (!TargetRegisterInfo::isVirtualRegister(OldR) ||
+      !TargetRegisterInfo::isVirtualRegister(NewR))
     return false;
   if (hasTiedUse(OldR, MRI, NewSR))
     return false;
@@ -382,10 +382,10 @@ bool HexagonBitSimplify::replaceRegWithSub(Register OldR, Register NewR,
   return Begin != End;
 }
 
-bool HexagonBitSimplify::replaceSubWithSub(Register OldR, unsigned OldSR,
-                                           Register NewR, unsigned NewSR,
-                                           MachineRegisterInfo &MRI) {
-  if (!OldR.isVirtual() || !NewR.isVirtual())
+bool HexagonBitSimplify::replaceSubWithSub(unsigned OldR, unsigned OldSR,
+      unsigned NewR, unsigned NewSR, MachineRegisterInfo &MRI) {
+  if (!TargetRegisterInfo::isVirtualRegister(OldR) ||
+      !TargetRegisterInfo::isVirtualRegister(NewR))
     return false;
   if (OldSR != NewSR && hasTiedUse(OldR, MRI, NewSR))
     return false;
@@ -896,7 +896,7 @@ bool HexagonBitSimplify::getUsedBits(unsigned Opc, unsigned OpN,
 // register class.
 const TargetRegisterClass *HexagonBitSimplify::getFinalVRegClass(
       const BitTracker::RegisterRef &RR, MachineRegisterInfo &MRI) {
-  if (!RR.Reg.isVirtual())
+  if (!TargetRegisterInfo::isVirtualRegister(RR.Reg))
     return nullptr;
   auto *RC = MRI.getRegClass(RR.Reg);
   if (RR.Sub == 0)
@@ -927,7 +927,8 @@ const TargetRegisterClass *HexagonBitSimplify::getFinalVRegClass(
 // with a 32-bit register.
 bool HexagonBitSimplify::isTransparentCopy(const BitTracker::RegisterRef &RD,
       const BitTracker::RegisterRef &RS, MachineRegisterInfo &MRI) {
-  if (!RD.Reg.isVirtual() || !RS.Reg.isVirtual())
+  if (!TargetRegisterInfo::isVirtualRegister(RD.Reg) ||
+      !TargetRegisterInfo::isVirtualRegister(RS.Reg))
     return false;
   // Return false if one (or both) classes are nullptr.
   auto *DRC = getFinalVRegClass(RD, MRI);
@@ -978,7 +979,7 @@ bool DeadCodeElimination::isDead(unsigned R) const {
       continue;
     if (UseI->isPHI()) {
       assert(!UseI->getOperand(0).getSubReg());
-      Register DR = UseI->getOperand(0).getReg();
+      unsigned DR = UseI->getOperand(0).getReg();
       if (DR == R)
         continue;
     }
@@ -1017,8 +1018,8 @@ bool DeadCodeElimination::runOnNode(MachineDomTreeNode *N) {
     for (auto &Op : MI->operands()) {
       if (!Op.isReg() || !Op.isDef())
         continue;
-      Register R = Op.getReg();
-      if (!R.isVirtual() || !isDead(R)) {
+      unsigned R = Op.getReg();
+      if (!TargetRegisterInfo::isVirtualRegister(R) || !isDead(R)) {
         AllDead = false;
         break;
       }
@@ -1219,8 +1220,8 @@ bool RedundantInstrElimination::computeUsedBits(unsigned Reg, BitVector &Bits) {
         return false;
       MachineInstr &UseI = *I->getParent();
       if (UseI.isPHI() || UseI.isCopy()) {
-        Register DefR = UseI.getOperand(0).getReg();
-        if (!DefR.isVirtual())
+        unsigned DefR = UseI.getOperand(0).getReg();
+        if (!TargetRegisterInfo::isVirtualRegister(DefR))
           return false;
         Pending.push_back(DefR);
       } else {
@@ -1344,7 +1345,7 @@ bool RedundantInstrElimination::processBlock(MachineBasicBlock &B,
       // If found, replace the instruction with a COPY.
       const DebugLoc &DL = MI->getDebugLoc();
       const TargetRegisterClass *FRC = HBS::getFinalVRegClass(RD, MRI);
-      Register NewR = MRI.createVirtualRegister(FRC);
+      unsigned NewR = MRI.createVirtualRegister(FRC);
       MachineInstr *CopyI =
           BuildMI(B, At, DL, HII.get(TargetOpcode::COPY), NewR)
             .addReg(RS.Reg, 0, RS.Sub);
@@ -1381,9 +1382,8 @@ namespace {
     static bool isTfrConst(const MachineInstr &MI);
 
   private:
-    Register genTfrConst(const TargetRegisterClass *RC, int64_t C,
-                         MachineBasicBlock &B, MachineBasicBlock::iterator At,
-                         DebugLoc &DL);
+    unsigned genTfrConst(const TargetRegisterClass *RC, int64_t C,
+        MachineBasicBlock &B, MachineBasicBlock::iterator At, DebugLoc &DL);
 
     const HexagonInstrInfo &HII;
     MachineRegisterInfo &MRI;
@@ -1410,11 +1410,9 @@ bool ConstGeneration::isTfrConst(const MachineInstr &MI) {
 
 // Generate a transfer-immediate instruction that is appropriate for the
 // register class and the actual value being transferred.
-Register ConstGeneration::genTfrConst(const TargetRegisterClass *RC, int64_t C,
-                                      MachineBasicBlock &B,
-                                      MachineBasicBlock::iterator At,
-                                      DebugLoc &DL) {
-  Register Reg = MRI.createVirtualRegister(RC);
+unsigned ConstGeneration::genTfrConst(const TargetRegisterClass *RC, int64_t C,
+      MachineBasicBlock &B, MachineBasicBlock::iterator At, DebugLoc &DL) {
+  unsigned Reg = MRI.createVirtualRegister(RC);
   if (RC == &Hexagon::IntRegsRegClass) {
     BuildMI(B, At, DL, HII.get(Hexagon::A2_tfrsi), Reg)
         .addImm(int32_t(C));
@@ -1437,16 +1435,10 @@ Register ConstGeneration::genTfrConst(const TargetRegisterClass *RC, int64_t C,
           .addImm(int32_t(Lo));
       return Reg;
     }
-    MachineFunction *MF = B.getParent();
-    auto &HST = MF->getSubtarget<HexagonSubtarget>();
 
-    // Disable CONST64 for tiny core since it takes a LD resource.
-    if (!HST.isTinyCore() ||
-        MF->getFunction().hasOptSize()) {
-      BuildMI(B, At, DL, HII.get(Hexagon::CONST64), Reg)
-          .addImm(C);
-      return Reg;
-    }
+    BuildMI(B, At, DL, HII.get(Hexagon::CONST64), Reg)
+        .addImm(C);
+    return Reg;
   }
 
   if (RC == &Hexagon::PredRegsRegClass) {
@@ -1477,8 +1469,8 @@ bool ConstGeneration::processBlock(MachineBasicBlock &B, const RegisterSet&) {
     HBS::getInstrDefs(*I, Defs);
     if (Defs.count() != 1)
       continue;
-    Register DR = Defs.find_first();
-    if (!DR.isVirtual())
+    unsigned DR = Defs.find_first();
+    if (!TargetRegisterInfo::isVirtualRegister(DR))
       continue;
     uint64_t U;
     const BitTracker::RegisterCell &DRC = BT.lookup(DR);
@@ -1486,7 +1478,7 @@ bool ConstGeneration::processBlock(MachineBasicBlock &B, const RegisterSet&) {
       int64_t C = U;
       DebugLoc DL = I->getDebugLoc();
       auto At = I->isPHI() ? B.getFirstNonPHI() : I;
-      Register ImmReg = genTfrConst(MRI.getRegClass(DR), C, B, At, DL);
+      unsigned ImmReg = genTfrConst(MRI.getRegClass(DR), C, B, At, DL);
       if (ImmReg) {
         HBS::replaceReg(DR, ImmReg, MRI);
         BT.put(ImmReg, DRC);
@@ -1553,7 +1545,7 @@ bool CopyGeneration::findMatch(const BitTracker::RegisterRef &Inp,
   if (!HBS::getSubregMask(Inp, B, W, MRI))
     return false;
 
-  for (Register R = AVs.find_first(); R; R = AVs.find_next(R)) {
+  for (unsigned R = AVs.find_first(); R; R = AVs.find_next(R)) {
     if (!BT.has(R) || Forbidden[R])
       continue;
     const BitTracker::RegisterCell &RC = BT.lookup(R);
@@ -1612,12 +1604,12 @@ bool CopyGeneration::processBlock(MachineBasicBlock &B,
     DebugLoc DL = I->getDebugLoc();
     auto At = I->isPHI() ? B.getFirstNonPHI() : I;
 
-    for (Register R = Defs.find_first(); R; R = Defs.find_next(R)) {
+    for (unsigned R = Defs.find_first(); R; R = Defs.find_next(R)) {
       BitTracker::RegisterRef MR;
       auto *FRC = HBS::getFinalVRegClass(R, MRI);
 
       if (findMatch(R, MR, AVB)) {
-        Register NewR = MRI.createVirtualRegister(FRC);
+        unsigned NewR = MRI.createVirtualRegister(FRC);
         BuildMI(B, At, DL, HII.get(TargetOpcode::COPY), NewR)
           .addReg(MR.Reg, 0, MR.Sub);
         BT.put(BitTracker::RegisterRef(NewR), BT.get(MR));
@@ -1636,7 +1628,7 @@ bool CopyGeneration::processBlock(MachineBasicBlock &B,
         BitTracker::RegisterRef ML, MH;
         if (findMatch(TL, ML, AVB) && findMatch(TH, MH, AVB)) {
           auto *FRC = HBS::getFinalVRegClass(R, MRI);
-          Register NewR = MRI.createVirtualRegister(FRC);
+          unsigned NewR = MRI.createVirtualRegister(FRC);
           BuildMI(B, At, DL, HII.get(TargetOpcode::REG_SEQUENCE), NewR)
             .addReg(ML.Reg, 0, ML.Sub)
             .addImm(SubLo)
@@ -1819,7 +1811,7 @@ bool BitSimplification::matchHalf(unsigned SelfR,
   if (I == B+16)
     return false;
 
-  Register Reg = RC[I].RefI.Reg;
+  unsigned Reg = RC[I].RefI.Reg;
   unsigned P = RC[I].RefI.Pos;    // The RefI.Pos will be advanced by I-B.
   if (P < I-B)
     return false;
@@ -1827,7 +1819,7 @@ bool BitSimplification::matchHalf(unsigned SelfR,
 
   if (Reg == 0 || Reg == SelfR)    // Don't match "self".
     return false;
-  if (!Reg.isVirtual())
+  if (!TargetRegisterInfo::isVirtualRegister(Reg))
     return false;
   if (!BT.has(Reg))
     return false;
@@ -2033,7 +2025,7 @@ bool BitSimplification::genPackhl(MachineInstr *MI,
     return false;
 
   MachineBasicBlock &B = *MI->getParent();
-  Register NewR = MRI.createVirtualRegister(&Hexagon::DoubleRegsRegClass);
+  unsigned NewR = MRI.createVirtualRegister(&Hexagon::DoubleRegsRegClass);
   DebugLoc DL = MI->getDebugLoc();
   auto At = MI->isPHI() ? B.getFirstNonPHI()
                         : MachineBasicBlock::iterator(MI);
@@ -2105,7 +2097,7 @@ bool BitSimplification::genCombineHalf(MachineInstr *MI,
 
   MachineBasicBlock &B = *MI->getParent();
   DebugLoc DL = MI->getDebugLoc();
-  Register NewR = MRI.createVirtualRegister(&Hexagon::IntRegsRegClass);
+  unsigned NewR = MRI.createVirtualRegister(&Hexagon::IntRegsRegClass);
   auto At = MI->isPHI() ? B.getFirstNonPHI()
                         : MachineBasicBlock::iterator(MI);
   BuildMI(B, At, DL, HII.get(COpc), NewR)
@@ -2162,7 +2154,7 @@ bool BitSimplification::genExtractLow(MachineInstr *MI,
     if (!validateReg(RS, NewOpc, 1))
       continue;
 
-    Register NewR = MRI.createVirtualRegister(&Hexagon::IntRegsRegClass);
+    unsigned NewR = MRI.createVirtualRegister(&Hexagon::IntRegsRegClass);
     auto At = MI->isPHI() ? B.getFirstNonPHI()
                           : MachineBasicBlock::iterator(MI);
     auto MIB = BuildMI(B, At, DL, HII.get(NewOpc), NewR)
@@ -2367,7 +2359,7 @@ bool BitSimplification::simplifyTstbit(MachineInstr *MI,
       P = V.RefI.Pos;
     }
     if (P != std::numeric_limits<unsigned>::max()) {
-      Register NewR = MRI.createVirtualRegister(&Hexagon::PredRegsRegClass);
+      unsigned NewR = MRI.createVirtualRegister(&Hexagon::PredRegsRegClass);
       BuildMI(B, At, DL, HII.get(Hexagon::S2_tstbit_i), NewR)
           .addReg(RR.Reg, 0, RR.Sub)
           .addImm(P);
@@ -2376,7 +2368,7 @@ bool BitSimplification::simplifyTstbit(MachineInstr *MI,
       return true;
     }
   } else if (V.is(0) || V.is(1)) {
-    Register NewR = MRI.createVirtualRegister(&Hexagon::PredRegsRegClass);
+    unsigned NewR = MRI.createVirtualRegister(&Hexagon::PredRegsRegClass);
     unsigned NewOpc = V.is(0) ? Hexagon::PS_false : Hexagon::PS_true;
     BuildMI(B, At, DL, HII.get(NewOpc), NewR);
     HBS::replaceReg(RD.Reg, NewR, MRI);
@@ -2549,7 +2541,7 @@ bool BitSimplification::simplifyExtractLow(MachineInstr *MI,
 
     DebugLoc DL = MI->getDebugLoc();
     MachineBasicBlock &B = *MI->getParent();
-    Register NewR = MRI.createVirtualRegister(FRC);
+    unsigned NewR = MRI.createVirtualRegister(FRC);
     auto At = MI->isPHI() ? B.getFirstNonPHI()
                           : MachineBasicBlock::iterator(MI);
     auto MIB = BuildMI(B, At, DL, HII.get(ExtOpc), NewR)
@@ -2620,8 +2612,8 @@ bool BitSimplification::simplifyRCmp0(MachineInstr *MI,
       KnownNZ = true;
   }
 
-  auto ReplaceWithConst = [&](int C) {
-    Register NewR = MRI.createVirtualRegister(FRC);
+  auto ReplaceWithConst = [&] (int C) {
+    unsigned NewR = MRI.createVirtualRegister(FRC);
     BuildMI(B, At, DL, HII.get(Hexagon::A2_tfrsi), NewR)
       .addImm(C);
     HBS::replaceReg(RD.Reg, NewR, MRI);
@@ -2686,7 +2678,7 @@ bool BitSimplification::simplifyRCmp0(MachineInstr *MI,
     // replace the comparison with a C2_muxii, using the same predicate
     // register, but with operands substituted with 0/1 accordingly.
     if ((KnownZ1 || KnownNZ1) && (KnownZ2 || KnownNZ2)) {
-      Register NewR = MRI.createVirtualRegister(FRC);
+      unsigned NewR = MRI.createVirtualRegister(FRC);
       BuildMI(B, At, DL, HII.get(Hexagon::C2_muxii), NewR)
         .addReg(InpDef->getOperand(1).getReg())
         .addImm(KnownZ1 == (Opc == Hexagon::A4_rcmpeqi))
@@ -3079,7 +3071,7 @@ void HexagonLoopRescheduling::moveGroup(InstrGroup &G, MachineBasicBlock &LB,
   DenseMap<unsigned,unsigned> RegMap;
 
   const TargetRegisterClass *PhiRC = MRI->getRegClass(NewPredR);
-  Register PhiR = MRI->createVirtualRegister(PhiRC);
+  unsigned PhiR = MRI->createVirtualRegister(PhiRC);
   BuildMI(LB, At, At->getDebugLoc(), HII->get(TargetOpcode::PHI), PhiR)
     .addReg(NewPredR)
     .addMBB(&PB)
@@ -3091,7 +3083,7 @@ void HexagonLoopRescheduling::moveGroup(InstrGroup &G, MachineBasicBlock &LB,
     const MachineInstr *SI = G.Ins[i-1];
     unsigned DR = getDefReg(SI);
     const TargetRegisterClass *RC = MRI->getRegClass(DR);
-    Register NewDR = MRI->createVirtualRegister(RC);
+    unsigned NewDR = MRI->createVirtualRegister(RC);
     DebugLoc DL = SI->getDebugLoc();
 
     auto MIB = BuildMI(LB, At, DL, HII->get(SI->getOpcode()), NewDR);
@@ -3169,8 +3161,8 @@ bool HexagonLoopRescheduling::processLoop(LoopCand &C) {
     HBS::getInstrDefs(*I, Defs);
     if (Defs.count() != 1)
       continue;
-    Register DefR = Defs.find_first();
-    if (!DefR.isVirtual())
+    unsigned DefR = Defs.find_first();
+    if (!TargetRegisterInfo::isVirtualRegister(DefR))
       continue;
     if (!isBitShuffle(&*I, DefR))
       continue;

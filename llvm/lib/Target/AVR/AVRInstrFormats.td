@@ -42,8 +42,8 @@ class AVRInst32<dag outs, dag ins, string asmstr, list<dag> pattern>
 }
 
 // A class for pseudo instructions.
-// Pseudo instructions are not real AVR instructions. The DAG stores
-// pseudo instructions which are replaced by real AVR instructions by
+// Psuedo instructions are not real AVR instructions. The DAG stores
+// psuedo instructions which are replaced by real AVR instructions by
 // AVRExpandPseudoInsts.cpp.
 //
 // For example, the ADDW (add wide, as in add 16 bit values) instruction
@@ -148,8 +148,6 @@ class FRd<bits<4> opcode, bits<7> f, dag outs, dag ins, string asmstr,
   let Inst{11-9} = f{6-4};
   let Inst{8-4} = d;
   let Inst{3-0} = f{3-0};
-
-  let DecoderMethod = "decodeFRd";
 }
 
 //===----------------------------------------------------------------------===//
@@ -237,8 +235,6 @@ class FLPMX<bit e, bit p, dag outs, dag ins, string asmstr, list<dag> pattern>
    let Inst{3-2} = 0b01;
    let Inst{1} = e;
    let Inst{0} = p;
-
-   let DecoderMethod = "decodeFLPMX";
 }
 
 //===----------------------------------------------------------------------===//
@@ -256,8 +252,6 @@ class FMOVWRdRr<dag outs, dag ins, string asmstr, list<dag> pattern>
   let Inst{15-8} = 0b00000001;
   let Inst{7-4} = d{4-1};
   let Inst{3-0} = r{4-1};
-
-  let DecoderMethod = "decodeFMOVWRdRr";
 }
 
 //===----------------------------------------------------------------------===//
@@ -276,8 +270,6 @@ class FMUL2RdRr<bit f, dag outs, dag ins, string asmstr, list<dag> pattern>
   let Inst{8} = f;
   let Inst{7-4} = rd{3-0};
   let Inst{3-0} = rr{3-0};
-
-  let DecoderMethod = "decodeFMUL2RdRr";
 }
 
 // Special encoding for the FMUL family of instructions.
@@ -301,8 +293,6 @@ class FFMULRdRr<bits<2> f, dag outs, dag ins, string asmstr, list<dag> pattern>
   let Inst{6-4} = rd;
   let Inst{3} = f{0};
   let Inst{2-0} = rr;
-
-  let DecoderMethod = "decodeFFMULRdRr";
 }
 
 
@@ -324,8 +314,6 @@ class FWRdK<bit f, dag outs, dag ins, string asmstr, list<dag> pattern>
   let Inst{7-6} = k{5-4};
   let Inst{5-4} = dst{2-1};
   let Inst{3-0} = k{3-0};
-
-  let DecoderMethod = "decodeFWRdK";
 }
 
 //===----------------------------------------------------------------------===//
@@ -344,8 +332,6 @@ class FIORdA<dag outs, dag ins, string asmstr, list<dag> pattern>
   let Inst{10-9} = A{5-4};
   let Inst{8-4} = d;
   let Inst{3-0} = A{3-0};
-
-  let DecoderMethod = "decodeFIORdA";
 }
 
 //===----------------------------------------------------------------------===//
@@ -364,8 +350,6 @@ class FIOARr<dag outs, dag ins, string asmstr, list<dag> pattern>
   let Inst{10-9} = A{5-4};
   let Inst{8-4} = r;
   let Inst{3-0} = A{3-0};
-
-  let DecoderMethod = "decodeFIOARr";
 }
 
 //===----------------------------------------------------------------------===//
@@ -390,8 +374,6 @@ class FIOBIT<bits<2> t, dag outs, dag ins, string asmstr, list<dag> pattern>
 
   let Inst{3} = A{0};
   let Inst{2-0} = b{2-0};
-
-  let DecoderMethod = "decodeFIOBIT";
 }
 
 //===----------------------------------------------------------------------===//
@@ -503,7 +485,7 @@ class F32BRk<bits<3> f, dag outs, dag ins, string asmstr, list<dag> pattern>
 }
 
 //===----------------------------------------------------------------------===//
-// 32 bits direct mem instructions: <|1001|00fd|dddd|0000|kkkk|kkkk|kkkk|kkkk|>
+// 32 bits direct mem instructions: <|1001|00fd|dddd|0000|kkkk|kkkk|kkkk|kkkk|> 
 // f = secondary opcode = 1 bit
 // d = destination = 5 bits
 // k = constant address = 16 bits

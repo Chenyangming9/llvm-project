@@ -29,7 +29,6 @@ class MDNode;
 namespace clang {
 class Attr;
 class ASTContext;
-class CodeGenOptions;
 namespace CodeGen {
 
 /// Attributes that may be specified on loops.
@@ -52,14 +51,8 @@ struct LoopAttributes {
   /// Value for llvm.loop.unroll_and_jam.* metadata (enable, disable, or full).
   LVEnableState UnrollAndJamEnable;
 
-  /// Value for llvm.loop.vectorize.predicate metadata
-  LVEnableState VectorizePredicateEnable;
-
   /// Value for llvm.loop.vectorize.width metadata.
   unsigned VectorizeWidth;
-
-  // Value for llvm.loop.vectorize.scalable.enable
-  LVEnableState VectorizeScalable;
 
   /// Value for llvm.loop.interleave.count metadata.
   unsigned InterleaveCount;
@@ -78,9 +71,6 @@ struct LoopAttributes {
 
   /// Value for llvm.loop.pipeline.iicount metadata.
   unsigned PipelineInitiationInterval;
-
-  /// Value for whether the loop is required to make progress.
-  bool MustProgress;
 };
 
 /// Information used when generating a structured loop.
@@ -209,9 +199,8 @@ public:
   /// Begin a new structured loop. Stage attributes from the Attrs list.
   /// The staged attributes are applied to the loop and then cleared.
   void push(llvm::BasicBlock *Header, clang::ASTContext &Ctx,
-            const clang::CodeGenOptions &CGOpts,
             llvm::ArrayRef<const Attr *> Attrs, const llvm::DebugLoc &StartLoc,
-            const llvm::DebugLoc &EndLoc, bool MustProgress = false);
+            const llvm::DebugLoc &EndLoc);
 
   /// End the current loop.
   void pop();
@@ -248,11 +237,6 @@ public:
     StagedAttrs.UnrollEnable = State;
   }
 
-  /// Set the next pushed vectorize predicate state.
-  void setVectorizePredicateState(const LoopAttributes::LVEnableState &State) {
-    StagedAttrs.VectorizePredicateEnable = State;
-  }
-
   /// Set the next pushed loop unroll_and_jam state.
   void setUnrollAndJamState(const LoopAttributes::LVEnableState &State) {
     StagedAttrs.UnrollAndJamEnable = State;
@@ -260,10 +244,6 @@ public:
 
   /// Set the vectorize width for the next loop pushed.
   void setVectorizeWidth(unsigned W) { StagedAttrs.VectorizeWidth = W; }
-
-  void setVectorizeScalable(const LoopAttributes::LVEnableState &State) {
-    StagedAttrs.VectorizeScalable = State;
-  }
 
   /// Set the interleave count for the next loop pushed.
   void setInterleaveCount(unsigned C) { StagedAttrs.InterleaveCount = C; }
@@ -282,19 +262,16 @@ public:
     StagedAttrs.PipelineInitiationInterval = C;
   }
 
-  /// Set no progress for the next loop pushed.
-  void setMustProgress(bool P) { StagedAttrs.MustProgress = P; }
-
 private:
   /// Returns true if there is LoopInfo on the stack.
   bool hasInfo() const { return !Active.empty(); }
   /// Return the LoopInfo for the current loop. HasInfo should be called
   /// first to ensure LoopInfo is present.
-  const LoopInfo &getInfo() const { return *Active.back(); }
+  const LoopInfo &getInfo() const { return Active.back(); }
   /// The set of attributes that will be applied to the next pushed loop.
   LoopAttributes StagedAttrs;
   /// Stack of active loops.
-  llvm::SmallVector<std::unique_ptr<LoopInfo>, 4> Active;
+  llvm::SmallVector<LoopInfo, 4> Active;
 };
 
 } // end namespace CodeGen

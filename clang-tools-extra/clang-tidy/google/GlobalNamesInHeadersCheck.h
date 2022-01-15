@@ -10,7 +10,7 @@
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_GOOGLE_GLOBALNAMESINHEADERSCHECK_H
 
 #include "../ClangTidyCheck.h"
-#include "../utils/FileExtensionsUtils.h"
+#include "../utils/HeaderFileExtensionsUtils.h"
 
 namespace clang {
 namespace tidy {
@@ -21,15 +21,11 @@ namespace readability {
 /// Right now it only triggers on using declarations and directives.
 ///
 /// The check supports these options:
-///   - `HeaderFileExtensions`: a semicolon-separated list of filename
-///     extensions of header files (the filename extensions should not contain
-///     "." prefix). ";h;hh;hpp;hxx" by default.
-///
+///   - `HeaderFileExtensions`: a comma-separated list of filename extensions
+///     of header files (the filename extensions should not contain "." prefix).
+///     "h" by default.
 ///     For extension-less header files, using an empty string or leaving an
-///     empty string between ";" if there are other filename extensions.
-///
-/// For the user-facing documentation see:
-/// http://clang.llvm.org/extra/clang-tidy/checks/google-global-names-in-headers.html
+///     empty string between "," if there are other filename extensions.
 class GlobalNamesInHeadersCheck : public ClangTidyCheck {
 public:
   GlobalNamesInHeadersCheck(StringRef Name, ClangTidyContext *Context);
@@ -39,7 +35,7 @@ public:
 
 private:
   const std::string RawStringHeaderFileExtensions;
-  utils::FileExtensionsSet HeaderFileExtensions;
+  utils::HeaderFileExtensionsSet HeaderFileExtensions;
 };
 
 } // namespace readability

@@ -13,13 +13,13 @@
 //     space.
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_ELF_CORE_PROCESSELFCORE_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_ELF_CORE_PROCESSELFCORE_H
+#ifndef liblldb_ProcessElfCore_h_
+#define liblldb_ProcessElfCore_h_
 
 #include <list>
 #include <vector>
 
-#include "lldb/Target/PostMortemProcess.h"
+#include "lldb/Target/Process.h"
 #include "lldb/Utility/ConstString.h"
 #include "lldb/Utility/Status.h"
 
@@ -28,13 +28,12 @@
 
 struct ThreadData;
 
-class ProcessElfCore : public lldb_private::PostMortemProcess {
+class ProcessElfCore : public lldb_private::Process {
 public:
   // Constructors and Destructors
   static lldb::ProcessSP
   CreateInstance(lldb::TargetSP target_sp, lldb::ListenerSP listener_sp,
-                 const lldb_private::FileSpec *crash_file_path,
-                 bool can_connect);
+                 const lldb_private::FileSpec *crash_file_path);
 
   static void Initialize();
 
@@ -105,8 +104,8 @@ public:
 protected:
   void Clear();
 
-  bool DoUpdateThreadList(lldb_private::ThreadList &old_thread_list,
-                          lldb_private::ThreadList &new_thread_list) override;
+  bool UpdateThreadList(lldb_private::ThreadList &old_thread_list,
+                        lldb_private::ThreadList &new_thread_list) override;
 
 private:
   struct NT_FILE_Entry {
@@ -126,6 +125,7 @@ private:
   lldb::ModuleSP m_core_module_sp;
   lldb_private::FileSpec m_core_file;
   std::string m_dyld_plugin_name;
+  DISALLOW_COPY_AND_ASSIGN(ProcessElfCore);
 
   // True if m_thread_contexts contains valid entries
   bool m_thread_data_valid = false;
@@ -165,4 +165,4 @@ private:
   llvm::Error parseLinuxNotes(llvm::ArrayRef<lldb_private::CoreNote> notes);
 };
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_ELF_CORE_PROCESSELFCORE_H
+#endif // liblldb_ProcessElfCore_h_

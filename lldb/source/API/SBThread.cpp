@@ -1,4 +1,4 @@
-//===-- SBThread.cpp ------------------------------------------------------===//
+//===-- SBThread.cpp --------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,7 +16,6 @@
 #include "lldb/API/SBFrame.h"
 #include "lldb/API/SBProcess.h"
 #include "lldb/API/SBStream.h"
-#include "lldb/API/SBStructuredData.h"
 #include "lldb/API/SBSymbolContext.h"
 #include "lldb/API/SBThreadCollection.h"
 #include "lldb/API/SBThreadPlan.h"
@@ -24,7 +23,6 @@
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/StreamFile.h"
-#include "lldb/Core/StructuredDataImpl.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Symbol/CompileUnit.h"
@@ -40,6 +38,7 @@
 #include "lldb/Target/ThreadPlanStepInstruction.h"
 #include "lldb/Target/ThreadPlanStepOut.h"
 #include "lldb/Target/ThreadPlanStepRange.h"
+#include "lldb/Target/UnixSignals.h"
 #include "lldb/Utility/State.h"
 #include "lldb/Utility/Stream.h"
 #include "lldb/Utility/StructuredData.h"
@@ -85,7 +84,7 @@ const lldb::SBThread &SBThread::operator=(const SBThread &rhs) {
 }
 
 // Destructor
-SBThread::~SBThread() = default;
+SBThread::~SBThread() {}
 
 lldb::SBQueue SBThread::GetQueue() const {
   LLDB_RECORD_METHOD_CONST_NO_ARGS(lldb::SBQueue, SBThread, GetQueue);
@@ -172,8 +171,6 @@ size_t SBThread::GetStopReasonDataCount() {
         case eStopReasonPlanComplete:
         case eStopReasonThreadExiting:
         case eStopReasonInstrumentation:
-        case eStopReasonProcessorTrace:
-        case eStopReasonVForkDone:
           // There is no data for these stop reasons.
           return 0;
 
@@ -195,12 +192,6 @@ size_t SBThread::GetStopReasonDataCount() {
           return 1;
 
         case eStopReasonException:
-          return 1;
-
-        case eStopReasonFork:
-          return 1;
-
-        case eStopReasonVFork:
           return 1;
         }
       }
@@ -231,8 +222,6 @@ uint64_t SBThread::GetStopReasonDataAtIndex(uint32_t idx) {
         case eStopReasonPlanComplete:
         case eStopReasonThreadExiting:
         case eStopReasonInstrumentation:
-        case eStopReasonProcessorTrace:
-        case eStopReasonVForkDone:
           // There is no data for these stop reasons.
           return 0;
 
@@ -265,12 +254,6 @@ uint64_t SBThread::GetStopReasonDataAtIndex(uint32_t idx) {
           return stop_info_sp->GetValue();
 
         case eStopReasonException:
-          return stop_info_sp->GetValue();
-
-        case eStopReasonFork:
-          return stop_info_sp->GetValue();
-
-        case eStopReasonVFork:
           return stop_info_sp->GetValue();
         }
       }
@@ -307,13 +290,14 @@ SBThread::GetStopReasonExtendedBacktraces(InstrumentationRuntimeType type) {
                      GetStopReasonExtendedBacktraces,
                      (lldb::InstrumentationRuntimeType), type);
 
-  SBThreadCollection threads;
+  ThreadCollectionSP threads;
+  threads = std::make_shared<ThreadCollection>();
 
   std::unique_lock<std::recursive_mutex> lock;
   ExecutionContext exe_ctx(m_opaque_sp.get(), lock);
 
   if (!exe_ctx.HasThreadScope())
-    return LLDB_RECORD_RESULT(SBThreadCollection());
+    return LLDB_RECORD_RESULT(threads);
 
   ProcessSP process_sp = exe_ctx.GetProcessSP();
 
@@ -322,38 +306,105 @@ SBThread::GetStopReasonExtendedBacktraces(InstrumentationRuntimeType type) {
   if (!info)
     return LLDB_RECORD_RESULT(threads);
 
-  threads = process_sp->GetInstrumentationRuntime(type)
-                ->GetBacktracesFromExtendedStopInfo(info);
-  return LLDB_RECORD_RESULT(threads);
+  return LLDB_RECORD_RESULT(process_sp->GetInstrumentationRuntime(type)
+                                ->GetBacktracesFromExtendedStopInfo(info));
 }
 
 size_t SBThread::GetStopDescription(char *dst, size_t dst_len) {
-  LLDB_RECORD_CHAR_PTR_METHOD(size_t, SBThread, GetStopDescription,
-                              (char *, size_t), dst, "", dst_len);
+  LLDB_RECORD_METHOD(size_t, SBThread, GetStopDescription, (char *, size_t),
+                     dst, dst_len);
 
   std::unique_lock<std::recursive_mutex> lock;
   ExecutionContext exe_ctx(m_opaque_sp.get(), lock);
 
+  if (exe_ctx.HasThreadScope()) {
+    Process::StopLocker stop_locker;
+    if (stop_locker.TryLock(&exe_ctx.GetProcessPtr()->GetRunLock())) {
+
+      StopInfoSP stop_info_sp = exe_ctx.GetThreadPtr()->GetStopInfo();
+      if (stop_info_sp) {
+        const char *stop_desc = stop_info_sp->GetDescription();
+        if (stop_desc) {
+          if (dst)
+            return ::snprintf(dst, dst_len, "%s", stop_desc);
+          else {
+            // NULL dst passed in, return the length needed to contain the
+            // description
+            return ::strlen(stop_desc) + 1; // Include the NULL byte for size
+          }
+        } else {
+          size_t stop_desc_len = 0;
+          switch (stop_info_sp->GetStopReason()) {
+          case eStopReasonTrace:
+          case eStopReasonPlanComplete: {
+            static char trace_desc[] = "step";
+            stop_desc = trace_desc;
+            stop_desc_len =
+                sizeof(trace_desc); // Include the NULL byte for size
+          } break;
+
+          case eStopReasonBreakpoint: {
+            static char bp_desc[] = "breakpoint hit";
+            stop_desc = bp_desc;
+            stop_desc_len = sizeof(bp_desc); // Include the NULL byte for size
+          } break;
+
+          case eStopReasonWatchpoint: {
+            static char wp_desc[] = "watchpoint hit";
+            stop_desc = wp_desc;
+            stop_desc_len = sizeof(wp_desc); // Include the NULL byte for size
+          } break;
+
+          case eStopReasonSignal: {
+            stop_desc =
+                exe_ctx.GetProcessPtr()->GetUnixSignals()->GetSignalAsCString(
+                    stop_info_sp->GetValue());
+            if (stop_desc == nullptr || stop_desc[0] == '\0') {
+              static char signal_desc[] = "signal";
+              stop_desc = signal_desc;
+              stop_desc_len =
+                  sizeof(signal_desc); // Include the NULL byte for size
+            }
+          } break;
+
+          case eStopReasonException: {
+            char exc_desc[] = "exception";
+            stop_desc = exc_desc;
+            stop_desc_len = sizeof(exc_desc); // Include the NULL byte for size
+          } break;
+
+          case eStopReasonExec: {
+            char exc_desc[] = "exec";
+            stop_desc = exc_desc;
+            stop_desc_len = sizeof(exc_desc); // Include the NULL byte for size
+          } break;
+
+          case eStopReasonThreadExiting: {
+            char limbo_desc[] = "thread exiting";
+            stop_desc = limbo_desc;
+            stop_desc_len = sizeof(limbo_desc);
+          } break;
+          default:
+            break;
+          }
+
+          if (stop_desc && stop_desc[0]) {
+            if (dst)
+              return ::snprintf(dst, dst_len, "%s", stop_desc) +
+                     1; // Include the NULL byte
+
+            if (stop_desc_len == 0)
+              stop_desc_len = ::strlen(stop_desc) + 1; // Include the NULL byte
+
+            return stop_desc_len;
+          }
+        }
+      }
+    }
+  }
   if (dst)
     *dst = 0;
-
-  if (!exe_ctx.HasThreadScope())
-    return 0;
-
-  Process::StopLocker stop_locker;
-  if (!stop_locker.TryLock(&exe_ctx.GetProcessPtr()->GetRunLock()))
-    return 0;
-
-  std::string thread_stop_desc = exe_ctx.GetThreadPtr()->GetStopDescription();
-  if (thread_stop_desc.empty())
-    return 0;
-
-  if (dst)
-    return ::snprintf(dst, dst_len, "%s", thread_stop_desc.c_str()) + 1;
-
-  // NULL dst passed in, return the length needed to contain the
-  // description.
-  return thread_stop_desc.size() + 1; // Include the NULL byte for size
+  return 0;
 }
 
 SBValue SBThread::GetStopReturnValue() {
@@ -857,15 +908,13 @@ SBError SBThread::StepOverUntil(lldb::SBFrame &sb_frame,
     std::vector<addr_t> step_over_until_addrs;
     const bool abort_other_plans = false;
     const bool stop_other_threads = false;
-    // TODO: Handle SourceLocationSpec column information
-    SourceLocationSpec location_spec(
-        step_file_spec, line, /*column=*/llvm::None, /*check_inlines=*/true,
-        /*exact_match=*/false);
+    const bool check_inlines = true;
+    const bool exact = false;
 
     SymbolContextList sc_list;
-    frame_sc.comp_unit->ResolveSymbolContext(location_spec,
-                                             eSymbolContextLineEntry, sc_list);
-    const uint32_t num_matches = sc_list.GetSize();
+    const uint32_t num_matches = frame_sc.comp_unit->ResolveSymbolContext(
+        step_file_spec, line, check_inlines, exact, eSymbolContextLineEntry,
+        sc_list);
     if (num_matches > 0) {
       SymbolContext sc;
       for (uint32_t i = 0; i < num_matches; ++i) {
@@ -916,22 +965,10 @@ SBError SBThread::StepUsingScriptedThreadPlan(const char *script_class_name) {
 }
 
 SBError SBThread::StepUsingScriptedThreadPlan(const char *script_class_name,
-                                            bool resume_immediately) {
+                                              bool resume_immediately) {
   LLDB_RECORD_METHOD(lldb::SBError, SBThread, StepUsingScriptedThreadPlan,
                      (const char *, bool), script_class_name,
                      resume_immediately);
-
-  lldb::SBStructuredData no_data;
-  return LLDB_RECORD_RESULT(StepUsingScriptedThreadPlan(
-      script_class_name, no_data, resume_immediately));
-}
-
-SBError SBThread::StepUsingScriptedThreadPlan(const char *script_class_name,
-                                              SBStructuredData &args_data,
-                                              bool resume_immediately) {
-  LLDB_RECORD_METHOD(lldb::SBError, SBThread, StepUsingScriptedThreadPlan,
-                     (const char *, lldb::SBStructuredData &, bool),
-                     script_class_name, args_data, resume_immediately);
 
   SBError error;
 
@@ -945,10 +982,8 @@ SBError SBThread::StepUsingScriptedThreadPlan(const char *script_class_name,
 
   Thread *thread = exe_ctx.GetThreadPtr();
   Status new_plan_status;
-  StructuredData::ObjectSP obj_sp = args_data.m_impl_up->GetObjectSP();
-
   ThreadPlanSP new_plan_sp = thread->QueueThreadPlanForStepScripted(
-      false, script_class_name, obj_sp, false, new_plan_status);
+      false, script_class_name, false, new_plan_status);
 
   if (new_plan_status.Fail()) {
     error.SetErrorString(new_plan_status.AsCString());
@@ -982,7 +1017,7 @@ SBError SBThread::JumpToLine(lldb::SBFileSpec &file_spec, uint32_t line) {
 
   Thread *thread = exe_ctx.GetThreadPtr();
 
-  Status err = thread->JumpToLine(file_spec.ref(), line, true);
+  Status err = thread->JumpToLine(file_spec.get(), line, true);
   sb_error.SetError(err);
   return LLDB_RECORD_RESULT(sb_error);
 }
@@ -1389,6 +1424,8 @@ void RegisterMethods<SBThread>(Registry &R) {
   LLDB_REGISTER_METHOD(lldb::SBThreadCollection, SBThread,
                        GetStopReasonExtendedBacktraces,
                        (lldb::InstrumentationRuntimeType));
+  LLDB_REGISTER_METHOD(size_t, SBThread, GetStopDescription,
+                       (char *, size_t));
   LLDB_REGISTER_METHOD(lldb::SBValue, SBThread, GetStopReturnValue, ());
   LLDB_REGISTER_METHOD_CONST(lldb::tid_t, SBThread, GetThreadID, ());
   LLDB_REGISTER_METHOD_CONST(uint32_t, SBThread, GetIndexID, ());
@@ -1423,8 +1460,6 @@ void RegisterMethods<SBThread>(Registry &R) {
                        (const char *));
   LLDB_REGISTER_METHOD(lldb::SBError, SBThread, StepUsingScriptedThreadPlan,
                        (const char *, bool));
-  LLDB_REGISTER_METHOD(lldb::SBError, SBThread, StepUsingScriptedThreadPlan,
-                       (const char *, SBStructuredData &, bool));
   LLDB_REGISTER_METHOD(lldb::SBError, SBThread, JumpToLine,
                        (lldb::SBFileSpec &, uint32_t));
   LLDB_REGISTER_METHOD(lldb::SBError, SBThread, ReturnFromFrame,
@@ -1465,7 +1500,6 @@ void RegisterMethods<SBThread>(Registry &R) {
   LLDB_REGISTER_METHOD(lldb::SBThread, SBThread, GetCurrentExceptionBacktrace,
                        ());
   LLDB_REGISTER_METHOD(bool, SBThread, SafeToCallFunctions, ());
-  LLDB_REGISTER_CHAR_PTR_METHOD(size_t, SBThread, GetStopDescription);
 }
 
 }

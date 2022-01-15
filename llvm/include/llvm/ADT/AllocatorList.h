@@ -110,14 +110,21 @@ private:
 
     template <class OtherValueT, class OtherIteratorBase>
     IteratorImpl(const IteratorImpl<OtherValueT, OtherIteratorBase> &X,
-                 std::enable_if_t<std::is_convertible<
-                     OtherIteratorBase, IteratorBase>::value> * = nullptr)
+                 typename std::enable_if<std::is_convertible<
+                     OtherIteratorBase, IteratorBase>::value>::type * = nullptr)
         : base_type(X.wrapped()) {}
 
     ~IteratorImpl() = default;
 
     reference operator*() const { return base_type::wrapped()->V; }
     pointer operator->() const { return &operator*(); }
+
+    friend bool operator==(const IteratorImpl &L, const IteratorImpl &R) {
+      return L.wrapped() == R.wrapped();
+    }
+    friend bool operator!=(const IteratorImpl &L, const IteratorImpl &R) {
+      return !(L == R);
+    }
   };
 
 public:

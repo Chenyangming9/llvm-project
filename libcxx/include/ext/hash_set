@@ -197,7 +197,7 @@ template <class Value, class Hash, class Pred, class Alloc>
 #include <functional>
 #include <ext/__hash>
 
-#if defined(__DEPRECATED) && __DEPRECATED
+#if __DEPRECATED
 #if defined(_LIBCPP_WARNING)
     _LIBCPP_WARNING("Use of the header <ext/hash_set> is deprecated.  Migrate to <unordered_set>")
 #else
@@ -237,7 +237,7 @@ public:
     typedef typename __table::const_iterator       const_iterator;
 
     _LIBCPP_INLINE_VISIBILITY
-    hash_set() { }
+    hash_set() {__table_.rehash(193);}
     explicit hash_set(size_type __n, const hasher& __hf = hasher(),
                            const key_equal& __eql = key_equal());
     hash_set(size_type __n, const hasher& __hf, const key_equal& __eql,
@@ -347,6 +347,7 @@ template <class _InputIterator>
 hash_set<_Value, _Hash, _Pred, _Alloc>::hash_set(
         _InputIterator __first, _InputIterator __last)
 {
+    __table_.rehash(193);
     insert(__first, __last);
 }
 
@@ -458,7 +459,7 @@ public:
     typedef typename __table::const_iterator       const_iterator;
 
     _LIBCPP_INLINE_VISIBILITY
-    hash_multiset() { }
+    hash_multiset() {__table_.rehash(193);}
     explicit hash_multiset(size_type __n, const hasher& __hf = hasher(),
                                 const key_equal& __eql = key_equal());
     hash_multiset(size_type __n, const hasher& __hf,
@@ -568,6 +569,7 @@ template <class _InputIterator>
 hash_multiset<_Value, _Hash, _Pred, _Alloc>::hash_multiset(
         _InputIterator __first, _InputIterator __last)
 {
+    __table_.rehash(193);
     insert(__first, __last);
 }
 
@@ -656,4 +658,4 @@ operator!=(const hash_multiset<_Value, _Hash, _Pred, _Alloc>& __x,
 
 } // __gnu_cxx
 
-#endif // _LIBCPP_HASH_SET
+#endif  // _LIBCPP_HASH_SET

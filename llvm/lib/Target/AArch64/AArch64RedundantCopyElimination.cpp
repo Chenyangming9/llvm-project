@@ -408,11 +408,6 @@ bool AArch64RedundantCopyElimination::optimizeBlock(MachineBasicBlock *MBB) {
                          O.getReg() != CmpReg;
                 }))
               continue;
-
-            // Don't remove a move immediate that implicitly defines the upper
-            // bits as different.
-            if (TRI->isSuperRegister(DefReg, KnownReg.Reg) && KnownReg.Imm < 0)
-              continue;
           }
 
           if (IsCopy)

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TARGET_THREADCOLLECTION_H
-#define LLDB_TARGET_THREADCOLLECTION_H
+#ifndef liblldb_ThreadCollection_h_
+#define liblldb_ThreadCollection_h_
 
 #include <mutex>
 #include <vector>
@@ -28,7 +28,7 @@ public:
 
   ThreadCollection(collection threads);
 
-  virtual ~ThreadCollection() = default;
+  virtual ~ThreadCollection() {}
 
   uint32_t GetSize();
 
@@ -56,4 +56,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_TARGET_THREADCOLLECTION_H
+#endif // liblldb_ThreadCollection_h_

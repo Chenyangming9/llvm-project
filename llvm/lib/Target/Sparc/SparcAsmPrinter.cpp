@@ -52,8 +52,8 @@ namespace {
     void printMemOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                          const char *Modifier = nullptr);
 
-    void emitFunctionBodyStart() override;
-    void emitInstruction(const MachineInstr *MI) override;
+    void EmitFunctionBodyStart() override;
+    void EmitInstruction(const MachineInstr *MI) override;
 
     static const char *getRegisterName(unsigned RegNo) {
       return SparcInstPrinter::getRegisterName(RegNo);
@@ -80,7 +80,7 @@ static MCOperand createSparcMCOperand(SparcMCExpr::VariantKind Kind,
 }
 static MCOperand createPCXCallOP(MCSymbol *Label,
                                  MCContext &OutContext) {
-  return createSparcMCOperand(SparcMCExpr::VK_Sparc_WDISP30, Label, OutContext);
+  return createSparcMCOperand(SparcMCExpr::VK_Sparc_None, Label, OutContext);
 }
 
 static MCOperand createPCXRelExprOp(SparcMCExpr::VariantKind Kind,
@@ -108,7 +108,7 @@ static void EmitCall(MCStreamer &OutStreamer,
   MCInst CallInst;
   CallInst.setOpcode(SP::CALL);
   CallInst.addOperand(Callee);
-  OutStreamer.emitInstruction(CallInst, STI);
+  OutStreamer.EmitInstruction(CallInst, STI);
 }
 
 static void EmitSETHI(MCStreamer &OutStreamer,
@@ -119,7 +119,7 @@ static void EmitSETHI(MCStreamer &OutStreamer,
   SETHIInst.setOpcode(SP::SETHIi);
   SETHIInst.addOperand(RD);
   SETHIInst.addOperand(Imm);
-  OutStreamer.emitInstruction(SETHIInst, STI);
+  OutStreamer.EmitInstruction(SETHIInst, STI);
 }
 
 static void EmitBinary(MCStreamer &OutStreamer, unsigned Opcode,
@@ -131,7 +131,7 @@ static void EmitBinary(MCStreamer &OutStreamer, unsigned Opcode,
   Inst.addOperand(RD);
   Inst.addOperand(RS1);
   Inst.addOperand(Src2);
-  OutStreamer.emitInstruction(Inst, STI);
+  OutStreamer.EmitInstruction(Inst, STI);
 }
 
 static void EmitOR(MCStreamer &OutStreamer,
@@ -233,15 +233,15 @@ void SparcAsmPrinter::LowerGETPCXAndEmitMCInsts(const MachineInstr *MI,
   //   or  <MO>, %lo(_GLOBAL_OFFSET_TABLE_+(<EndLabel>-<StartLabel>))), <MO>
   //   add <MO>, %o7, <MO>
 
-  OutStreamer->emitLabel(StartLabel);
+  OutStreamer->EmitLabel(StartLabel);
   MCOperand Callee =  createPCXCallOP(EndLabel, OutContext);
   EmitCall(*OutStreamer, Callee, STI);
-  OutStreamer->emitLabel(SethiLabel);
+  OutStreamer->EmitLabel(SethiLabel);
   MCOperand hiImm = createPCXRelExprOp(SparcMCExpr::VK_Sparc_PC22,
                                        GOTLabel, StartLabel, SethiLabel,
                                        OutContext);
   EmitSETHI(*OutStreamer, hiImm, MCRegOP, STI);
-  OutStreamer->emitLabel(EndLabel);
+  OutStreamer->EmitLabel(EndLabel);
   MCOperand loImm = createPCXRelExprOp(SparcMCExpr::VK_Sparc_PC10,
                                        GOTLabel, StartLabel, EndLabel,
                                        OutContext);
@@ -249,7 +249,8 @@ void SparcAsmPrinter::LowerGETPCXAndEmitMCInsts(const MachineInstr *MI,
   EmitADD(*OutStreamer, MCRegOP, RegO7, MCRegOP, STI);
 }
 
-void SparcAsmPrinter::emitInstruction(const MachineInstr *MI) {
+void SparcAsmPrinter::EmitInstruction(const MachineInstr *MI)
+{
 
   switch (MI->getOpcode()) {
   default: break;
@@ -269,7 +270,7 @@ void SparcAsmPrinter::emitInstruction(const MachineInstr *MI) {
   } while ((++I != E) && I->isInsideBundle()); // Delay slot check.
 }
 
-void SparcAsmPrinter::emitFunctionBodyStart() {
+void SparcAsmPrinter::EmitFunctionBodyStart() {
   if (!MF->getSubtarget<SparcSubtarget>().is64Bit())
     return;
 
@@ -303,7 +304,6 @@ void SparcAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
       assert((TF == SparcMCExpr::VK_Sparc_HI
               || TF == SparcMCExpr::VK_Sparc_H44
               || TF == SparcMCExpr::VK_Sparc_HH
-              || TF == SparcMCExpr::VK_Sparc_LM
               || TF == SparcMCExpr::VK_Sparc_TLS_GD_HI22
               || TF == SparcMCExpr::VK_Sparc_TLS_LDM_HI22
               || TF == SparcMCExpr::VK_Sparc_TLS_LDO_HIX22
@@ -352,7 +352,7 @@ void SparcAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
     break;
 
   case MachineOperand::MO_Immediate:
-    O << MO.getImm();
+    O << (int)MO.getImm();
     break;
   case MachineOperand::MO_MachineBasicBlock:
     MO.getMBB()->getSymbol()->print(O, MAI);
@@ -439,7 +439,7 @@ bool SparcAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
 }
 
 // Force static initialization.
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeSparcAsmPrinter() {
+extern "C" void LLVMInitializeSparcAsmPrinter() {
   RegisterAsmPrinter<SparcAsmPrinter> X(getTheSparcTarget());
   RegisterAsmPrinter<SparcAsmPrinter> Y(getTheSparcV9Target());
   RegisterAsmPrinter<SparcAsmPrinter> Z(getTheSparcelTarget());

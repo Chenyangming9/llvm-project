@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_UTILITY_DATABUFFER_H
-#define LLDB_UTILITY_DATABUFFER_H
+#ifndef liblldb_DataBuffer_h_
+#define liblldb_DataBuffer_h_
 #if defined(__cplusplus)
 
-#include <cstdint>
-#include <cstring>
+#include <stdint.h>
+#include <string.h>
 
 #include "lldb/lldb-types.h"
 
@@ -48,7 +48,7 @@ public:
   /// and be downcast to the DataBuffer pure virtual interface. The virtual
   /// destructor ensures that destructing the base class will destruct the
   /// class that inherited from it correctly.
-  virtual ~DataBuffer() = default;
+  virtual ~DataBuffer() {}
 
   /// Get a pointer to the data.
   ///
@@ -79,21 +79,7 @@ public:
   }
 };
 
-class DataBufferUnowned : public DataBuffer {
-public:
-  DataBufferUnowned(uint8_t *bytes, lldb::offset_t size)
-      : m_bytes(bytes), m_size(size) {}
-
-  uint8_t *GetBytes() override { return m_bytes; }
-  const uint8_t *GetBytes() const override { return m_bytes; }
-  lldb::offset_t GetByteSize() const override { return m_size; }
-
-private:
-  uint8_t *m_bytes;
-  lldb::offset_t m_size;
-};
-
 } // namespace lldb_private
 
 #endif /// #if defined(__cplusplus)
-#endif // LLDB_UTILITY_DATABUFFER_H
+#endif /// lldb_DataBuffer_h_

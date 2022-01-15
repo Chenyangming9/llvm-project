@@ -1,4 +1,4 @@
-//===-- FileAction.cpp ----------------------------------------------------===//
+//===-- FileAction.cpp ------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,7 +16,8 @@ using namespace lldb_private;
 
 // FileAction member functions
 
-FileAction::FileAction() : m_file_spec() {}
+FileAction::FileAction()
+    : m_action(eFileActionNone), m_fd(-1), m_arg(-1), m_file_spec() {}
 
 void FileAction::Clear() {
   m_action = eFileActionNone;

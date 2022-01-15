@@ -64,7 +64,7 @@
 ...
 ---
 name:            foo
-alignment:       16
+alignment:       4
 exposesReturnsTwice: false
 legalized:       false
 regBankSelected: false

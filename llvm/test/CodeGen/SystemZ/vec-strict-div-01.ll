@@ -7,19 +7,19 @@ declare <2 x double> @llvm.experimental.constrained.fdiv.v2f64(<2 x double>, <2 
 
 ; Test a v2f64 division.
 define <2 x double> @f5(<2 x double> %dummy, <2 x double> %val1,
-                        <2 x double> %val2) #0 {
+                        <2 x double> %val2) {
 ; CHECK-LABEL: f5:
 ; CHECK: vfddb %v24, %v26, %v28
 ; CHECK: br %r14
   %ret = call <2 x double> @llvm.experimental.constrained.fdiv.v2f64(
                         <2 x double> %val1, <2 x double> %val2,
                         metadata !"round.dynamic",
-                        metadata !"fpexcept.strict") #0
+                        metadata !"fpexcept.strict")
   ret <2 x double> %ret
 }
 
 ; Test an f64 division that uses vector registers.
-define double @f6(<2 x double> %val1, <2 x double> %val2) #0 {
+define double @f6(<2 x double> %val1, <2 x double> %val2) {
 ; CHECK-LABEL: f6:
 ; CHECK: wfddb %f0, %v24, %v26
 ; CHECK: br %r14
@@ -28,8 +28,6 @@ define double @f6(<2 x double> %val1, <2 x double> %val2) #0 {
   %ret = call double @llvm.experimental.constrained.fdiv.f64(
                         double %scalar1, double %scalar2,
                         metadata !"round.dynamic",
-                        metadata !"fpexcept.strict") #0
+                        metadata !"fpexcept.strict")
   ret double %ret
 }
-
-attributes #0 = { strictfp }

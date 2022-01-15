@@ -24,57 +24,53 @@ static __isl_give isl_val *FN(UNION,eval_void)(__isl_take UNION *u,
 	return isl_val_nan(ctx);
 }
 
-/* Internal data structure for isl_union_*_eval.
- *
- * "pnt" is the point in which the function is evaluated.
- * "v" stores the result and is initialized to zero.
+/* Is the domain space of "entry" equal to "space"?
  */
-S(UNION,eval_data) {
-	isl_point *pnt;
-	isl_val *v;
-};
-
-/* Update the evaluation in data->v based on the evaluation of "part".
- *
- * Only (at most) a single part on which this function is called
- * is assumed to evaluate to anything other than zero.
- * Since the value is initialized to zero, the evaluation of "part"
- * can simply be added.
- */
-static isl_stat FN(UNION,eval_entry)(__isl_take PART *part, void *user)
+static int FN(UNION,has_domain_space)(const void *entry, const void *val)
 {
-	S(UNION,eval_data) *data = user;
-	isl_val *v;
+	PART *part = (PART *)entry;
+	isl_space *space = (isl_space *) val;
 
-	v = FN(PART,eval)(part, isl_point_copy(data->pnt));
-	data->v = isl_val_add(data->v, v);
+	if (isl_space_is_params(space))
+		return isl_space_is_set(part->dim);
 
-	return isl_stat_non_null(data->v);
+	return isl_space_tuple_is_equal(part->dim, isl_dim_in,
+					space, isl_dim_set);
 }
 
-/* Evaluate "u" in the point "pnt".
- */
 __isl_give isl_val *FN(UNION,eval)(__isl_take UNION *u,
 	__isl_take isl_point *pnt)
 {
-	S(UNION,eval_data) data = { pnt };
+	uint32_t hash;
+	struct isl_hash_table_entry *entry;
 	isl_bool is_void;
 	isl_space *space;
+	isl_val *v;
 
+	if (!u || !pnt)
+		goto error;
 	is_void = isl_point_is_void(pnt);
 	if (is_void < 0)
 		goto error;
 	if (is_void)
 		return FN(UNION,eval_void)(u, pnt);
 
-	data.v = isl_val_zero(isl_point_get_ctx(pnt));
-	space = isl_point_peek_space(pnt);
-	if (FN(UNION,foreach_on_domain)(u, space,
-					&FN(UNION,eval_entry), &data) < 0)
-		data.v = isl_val_free(data.v);
+	space = isl_space_copy(pnt->dim);
+	if (!space)
+		goto error;
+	hash = isl_space_get_hash(space);
+	entry = isl_hash_table_find(u->space->ctx, &u->table,
+				    hash, &FN(UNION,has_domain_space),
+				    space, 0);
+	isl_space_free(space);
+	if (!entry) {
+		v = isl_val_zero(isl_point_get_ctx(pnt));
+		isl_point_free(pnt);
+	} else {
+		v = FN(PART,eval)(FN(PART,copy)(entry->data), pnt);
+	}
 	FN(UNION,free)(u);
-	isl_point_free(pnt);
-	return data.v;
+	return v;
 error:
 	FN(UNION,free)(u);
 	isl_point_free(pnt);

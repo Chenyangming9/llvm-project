@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_COMMANDS_COMMANDOBJECTHELP_H
-#define LLDB_SOURCE_COMMANDS_COMMANDOBJECTHELP_H
+#ifndef liblldb_CommandObjectHelp_h_
+#define liblldb_CommandObjectHelp_h_
 
 #include "lldb/Host/OptionParser.h"
 #include "lldb/Interpreter/CommandObject.h"
@@ -23,7 +23,7 @@ public:
 
   ~CommandObjectHelp() override;
 
-  void HandleCompletion(CompletionRequest &request) override;
+  int HandleCompletion(CompletionRequest &request) override;
 
   static void GenerateAdditionalHelpAvenuesMessage(
       Stream *s, llvm::StringRef command, llvm::StringRef prefix,
@@ -34,7 +34,7 @@ public:
   public:
     CommandOptions() : Options() {}
 
-    ~CommandOptions() override = default;
+    ~CommandOptions() override {}
 
     Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_arg,
                           ExecutionContext *execution_context) override {
@@ -52,7 +52,9 @@ public:
         m_show_hidden = true;
         break;
       default:
-        llvm_unreachable("Unimplemented option");
+        error.SetErrorStringWithFormat("unrecognized option '%c'",
+                                       short_option);
+        break;
       }
 
       return error;
@@ -84,4 +86,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_COMMANDS_COMMANDOBJECTHELP_H
+#endif // liblldb_CommandObjectHelp_h_

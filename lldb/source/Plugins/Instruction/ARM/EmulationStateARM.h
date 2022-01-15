@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_INSTRUCTION_ARM_EMULATIONSTATEARM_H
-#define LLDB_SOURCE_PLUGINS_INSTRUCTION_ARM_EMULATIONSTATEARM_H
+#ifndef lldb_EmulationStateARM_h_
+#define lldb_EmulationStateARM_h_
 
 #include <map>
 
@@ -61,7 +61,7 @@ public:
                       const lldb_private::RegisterValue &reg_value);
 
 private:
-  uint32_t m_gpr[17] = {0};
+  uint32_t m_gpr[17];
   struct _sd_regs {
     uint32_t s_regs[32]; // sregs 0 - 31 & dregs 0 - 15
 
@@ -73,8 +73,7 @@ private:
                                              // uint32_t to a data buffer heap
                                              // type.
 
-  EmulationStateARM(const EmulationStateARM &) = delete;
-  const EmulationStateARM &operator=(const EmulationStateARM &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(EmulationStateARM);
 };
 
-#endif // LLDB_SOURCE_PLUGINS_INSTRUCTION_ARM_EMULATIONSTATEARM_H
+#endif // lldb_EmulationStateARM_h_

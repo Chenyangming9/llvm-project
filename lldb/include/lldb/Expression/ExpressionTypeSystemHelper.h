@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_EXPRESSION_EXPRESSIONTYPESYSTEMHELPER_H
-#define LLDB_EXPRESSION_EXPRESSIONTYPESYSTEMHELPER_H
+#ifndef ExpressionTypeSystemHelper_h
+#define ExpressionTypeSystemHelper_h
 
 #include "llvm/Support/Casting.h"
 
@@ -36,7 +36,7 @@ public:
 
   ExpressionTypeSystemHelper(LLVMCastKind kind) : m_kind(kind) {}
 
-  ~ExpressionTypeSystemHelper() = default;
+  ~ExpressionTypeSystemHelper() {}
 
 protected:
   LLVMCastKind m_kind;
@@ -44,4 +44,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_EXPRESSION_EXPRESSIONTYPESYSTEMHELPER_H
+#endif /* ExpressionTypeSystemHelper_h */

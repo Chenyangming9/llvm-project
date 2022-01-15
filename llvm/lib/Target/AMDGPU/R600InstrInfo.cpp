@@ -13,10 +13,33 @@
 
 #include "R600InstrInfo.h"
 #include "AMDGPU.h"
-#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "AMDGPUInstrInfo.h"
+#include "AMDGPUSubtarget.h"
 #include "R600Defines.h"
-#include "R600Subtarget.h"
+#include "R600FrameLowering.h"
+#include "R600RegisterInfo.h"
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "Utils/AMDGPUBaseInfo.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/Support/ErrorHandling.h"
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+#include <iterator>
+#include <utility>
+#include <vector>
 
 using namespace llvm;
 
@@ -37,8 +60,8 @@ bool R600InstrInfo::isVector(const MachineInstr &MI) const {
 
 void R600InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator MI,
-                                const DebugLoc &DL, MCRegister DestReg,
-                                MCRegister SrcReg, bool KillSrc) const {
+                                const DebugLoc &DL, unsigned DestReg,
+                                unsigned SrcReg, bool KillSrc) const {
   unsigned VectorComponents = 0;
   if ((R600::R600_Reg128RegClass.contains(DestReg) ||
       R600::R600_Reg128VerticalRegClass.contains(DestReg)) &&
@@ -54,7 +77,7 @@ void R600InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
 
   if (VectorComponents > 0) {
     for (unsigned I = 0; I < VectorComponents; I++) {
-      unsigned SubRegIndex = R600RegisterInfo::getSubRegFromChannel(I);
+      unsigned SubRegIndex = AMDGPURegisterInfo::getSubRegFromChannel(I);
       buildDefaultInstruction(MBB, MI, R600::MOV,
                               RI.getSubReg(DestReg, SubRegIndex),
                               RI.getSubReg(SrcReg, SubRegIndex))
@@ -74,8 +97,8 @@ bool R600InstrInfo::isLegalToSplitMBBAt(MachineBasicBlock &MBB,
                                        MachineBasicBlock::iterator MBBI) const {
   for (MachineInstr::const_mop_iterator I = MBBI->operands_begin(),
                                         E = MBBI->operands_end(); I != E; ++I) {
-    if (I->isReg() && !I->getReg().isVirtual() && I->isUse() &&
-        RI.isPhysRegLiveAcrossClauses(I->getReg()))
+    if (I->isReg() && !TargetRegisterInfo::isVirtualRegister(I->getReg()) &&
+        I->isUse() && RI.isPhysRegLiveAcrossClauses(I->getReg()))
       return false;
   }
   return true;
@@ -219,7 +242,8 @@ bool R600InstrInfo::readsLDSSrcReg(const MachineInstr &MI) const {
   for (MachineInstr::const_mop_iterator I = MI.operands_begin(),
                                         E = MI.operands_end();
        I != E; ++I) {
-    if (!I->isReg() || !I->isUse() || I->getReg().isVirtual())
+    if (!I->isReg() || !I->isUse() ||
+        TargetRegisterInfo::isVirtualRegister(I->getReg()))
       continue;
 
     if (R600::R600_LDS_SRC_REGRegClass.contains(I->getReg()))
@@ -270,7 +294,7 @@ R600InstrInfo::getSrcs(MachineInstr &MI) const {
     for (unsigned j = 0; j < 8; j++) {
       MachineOperand &MO =
           MI.getOperand(getOperandIdx(MI.getOpcode(), OpTable[j][0]));
-      Register Reg = MO.getReg();
+      unsigned Reg = MO.getReg();
       if (Reg == R600::ALU_CONST) {
         MachineOperand &Sel =
             MI.getOperand(getOperandIdx(MI.getOpcode(), OpTable[j][1]));
@@ -293,7 +317,7 @@ R600InstrInfo::getSrcs(MachineInstr &MI) const {
     if (SrcIdx < 0)
       break;
     MachineOperand &MO = MI.getOperand(SrcIdx);
-    Register Reg = MO.getReg();
+    unsigned Reg = MO.getReg();
     if (Reg == R600::ALU_CONST) {
       MachineOperand &Sel =
           MI.getOperand(getOperandIdx(MI.getOpcode(), OpTable[j][1]));
@@ -324,7 +348,7 @@ R600InstrInfo::ExtractSrcs(MachineInstr &MI,
   unsigned i = 0;
   for (const auto &Src : getSrcs(MI)) {
     ++i;
-    Register Reg = Src.first->getReg();
+    unsigned Reg = Src.first->getReg();
     int Index = RI.getEncodingValue(Reg) & 0xff;
     if (Reg == R600::OQAP) {
       Result.push_back(std::make_pair(Index, 0U));
@@ -653,7 +677,7 @@ bool R600InstrInfo::analyzeBranch(MachineBasicBlock &MBB,
                                   MachineBasicBlock *&FBB,
                                   SmallVectorImpl<MachineOperand> &Cond,
                                   bool AllowModify) const {
-  // Most of the following comes from the ARM implementation of analyzeBranch
+  // Most of the following comes from the ARM implementation of AnalyzeBranch
 
   // If the block has no terminators, it just falls into the block after it.
   MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
@@ -841,7 +865,7 @@ bool R600InstrInfo::isPredicated(const MachineInstr &MI) const {
   if (idx < 0)
     return false;
 
-  Register Reg = MI.getOperand(idx).getReg();
+  unsigned Reg = MI.getOperand(idx).getReg();
   switch (Reg) {
   default: return false;
   case R600::PRED_SEL_ONE:
@@ -940,9 +964,8 @@ R600InstrInfo::reverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) con
   return false;
 }
 
-bool R600InstrInfo::ClobbersPredicate(MachineInstr &MI,
-                                      std::vector<MachineOperand> &Pred,
-                                      bool SkipDead) const {
+bool R600InstrInfo::DefinesPredicate(MachineInstr &MI,
+                                     std::vector<MachineOperand> &Pred) const {
   return isPredicateSetter(MI.getOpcode());
 }
 
@@ -1015,7 +1038,7 @@ bool R600InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       unsigned RegIndex = MI.getOperand(RegOpIdx).getImm();
       unsigned Channel = MI.getOperand(ChanOpIdx).getImm();
       unsigned Address = calculateIndirectAddress(RegIndex, Channel);
-      Register OffsetReg = MI.getOperand(OffsetOpIdx).getReg();
+      unsigned OffsetReg = MI.getOperand(OffsetOpIdx).getReg();
       if (OffsetReg == R600::INDIRECT_BASE_ADDR) {
         buildMovInstr(MBB, MI, MI.getOperand(DstOpIdx).getReg(),
                       getIndirectAddrRegClass()->getRegister(Address));
@@ -1029,7 +1052,7 @@ bool R600InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
       unsigned RegIndex = MI.getOperand(RegOpIdx).getImm();
       unsigned Channel = MI.getOperand(ChanOpIdx).getImm();
       unsigned Address = calculateIndirectAddress(RegIndex, Channel);
-      Register OffsetReg = MI.getOperand(OffsetOpIdx).getReg();
+      unsigned OffsetReg = MI.getOperand(OffsetOpIdx).getReg();
       if (OffsetReg == R600::INDIRECT_BASE_ADDR) {
         buildMovInstr(MBB, MI, getIndirectAddrRegClass()->getRegister(Address),
                       MI.getOperand(ValOpIdx).getReg());
@@ -1169,15 +1192,16 @@ int R600InstrInfo::getIndirectIndexBegin(const MachineFunction &MF) const {
 
   const TargetRegisterClass *IndirectRC = getIndirectAddrRegClass();
   for (std::pair<unsigned, unsigned> LI : MRI.liveins()) {
-    Register Reg = LI.first;
-    if (Reg.isVirtual() || !IndirectRC->contains(Reg))
+    unsigned Reg = LI.first;
+    if (TargetRegisterInfo::isVirtualRegister(Reg) ||
+        !IndirectRC->contains(Reg))
       continue;
 
     unsigned RegIndex;
     unsigned RegEnd;
     for (RegIndex = 0, RegEnd = IndirectRC->getNumRegs(); RegIndex != RegEnd;
                                                           ++RegIndex) {
-      if (IndirectRC->getRegister(RegIndex) == (unsigned)Reg)
+      if (IndirectRC->getRegister(RegIndex) == Reg)
         break;
     }
     Offset = std::max(Offset, (int)RegIndex);
@@ -1202,8 +1226,8 @@ int R600InstrInfo::getIndirectIndexEnd(const MachineFunction &MF) const {
   const R600Subtarget &ST = MF.getSubtarget<R600Subtarget>();
   const R600FrameLowering *TFL = ST.getFrameLowering();
 
-  Register IgnoredFrameReg;
-  Offset = TFL->getFrameIndexReference(MF, -1, IgnoredFrameReg).getFixed();
+  unsigned IgnoredFrameReg;
+  Offset = TFL->getFrameIndexReference(MF, -1, IgnoredFrameReg);
 
   return getIndirectIndexBegin(MF) + Offset;
 }

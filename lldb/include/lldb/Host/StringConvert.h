@@ -6,10 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_HOST_STRINGCONVERT_H
-#define LLDB_HOST_STRINGCONVERT_H
+#ifndef liblldb_StringConvert_h_
+#define liblldb_StringConvert_h_
 
-#include <cstdint>
+#include <stdint.h>
+
+
 
 namespace lldb_private {
 

@@ -1,4 +1,4 @@
-//===-- OptionGroupFormat.cpp ---------------------------------------------===//
+//===-- OptionGroupFormat.cpp -----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -23,6 +23,8 @@ OptionGroupFormat::OptionGroupFormat(lldb::Format default_format,
       m_byte_size(default_byte_size, default_byte_size),
       m_count(default_count, default_count), m_prev_gdb_format('x'),
       m_prev_gdb_size('w') {}
+
+OptionGroupFormat::~OptionGroupFormat() {}
 
 static constexpr OptionDefinition g_option_table[] = {
     {LLDB_OPT_SET_1, false, "format", 'f', OptionParser::eRequiredArgument,
@@ -158,7 +160,8 @@ Status OptionGroupFormat::SetOptionValue(uint32_t option_idx,
   } break;
 
   default:
-    llvm_unreachable("Unimplemented option");
+    error.SetErrorStringWithFormat("unrecognized option '%c'", short_option);
+    break;
   }
 
   return error;

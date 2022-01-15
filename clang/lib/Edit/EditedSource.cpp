@@ -59,7 +59,7 @@ void EditedSource::finishedCommit() {
     SourceLocation ExpLoc;
     MacroArgUse ArgUse;
     std::tie(ExpLoc, ArgUse) = ExpArg;
-    auto &ArgUses = ExpansionToArgMap[ExpLoc];
+    auto &ArgUses = ExpansionToArgMap[ExpLoc.getRawEncoding()];
     if (llvm::find(ArgUses, ArgUse) == ArgUses.end())
       ArgUses.push_back(ArgUse);
   }
@@ -82,7 +82,7 @@ bool EditedSource::canInsertInOffset(SourceLocation OrigLoc, FileOffset Offs) {
     SourceLocation ExpLoc;
     MacroArgUse ArgUse;
     deconstructMacroArgLoc(OrigLoc, ExpLoc, ArgUse);
-    auto I = ExpansionToArgMap.find(ExpLoc);
+    auto I = ExpansionToArgMap.find(ExpLoc.getRawEncoding());
     if (I != ExpansionToArgMap.end() &&
         find_if(I->second, [&](const MacroArgUse &U) {
           return ArgUse.Identifier == U.Identifier &&

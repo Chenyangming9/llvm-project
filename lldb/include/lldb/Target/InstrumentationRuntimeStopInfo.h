@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TARGET_INSTRUMENTATIONRUNTIMESTOPINFO_H
-#define LLDB_TARGET_INSTRUMENTATIONRUNTIMESTOPINFO_H
+#ifndef liblldb_InstrumentationRuntimeStopInfo_h_
+#define liblldb_InstrumentationRuntimeStopInfo_h_
 
 #include <string>
 
@@ -18,7 +18,7 @@ namespace lldb_private {
 
 class InstrumentationRuntimeStopInfo : public StopInfo {
 public:
-  ~InstrumentationRuntimeStopInfo() override = default;
+  ~InstrumentationRuntimeStopInfo() override {}
 
   lldb::StopReason GetStopReason() const override {
     return lldb::eStopReasonInstrumentation;
@@ -39,4 +39,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_TARGET_INSTRUMENTATIONRUNTIMESTOPINFO_H
+#endif // liblldb_InstrumentationRuntimeStopInfo_h_

@@ -8,16 +8,12 @@
 
 #include "AMDGPU.h"
 #include "AMDGPUSubtarget.h"
-#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/IntrinsicsAMDGPU.h"
-#include "llvm/IR/IntrinsicsR600.h"
 #include "llvm/IR/Module.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Utils/LowerMemIntrinsics.h"
 
 #define DEBUG_TYPE "amdgpu-lower-intrinsics"
@@ -26,15 +22,7 @@ using namespace llvm;
 
 namespace {
 
-static int MaxStaticSize;
-
-static cl::opt<int, true> MemIntrinsicExpandSizeThresholdOpt(
-  "amdgpu-mem-intrinsic-expand-size",
-  cl::desc("Set minimum mem intrinsic size to expand in IR"),
-  cl::location(MaxStaticSize),
-  cl::init(1024),
-  cl::Hidden);
-
+const unsigned MaxStaticSize = 1024;
 
 class AMDGPULowerIntrinsics : public ModulePass {
 private:
@@ -69,7 +57,7 @@ INITIALIZE_PASS(AMDGPULowerIntrinsics, DEBUG_TYPE, "Lower intrinsics", false,
 // require splitting based on alignment)
 static bool shouldExpandOperationWithSize(Value *Size) {
   ConstantInt *CI = dyn_cast<ConstantInt>(Size);
-  return !CI || (CI->getSExtValue() > MaxStaticSize);
+  return !CI || (CI->getZExtValue() > MaxStaticSize);
 }
 
 bool AMDGPULowerIntrinsics::expandMemIntrinsicUses(Function &F) {
@@ -135,9 +123,7 @@ bool AMDGPULowerIntrinsics::makeLIDRangeMetadata(Function &F) const {
     if (!CI)
       continue;
 
-    Function *Caller = CI->getParent()->getParent();
-    const AMDGPUSubtarget &ST = AMDGPUSubtarget::get(TM, *Caller);
-    Changed |= ST.makeLIDRangeMetadata(CI);
+    Changed |= AMDGPUSubtarget::get(TM, F).makeLIDRangeMetadata(CI);
   }
   return Changed;
 }

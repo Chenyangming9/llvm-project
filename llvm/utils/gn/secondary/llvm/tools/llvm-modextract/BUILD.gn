@@ -6,5 +6,7 @@ executable("llvm-modextract") {
     "//llvm/lib/IRReader",
     "//llvm/lib/Support",
   ]
-  sources = [ "llvm-modextract.cpp" ]
+  sources = [
+    "llvm-modextract.cpp",
+  ]
 }

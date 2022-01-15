@@ -11,3 +11,12 @@
 using namespace llvm;
 
 void LanaiMachineFunctionInfo::anchor() {}
+
+unsigned LanaiMachineFunctionInfo::getGlobalBaseReg() {
+  // Return if it has already been initialized.
+  if (GlobalBaseReg)
+    return GlobalBaseReg;
+
+  return GlobalBaseReg =
+             MF.getRegInfo().createVirtualRegister(&Lanai::GPRRegClass);
+}

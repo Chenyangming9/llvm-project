@@ -1,9 +1,3 @@
-add_llvm_component_library(LLVMHexagonInfo
+add_llvm_library(LLVMHexagonInfo
   HexagonTargetInfo.cpp
-
-  LINK_COMPONENTS
-  Support
-
-  ADD_TO_COMPONENT
-  Hexagon
   )

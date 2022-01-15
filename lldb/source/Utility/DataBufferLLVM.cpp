@@ -1,4 +1,4 @@
-//===-- DataBufferLLVM.cpp ------------------------------------------------===//
+//===--- DataBufferLLVM.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,9 +8,12 @@
 
 #include "lldb/Utility/DataBufferLLVM.h"
 
+#include "llvm/ADT/Twine.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 
-#include <cassert>
+#include <assert.h>
+#include <type_traits>
 
 using namespace lldb_private;
 
@@ -21,7 +24,7 @@ DataBufferLLVM::DataBufferLLVM(
          "Cannot construct a DataBufferLLVM with a null buffer");
 }
 
-DataBufferLLVM::~DataBufferLLVM() = default;
+DataBufferLLVM::~DataBufferLLVM() {}
 
 uint8_t *DataBufferLLVM::GetBytes() {
   return reinterpret_cast<uint8_t *>(Buffer->getBufferStart());

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONVALUEARCH_H
-#define LLDB_INTERPRETER_OPTIONVALUEARCH_H
+#ifndef liblldb_OptionValueArch_h_
+#define liblldb_OptionValueArch_h_
 
 #include "lldb/Interpreter/OptionValue.h"
 #include "lldb/Utility/ArchSpec.h"
@@ -15,21 +15,23 @@
 
 namespace lldb_private {
 
-class OptionValueArch : public Cloneable<OptionValueArch, OptionValue> {
+class OptionValueArch : public OptionValue {
 public:
-  OptionValueArch() = default;
+  OptionValueArch() : OptionValue(), m_current_value(), m_default_value() {}
 
-  OptionValueArch(const char *triple) : m_current_value(triple) {
+  OptionValueArch(const char *triple)
+      : OptionValue(), m_current_value(triple), m_default_value() {
     m_default_value = m_current_value;
   }
 
   OptionValueArch(const ArchSpec &value)
-      : m_current_value(value), m_default_value(value) {}
+      : OptionValue(), m_current_value(value), m_default_value(value) {}
 
   OptionValueArch(const ArchSpec &current_value, const ArchSpec &default_value)
-      : m_current_value(current_value), m_default_value(default_value) {}
+      : OptionValue(), m_current_value(current_value),
+        m_default_value(default_value) {}
 
-  ~OptionValueArch() override = default;
+  ~OptionValueArch() override {}
 
   // Virtual subclass pure virtual overrides
 
@@ -41,14 +43,20 @@ public:
   Status
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
+  Status
+  SetValueFromString(const char *,
+                     VarSetOperationType = eVarSetOperationAssign) = delete;
 
-  void Clear() override {
+  bool Clear() override {
     m_current_value = m_default_value;
     m_value_was_set = false;
+    return true;
   }
 
-  void AutoComplete(CommandInterpreter &interpreter,
-                    lldb_private::CompletionRequest &request) override;
+  lldb::OptionValueSP DeepCopy() const override;
+
+  size_t AutoComplete(CommandInterpreter &interpreter,
+                      lldb_private::CompletionRequest &request) override;
 
   // Subclass specific functions
 
@@ -73,4 +81,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONVALUEARCH_H
+#endif // liblldb_OptionValueArch_h_

@@ -386,7 +386,7 @@ BugDriver::extractMappedBlocksFromModule(const std::vector<BasicBlock *> &BBs,
   for (Function &F : *M)
     for (BasicBlock &BB : F)
       // Check if this block is going to be extracted.
-      if (!llvm::is_contained(BBs, &BB))
+      if (std::find(BBs.begin(), BBs.end(), &BB) == BBs.end())
         BlocksToExtract.push_back(&BB);
 
   raw_fd_ostream OS(Temp->FD, /*shouldClose*/ false);
@@ -407,10 +407,11 @@ BugDriver::extractMappedBlocksFromModule(const std::vector<BasicBlock *> &BBs,
 
   std::string uniqueFN = "--extract-blocks-file=";
   uniqueFN += Temp->TmpName;
+  const char *ExtraArg = uniqueFN.c_str();
 
   std::vector<std::string> PI;
   PI.push_back("extract-blocks");
-  std::unique_ptr<Module> Ret = runPassesOn(M, PI, {uniqueFN});
+  std::unique_ptr<Module> Ret = runPassesOn(M, PI, 1, &ExtraArg);
 
   if (!Ret) {
     outs() << "*** Basic Block extraction failed, please report a bug!\n";

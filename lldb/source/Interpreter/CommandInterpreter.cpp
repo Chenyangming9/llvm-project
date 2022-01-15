@@ -1,4 +1,4 @@
-//===-- CommandInterpreter.cpp --------------------------------------------===//
+//===-- CommandInterpreter.cpp ----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,14 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cstdlib>
-#include <limits>
 #include <memory>
+#include <stdlib.h>
 #include <string>
 #include <vector>
 
+#include "CommandObjectScript.h"
+#include "lldb/Interpreter/CommandObjectRegexCommand.h"
+
 #include "Commands/CommandObjectApropos.h"
 #include "Commands/CommandObjectBreakpoint.h"
+#include "Commands/CommandObjectBugreport.h"
 #include "Commands/CommandObjectCommands.h"
 #include "Commands/CommandObjectDisassemble.h"
 #include "Commands/CommandObjectExpression.h"
@@ -27,17 +30,13 @@
 #include "Commands/CommandObjectPlugin.h"
 #include "Commands/CommandObjectProcess.h"
 #include "Commands/CommandObjectQuit.h"
-#include "Commands/CommandObjectRegexCommand.h"
 #include "Commands/CommandObjectRegister.h"
 #include "Commands/CommandObjectReproducer.h"
-#include "Commands/CommandObjectScript.h"
-#include "Commands/CommandObjectSession.h"
 #include "Commands/CommandObjectSettings.h"
 #include "Commands/CommandObjectSource.h"
 #include "Commands/CommandObjectStats.h"
 #include "Commands/CommandObjectTarget.h"
 #include "Commands/CommandObjectThread.h"
-#include "Commands/CommandObjectTrace.h"
 #include "Commands/CommandObjectType.h"
 #include "Commands/CommandObjectVersion.h"
 #include "Commands/CommandObjectWatchpoint.h"
@@ -46,17 +45,13 @@
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Utility/Log.h"
-#include "lldb/Utility/Reproducer.h"
 #include "lldb/Utility/State.h"
 #include "lldb/Utility/Stream.h"
 #include "lldb/Utility/Timer.h"
 
-#include "lldb/Host/Config.h"
-#if LLDB_ENABLE_LIBEDIT
+#ifndef LLDB_DISABLE_LIBEDIT
 #include "lldb/Host/Editline.h"
 #endif
-#include "lldb/Host/File.h"
-#include "lldb/Host/FileCache.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
 
@@ -68,26 +63,24 @@
 #include "lldb/Interpreter/Property.h"
 #include "lldb/Utility/Args.h"
 
-#include "lldb/Target/Language.h"
 #include "lldb/Target/Process.h"
-#include "lldb/Target/StopInfo.h"
 #include "lldb/Target/TargetList.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Target/UnixSignals.h"
 
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/Support/FormatAdapters.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
-#include "llvm/Support/ScopedPrinter.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
 static const char *k_white_space = " \t\v";
 
+static constexpr bool NoGlobalSetting = true;
+static constexpr uintptr_t DefaultValueTrue = true;
+static constexpr uintptr_t DefaultValueFalse = false;
+static constexpr const char *NoCStrDefault = nullptr;
 static constexpr const char *InitFileWarning =
     "There is a .lldbinit file in the current directory which is not being "
     "read.\n"
@@ -100,12 +93,38 @@ static constexpr const char *InitFileWarning =
     "and\n"
     "accept the security risk.";
 
-#define LLDB_PROPERTIES_interpreter
-#include "InterpreterProperties.inc"
+static constexpr PropertyDefinition g_properties[] = {
+    {"expand-regex-aliases", OptionValue::eTypeBoolean, NoGlobalSetting,
+     DefaultValueFalse, NoCStrDefault, {},
+     "If true, regular expression alias commands will show the "
+     "expanded command that will be executed. This can be used to "
+     "debug new regular expression alias commands."},
+    {"prompt-on-quit", OptionValue::eTypeBoolean, NoGlobalSetting,
+     DefaultValueTrue, NoCStrDefault, {},
+     "If true, LLDB will prompt you before quitting if there are any live "
+     "processes being debugged. If false, LLDB will quit without asking in any "
+     "case."},
+    {"stop-command-source-on-error", OptionValue::eTypeBoolean, NoGlobalSetting,
+     DefaultValueTrue, NoCStrDefault, {},
+     "If true, LLDB will stop running a 'command source' "
+     "script upon encountering an error."},
+    {"space-repl-prompts", OptionValue::eTypeBoolean, NoGlobalSetting,
+     DefaultValueFalse, NoCStrDefault, {},
+     "If true, blank lines will be printed between between REPL submissions."},
+    {"echo-commands", OptionValue::eTypeBoolean, NoGlobalSetting,
+     DefaultValueTrue, NoCStrDefault, {},
+     "If true, commands will be echoed before they are evaluated."},
+    {"echo-comment-commands", OptionValue::eTypeBoolean, NoGlobalSetting,
+     DefaultValueTrue, NoCStrDefault, {},
+     "If true, commands will be echoed even if they are pure comment lines."}};
 
 enum {
-#define LLDB_PROPERTIES_interpreter
-#include "InterpreterPropertiesEnum.inc"
+  ePropertyExpandRegexAliases = 0,
+  ePropertyPromptOnQuit = 1,
+  ePropertyStopCmdSourceOnError = 2,
+  eSpaceReplPrompts = 3,
+  eEchoCommands = 4,
+  eEchoCommentCommands = 5
 };
 
 ConstString &CommandInterpreter::GetStaticBroadcasterClass() {
@@ -120,76 +139,56 @@ CommandInterpreter::CommandInterpreter(Debugger &debugger,
       Properties(OptionValuePropertiesSP(
           new OptionValueProperties(ConstString("interpreter")))),
       IOHandlerDelegate(IOHandlerDelegate::Completion::LLDBCommand),
-      m_debugger(debugger), m_synchronous_execution(true),
+      m_debugger(debugger), m_synchronous_execution(synchronous_execution),
       m_skip_lldbinit_files(false), m_skip_app_init_files(false),
-      m_comment_char('#'), m_batch_command_mode(false),
-      m_truncation_warning(eNoTruncation), m_command_source_depth(0) {
+      m_command_io_handler_sp(), m_comment_char('#'),
+      m_batch_command_mode(false), m_truncation_warning(eNoTruncation),
+      m_command_source_depth(0), m_num_errors(0), m_quit_requested(false),
+      m_stopped_for_crash(false) {
   SetEventName(eBroadcastBitThreadShouldExit, "thread-should-exit");
   SetEventName(eBroadcastBitResetPrompt, "reset-prompt");
   SetEventName(eBroadcastBitQuitCommandReceived, "quit");
-  SetSynchronous(synchronous_execution);
   CheckInWithManager();
-  m_collection_sp->Initialize(g_interpreter_properties);
+  m_collection_sp->Initialize(g_properties);
 }
 
 bool CommandInterpreter::GetExpandRegexAliases() const {
   const uint32_t idx = ePropertyExpandRegexAliases;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_properties[idx].default_uint_value != 0);
 }
 
 bool CommandInterpreter::GetPromptOnQuit() const {
   const uint32_t idx = ePropertyPromptOnQuit;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_properties[idx].default_uint_value != 0);
 }
 
-void CommandInterpreter::SetPromptOnQuit(bool enable) {
+void CommandInterpreter::SetPromptOnQuit(bool b) {
   const uint32_t idx = ePropertyPromptOnQuit;
-  m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, enable);
-}
-
-bool CommandInterpreter::GetSaveSessionOnQuit() const {
-  const uint32_t idx = ePropertySaveSessionOnQuit;
-  return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
-}
-
-void CommandInterpreter::SetSaveSessionOnQuit(bool enable) {
-  const uint32_t idx = ePropertySaveSessionOnQuit;
-  m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, enable);
-}
-
-FileSpec CommandInterpreter::GetSaveSessionDirectory() const {
-  const uint32_t idx = ePropertySaveSessionDirectory;
-  return m_collection_sp->GetPropertyAtIndexAsFileSpec(nullptr, idx);
-}
-
-void CommandInterpreter::SetSaveSessionDirectory(llvm::StringRef path) {
-  const uint32_t idx = ePropertySaveSessionDirectory;
-  m_collection_sp->SetPropertyAtIndexAsString(nullptr, idx, path);
+  m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, b);
 }
 
 bool CommandInterpreter::GetEchoCommands() const {
-  const uint32_t idx = ePropertyEchoCommands;
+  const uint32_t idx = eEchoCommands;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_properties[idx].default_uint_value != 0);
 }
 
-void CommandInterpreter::SetEchoCommands(bool enable) {
-  const uint32_t idx = ePropertyEchoCommands;
-  m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, enable);
+void CommandInterpreter::SetEchoCommands(bool b) {
+  const uint32_t idx = eEchoCommands;
+  m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, b);
 }
 
 bool CommandInterpreter::GetEchoCommentCommands() const {
-  const uint32_t idx = ePropertyEchoCommentCommands;
+  const uint32_t idx = eEchoCommentCommands;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_properties[idx].default_uint_value != 0);
 }
 
-void CommandInterpreter::SetEchoCommentCommands(bool enable) {
-  const uint32_t idx = ePropertyEchoCommentCommands;
-  m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, enable);
+void CommandInterpreter::SetEchoCommentCommands(bool b) {
+  const uint32_t idx = eEchoCommentCommands;
+  m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, b);
 }
 
 void CommandInterpreter::AllowExitCodeOnQuit(bool allow) {
@@ -224,25 +223,20 @@ void CommandInterpreter::ResolveCommand(const char *command_line,
 bool CommandInterpreter::GetStopCmdSourceOnError() const {
   const uint32_t idx = ePropertyStopCmdSourceOnError;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_properties[idx].default_uint_value != 0);
 }
 
 bool CommandInterpreter::GetSpaceReplPrompts() const {
-  const uint32_t idx = ePropertySpaceReplPrompts;
+  const uint32_t idx = eSpaceReplPrompts;
   return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
-}
-
-bool CommandInterpreter::GetRepeatPreviousCommand() const {
-  const uint32_t idx = ePropertyRepeatPreviousCommand;
-  return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_interpreter_properties[idx].default_uint_value != 0);
+      nullptr, idx, g_properties[idx].default_uint_value != 0);
 }
 
 void CommandInterpreter::Initialize() {
-  LLDB_SCOPED_TIMER();
+  static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
+  Timer scoped_timer(func_cat, LLVM_PRETTY_FUNCTION);
 
-  CommandReturnObject result(m_debugger.GetUseColor());
+  CommandReturnObject result;
 
   LoadCommandDictionary();
 
@@ -250,48 +244,48 @@ void CommandInterpreter::Initialize() {
   OptionArgVectorSP alias_arguments_vector_sp(new OptionArgVector);
 
   // Set up some initial aliases.
-  CommandObjectSP cmd_obj_sp = GetCommandSPExact("quit");
+  CommandObjectSP cmd_obj_sp = GetCommandSPExact("quit", false);
   if (cmd_obj_sp) {
     AddAlias("q", cmd_obj_sp);
     AddAlias("exit", cmd_obj_sp);
   }
 
-  cmd_obj_sp = GetCommandSPExact("_regexp-attach");
+  cmd_obj_sp = GetCommandSPExact("_regexp-attach", false);
   if (cmd_obj_sp)
     AddAlias("attach", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
 
-  cmd_obj_sp = GetCommandSPExact("process detach");
+  cmd_obj_sp = GetCommandSPExact("process detach", false);
   if (cmd_obj_sp) {
     AddAlias("detach", cmd_obj_sp);
   }
 
-  cmd_obj_sp = GetCommandSPExact("process continue");
+  cmd_obj_sp = GetCommandSPExact("process continue", false);
   if (cmd_obj_sp) {
     AddAlias("c", cmd_obj_sp);
     AddAlias("continue", cmd_obj_sp);
   }
 
-  cmd_obj_sp = GetCommandSPExact("_regexp-break");
+  cmd_obj_sp = GetCommandSPExact("_regexp-break", false);
   if (cmd_obj_sp)
     AddAlias("b", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
 
-  cmd_obj_sp = GetCommandSPExact("_regexp-tbreak");
+  cmd_obj_sp = GetCommandSPExact("_regexp-tbreak", false);
   if (cmd_obj_sp)
     AddAlias("tbreak", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
 
-  cmd_obj_sp = GetCommandSPExact("thread step-inst");
+  cmd_obj_sp = GetCommandSPExact("thread step-inst", false);
   if (cmd_obj_sp) {
     AddAlias("stepi", cmd_obj_sp);
     AddAlias("si", cmd_obj_sp);
   }
 
-  cmd_obj_sp = GetCommandSPExact("thread step-inst-over");
+  cmd_obj_sp = GetCommandSPExact("thread step-inst-over", false);
   if (cmd_obj_sp) {
     AddAlias("nexti", cmd_obj_sp);
     AddAlias("ni", cmd_obj_sp);
   }
 
-  cmd_obj_sp = GetCommandSPExact("thread step-in");
+  cmd_obj_sp = GetCommandSPExact("thread step-in", false);
   if (cmd_obj_sp) {
     AddAlias("s", cmd_obj_sp);
     AddAlias("step", cmd_obj_sp);
@@ -305,141 +299,121 @@ void CommandInterpreter::Initialize() {
     }
   }
 
-  cmd_obj_sp = GetCommandSPExact("thread step-over");
+  cmd_obj_sp = GetCommandSPExact("thread step-over", false);
   if (cmd_obj_sp) {
     AddAlias("n", cmd_obj_sp);
     AddAlias("next", cmd_obj_sp);
   }
 
-  cmd_obj_sp = GetCommandSPExact("thread step-out");
+  cmd_obj_sp = GetCommandSPExact("thread step-out", false);
   if (cmd_obj_sp) {
     AddAlias("finish", cmd_obj_sp);
   }
 
-  cmd_obj_sp = GetCommandSPExact("frame select");
+  cmd_obj_sp = GetCommandSPExact("frame select", false);
   if (cmd_obj_sp) {
     AddAlias("f", cmd_obj_sp);
   }
 
-  cmd_obj_sp = GetCommandSPExact("thread select");
+  cmd_obj_sp = GetCommandSPExact("thread select", false);
   if (cmd_obj_sp) {
     AddAlias("t", cmd_obj_sp);
   }
 
-  cmd_obj_sp = GetCommandSPExact("_regexp-jump");
+  cmd_obj_sp = GetCommandSPExact("_regexp-jump", false);
   if (cmd_obj_sp) {
     AddAlias("j", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
     AddAlias("jump", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
   }
 
-  cmd_obj_sp = GetCommandSPExact("_regexp-list");
+  cmd_obj_sp = GetCommandSPExact("_regexp-list", false);
   if (cmd_obj_sp) {
     AddAlias("l", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
     AddAlias("list", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
   }
 
-  cmd_obj_sp = GetCommandSPExact("_regexp-env");
+  cmd_obj_sp = GetCommandSPExact("_regexp-env", false);
   if (cmd_obj_sp)
     AddAlias("env", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
 
-  cmd_obj_sp = GetCommandSPExact("memory read");
+  cmd_obj_sp = GetCommandSPExact("memory read", false);
   if (cmd_obj_sp)
     AddAlias("x", cmd_obj_sp);
 
-  cmd_obj_sp = GetCommandSPExact("_regexp-up");
+  cmd_obj_sp = GetCommandSPExact("_regexp-up", false);
   if (cmd_obj_sp)
     AddAlias("up", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
 
-  cmd_obj_sp = GetCommandSPExact("_regexp-down");
+  cmd_obj_sp = GetCommandSPExact("_regexp-down", false);
   if (cmd_obj_sp)
     AddAlias("down", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
 
-  cmd_obj_sp = GetCommandSPExact("_regexp-display");
+  cmd_obj_sp = GetCommandSPExact("_regexp-display", false);
   if (cmd_obj_sp)
     AddAlias("display", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
 
-  cmd_obj_sp = GetCommandSPExact("disassemble");
+  cmd_obj_sp = GetCommandSPExact("disassemble", false);
   if (cmd_obj_sp)
     AddAlias("dis", cmd_obj_sp);
 
-  cmd_obj_sp = GetCommandSPExact("disassemble");
+  cmd_obj_sp = GetCommandSPExact("disassemble", false);
   if (cmd_obj_sp)
     AddAlias("di", cmd_obj_sp);
 
-  cmd_obj_sp = GetCommandSPExact("_regexp-undisplay");
+  cmd_obj_sp = GetCommandSPExact("_regexp-undisplay", false);
   if (cmd_obj_sp)
     AddAlias("undisplay", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
 
-  cmd_obj_sp = GetCommandSPExact("_regexp-bt");
+  cmd_obj_sp = GetCommandSPExact("_regexp-bt", false);
   if (cmd_obj_sp)
     AddAlias("bt", cmd_obj_sp)->SetSyntax(cmd_obj_sp->GetSyntax());
 
-  cmd_obj_sp = GetCommandSPExact("target create");
+  cmd_obj_sp = GetCommandSPExact("target create", false);
   if (cmd_obj_sp)
     AddAlias("file", cmd_obj_sp);
 
-  cmd_obj_sp = GetCommandSPExact("target modules");
+  cmd_obj_sp = GetCommandSPExact("target modules", false);
   if (cmd_obj_sp)
     AddAlias("image", cmd_obj_sp);
 
   alias_arguments_vector_sp = std::make_shared<OptionArgVector>();
 
-  cmd_obj_sp = GetCommandSPExact("expression");
+  cmd_obj_sp = GetCommandSPExact("expression", false);
   if (cmd_obj_sp) {
     AddAlias("p", cmd_obj_sp, "--")->SetHelpLong("");
     AddAlias("print", cmd_obj_sp, "--")->SetHelpLong("");
     AddAlias("call", cmd_obj_sp, "--")->SetHelpLong("");
-    if (auto *po = AddAlias("po", cmd_obj_sp, "-O --")) {
+    if (auto po = AddAlias("po", cmd_obj_sp, "-O --")) {
       po->SetHelp("Evaluate an expression on the current thread.  Displays any "
                   "returned value with formatting "
                   "controlled by the type's author.");
       po->SetHelpLong("");
     }
-    CommandAlias *parray_alias =
-        AddAlias("parray", cmd_obj_sp, "--element-count %1 --");
-    if (parray_alias) {
-        parray_alias->SetHelp
-          ("parray <COUNT> <EXPRESSION> -- lldb will evaluate EXPRESSION "
-           "to get a typed-pointer-to-an-array in memory, and will display "
-           "COUNT elements of that type from the array.");
-        parray_alias->SetHelpLong("");
-    }
-    CommandAlias *poarray_alias = AddAlias("poarray", cmd_obj_sp,
-             "--object-description --element-count %1 --");
-    if (poarray_alias) {
-      poarray_alias->SetHelp("poarray <COUNT> <EXPRESSION> -- lldb will "
-          "evaluate EXPRESSION to get the address of an array of COUNT "
-          "objects in memory, and will call po on them.");
-      poarray_alias->SetHelpLong("");
-    }
+    AddAlias("parray", cmd_obj_sp, "--element-count %1 --")->SetHelpLong("");
+    AddAlias("poarray", cmd_obj_sp,
+             "--object-description --element-count %1 --")
+        ->SetHelpLong("");
   }
 
-  cmd_obj_sp = GetCommandSPExact("platform shell");
-  if (cmd_obj_sp) {
-    CommandAlias *shell_alias = AddAlias("shell", cmd_obj_sp, " --host --");
-    if (shell_alias) {
-      shell_alias->SetHelp("Run a shell command on the host.");
-      shell_alias->SetHelpLong("");
-      shell_alias->SetSyntax("shell <shell-command>");
-    }
-  }
-
-  cmd_obj_sp = GetCommandSPExact("process kill");
+  cmd_obj_sp = GetCommandSPExact("process kill", false);
   if (cmd_obj_sp) {
     AddAlias("kill", cmd_obj_sp);
   }
 
-  cmd_obj_sp = GetCommandSPExact("process launch");
+  cmd_obj_sp = GetCommandSPExact("process launch", false);
   if (cmd_obj_sp) {
     alias_arguments_vector_sp = std::make_shared<OptionArgVector>();
-#if defined(__APPLE__)
-#if defined(TARGET_OS_IPHONE)
+#if defined(__arm__) || defined(__arm64__) || defined(__aarch64__)
     AddAlias("r", cmd_obj_sp, "--");
     AddAlias("run", cmd_obj_sp, "--");
 #else
+#if defined(__APPLE__)
+    std::string shell_option;
+    shell_option.append("--shell-expand-args");
+    shell_option.append(" true");
+    shell_option.append(" --");
     AddAlias("r", cmd_obj_sp, "--shell-expand-args true --");
     AddAlias("run", cmd_obj_sp, "--shell-expand-args true --");
-#endif
 #else
     StreamString defaultshell;
     defaultshell.Printf("--shell=%s --",
@@ -447,33 +421,29 @@ void CommandInterpreter::Initialize() {
     AddAlias("r", cmd_obj_sp, defaultshell.GetString());
     AddAlias("run", cmd_obj_sp, defaultshell.GetString());
 #endif
+#endif
   }
 
-  cmd_obj_sp = GetCommandSPExact("target symbols add");
+  cmd_obj_sp = GetCommandSPExact("target symbols add", false);
   if (cmd_obj_sp) {
     AddAlias("add-dsym", cmd_obj_sp);
   }
 
-  cmd_obj_sp = GetCommandSPExact("breakpoint set");
+  cmd_obj_sp = GetCommandSPExact("breakpoint set", false);
   if (cmd_obj_sp) {
     AddAlias("rbreak", cmd_obj_sp, "--func-regex %1");
   }
 
-  cmd_obj_sp = GetCommandSPExact("frame variable");
+  cmd_obj_sp = GetCommandSPExact("frame variable", false);
   if (cmd_obj_sp) {
     AddAlias("v", cmd_obj_sp);
     AddAlias("var", cmd_obj_sp);
     AddAlias("vo", cmd_obj_sp, "--object-description");
   }
 
-  cmd_obj_sp = GetCommandSPExact("register");
+  cmd_obj_sp = GetCommandSPExact("register", false);
   if (cmd_obj_sp) {
     AddAlias("re", cmd_obj_sp);
-  }
-
-  cmd_obj_sp = GetCommandSPExact("session history");
-  if (cmd_obj_sp) {
-    AddAlias("history", cmd_obj_sp);
   }
 }
 
@@ -494,45 +464,58 @@ const char *CommandInterpreter::ProcessEmbeddedScriptCommands(const char *arg) {
   return arg;
 }
 
-#define REGISTER_COMMAND_OBJECT(NAME, CLASS)                                   \
-  m_command_dict[NAME] = std::make_shared<CLASS>(*this);
-
 void CommandInterpreter::LoadCommandDictionary() {
-  LLDB_SCOPED_TIMER();
+  static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
+  Timer scoped_timer(func_cat, LLVM_PRETTY_FUNCTION);
 
-  REGISTER_COMMAND_OBJECT("apropos", CommandObjectApropos);
-  REGISTER_COMMAND_OBJECT("breakpoint", CommandObjectMultiwordBreakpoint);
-  REGISTER_COMMAND_OBJECT("command", CommandObjectMultiwordCommands);
-  REGISTER_COMMAND_OBJECT("disassemble", CommandObjectDisassemble);
-  REGISTER_COMMAND_OBJECT("expression", CommandObjectExpression);
-  REGISTER_COMMAND_OBJECT("frame", CommandObjectMultiwordFrame);
-  REGISTER_COMMAND_OBJECT("gui", CommandObjectGUI);
-  REGISTER_COMMAND_OBJECT("help", CommandObjectHelp);
-  REGISTER_COMMAND_OBJECT("log", CommandObjectLog);
-  REGISTER_COMMAND_OBJECT("memory", CommandObjectMemory);
-  REGISTER_COMMAND_OBJECT("platform", CommandObjectPlatform);
-  REGISTER_COMMAND_OBJECT("plugin", CommandObjectPlugin);
-  REGISTER_COMMAND_OBJECT("process", CommandObjectMultiwordProcess);
-  REGISTER_COMMAND_OBJECT("quit", CommandObjectQuit);
-  REGISTER_COMMAND_OBJECT("register", CommandObjectRegister);
-  REGISTER_COMMAND_OBJECT("reproducer", CommandObjectReproducer);
-  REGISTER_COMMAND_OBJECT("script", CommandObjectScript);
-  REGISTER_COMMAND_OBJECT("settings", CommandObjectMultiwordSettings);
-  REGISTER_COMMAND_OBJECT("session", CommandObjectSession);
-  REGISTER_COMMAND_OBJECT("source", CommandObjectMultiwordSource);
-  REGISTER_COMMAND_OBJECT("statistics", CommandObjectStats);
-  REGISTER_COMMAND_OBJECT("target", CommandObjectMultiwordTarget);
-  REGISTER_COMMAND_OBJECT("thread", CommandObjectMultiwordThread);
-  REGISTER_COMMAND_OBJECT("trace", CommandObjectTrace);
-  REGISTER_COMMAND_OBJECT("type", CommandObjectType);
-  REGISTER_COMMAND_OBJECT("version", CommandObjectVersion);
-  REGISTER_COMMAND_OBJECT("watchpoint", CommandObjectMultiwordWatchpoint);
-  REGISTER_COMMAND_OBJECT("language", CommandObjectLanguage);
+  lldb::ScriptLanguage script_language = m_debugger.GetScriptLanguage();
 
-  // clang-format off
+  m_command_dict["apropos"] = CommandObjectSP(new CommandObjectApropos(*this));
+  m_command_dict["breakpoint"] =
+      CommandObjectSP(new CommandObjectMultiwordBreakpoint(*this));
+  m_command_dict["bugreport"] =
+      CommandObjectSP(new CommandObjectMultiwordBugreport(*this));
+  m_command_dict["command"] =
+      CommandObjectSP(new CommandObjectMultiwordCommands(*this));
+  m_command_dict["disassemble"] =
+      CommandObjectSP(new CommandObjectDisassemble(*this));
+  m_command_dict["expression"] =
+      CommandObjectSP(new CommandObjectExpression(*this));
+  m_command_dict["frame"] =
+      CommandObjectSP(new CommandObjectMultiwordFrame(*this));
+  m_command_dict["gui"] = CommandObjectSP(new CommandObjectGUI(*this));
+  m_command_dict["help"] = CommandObjectSP(new CommandObjectHelp(*this));
+  m_command_dict["log"] = CommandObjectSP(new CommandObjectLog(*this));
+  m_command_dict["memory"] = CommandObjectSP(new CommandObjectMemory(*this));
+  m_command_dict["platform"] =
+      CommandObjectSP(new CommandObjectPlatform(*this));
+  m_command_dict["plugin"] = CommandObjectSP(new CommandObjectPlugin(*this));
+  m_command_dict["process"] =
+      CommandObjectSP(new CommandObjectMultiwordProcess(*this));
+  m_command_dict["quit"] = CommandObjectSP(new CommandObjectQuit(*this));
+  m_command_dict["register"] =
+      CommandObjectSP(new CommandObjectRegister(*this));
+  m_command_dict["reproducer"] =
+      CommandObjectSP(new CommandObjectReproducer(*this));
+  m_command_dict["script"] =
+      CommandObjectSP(new CommandObjectScript(*this, script_language));
+  m_command_dict["settings"] =
+      CommandObjectSP(new CommandObjectMultiwordSettings(*this));
+  m_command_dict["source"] =
+      CommandObjectSP(new CommandObjectMultiwordSource(*this));
+  m_command_dict["statistics"] = CommandObjectSP(new CommandObjectStats(*this));
+  m_command_dict["target"] =
+      CommandObjectSP(new CommandObjectMultiwordTarget(*this));
+  m_command_dict["thread"] =
+      CommandObjectSP(new CommandObjectMultiwordThread(*this));
+  m_command_dict["type"] = CommandObjectSP(new CommandObjectType(*this));
+  m_command_dict["version"] = CommandObjectSP(new CommandObjectVersion(*this));
+  m_command_dict["watchpoint"] =
+      CommandObjectSP(new CommandObjectMultiwordWatchpoint(*this));
+  m_command_dict["language"] =
+      CommandObjectSP(new CommandObjectLanguage(*this));
+
   const char *break_regexes[][2] = {
-      {"^(.*[^[:space:]])[[:space:]]*:[[:space:]]*([[:digit:]]+)[[:space:]]*:[[:space:]]*([[:digit:]]+)[[:space:]]*$",
-       "breakpoint set --file '%1' --line %2 --column %3"},
       {"^(.*[^[:space:]])[[:space:]]*:[[:space:]]*([[:digit:]]+)[[:space:]]*$",
        "breakpoint set --file '%1' --line %2"},
       {"^/([^/]+)/$", "breakpoint set --source-pattern-regexp '%1'"},
@@ -547,7 +530,6 @@ void CommandInterpreter::LoadCommandDictionary() {
        "breakpoint set --name '%1' --skip-prologue=0"},
       {"^[\"']?(.*[^[:space:]\"'])[\"']?[[:space:]]*$",
        "breakpoint set --name '%1'"}};
-  // clang-format on
 
   size_t num_regexes = llvm::array_lengthof(break_regexes);
 
@@ -556,9 +538,6 @@ void CommandInterpreter::LoadCommandDictionary() {
           *this, "_regexp-break",
           "Set a breakpoint using one of several shorthand formats.",
           "\n"
-          "_regexp-break <filename>:<linenum>:<colnum>\n"
-          "              main.c:12:21          // Break at line 12 and column "
-          "21 of main.c\n\n"
           "_regexp-break <filename>:<linenum>\n"
           "              main.c:12             // Break at line 12 of "
           "main.c\n\n"
@@ -582,7 +561,7 @@ void CommandInterpreter::LoadCommandDictionary() {
           "current file\n"
           "                                    // containing text 'break "
           "here'.\n",
-          3,
+          2,
           CommandCompletions::eSymbolCompletion |
               CommandCompletions::eSourceFileCompletion,
           false));
@@ -600,8 +579,7 @@ void CommandInterpreter::LoadCommandDictionary() {
 
     if (success) {
       CommandObjectSP break_regex_cmd_sp(break_regex_cmd_up.release());
-      m_command_dict[std::string(break_regex_cmd_sp->GetCommandName())] =
-          break_regex_cmd_sp;
+      m_command_dict[break_regex_cmd_sp->GetCommandName()] = break_regex_cmd_sp;
     }
   }
 
@@ -610,9 +588,6 @@ void CommandInterpreter::LoadCommandDictionary() {
           *this, "_regexp-tbreak",
           "Set a one-shot breakpoint using one of several shorthand formats.",
           "\n"
-          "_regexp-break <filename>:<linenum>:<colnum>\n"
-          "              main.c:12:21          // Break at line 12 and column "
-          "21 of main.c\n\n"
           "_regexp-break <filename>:<linenum>\n"
           "              main.c:12             // Break at line 12 of "
           "main.c\n\n"
@@ -644,10 +619,15 @@ void CommandInterpreter::LoadCommandDictionary() {
   if (tbreak_regex_cmd_up) {
     bool success = true;
     for (size_t i = 0; i < num_regexes; i++) {
-      std::string command = break_regexes[i][1];
-      command += " -o 1";
+      // If you add a resultant command string longer than 1024 characters be
+      // sure to increase the size of this buffer.
+      char buffer[1024];
+      int num_printed =
+          snprintf(buffer, 1024, "%s %s", break_regexes[i][1], "-o 1");
+      lldbassert(num_printed < 1024);
+      UNUSED_IF_ASSERT_DISABLED(num_printed);
       success =
-          tbreak_regex_cmd_up->AddRegexCommand(break_regexes[i][0], command);
+          tbreak_regex_cmd_up->AddRegexCommand(break_regexes[i][0], buffer);
       if (!success)
         break;
     }
@@ -656,7 +636,7 @@ void CommandInterpreter::LoadCommandDictionary() {
 
     if (success) {
       CommandObjectSP tbreak_regex_cmd_sp(tbreak_regex_cmd_up.release());
-      m_command_dict[std::string(tbreak_regex_cmd_sp->GetCommandName())] =
+      m_command_dict[tbreak_regex_cmd_sp->GetCommandName()] =
           tbreak_regex_cmd_sp;
     }
   }
@@ -676,7 +656,7 @@ void CommandInterpreter::LoadCommandDictionary() {
                                              "process attach --name '%1'") &&
         attach_regex_cmd_up->AddRegexCommand("^$", "process attach")) {
       CommandObjectSP attach_regex_cmd_sp(attach_regex_cmd_up.release());
-      m_command_dict[std::string(attach_regex_cmd_sp->GetCommandName())] =
+      m_command_dict[attach_regex_cmd_sp->GetCommandName()] =
           attach_regex_cmd_sp;
     }
   }
@@ -692,8 +672,7 @@ void CommandInterpreter::LoadCommandDictionary() {
         down_regex_cmd_up->AddRegexCommand("^([0-9]+)$",
                                            "frame select -r -%1")) {
       CommandObjectSP down_regex_cmd_sp(down_regex_cmd_up.release());
-      m_command_dict[std::string(down_regex_cmd_sp->GetCommandName())] =
-          down_regex_cmd_sp;
+      m_command_dict[down_regex_cmd_sp->GetCommandName()] = down_regex_cmd_sp;
     }
   }
 
@@ -707,8 +686,7 @@ void CommandInterpreter::LoadCommandDictionary() {
     if (up_regex_cmd_up->AddRegexCommand("^$", "frame select -r 1") &&
         up_regex_cmd_up->AddRegexCommand("^([0-9]+)$", "frame select -r %1")) {
       CommandObjectSP up_regex_cmd_sp(up_regex_cmd_up.release());
-      m_command_dict[std::string(up_regex_cmd_sp->GetCommandName())] =
-          up_regex_cmd_sp;
+      m_command_dict[up_regex_cmd_sp->GetCommandName()] = up_regex_cmd_sp;
     }
   }
 
@@ -721,7 +699,7 @@ void CommandInterpreter::LoadCommandDictionary() {
     if (display_regex_cmd_up->AddRegexCommand(
             "^(.+)$", "target stop-hook add -o \"expr -- %1\"")) {
       CommandObjectSP display_regex_cmd_sp(display_regex_cmd_up.release());
-      m_command_dict[std::string(display_regex_cmd_sp->GetCommandName())] =
+      m_command_dict[display_regex_cmd_sp->GetCommandName()] =
           display_regex_cmd_sp;
     }
   }
@@ -736,7 +714,7 @@ void CommandInterpreter::LoadCommandDictionary() {
     if (undisplay_regex_cmd_up->AddRegexCommand("^([0-9]+)$",
                                                 "target stop-hook delete %1")) {
       CommandObjectSP undisplay_regex_cmd_sp(undisplay_regex_cmd_up.release());
-      m_command_dict[std::string(undisplay_regex_cmd_sp->GetCommandName())] =
+      m_command_dict[undisplay_regex_cmd_sp->GetCommandName()] =
           undisplay_regex_cmd_sp;
     }
   }
@@ -755,7 +733,7 @@ void CommandInterpreter::LoadCommandDictionary() {
             "^([[:digit:]]+)$",
             "process connect --plugin gdb-remote connect://localhost:%1")) {
       CommandObjectSP command_sp(connect_gdb_remote_cmd_up.release());
-      m_command_dict[std::string(command_sp->GetCommandName())] = command_sp;
+      m_command_dict[command_sp->GetCommandName()] = command_sp;
     }
   }
 
@@ -773,7 +751,7 @@ void CommandInterpreter::LoadCommandDictionary() {
         connect_kdp_remote_cmd_up->AddRegexCommand(
             "^(.+)$", "process connect --plugin kdp-remote udp://%1:41139")) {
       CommandObjectSP command_sp(connect_kdp_remote_cmd_up.release());
-      m_command_dict[std::string(command_sp->GetCommandName())] = command_sp;
+      m_command_dict[command_sp->GetCommandName()] = command_sp;
     }
   }
 
@@ -798,7 +776,7 @@ void CommandInterpreter::LoadCommandDictionary() {
         bt_regex_cmd_up->AddRegexCommand("^all[[:space:]]*$", "thread backtrace all") &&
         bt_regex_cmd_up->AddRegexCommand("^[[:space:]]*$", "thread backtrace")) {
       CommandObjectSP command_sp(bt_regex_cmd_up.release());
-      m_command_dict[std::string(command_sp->GetCommandName())] = command_sp;
+      m_command_dict[command_sp->GetCommandName()] = command_sp;
     }
   }
 
@@ -834,8 +812,7 @@ void CommandInterpreter::LoadCommandDictionary() {
                                            "source list --name \"%1\"") &&
         list_regex_cmd_up->AddRegexCommand("^$", "source list")) {
       CommandObjectSP list_regex_cmd_sp(list_regex_cmd_up.release());
-      m_command_dict[std::string(list_regex_cmd_sp->GetCommandName())] =
-          list_regex_cmd_sp;
+      m_command_dict[list_regex_cmd_sp->GetCommandName()] = list_regex_cmd_sp;
     }
   }
 
@@ -853,8 +830,7 @@ void CommandInterpreter::LoadCommandDictionary() {
         env_regex_cmd_up->AddRegexCommand("^([A-Za-z_][A-Za-z_0-9]*=.*)$",
                                           "settings set target.env-vars %1")) {
       CommandObjectSP env_regex_cmd_sp(env_regex_cmd_up.release());
-      m_command_dict[std::string(env_regex_cmd_sp->GetCommandName())] =
-          env_regex_cmd_sp;
+      m_command_dict[env_regex_cmd_sp->GetCommandName()] = env_regex_cmd_sp;
     }
   }
 
@@ -877,8 +853,7 @@ void CommandInterpreter::LoadCommandDictionary() {
         jump_regex_cmd_up->AddRegexCommand("^([+\\-][0-9]+)$",
                                            "thread jump --by %1")) {
       CommandObjectSP jump_regex_cmd_sp(jump_regex_cmd_up.release());
-      m_command_dict[std::string(jump_regex_cmd_sp->GetCommandName())] =
-          jump_regex_cmd_sp;
+      m_command_dict[jump_regex_cmd_sp->GetCommandName()] = jump_regex_cmd_sp;
     }
   }
 }
@@ -903,7 +878,7 @@ CommandInterpreter::GetCommandSP(llvm::StringRef cmd_str, bool include_aliases,
                                  StringList *descriptions) const {
   CommandObjectSP command_sp;
 
-  std::string cmd = std::string(cmd_str);
+  std::string cmd = cmd_str;
 
   if (HasCommands()) {
     auto pos = m_command_dict.find(cmd);
@@ -1032,63 +1007,64 @@ bool CommandInterpreter::AddUserCommand(llvm::StringRef name,
     if (CommandExists(name)) {
       if (!can_replace)
         return false;
-      if (!m_command_dict[std::string(name)]->IsRemovable())
+      if (!m_command_dict[name]->IsRemovable())
         return false;
     }
 
     if (UserCommandExists(name)) {
       if (!can_replace)
         return false;
-      if (!m_user_dict[std::string(name)]->IsRemovable())
+      if (!m_user_dict[name]->IsRemovable())
         return false;
     }
 
-    m_user_dict[std::string(name)] = cmd_sp;
+    m_user_dict[name] = cmd_sp;
     return true;
   }
   return false;
 }
 
-CommandObjectSP
-CommandInterpreter::GetCommandSPExact(llvm::StringRef cmd_str,
-                                      bool include_aliases) const {
-  // Break up the command string into words, in case it's a multi-word command.
-  Args cmd_words(cmd_str);
+CommandObjectSP CommandInterpreter::GetCommandSPExact(llvm::StringRef cmd_str,
+                                                      bool include_aliases) const {
+  Args cmd_words(cmd_str);  // Break up the command string into words, in case
+                            // it's a multi-word command.
+  CommandObjectSP ret_val;  // Possibly empty return value.
 
   if (cmd_str.empty())
-    return {};
+    return ret_val;
 
   if (cmd_words.GetArgumentCount() == 1)
-    return GetCommandSP(cmd_str, include_aliases, true);
-
-  // We have a multi-word command (seemingly), so we need to do more work.
-  // First, get the cmd_obj_sp for the first word in the command.
-  CommandObjectSP cmd_obj_sp =
-      GetCommandSP(cmd_words.GetArgumentAtIndex(0), include_aliases, true);
-  if (!cmd_obj_sp)
-    return {};
-
-  // Loop through the rest of the words in the command (everything passed in
-  // was supposed to be part of a command name), and find the appropriate
-  // sub-command SP for each command word....
-  size_t end = cmd_words.GetArgumentCount();
-  for (size_t i = 1; i < end; ++i) {
-    if (!cmd_obj_sp->IsMultiwordObject()) {
-      // We have more words in the command name, but we don't have a
-      // multiword object. Fail and return.
-      return {};
-    }
-
-    cmd_obj_sp = cmd_obj_sp->GetSubcommandSP(cmd_words.GetArgumentAtIndex(i));
-    if (!cmd_obj_sp) {
-      // The sub-command name was invalid.  Fail and return.
-      return {};
+    return GetCommandSP(cmd_str, include_aliases, true, nullptr);
+  else {
+    // We have a multi-word command (seemingly), so we need to do more work.
+    // First, get the cmd_obj_sp for the first word in the command.
+    CommandObjectSP cmd_obj_sp = GetCommandSP(llvm::StringRef(cmd_words.GetArgumentAtIndex(0)),
+                                              include_aliases, true, nullptr);
+    if (cmd_obj_sp.get() != nullptr) {
+      // Loop through the rest of the words in the command (everything passed
+      // in was supposed to be part of a command name), and find the
+      // appropriate sub-command SP for each command word....
+      size_t end = cmd_words.GetArgumentCount();
+      for (size_t j = 1; j < end; ++j) {
+        if (cmd_obj_sp->IsMultiwordObject()) {
+          cmd_obj_sp =
+              cmd_obj_sp->GetSubcommandSP(cmd_words.GetArgumentAtIndex(j));
+          if (cmd_obj_sp.get() == nullptr)
+            // The sub-command name was invalid.  Fail and return the empty
+            // 'ret_val'.
+            return ret_val;
+        } else
+          // We have more words in the command name, but we don't have a
+          // multiword object. Fail and return empty 'ret_val'.
+          return ret_val;
+      }
+      // We successfully looped through all the command words and got valid
+      // command objects for them.  Assign the last object retrieved to
+      // 'ret_val'.
+      ret_val = cmd_obj_sp;
     }
   }
-
-  // We successfully looped through all the command words and got valid
-  // command objects for them.
-  return cmd_obj_sp;
+  return ret_val;
 }
 
 CommandObject *
@@ -1128,15 +1104,14 @@ CommandInterpreter::GetCommandObject(llvm::StringRef cmd_str,
 }
 
 bool CommandInterpreter::CommandExists(llvm::StringRef cmd) const {
-  return m_command_dict.find(std::string(cmd)) != m_command_dict.end();
+  return m_command_dict.find(cmd) != m_command_dict.end();
 }
 
 bool CommandInterpreter::GetAliasFullName(llvm::StringRef cmd,
                                           std::string &full_name) const {
-  bool exact_match =
-      (m_alias_dict.find(std::string(cmd)) != m_alias_dict.end());
+  bool exact_match = (m_alias_dict.find(cmd) != m_alias_dict.end());
   if (exact_match) {
-    full_name.assign(std::string(cmd));
+    full_name.assign(cmd);
     return exact_match;
   } else {
     StringList matches;
@@ -1162,11 +1137,11 @@ bool CommandInterpreter::GetAliasFullName(llvm::StringRef cmd,
 }
 
 bool CommandInterpreter::AliasExists(llvm::StringRef cmd) const {
-  return m_alias_dict.find(std::string(cmd)) != m_alias_dict.end();
+  return m_alias_dict.find(cmd) != m_alias_dict.end();
 }
 
 bool CommandInterpreter::UserCommandExists(llvm::StringRef cmd) const {
-  return m_user_dict.find(std::string(cmd)) != m_user_dict.end();
+  return m_user_dict.find(cmd) != m_user_dict.end();
 }
 
 CommandAlias *
@@ -1181,8 +1156,7 @@ CommandInterpreter::AddAlias(llvm::StringRef alias_name,
       new CommandAlias(*this, command_obj_sp, args_string, alias_name));
 
   if (command_alias_up && command_alias_up->IsValid()) {
-    m_alias_dict[std::string(alias_name)] =
-        CommandObjectSP(command_alias_up.get());
+    m_alias_dict[alias_name] = CommandObjectSP(command_alias_up.get());
     return command_alias_up.release();
   }
 
@@ -1190,7 +1164,7 @@ CommandInterpreter::AddAlias(llvm::StringRef alias_name,
 }
 
 bool CommandInterpreter::RemoveAlias(llvm::StringRef alias_name) {
-  auto pos = m_alias_dict.find(std::string(alias_name));
+  auto pos = m_alias_dict.find(alias_name);
   if (pos != m_alias_dict.end()) {
     m_alias_dict.erase(pos);
     return true;
@@ -1199,7 +1173,7 @@ bool CommandInterpreter::RemoveAlias(llvm::StringRef alias_name) {
 }
 
 bool CommandInterpreter::RemoveCommand(llvm::StringRef cmd) {
-  auto pos = m_command_dict.find(std::string(cmd));
+  auto pos = m_command_dict.find(cmd);
   if (pos != m_command_dict.end()) {
     if (pos->second->IsRemovable()) {
       // Only regular expression objects or python commands are removable
@@ -1210,8 +1184,7 @@ bool CommandInterpreter::RemoveCommand(llvm::StringRef cmd) {
   return false;
 }
 bool CommandInterpreter::RemoveUser(llvm::StringRef alias_name) {
-  CommandObject::CommandMap::iterator pos =
-      m_user_dict.find(std::string(alias_name));
+  CommandObject::CommandMap::iterator pos = m_user_dict.find(alias_name);
   if (pos != m_user_dict.end()) {
     m_user_dict.erase(pos);
     return true;
@@ -1295,8 +1268,7 @@ CommandObject *CommandInterpreter::GetCommandObjectForCommand(
       end = command_string.find_first_of(k_white_space, start);
       if (end == std::string::npos)
         end = command_string.size();
-      std::string cmd_word =
-          std::string(command_string.substr(start, end - start));
+      std::string cmd_word = command_string.substr(start, end - start);
 
       if (cmd_obj == nullptr)
         // Since cmd_obj is NULL we are on our first time through this loop.
@@ -1354,10 +1326,10 @@ static size_t FindArgumentTerminator(const std::string &s) {
     if (pos == std::string::npos)
       break;
     if (pos > 0) {
-      if (llvm::isSpace(s[pos - 1])) {
+      if (isspace(s[pos - 1])) {
         // Check if the string ends "\s--" (where \s is a space character) or
         // if we have "\s--\s".
-        if ((pos + 2 >= s_len) || llvm::isSpace(s[pos + 2])) {
+        if ((pos + 2 >= s_len) || isspace(s[pos + 2])) {
           return pos;
         }
       }
@@ -1437,7 +1409,7 @@ CommandObject *CommandInterpreter::BuildAliasResult(
       ((CommandAlias *)alias_cmd_obj)->Desugar();
   OptionArgVectorSP option_arg_vector_sp = desugared.second;
   alias_cmd_obj = desugared.first.get();
-  std::string alias_name_str = std::string(alias_name);
+  std::string alias_name_str = alias_name;
   if ((cmd_args.GetArgumentCount() == 0) ||
       (alias_name_str != cmd_args.GetArgumentAtIndex(0)))
     cmd_args.Unshift(alias_name_str);
@@ -1445,7 +1417,7 @@ CommandObject *CommandInterpreter::BuildAliasResult(
   result_str.Printf("%s", alias_cmd_obj->GetCommandName().str().c_str());
 
   if (!option_arg_vector_sp.get()) {
-    alias_result = std::string(result_str.GetString());
+    alias_result = result_str.GetString();
     return alias_cmd_obj;
   }
   OptionArgVector *option_arg_vector = option_arg_vector_sp.get();
@@ -1475,6 +1447,7 @@ CommandObject *CommandInterpreter::BuildAliasResult(
                                    "need at least %d arguments to use "
                                    "this alias.\n",
                                    index);
+      result.SetStatus(eReturnStatusFailed);
       return nullptr;
     } else {
       size_t strpos = raw_input_string.find(cmd_args.GetArgumentAtIndex(index));
@@ -1485,7 +1458,7 @@ CommandObject *CommandInterpreter::BuildAliasResult(
     }
   }
 
-  alias_result = std::string(result_str.GetString());
+  alias_result = result_str.GetString();
   return alias_cmd_obj;
 }
 
@@ -1531,12 +1504,16 @@ Status CommandInterpreter::PreprocessCommand(std::string &command) {
                          end_backtick - expr_content_start);
 
     ExecutionContext exe_ctx(GetExecutionContext());
+    Target *target = exe_ctx.GetTargetPtr();
 
     // Get a dummy target to allow for calculator mode while processing
     // backticks. This also helps break the infinite loop caused when target is
     // null.
-    Target *exe_target = exe_ctx.GetTargetPtr();
-    Target &target = exe_target ? *exe_target : m_debugger.GetDummyTarget();
+    if (!target)
+      target = m_debugger.GetDummyTarget();
+
+    if (!target)
+      continue;
 
     ValueObjectSP expr_result_valobj_sp;
 
@@ -1549,8 +1526,8 @@ Status CommandInterpreter::PreprocessCommand(std::string &command) {
     options.SetTimeout(llvm::None);
 
     ExpressionResults expr_result =
-        target.EvaluateExpression(expr_str.c_str(), exe_ctx.GetFramePtr(),
-                                  expr_result_valobj_sp, options);
+        target->EvaluateExpression(expr_str.c_str(), exe_ctx.GetFramePtr(),
+                                   expr_result_valobj_sp, options);
 
     if (expr_result == eExpressionCompleted) {
       Scalar scalar;
@@ -1565,7 +1542,7 @@ Status CommandInterpreter::PreprocessCommand(std::string &command) {
         scalar.GetValue(&value_strm, show_type);
         size_t value_string_size = value_strm.GetSize();
         if (value_string_size) {
-          command.insert(start_backtick, std::string(value_strm.GetString()));
+          command.insert(start_backtick, value_strm.GetString());
           pos = start_backtick + value_string_size;
           continue;
         } else {
@@ -1629,11 +1606,6 @@ Status CommandInterpreter::PreprocessCommand(std::string &command) {
                                        "expression '%s'",
                                        expr_str.c_str());
         break;
-      case eExpressionThreadVanished:
-        error.SetErrorStringWithFormat(
-            "expression thread vanished for the expression '%s'",
-            expr_str.c_str());
-        break;
       }
     }
   }
@@ -1642,18 +1614,12 @@ Status CommandInterpreter::PreprocessCommand(std::string &command) {
 
 bool CommandInterpreter::HandleCommand(const char *command_line,
                                        LazyBool lazy_add_to_history,
-                                       const ExecutionContext &override_context,
-                                       CommandReturnObject &result) {
+                                       CommandReturnObject &result,
+                                       ExecutionContext *override_context,
+                                       bool repeat_on_empty_command,
+                                       bool no_context_switching)
 
-  OverrideExecutionContext(override_context);
-  bool status = HandleCommand(command_line, lazy_add_to_history, result);
-  RestoreExecutionContext();
-  return status;
-}
-
-bool CommandInterpreter::HandleCommand(const char *command_line,
-                                       LazyBool lazy_add_to_history,
-                                       CommandReturnObject &result) {
+{
 
   std::string command_string(command_line);
   std::string original_command_string(command_line);
@@ -1662,11 +1628,18 @@ bool CommandInterpreter::HandleCommand(const char *command_line,
   llvm::PrettyStackTraceFormat stack_trace("HandleCommand(command = \"%s\")",
                                    command_line);
 
-  LLDB_LOGF(log, "Processing command: %s", command_line);
-  LLDB_SCOPED_TIMERF("Processing command: %s.", command_line);
+  if (log)
+    log->Printf("Processing command: %s", command_line);
+
+  static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
+  Timer scoped_timer(func_cat, "Handling command: %s.", command_line);
+
+  if (!no_context_switching)
+    UpdateExecutionContext(override_context);
 
   if (WasInterrupted()) {
     result.AppendError("interrupted");
+    result.SetStatus(eReturnStatusFailed);
     return false;
   }
 
@@ -1675,8 +1648,6 @@ bool CommandInterpreter::HandleCommand(const char *command_line,
     add_to_history = (m_command_source_depth == 0);
   else
     add_to_history = (lazy_add_to_history == eLazyBoolYes);
-
-  m_transcript_stream << "(lldb) " << command_line << '\n';
 
   bool empty_command = false;
   bool comment_command = false;
@@ -1697,36 +1668,38 @@ bool CommandInterpreter::HandleCommand(const char *command_line,
       search_str = search_str.drop_front(non_space);
       if (auto hist_str = m_command_history.FindString(search_str)) {
         add_to_history = false;
-        command_string = std::string(*hist_str);
-        original_command_string = std::string(*hist_str);
+        command_string = *hist_str;
+        original_command_string = *hist_str;
       } else {
         result.AppendErrorWithFormat("Could not find entry: %s in history",
                                      command_string.c_str());
+        result.SetStatus(eReturnStatusFailed);
         return false;
       }
     }
   }
 
   if (empty_command) {
-    if (!GetRepeatPreviousCommand()) {
+    if (repeat_on_empty_command) {
+      if (m_command_history.IsEmpty()) {
+        result.AppendError("empty command");
+        result.SetStatus(eReturnStatusFailed);
+        return false;
+      } else {
+        command_line = m_repeat_command.c_str();
+        command_string = command_line;
+        original_command_string = command_line;
+        if (m_repeat_command.empty()) {
+          result.AppendErrorWithFormat("No auto repeat.\n");
+          result.SetStatus(eReturnStatusFailed);
+          return false;
+        }
+      }
+      add_to_history = false;
+    } else {
       result.SetStatus(eReturnStatusSuccessFinishNoResult);
       return true;
     }
-
-    if (m_command_history.IsEmpty()) {
-      result.AppendError("empty command");
-      return false;
-    }
-
-    command_line = m_repeat_command.c_str();
-    command_string = command_line;
-    original_command_string = command_line;
-    if (m_repeat_command.empty()) {
-      result.AppendError("No auto repeat.");
-      return false;
-    }
-
-    add_to_history = false;
   } else if (comment_command) {
     result.SetStatus(eReturnStatusSuccessFinishNoResult);
     return true;
@@ -1736,6 +1709,7 @@ bool CommandInterpreter::HandleCommand(const char *command_line,
 
   if (error.Fail()) {
     result.AppendError(error.AsCString());
+    result.SetStatus(eReturnStatusFailed);
     return false;
   }
 
@@ -1761,13 +1735,13 @@ bool CommandInterpreter::HandleCommand(const char *command_line,
   // "br s -n main", command_string is now "breakpoint set -n main".
   if (log) {
     llvm::StringRef command_name = cmd_obj ? cmd_obj->GetCommandName() : "<not found>";
-    LLDB_LOGF(log, "HandleCommand, cmd_obj : '%s'", command_name.str().c_str());
-    LLDB_LOGF(log, "HandleCommand, (revised) command_string: '%s'",
-              command_string.c_str());
+    log->Printf("HandleCommand, cmd_obj : '%s'", command_name.str().c_str());
+    log->Printf("HandleCommand, (revised) command_string: '%s'",
+                command_string.c_str());
     const bool wants_raw_input =
         (cmd_obj != nullptr) ? cmd_obj->WantsRawCommandString() : false;
-    LLDB_LOGF(log, "HandleCommand, wants_raw_input:'%s'",
-              wants_raw_input ? "True" : "False");
+    log->Printf("HandleCommand, wants_raw_input:'%s'",
+                wants_raw_input ? "True" : "False");
   }
 
   // Phase 2.
@@ -1797,33 +1771,34 @@ bool CommandInterpreter::HandleCommand(const char *command_line,
     if (pos != 0 && pos != std::string::npos)
       remainder.erase(0, pos);
 
-    LLDB_LOGF(
-        log, "HandleCommand, command line after removing command name(s): '%s'",
-        remainder.c_str());
+    if (log)
+      log->Printf(
+          "HandleCommand, command line after removing command name(s): '%s'",
+          remainder.c_str());
 
     cmd_obj->Execute(remainder.c_str(), result);
   }
 
-  LLDB_LOGF(log, "HandleCommand, command %s",
-            (result.Succeeded() ? "succeeded" : "did not succeed"));
-
-  m_transcript_stream << result.GetOutputData();
-  m_transcript_stream << result.GetErrorData();
+  if (log)
+    log->Printf("HandleCommand, command %s",
+                (result.Succeeded() ? "succeeded" : "did not succeed"));
 
   return result.Succeeded();
 }
 
-void CommandInterpreter::HandleCompletionMatches(CompletionRequest &request) {
+int CommandInterpreter::HandleCompletionMatches(CompletionRequest &request) {
+  int num_command_matches = 0;
   bool look_for_subcommand = false;
 
   // For any of the command completions a unique match will be a complete word.
+  request.SetWordComplete(true);
 
-  if (request.GetParsedLine().GetArgumentCount() == 0) {
+  if (request.GetCursorIndex() == -1) {
     // We got nothing on the command line, so return the list of commands
     bool include_aliases = true;
     StringList new_matches, descriptions;
-    GetCommandNamesMatchingPartialString("", include_aliases, new_matches,
-                                         descriptions);
+    num_command_matches = GetCommandNamesMatchingPartialString(
+        "", include_aliases, new_matches, descriptions);
     request.AddCompletions(new_matches, descriptions);
   } else if (request.GetCursorIndex() == 0) {
     // The cursor is in the first argument, so just do a lookup in the
@@ -1833,18 +1808,24 @@ void CommandInterpreter::HandleCompletionMatches(CompletionRequest &request) {
         GetCommandObject(request.GetParsedLine().GetArgumentAtIndex(0),
                          &new_matches, &new_descriptions);
 
-    if (new_matches.GetSize() && cmd_obj && cmd_obj->IsMultiwordObject() &&
+    if (num_command_matches == 1 && cmd_obj && cmd_obj->IsMultiwordObject() &&
         new_matches.GetStringAtIndex(0) != nullptr &&
         strcmp(request.GetParsedLine().GetArgumentAtIndex(0),
                new_matches.GetStringAtIndex(0)) == 0) {
-      if (request.GetParsedLine().GetArgumentCount() != 1) {
+      if (request.GetParsedLine().GetArgumentCount() == 1) {
+        request.SetWordComplete(true);
+      } else {
         look_for_subcommand = true;
+        num_command_matches = 0;
         new_matches.DeleteStringAtIndex(0);
         new_descriptions.DeleteStringAtIndex(0);
-        request.AppendEmptyArgument();
+        request.GetParsedLine().AppendArgument(llvm::StringRef());
+        request.SetCursorIndex(request.GetCursorIndex() + 1);
+        request.SetCursorCharPosition(0);
       }
     }
     request.AddCompletions(new_matches, new_descriptions);
+    num_command_matches = request.GetNumberOfMatches();
   }
 
   if (request.GetCursorIndex() > 0 || look_for_subcommand) {
@@ -1853,45 +1834,84 @@ void CommandInterpreter::HandleCompletionMatches(CompletionRequest &request) {
     // matching initial command:
     CommandObject *command_object =
         GetCommandObject(request.GetParsedLine().GetArgumentAtIndex(0));
-    if (command_object) {
-      request.ShiftArguments();
-      command_object->HandleCompletion(request);
+    if (command_object == nullptr) {
+      return 0;
+    } else {
+      request.GetParsedLine().Shift();
+      request.SetCursorIndex(request.GetCursorIndex() - 1);
+      num_command_matches = command_object->HandleCompletion(request);
     }
   }
+
+  return num_command_matches;
 }
 
-void CommandInterpreter::HandleCompletion(CompletionRequest &request) {
+int CommandInterpreter::HandleCompletion(
+    const char *current_line, const char *cursor, const char *last_char,
+    int match_start_point, int max_return_elements, StringList &matches,
+    StringList &descriptions) {
 
+  llvm::StringRef command_line(current_line, last_char - current_line);
+  CompletionResult result;
+  CompletionRequest request(command_line, cursor - current_line,
+                            match_start_point, max_return_elements, result);
   // Don't complete comments, and if the line we are completing is just the
   // history repeat character, substitute the appropriate history line.
-  llvm::StringRef first_arg = request.GetParsedLine().GetArgumentAtIndex(0);
-
-  if (!first_arg.empty()) {
-    if (first_arg.front() == m_comment_char)
-      return;
-    if (first_arg.front() == CommandHistory::g_repeat_char) {
-      if (auto hist_str = m_command_history.FindString(first_arg))
-        request.AddCompletion(*hist_str, "Previous command history event",
-                              CompletionMode::RewriteLine);
-      return;
+  const char *first_arg = request.GetParsedLine().GetArgumentAtIndex(0);
+  if (first_arg) {
+    if (first_arg[0] == m_comment_char)
+      return 0;
+    else if (first_arg[0] == CommandHistory::g_repeat_char) {
+      if (auto hist_str = m_command_history.FindString(first_arg)) {
+        matches.InsertStringAtIndex(0, *hist_str);
+        descriptions.InsertStringAtIndex(0, "Previous command history event");
+        return -2;
+      } else
+        return 0;
     }
   }
 
-  HandleCompletionMatches(request);
+  // Only max_return_elements == -1 is supported at present:
+  lldbassert(max_return_elements == -1);
+
+  int num_command_matches = HandleCompletionMatches(request);
+  result.GetMatches(matches);
+  result.GetDescriptions(descriptions);
+
+  if (num_command_matches <= 0)
+    return num_command_matches;
+
+  if (request.GetParsedLine().GetArgumentCount() == 0) {
+    // If we got an empty string, insert nothing.
+    matches.InsertStringAtIndex(0, "");
+    descriptions.InsertStringAtIndex(0, "");
+  } else {
+    // Now figure out if there is a common substring, and if so put that in
+    // element 0, otherwise put an empty string in element 0.
+    std::string command_partial_str = request.GetCursorArgumentPrefix().str();
+
+    std::string common_prefix;
+    matches.LongestCommonPrefix(common_prefix);
+    const size_t partial_name_len = command_partial_str.size();
+    common_prefix.erase(0, partial_name_len);
+
+    // If we matched a unique single command, add a space... Only do this if
+    // the completer told us this was a complete word, however...
+    if (num_command_matches == 1 && request.GetWordComplete()) {
+      char quote_char = request.GetParsedLine()[request.GetCursorIndex()].quote;
+      common_prefix =
+          Args::EscapeLLDBCommandArgument(common_prefix, quote_char);
+      if (quote_char != '\0')
+        common_prefix.push_back(quote_char);
+      common_prefix.push_back(' ');
+    }
+    matches.InsertStringAtIndex(0, common_prefix.c_str());
+    descriptions.InsertStringAtIndex(0, "");
+  }
+  return num_command_matches;
 }
 
-llvm::Optional<std::string>
-CommandInterpreter::GetAutoSuggestionForCommand(llvm::StringRef line) {
-  if (line.empty())
-    return llvm::None;
-  const size_t s = m_command_history.GetSize();
-  for (int i = s - 1; i >= 0; --i) {
-    llvm::StringRef entry = m_command_history.GetStringAtIndex(i);
-    if (entry.consume_front(line))
-      return entry.str();
-  }
-  return llvm::None;
-}
+CommandInterpreter::~CommandInterpreter() {}
 
 void CommandInterpreter::UpdatePrompt(llvm::StringRef new_prompt) {
   EventSP prompt_change_event_sp(
@@ -1910,7 +1930,7 @@ bool CommandInterpreter::Confirm(llvm::StringRef message, bool default_answer) {
   IOHandlerConfirm *confirm =
       new IOHandlerConfirm(m_debugger, message, default_answer);
   IOHandlerSP io_handler_sp(confirm);
-  m_debugger.RunIOHandlerSync(io_handler_sp);
+  m_debugger.RunIOHandler(io_handler_sp);
   return confirm->GetResponse();
 }
 
@@ -1918,7 +1938,7 @@ const CommandAlias *
 CommandInterpreter::GetAlias(llvm::StringRef alias_name) const {
   OptionArgVectorSP ret_val;
 
-  auto pos = m_alias_dict.find(std::string(alias_name));
+  auto pos = m_alias_dict.find(alias_name);
   if (pos != m_alias_dict.end())
     return (CommandAlias *)pos->second.get();
 
@@ -1995,7 +2015,10 @@ void CommandInterpreter::BuildAliasCommandArgs(CommandObject *alias_cmd_obj,
         if (value_type != OptionParser::eOptionalArgument)
           new_args.AppendArgument(value);
         else {
-          new_args.AppendArgument(option + value);
+          char buffer[255];
+          ::snprintf(buffer, sizeof(buffer), "%s%s", option.c_str(),
+                     value.c_str());
+          new_args.AppendArgument(llvm::StringRef(buffer));
         }
 
       } else if (static_cast<size_t>(index) >= cmd_args.GetArgumentCount()) {
@@ -2003,6 +2026,7 @@ void CommandInterpreter::BuildAliasCommandArgs(CommandObject *alias_cmd_obj,
                                      "need at least %d arguments to use "
                                      "this alias.\n",
                                      index);
+        result.SetStatus(eReturnStatusFailed);
         return;
       } else {
         // Find and remove cmd_args.GetArgumentAtIndex(i) from raw_input_string
@@ -2016,7 +2040,10 @@ void CommandInterpreter::BuildAliasCommandArgs(CommandObject *alias_cmd_obj,
         if (value_type != OptionParser::eOptionalArgument)
           new_args.AppendArgument(cmd_args.GetArgumentAtIndex(index));
         else {
-          new_args.AppendArgument(option + cmd_args.GetArgumentAtIndex(index));
+          char buffer[255];
+          ::snprintf(buffer, sizeof(buffer), "%s%s", option.c_str(),
+                     cmd_args.GetArgumentAtIndex(index));
+          new_args.AppendArgument(buffer);
         }
         used[index] = true;
       }
@@ -2024,7 +2051,7 @@ void CommandInterpreter::BuildAliasCommandArgs(CommandObject *alias_cmd_obj,
 
     for (auto entry : llvm::enumerate(cmd_args.entries())) {
       if (!used[entry.index()] && !wants_raw_input)
-        new_args.AppendArgument(entry.value().ref());
+        new_args.AppendArgument(entry.value().ref);
     }
 
     cmd_args.Clear();
@@ -2083,27 +2110,9 @@ static void GetHomeInitFile(llvm::SmallVectorImpl<char> &init_file,
     init_file_name.append(suffix.str());
   }
 
-  FileSystem::Instance().GetHomeDirectory(init_file);
+  llvm::sys::path::home_directory(init_file);
   llvm::sys::path::append(init_file, init_file_name);
 
-  FileSystem::Instance().Resolve(init_file);
-}
-
-static void GetHomeREPLInitFile(llvm::SmallVectorImpl<char> &init_file) {
-  LanguageSet repl_languages = Language::GetLanguagesSupportingREPLs();
-  LanguageType language = eLanguageTypeUnknown;
-  if (auto main_repl_language = repl_languages.GetSingularLanguage())
-    language = *main_repl_language;
-  else
-    return;
-
-  std::string init_file_name =
-      (llvm::Twine(".lldbinit-") +
-       llvm::Twine(Language::GetNameForLanguageType(language)) +
-       llvm::Twine("-repl"))
-          .str();
-  FileSystem::Instance().GetHomeDirectory(init_file);
-  llvm::sys::path::append(init_file, init_file_name);
   FileSystem::Instance().Resolve(init_file);
 }
 
@@ -2133,12 +2142,13 @@ void CommandInterpreter::SourceInitFile(FileSpec file,
   // broadcasting of the commands back to any appropriate listener (see
   // CommandObjectSource::Execute for more details).
   const bool saved_batch = SetBatchCommandMode(true);
+  ExecutionContext *ctx = nullptr;
   CommandInterpreterRunOptions options;
   options.SetSilent(true);
   options.SetPrintErrors(true);
   options.SetStopOnError(false);
   options.SetStopOnContinue(true);
-  HandleCommandsFromFile(file, options, result);
+  HandleCommandsFromFile(file, ctx, options, result);
   SetBatchCommandMode(saved_batch);
 }
 
@@ -2171,7 +2181,8 @@ void CommandInterpreter::SourceInitFileCwd(CommandReturnObject &result) {
         llvm::sys::path::parent_path(home_init_file)) {
       result.SetStatus(eReturnStatusSuccessFinishNoResult);
     } else {
-      result.AppendError(InitFileWarning);
+      result.AppendErrorWithFormat(InitFileWarning);
+      result.SetStatus(eReturnStatusFailed);
     }
   }
   }
@@ -2179,22 +2190,15 @@ void CommandInterpreter::SourceInitFileCwd(CommandReturnObject &result) {
 
 /// We will first see if there is an application specific ".lldbinit" file
 /// whose name is "~/.lldbinit" followed by a "-" and the name of the program.
-/// If this file doesn't exist, we fall back to the REPL init file or the
-/// default home init file in "~/.lldbinit".
-void CommandInterpreter::SourceInitFileHome(CommandReturnObject &result,
-                                            bool is_repl) {
+/// If this file doesn't exist, we fall back to just the "~/.lldbinit" file.
+void CommandInterpreter::SourceInitFileHome(CommandReturnObject &result) {
   if (m_skip_lldbinit_files) {
     result.SetStatus(eReturnStatusSuccessFinishNoResult);
     return;
   }
 
   llvm::SmallString<128> init_file;
-
-  if (is_repl)
-    GetHomeREPLInitFile(init_file);
-
-  if (init_file.empty())
-    GetHomeInitFile(init_file);
+  GetHomeInitFile(init_file);
 
   if (!m_skip_app_init_files) {
     llvm::StringRef program_name =
@@ -2227,61 +2231,9 @@ PlatformSP CommandInterpreter::GetPlatform(bool prefer_target_platform) {
   return platform_sp;
 }
 
-bool CommandInterpreter::DidProcessStopAbnormally() const {
-  auto exe_ctx = GetExecutionContext();
-  TargetSP target_sp = exe_ctx.GetTargetSP();
-  if (!target_sp)
-    return false;
-
-  ProcessSP process_sp(target_sp->GetProcessSP());
-  if (!process_sp)
-    return false;
-
-  if (eStateStopped != process_sp->GetState())
-    return false;
-
-  for (const auto &thread_sp : process_sp->GetThreadList().Threads()) {
-    StopInfoSP stop_info = thread_sp->GetStopInfo();
-    if (!stop_info)
-      return false;
-
-    const StopReason reason = stop_info->GetStopReason();
-    if (reason == eStopReasonException ||
-        reason == eStopReasonInstrumentation ||
-        reason == eStopReasonProcessorTrace)
-      return true;
-
-    if (reason == eStopReasonSignal) {
-      const auto stop_signal = static_cast<int32_t>(stop_info->GetValue());
-      UnixSignalsSP signals_sp = process_sp->GetUnixSignals();
-      if (!signals_sp || !signals_sp->SignalIsValid(stop_signal))
-        // The signal is unknown, treat it as abnormal.
-        return true;
-
-      const auto sigint_num = signals_sp->GetSignalNumberFromName("SIGINT");
-      const auto sigstop_num = signals_sp->GetSignalNumberFromName("SIGSTOP");
-      if ((stop_signal != sigint_num) && (stop_signal != sigstop_num))
-        // The signal very likely implies a crash.
-        return true;
-    }
-  }
-
-  return false;
-}
-
-void
-CommandInterpreter::HandleCommands(const StringList &commands,
-                                   const ExecutionContext &override_context,
-                                   const CommandInterpreterRunOptions &options,
-                                   CommandReturnObject &result) {
-
-  OverrideExecutionContext(override_context);
-  HandleCommands(commands, options, result);
-  RestoreExecutionContext();
-}
-
 void CommandInterpreter::HandleCommands(const StringList &commands,
-                                        const CommandInterpreterRunOptions &options,
+                                        ExecutionContext *override_context,
+                                        CommandInterpreterRunOptions &options,
                                         CommandReturnObject &result) {
   size_t num_lines = commands.GetSize();
 
@@ -2290,6 +2242,13 @@ void CommandInterpreter::HandleCommands(const StringList &commands,
   // from the function.
 
   bool old_async_execution = m_debugger.GetAsyncExecution();
+
+  // If we've been given an execution context, set it at the start, but don't
+  // keep resetting it or we will cause series of commands that change the
+  // context, then do an operation that relies on that context to fail.
+
+  if (override_context != nullptr)
+    UpdateExecutionContext(override_context);
 
   if (!options.GetStopOnContinue()) {
     m_debugger.SetAsyncExecution(false);
@@ -2306,16 +2265,20 @@ void CommandInterpreter::HandleCommands(const StringList &commands,
                                      m_debugger.GetPrompt().str().c_str(), cmd);
     }
 
-    CommandReturnObject tmp_result(m_debugger.GetUseColor());
-    tmp_result.SetInteractive(result.GetInteractive());
-    tmp_result.SetSuppressImmediateOutput(true);
+    CommandReturnObject tmp_result;
+    // If override_context is not NULL, pass no_context_switching = true for
+    // HandleCommand() since we updated our context already.
 
     // We might call into a regex or alias command, in which case the
     // add_to_history will get lost.  This m_command_source_depth dingus is the
     // way we turn off adding to the history in that case, so set it up here.
     if (!options.GetAddToHistory())
       m_command_source_depth++;
-    bool success = HandleCommand(cmd, options.m_add_to_history, tmp_result);
+    bool success =
+        HandleCommand(cmd, options.m_add_to_history, tmp_result,
+                      nullptr, /* override_context */
+                      true,    /* repeat_on_empty_command */
+                      override_context != nullptr /* no_context_switching */);
     if (!options.GetAddToHistory())
       m_command_source_depth--;
 
@@ -2333,6 +2296,7 @@ void CommandInterpreter::HandleCommands(const StringList &commands,
             "Aborting reading of commands after command #%" PRIu64
             ": '%s' failed with %s",
             (uint64_t)idx, cmd, error_msg.str().c_str());
+        result.SetStatus(eReturnStatusFailed);
         m_debugger.SetAsyncExecution(old_async_execution);
         return;
       } else if (options.GetPrintResults()) {
@@ -2377,22 +2341,38 @@ void CommandInterpreter::HandleCommands(const StringList &commands,
     }
 
     // Also check for "stop on crash here:
-    if (tmp_result.GetDidChangeProcessState() && options.GetStopOnCrash() &&
-        DidProcessStopAbnormally()) {
-      if (idx != num_lines - 1)
-        result.AppendErrorWithFormat(
-            "Aborting reading of commands after command #%" PRIu64
-            ": '%s' stopped with a signal or exception.\n",
-            (uint64_t)idx + 1, cmd);
-      else
-        result.AppendMessageWithFormat(
-            "Command #%" PRIu64 " '%s' stopped with a signal or exception.\n",
-            (uint64_t)idx + 1, cmd);
+    bool should_stop = false;
+    if (tmp_result.GetDidChangeProcessState() && options.GetStopOnCrash()) {
+      TargetSP target_sp(m_debugger.GetTargetList().GetSelectedTarget());
+      if (target_sp) {
+        ProcessSP process_sp(target_sp->GetProcessSP());
+        if (process_sp) {
+          for (ThreadSP thread_sp : process_sp->GetThreadList().Threads()) {
+            StopReason reason = thread_sp->GetStopReason();
+            if (reason == eStopReasonSignal || reason == eStopReasonException ||
+                reason == eStopReasonInstrumentation) {
+              should_stop = true;
+              break;
+            }
+          }
+        }
+      }
+      if (should_stop) {
+        if (idx != num_lines - 1)
+          result.AppendErrorWithFormat(
+              "Aborting reading of commands after command #%" PRIu64
+              ": '%s' stopped with a signal or exception.\n",
+              (uint64_t)idx + 1, cmd);
+        else
+          result.AppendMessageWithFormat(
+              "Command #%" PRIu64 " '%s' stopped with a signal or exception.\n",
+              (uint64_t)idx + 1, cmd);
 
-      result.SetStatus(tmp_result.GetStatus());
-      m_debugger.SetAsyncExecution(old_async_execution);
+        result.SetStatus(tmp_result.GetStatus());
+        m_debugger.SetAsyncExecution(old_async_execution);
 
-      return;
+        return;
+      }
     }
   }
 
@@ -2415,33 +2395,28 @@ enum {
 };
 
 void CommandInterpreter::HandleCommandsFromFile(
-    FileSpec &cmd_file, const ExecutionContext &context,
-    const CommandInterpreterRunOptions &options, CommandReturnObject &result) {
-  OverrideExecutionContext(context);
-  HandleCommandsFromFile(cmd_file, options, result);
-  RestoreExecutionContext();
-}
-
-void CommandInterpreter::HandleCommandsFromFile(FileSpec &cmd_file,
-    const CommandInterpreterRunOptions &options, CommandReturnObject &result) {
+    FileSpec &cmd_file, ExecutionContext *context,
+    CommandInterpreterRunOptions &options, CommandReturnObject &result) {
   if (!FileSystem::Instance().Exists(cmd_file)) {
     result.AppendErrorWithFormat(
         "Error reading commands from file %s - file not found.\n",
         cmd_file.GetFilename().AsCString("<Unknown>"));
+    result.SetStatus(eReturnStatusFailed);
     return;
   }
 
+  StreamFileSP input_file_sp(new StreamFile());
   std::string cmd_file_path = cmd_file.GetPath();
-  auto input_file_up =
-      FileSystem::Instance().Open(cmd_file, File::eOpenOptionRead);
-  if (!input_file_up) {
-    std::string error = llvm::toString(input_file_up.takeError());
-    result.AppendErrorWithFormatv(
-        "error: an error occurred read file '{0}': {1}\n", cmd_file_path,
-        llvm::fmt_consume(input_file_up.takeError()));
+  Status error = FileSystem::Instance().Open(input_file_sp->GetFile(), cmd_file,
+                                             File::eOpenOptionRead);
+
+  if (error.Fail()) {
+    result.AppendErrorWithFormat(
+        "error: an error occurred read file '%s': %s\n", cmd_file_path.c_str(),
+        error.AsCString());
+    result.SetStatus(eReturnStatusFailed);
     return;
   }
-  FileSP input_file_sp = FileSP(std::move(input_file_up.get()));
 
   Debugger &debugger = GetDebugger();
 
@@ -2527,8 +2502,8 @@ void CommandInterpreter::HandleCommandsFromFile(FileSpec &cmd_file,
   }
 
   if (flags & eHandleCommandFlagPrintResult) {
-    debugger.GetOutputFile().Printf("Executing commands in '%s'.\n",
-                                    cmd_file_path.c_str());
+    debugger.GetOutputFile()->Printf("Executing commands in '%s'.\n",
+                                     cmd_file_path.c_str());
   }
 
   // Used for inheriting the right settings when "command source" might
@@ -2554,15 +2529,11 @@ void CommandInterpreter::HandleCommandsFromFile(FileSpec &cmd_file,
     debugger.SetAsyncExecution(false);
 
   m_command_source_depth++;
-  m_command_source_dirs.push_back(cmd_file.CopyByRemovingLastPathComponent());
 
-  debugger.RunIOHandlerSync(io_handler_sp);
+  debugger.RunIOHandler(io_handler_sp);
   if (!m_command_source_flags.empty())
     m_command_source_flags.pop_back();
-
-  m_command_source_dirs.pop_back();
   m_command_source_depth--;
-
   result.SetStatus(eReturnStatusSuccessFinishNoResult);
   debugger.SetAsyncExecution(old_async_execution);
 }
@@ -2570,9 +2541,6 @@ void CommandInterpreter::HandleCommandsFromFile(FileSpec &cmd_file,
 bool CommandInterpreter::GetSynchronous() { return m_synchronous_execution; }
 
 void CommandInterpreter::SetSynchronous(bool value) {
-  // Asynchronous mode is not supported during reproducer replay.
-  if (repro::Reproducer::Instance().GetLoader())
-    return;
   m_synchronous_execution = value;
 }
 
@@ -2685,7 +2653,7 @@ void CommandInterpreter::FindCommandsForApropos(
     const bool search_long_help = false;
     const bool search_syntax = false;
     const bool search_options = false;
-    if (command_name.contains_insensitive(search_word) ||
+    if (command_name.contains_lower(search_word) ||
         cmd_obj->HelpTextContainsWord(search_word, search_short_help,
                                       search_long_help, search_syntax,
                                       search_options)) {
@@ -2722,26 +2690,43 @@ void CommandInterpreter::FindCommandsForApropos(llvm::StringRef search_word,
                            m_alias_dict);
 }
 
-ExecutionContext CommandInterpreter::GetExecutionContext() const {
-  return !m_overriden_exe_contexts.empty()
-             ? m_overriden_exe_contexts.top()
-             : m_debugger.GetSelectedExecutionContext();
+void CommandInterpreter::UpdateExecutionContext(
+    ExecutionContext *override_context) {
+  if (override_context != nullptr) {
+    m_exe_ctx_ref = *override_context;
+  } else {
+    const bool adopt_selected = true;
+    m_exe_ctx_ref.SetTargetPtr(m_debugger.GetSelectedTarget().get(),
+                               adopt_selected);
+  }
 }
 
-void CommandInterpreter::OverrideExecutionContext(
-    const ExecutionContext &override_context) {
-  m_overriden_exe_contexts.push(override_context);
-}
-
-void CommandInterpreter::RestoreExecutionContext() {
-  if (!m_overriden_exe_contexts.empty())
-    m_overriden_exe_contexts.pop();
-}
-
-void CommandInterpreter::GetProcessOutput() {
-  if (ProcessSP process_sp = GetExecutionContext().GetProcessSP())
-    m_debugger.FlushProcessOutput(*process_sp, /*flush_stdout*/ true,
-                                  /*flush_stderr*/ true);
+size_t CommandInterpreter::GetProcessOutput() {
+  //  The process has stuff waiting for stderr; get it and write it out to the
+  //  appropriate place.
+  char stdio_buffer[1024];
+  size_t len;
+  size_t total_bytes = 0;
+  Status error;
+  TargetSP target_sp(m_debugger.GetTargetList().GetSelectedTarget());
+  if (target_sp) {
+    ProcessSP process_sp(target_sp->GetProcessSP());
+    if (process_sp) {
+      while ((len = process_sp->GetSTDOUT(stdio_buffer, sizeof(stdio_buffer),
+                                          error)) > 0) {
+        size_t bytes_written = len;
+        m_debugger.GetOutputFile()->Write(stdio_buffer, bytes_written);
+        total_bytes += len;
+      }
+      while ((len = process_sp->GetSTDERR(stdio_buffer, sizeof(stdio_buffer),
+                                          error)) > 0) {
+        size_t bytes_written = len;
+        m_debugger.GetErrorFile()->Write(stdio_buffer, bytes_written);
+        total_bytes += len;
+      }
+    }
+  }
+  return total_bytes;
 }
 
 void CommandInterpreter::StartHandlingCommand() {
@@ -2833,18 +2818,13 @@ void CommandInterpreter::IOHandlerInputComplete(IOHandler &io_handler,
     // from a file) we need to echo the command out so we don't just see the
     // command output and no command...
     if (EchoCommandNonInteractive(line, io_handler.GetFlags()))
-      io_handler.GetOutputStreamFileSP()->Printf(
-          "%s%s\n", io_handler.GetPrompt(), line.c_str());
+      io_handler.GetOutputStreamFile()->Printf("%s%s\n", io_handler.GetPrompt(),
+                                               line.c_str());
   }
 
   StartHandlingCommand();
 
-  OverrideExecutionContext(m_debugger.GetSelectedExecutionContext());
-  auto finalize = llvm::make_scope_exit([this]() {
-    RestoreExecutionContext();
-  });
-
-  lldb_private::CommandReturnObject result(m_debugger.GetUseColor());
+  lldb_private::CommandReturnObject result;
   HandleCommand(line.c_str(), eLazyBoolCalculate, result);
 
   // Now emit the command output text from the command we just executed
@@ -2856,13 +2836,13 @@ void CommandInterpreter::IOHandlerInputComplete(IOHandler &io_handler,
 
     if (!result.GetImmediateOutputStream()) {
       llvm::StringRef output = result.GetOutputData();
-      PrintCommandOutput(*io_handler.GetOutputStreamFileSP(), output);
+      PrintCommandOutput(*io_handler.GetOutputStreamFile(), output);
     }
 
     // Now emit the command error text from the command we just executed
     if (!result.GetImmediateErrorStream()) {
       llvm::StringRef error = result.GetErrorData();
-      PrintCommandOutput(*io_handler.GetErrorStreamFileSP(), error);
+      PrintCommandOutput(*io_handler.GetErrorStreamFile(), error);
     }
   }
 
@@ -2882,26 +2862,40 @@ void CommandInterpreter::IOHandlerInputComplete(IOHandler &io_handler,
     break;
 
   case eReturnStatusFailed:
-    m_result.IncrementNumberOfErrors();
-    if (io_handler.GetFlags().Test(eHandleCommandFlagStopOnError)) {
-      m_result.SetResult(lldb::eCommandInterpreterResultCommandError);
+    m_num_errors++;
+    if (io_handler.GetFlags().Test(eHandleCommandFlagStopOnError))
       io_handler.SetIsDone(true);
-    }
     break;
 
   case eReturnStatusQuit:
-    m_result.SetResult(lldb::eCommandInterpreterResultQuitRequested);
+    m_quit_requested = true;
     io_handler.SetIsDone(true);
     break;
   }
 
   // Finally, if we're going to stop on crash, check that here:
-  if (m_result.IsResult(lldb::eCommandInterpreterResultSuccess) &&
-      result.GetDidChangeProcessState() &&
-      io_handler.GetFlags().Test(eHandleCommandFlagStopOnCrash) &&
-      DidProcessStopAbnormally()) {
-    io_handler.SetIsDone(true);
-    m_result.SetResult(lldb::eCommandInterpreterResultInferiorCrash);
+  if (!m_quit_requested && result.GetDidChangeProcessState() &&
+      io_handler.GetFlags().Test(eHandleCommandFlagStopOnCrash)) {
+    bool should_stop = false;
+    TargetSP target_sp(m_debugger.GetTargetList().GetSelectedTarget());
+    if (target_sp) {
+      ProcessSP process_sp(target_sp->GetProcessSP());
+      if (process_sp) {
+        for (ThreadSP thread_sp : process_sp->GetThreadList().Threads()) {
+          StopReason reason = thread_sp->GetStopReason();
+          if ((reason == eStopReasonSignal || reason == eStopReasonException ||
+               reason == eStopReasonInstrumentation) &&
+              !result.GetAbnormalStopWasExpected()) {
+            should_stop = true;
+            break;
+          }
+        }
+      }
+    }
+    if (should_stop) {
+      io_handler.SetIsDone(true);
+      m_stopped_for_crash = true;
+    }
   }
 }
 
@@ -2929,73 +2923,16 @@ bool CommandInterpreter::IOHandlerInterrupt(IOHandler &io_handler) {
   return false;
 }
 
-bool CommandInterpreter::SaveTranscript(
-    CommandReturnObject &result, llvm::Optional<std::string> output_file) {
-  if (output_file == llvm::None || output_file->empty()) {
-    std::string now = llvm::to_string(std::chrono::system_clock::now());
-    std::replace(now.begin(), now.end(), ' ', '_');
-    const std::string file_name = "lldb_session_" + now + ".log";
-
-    FileSpec save_location = GetSaveSessionDirectory();
-
-    if (!save_location)
-      save_location = HostInfo::GetGlobalTempDir();
-
-    FileSystem::Instance().Resolve(save_location);
-    save_location.AppendPathComponent(file_name);
-    output_file = save_location.GetPath();
-  }
-
-  auto error_out = [&](llvm::StringRef error_message, std::string description) {
-    LLDB_LOG(GetLogIfAllCategoriesSet(LIBLLDB_LOG_COMMANDS), "{0} ({1}:{2})",
-             error_message, output_file, description);
-    result.AppendErrorWithFormatv(
-        "Failed to save session's transcripts to {0}!", *output_file);
-    return false;
-  };
-
-  File::OpenOptions flags = File::eOpenOptionWrite |
-                            File::eOpenOptionCanCreate |
-                            File::eOpenOptionTruncate;
-
-  auto opened_file = FileSystem::Instance().Open(FileSpec(*output_file), flags);
-
-  if (!opened_file)
-    return error_out("Unable to create file",
-                     llvm::toString(opened_file.takeError()));
-
-  FileUP file = std::move(opened_file.get());
-
-  size_t byte_size = m_transcript_stream.GetSize();
-
-  Status error = file->Write(m_transcript_stream.GetData(), byte_size);
-
-  if (error.Fail() || byte_size != m_transcript_stream.GetSize())
-    return error_out("Unable to write to destination file",
-                     "Bytes written do not match transcript size.");
-
-  result.SetStatus(eReturnStatusSuccessFinishNoResult);
-  result.AppendMessageWithFormat("Session's transcripts saved to %s\n",
-                                 output_file->c_str());
-
-  return true;
-}
-
-FileSpec CommandInterpreter::GetCurrentSourceDir() {
-  if (m_command_source_dirs.empty())
-    return {};
-  return m_command_source_dirs.back();
-}
-
 void CommandInterpreter::GetLLDBCommandsFromIOHandler(
-    const char *prompt, IOHandlerDelegate &delegate, void *baton) {
+    const char *prompt, IOHandlerDelegate &delegate, bool asynchronously,
+    void *baton) {
   Debugger &debugger = GetDebugger();
   IOHandlerSP io_handler_sp(
       new IOHandlerEditline(debugger, IOHandler::Type::CommandList,
                             "lldb", // Name of input reader for history
-                            llvm::StringRef(prompt), // Prompt
-                            llvm::StringRef(),       // Continuation prompt
-                            true,                    // Get multiple lines
+                            llvm::StringRef::withNullAsEmpty(prompt), // Prompt
+                            llvm::StringRef(), // Continuation prompt
+                            true,              // Get multiple lines
                             debugger.GetUseColor(),
                             0,         // Don't show line numbers
                             delegate,  // IOHandlerDelegate
@@ -3003,19 +2940,23 @@ void CommandInterpreter::GetLLDBCommandsFromIOHandler(
 
   if (io_handler_sp) {
     io_handler_sp->SetUserData(baton);
-    debugger.RunIOHandlerAsync(io_handler_sp);
+    if (asynchronously)
+      debugger.PushIOHandler(io_handler_sp);
+    else
+      debugger.RunIOHandler(io_handler_sp);
   }
 }
 
 void CommandInterpreter::GetPythonCommandsFromIOHandler(
-    const char *prompt, IOHandlerDelegate &delegate, void *baton) {
+    const char *prompt, IOHandlerDelegate &delegate, bool asynchronously,
+    void *baton) {
   Debugger &debugger = GetDebugger();
   IOHandlerSP io_handler_sp(
       new IOHandlerEditline(debugger, IOHandler::Type::PythonCode,
                             "lldb-python", // Name of input reader for history
-                            llvm::StringRef(prompt), // Prompt
-                            llvm::StringRef(),       // Continuation prompt
-                            true,                    // Get multiple lines
+                            llvm::StringRef::withNullAsEmpty(prompt), // Prompt
+                            llvm::StringRef(), // Continuation prompt
+                            true,              // Get multiple lines
                             debugger.GetUseColor(),
                             0,         // Don't show line numbers
                             delegate,  // IOHandlerDelegate
@@ -3023,7 +2964,10 @@ void CommandInterpreter::GetPythonCommandsFromIOHandler(
 
   if (io_handler_sp) {
     io_handler_sp->SetUserData(baton);
-    debugger.RunIOHandlerAsync(io_handler_sp);
+    if (asynchronously)
+      debugger.PushIOHandler(io_handler_sp);
+    else
+      debugger.RunIOHandler(io_handler_sp);
   }
 }
 
@@ -3065,8 +3009,8 @@ CommandInterpreter::GetIOHandler(bool force_create,
 
     m_command_io_handler_sp = std::make_shared<IOHandlerEditline>(
         m_debugger, IOHandler::Type::CommandInterpreter,
-        m_debugger.GetInputFileSP(), m_debugger.GetOutputStreamSP(),
-        m_debugger.GetErrorStreamSP(), flags, "lldb", m_debugger.GetPrompt(),
+        m_debugger.GetInputFile(), m_debugger.GetOutputFile(),
+        m_debugger.GetErrorFile(), flags, "lldb", m_debugger.GetPrompt(),
         llvm::StringRef(), // Continuation prompt
         false, // Don't enable multiple line input, just single line commands
         m_debugger.GetUseColor(),
@@ -3077,27 +3021,26 @@ CommandInterpreter::GetIOHandler(bool force_create,
   return m_command_io_handler_sp;
 }
 
-CommandInterpreterRunResult CommandInterpreter::RunCommandInterpreter(
+void CommandInterpreter::RunCommandInterpreter(
+    bool auto_handle_events, bool spawn_thread,
     CommandInterpreterRunOptions &options) {
   // Always re-create the command interpreter when we run it in case any file
   // handles have changed.
   bool force_create = true;
-  m_debugger.RunIOHandlerAsync(GetIOHandler(force_create, &options));
-  m_result = CommandInterpreterRunResult();
+  m_debugger.PushIOHandler(GetIOHandler(force_create, &options));
+  m_stopped_for_crash = false;
 
-  if (options.GetAutoHandleEvents())
+  if (auto_handle_events)
     m_debugger.StartEventHandlerThread();
 
-  if (options.GetSpawnThread()) {
+  if (spawn_thread) {
     m_debugger.StartIOHandlerThread();
   } else {
-    m_debugger.RunIOHandlers();
+    m_debugger.ExecuteIOHandlers();
 
-    if (options.GetAutoHandleEvents())
+    if (auto_handle_events)
       m_debugger.StopEventHandlerThread();
   }
-
-  return m_result;
 }
 
 CommandObject *
@@ -3108,6 +3051,7 @@ CommandInterpreter::ResolveCommandImpl(std::string &command_line,
   CommandObject *cmd_obj = nullptr;
   StreamString revised_command_line;
   bool wants_raw_input = false;
+  size_t actual_cmd_name_len = 0;
   std::string next_word;
   StringList matches;
   bool done = false;
@@ -3129,10 +3073,12 @@ CommandInterpreter::ResolveCommandImpl(std::string &command_line,
         revised_command_line.Printf("%s", alias_result.c_str());
         if (cmd_obj) {
           wants_raw_input = cmd_obj->WantsRawCommandString();
+          actual_cmd_name_len = cmd_obj->GetCommandName().size();
         }
       } else {
         if (cmd_obj) {
           llvm::StringRef cmd_name = cmd_obj->GetCommandName();
+          actual_cmd_name_len += cmd_name.size();
           revised_command_line.Printf("%s", cmd_name.str().c_str());
           wants_raw_input = cmd_obj->WantsRawCommandString();
         } else {
@@ -3147,6 +3093,7 @@ CommandInterpreter::ResolveCommandImpl(std::string &command_line,
           // The subcommand's name includes the parent command's name, so
           // restart rather than append to the revised_command_line.
           llvm::StringRef sub_cmd_name = sub_cmd_obj->GetCommandName();
+          actual_cmd_name_len = sub_cmd_name.size() + 1;
           revised_command_line.Clear();
           revised_command_line.Printf("%s", sub_cmd_name.str().c_str());
           cmd_obj = sub_cmd_obj;
@@ -3190,6 +3137,7 @@ CommandInterpreter::ResolveCommandImpl(std::string &command_line,
         result.AppendErrorWithFormat("'%s' is not a valid command.\n",
                                      next_word.c_str());
       }
+      result.SetStatus(eReturnStatusFailed);
       return nullptr;
     }
 
@@ -3201,6 +3149,7 @@ CommandInterpreter::ResolveCommandImpl(std::string &command_line,
             cmd_obj->GetCommandName().str().c_str(),
             next_word.empty() ? "" : next_word.c_str(),
             next_word.empty() ? " -- " : " ", suffix.c_str());
+        result.SetStatus(eReturnStatusFailed);
         return nullptr;
       }
     } else {
@@ -3217,7 +3166,7 @@ CommandInterpreter::ResolveCommandImpl(std::string &command_line,
               std::string gdb_format_option("--gdb-format=");
               gdb_format_option += (suffix.c_str() + 1);
 
-              std::string cmd = std::string(revised_command_line.GetString());
+              std::string cmd = revised_command_line.GetString();
               size_t arg_terminator_idx = FindArgumentTerminator(cmd);
               if (arg_terminator_idx != std::string::npos) {
                 // Insert the gdb format option before the "--" that terminates
@@ -3236,6 +3185,7 @@ CommandInterpreter::ResolveCommandImpl(std::string &command_line,
               result.AppendErrorWithFormat(
                   "the '%s' command doesn't support the --gdb-format option\n",
                   cmd_obj->GetCommandName().str().c_str());
+              result.SetStatus(eReturnStatusFailed);
               return nullptr;
             }
           }
@@ -3244,6 +3194,7 @@ CommandInterpreter::ResolveCommandImpl(std::string &command_line,
         default:
           result.AppendErrorWithFormat(
               "unknown command shorthand suffix: '%s'\n", suffix.c_str());
+          result.SetStatus(eReturnStatusFailed);
           return nullptr;
         }
       }
@@ -3256,7 +3207,7 @@ CommandInterpreter::ResolveCommandImpl(std::string &command_line,
     revised_command_line.Printf(" %s", scratch_command.c_str());
 
   if (cmd_obj != nullptr)
-    command_line = std::string(revised_command_line.GetString());
+    command_line = revised_command_line.GetString();
 
   return cmd_obj;
 }

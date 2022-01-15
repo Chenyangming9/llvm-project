@@ -106,7 +106,6 @@
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Function.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/MC/LaneBitmask.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
@@ -174,7 +173,6 @@ namespace {
     unsigned CoaCounter = 0;
     unsigned TfrCounter = 0;
 
-    // FIXME: Consolidate duplicate definitions of RegisterRef
     struct RegisterRef {
       RegisterRef(const MachineOperand &Op) : Reg(Op.getReg()),
           Sub(Op.getSubReg()) {}
@@ -188,8 +186,7 @@ namespace {
         return Reg < RR.Reg || (Reg == RR.Reg && Sub < RR.Sub);
       }
 
-      Register Reg;
-      unsigned Sub;
+      unsigned Reg, Sub;
     };
 
     using ReferenceMap = DenseMap<unsigned, unsigned>;
@@ -198,25 +195,25 @@ namespace {
 
     unsigned getMaskForSub(unsigned Sub);
     bool isCondset(const MachineInstr &MI);
-    LaneBitmask getLaneMask(Register Reg, unsigned Sub);
+    LaneBitmask getLaneMask(unsigned Reg, unsigned Sub);
 
     void addRefToMap(RegisterRef RR, ReferenceMap &Map, unsigned Exec);
     bool isRefInMap(RegisterRef, ReferenceMap &Map, unsigned Exec);
 
-    void updateDeadsInRange(Register Reg, LaneBitmask LM, LiveRange &Range);
-    void updateKillFlags(Register Reg);
-    void updateDeadFlags(Register Reg);
-    void recalculateLiveInterval(Register Reg);
+    void updateDeadsInRange(unsigned Reg, LaneBitmask LM, LiveRange &Range);
+    void updateKillFlags(unsigned Reg);
+    void updateDeadFlags(unsigned Reg);
+    void recalculateLiveInterval(unsigned Reg);
     void removeInstr(MachineInstr &MI);
-    void updateLiveness(std::set<Register> &RegSet, bool Recalc,
-                        bool UpdateKills, bool UpdateDeads);
+    void updateLiveness(std::set<unsigned> &RegSet, bool Recalc,
+        bool UpdateKills, bool UpdateDeads);
 
     unsigned getCondTfrOpcode(const MachineOperand &SO, bool Cond);
     MachineInstr *genCondTfrFor(MachineOperand &SrcOp,
         MachineBasicBlock::iterator At, unsigned DstR,
         unsigned DstSR, const MachineOperand &PredOp, bool PredSense,
         bool ReadUndef, bool ImpUse);
-    bool split(MachineInstr &MI, std::set<Register> &UpdRegs);
+    bool split(MachineInstr &MI, std::set<unsigned> &UpdRegs);
 
     bool isPredicable(MachineInstr *MI);
     MachineInstr *getReachingDefForPred(RegisterRef RD,
@@ -226,18 +223,19 @@ namespace {
     void predicateAt(const MachineOperand &DefOp, MachineInstr &MI,
                      MachineBasicBlock::iterator Where,
                      const MachineOperand &PredOp, bool Cond,
-                     std::set<Register> &UpdRegs);
+                     std::set<unsigned> &UpdRegs);
     void renameInRange(RegisterRef RO, RegisterRef RN, unsigned PredR,
         bool Cond, MachineBasicBlock::iterator First,
         MachineBasicBlock::iterator Last);
-    bool predicate(MachineInstr &TfrI, bool Cond, std::set<Register> &UpdRegs);
-    bool predicateInBlock(MachineBasicBlock &B, std::set<Register> &UpdRegs);
+    bool predicate(MachineInstr &TfrI, bool Cond, std::set<unsigned> &UpdRegs);
+    bool predicateInBlock(MachineBasicBlock &B,
+        std::set<unsigned> &UpdRegs);
 
     bool isIntReg(RegisterRef RR, unsigned &BW);
     bool isIntraBlocks(LiveInterval &LI);
     bool coalesceRegisters(RegisterRef R1, RegisterRef R2);
-    bool coalesceSegments(const SmallVectorImpl<MachineInstr *> &Condsets,
-                          std::set<Register> &UpdRegs);
+    bool coalesceSegments(const SmallVectorImpl<MachineInstr*> &Condsets,
+                          std::set<unsigned> &UpdRegs);
   };
 
 } // end anonymous namespace
@@ -286,8 +284,8 @@ bool HexagonExpandCondsets::isCondset(const MachineInstr &MI) {
   return false;
 }
 
-LaneBitmask HexagonExpandCondsets::getLaneMask(Register Reg, unsigned Sub) {
-  assert(Reg.isVirtual());
+LaneBitmask HexagonExpandCondsets::getLaneMask(unsigned Reg, unsigned Sub) {
+  assert(TargetRegisterInfo::isVirtualRegister(Reg));
   return Sub != 0 ? TRI->getSubRegIndexLaneMask(Sub)
                   : MRI->getMaxLaneMaskForVReg(Reg);
 }
@@ -313,7 +311,7 @@ bool HexagonExpandCondsets::isRefInMap(RegisterRef RR, ReferenceMap &Map,
   return false;
 }
 
-void HexagonExpandCondsets::updateKillFlags(Register Reg) {
+void HexagonExpandCondsets::updateKillFlags(unsigned Reg) {
   auto KillAt = [this,Reg] (SlotIndex K, LaneBitmask LM) -> void {
     // Set the <kill> flag on a use of Reg whose lane mask is contained in LM.
     MachineInstr *MI = LIS->getInstructionFromIndex(K);
@@ -364,9 +362,9 @@ void HexagonExpandCondsets::updateKillFlags(Register Reg) {
   }
 }
 
-void HexagonExpandCondsets::updateDeadsInRange(Register Reg, LaneBitmask LM,
-                                               LiveRange &Range) {
-  assert(Reg.isVirtual());
+void HexagonExpandCondsets::updateDeadsInRange(unsigned Reg, LaneBitmask LM,
+      LiveRange &Range) {
+  assert(TargetRegisterInfo::isVirtualRegister(Reg));
   if (Range.empty())
     return;
 
@@ -374,8 +372,8 @@ void HexagonExpandCondsets::updateDeadsInRange(Register Reg, LaneBitmask LM,
   auto IsRegDef = [this,Reg,LM] (MachineOperand &Op) -> std::pair<bool,bool> {
     if (!Op.isReg() || !Op.isDef())
       return { false, false };
-    Register DR = Op.getReg(), DSR = Op.getSubReg();
-    if (!DR.isVirtual() || DR != Reg)
+    unsigned DR = Op.getReg(), DSR = Op.getSubReg();
+    if (!TargetRegisterInfo::isVirtualRegister(DR) || DR != Reg)
       return { false, false };
     LaneBitmask SLM = getLaneMask(DR, DSR);
     LaneBitmask A = SLM & LM;
@@ -525,7 +523,7 @@ void HexagonExpandCondsets::updateDeadsInRange(Register Reg, LaneBitmask LM,
   }
 }
 
-void HexagonExpandCondsets::updateDeadFlags(Register Reg) {
+void HexagonExpandCondsets::updateDeadFlags(unsigned Reg) {
   LiveInterval &LI = LIS->getInterval(Reg);
   if (LI.hasSubRanges()) {
     for (LiveInterval::SubRange &S : LI.subranges()) {
@@ -539,7 +537,7 @@ void HexagonExpandCondsets::updateDeadFlags(Register Reg) {
   }
 }
 
-void HexagonExpandCondsets::recalculateLiveInterval(Register Reg) {
+void HexagonExpandCondsets::recalculateLiveInterval(unsigned Reg) {
   LIS->removeInterval(Reg);
   LIS->createAndComputeVirtRegInterval(Reg);
 }
@@ -549,13 +547,12 @@ void HexagonExpandCondsets::removeInstr(MachineInstr &MI) {
   MI.eraseFromParent();
 }
 
-void HexagonExpandCondsets::updateLiveness(std::set<Register> &RegSet,
-                                           bool Recalc, bool UpdateKills,
-                                           bool UpdateDeads) {
+void HexagonExpandCondsets::updateLiveness(std::set<unsigned> &RegSet,
+      bool Recalc, bool UpdateKills, bool UpdateDeads) {
   UpdateKills |= UpdateDeads;
-  for (Register R : RegSet) {
-    if (!R.isVirtual()) {
-      assert(R.isPhysical());
+  for (unsigned R : RegSet) {
+    if (!TargetRegisterInfo::isVirtualRegister(R)) {
+      assert(TargetRegisterInfo::isPhysicalRegister(R));
       // There shouldn't be any physical registers as operands, except
       // possibly reserved registers.
       assert(MRI->isReserved(R));
@@ -582,16 +579,17 @@ unsigned HexagonExpandCondsets::getCondTfrOpcode(const MachineOperand &SO,
   using namespace Hexagon;
 
   if (SO.isReg()) {
-    MCRegister PhysR;
+    unsigned PhysR;
     RegisterRef RS = SO;
-    if (RS.Reg.isVirtual()) {
+    if (TargetRegisterInfo::isVirtualRegister(RS.Reg)) {
       const TargetRegisterClass *VC = MRI->getRegClass(RS.Reg);
       assert(VC->begin() != VC->end() && "Empty register class");
       PhysR = *VC->begin();
     } else {
+      assert(TargetRegisterInfo::isPhysicalRegister(RS.Reg));
       PhysR = RS.Reg;
     }
-    MCRegister PhysS = (RS.Sub == 0) ? PhysR : TRI->getSubReg(PhysR, RS.Sub);
+    unsigned PhysS = (RS.Sub == 0) ? PhysR : TRI->getSubReg(PhysR, RS.Sub);
     const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(PhysS);
     switch (TRI->getRegSizeInBits(*RC)) {
       case 32:
@@ -662,7 +660,7 @@ MachineInstr *HexagonExpandCondsets::genCondTfrFor(MachineOperand &SrcOp,
 /// Replace a MUX instruction MI with a pair A2_tfrt/A2_tfrf. This function
 /// performs all necessary changes to complete the replacement.
 bool HexagonExpandCondsets::split(MachineInstr &MI,
-                                  std::set<Register> &UpdRegs) {
+                                  std::set<unsigned> &UpdRegs) {
   if (TfrLimitActive) {
     if (TfrCounter >= TfrLimit)
       return false;
@@ -673,7 +671,7 @@ bool HexagonExpandCondsets::split(MachineInstr &MI,
   MachineOperand &MD = MI.getOperand(0);  // Definition
   MachineOperand &MP = MI.getOperand(1);  // Predicate register
   assert(MD.isDef());
-  Register DR = MD.getReg(), DSR = MD.getSubReg();
+  unsigned DR = MD.getReg(), DSR = MD.getSubReg();
   bool ReadUndef = MD.isUndef();
   MachineBasicBlock::iterator At = MI;
 
@@ -804,7 +802,7 @@ bool HexagonExpandCondsets::canMoveOver(MachineInstr &MI, ReferenceMap &Defs,
     // For physical register we would need to check register aliases, etc.
     // and we don't want to bother with that. It would be of little value
     // before the actual register rewriting (from virtual to physical).
-    if (!RR.Reg.isVirtual())
+    if (!TargetRegisterInfo::isVirtualRegister(RR.Reg))
       return false;
     // No redefs for any operand.
     if (isRefInMap(RR, Defs, Exec_Then))
@@ -856,7 +854,7 @@ void HexagonExpandCondsets::predicateAt(const MachineOperand &DefOp,
                                         MachineInstr &MI,
                                         MachineBasicBlock::iterator Where,
                                         const MachineOperand &PredOp, bool Cond,
-                                        std::set<Register> &UpdRegs) {
+                                        std::set<unsigned> &UpdRegs) {
   // The problem with updating live intervals is that we can move one def
   // past another def. In particular, this can happen when moving an A2_tfrt
   // over an A2_tfrf defining the same register. From the point of view of
@@ -934,7 +932,7 @@ void HexagonExpandCondsets::renameInRange(RegisterRef RO, RegisterRef RN,
 /// the copy under the given condition (using the same predicate register as
 /// the copy).
 bool HexagonExpandCondsets::predicate(MachineInstr &TfrI, bool Cond,
-                                      std::set<Register> &UpdRegs) {
+                                      std::set<unsigned> &UpdRegs) {
   // TfrI - A2_tfr[tf] Instruction (not A2_tfrsi).
   unsigned Opc = TfrI.getOpcode();
   (void)Opc;
@@ -956,7 +954,7 @@ bool HexagonExpandCondsets::predicate(MachineInstr &TfrI, bool Cond,
     return false;
 
   RegisterRef RT(MS);
-  Register PredR = MP.getReg();
+  unsigned PredR = MP.getReg();
   MachineInstr *DefI = getReachingDefForPred(RT, TfrI, PredR, Cond);
   if (!DefI || !isPredicable(DefI))
     return false;
@@ -1001,7 +999,7 @@ bool HexagonExpandCondsets::predicate(MachineInstr &TfrI, bool Cond,
       // subregisters are other physical registers, and we are not checking
       // that.
       RegisterRef RR = Op;
-      if (!RR.Reg.isVirtual())
+      if (!TargetRegisterInfo::isVirtualRegister(RR.Reg))
         return false;
 
       ReferenceMap &Map = Op.isDef() ? Defs : Uses;
@@ -1042,7 +1040,7 @@ bool HexagonExpandCondsets::predicate(MachineInstr &TfrI, bool Cond,
   bool CanDown = canMoveOver(*DefI, Defs, Uses);
   // The TfrI does not access memory, but DefI could. Check if it's safe
   // to move DefI down to TfrI.
-  if (DefI->mayLoadOrStore())
+  if (DefI->mayLoad() || DefI->mayStore())
     if (!canMoveMemTo(*DefI, TfrI, true))
       CanDown = false;
 
@@ -1068,7 +1066,7 @@ bool HexagonExpandCondsets::predicate(MachineInstr &TfrI, bool Cond,
 
 /// Predicate all cases of conditional copies in the specified block.
 bool HexagonExpandCondsets::predicateInBlock(MachineBasicBlock &B,
-                                             std::set<Register> &UpdRegs) {
+      std::set<unsigned> &UpdRegs) {
   bool Changed = false;
   MachineBasicBlock::iterator I, E, NextI;
   for (I = B.begin(), E = B.end(); I != E; I = NextI) {
@@ -1093,7 +1091,7 @@ bool HexagonExpandCondsets::predicateInBlock(MachineBasicBlock &B,
 }
 
 bool HexagonExpandCondsets::isIntReg(RegisterRef RR, unsigned &BW) {
-  if (!RR.Reg.isVirtual())
+  if (!TargetRegisterInfo::isVirtualRegister(RR.Reg))
     return false;
   const TargetRegisterClass *RC = MRI->getRegClass(RR.Reg);
   if (RC == &Hexagon::IntRegsRegClass) {
@@ -1173,7 +1171,7 @@ bool HexagonExpandCondsets::coalesceRegisters(RegisterRef R1, RegisterRef R2) {
     }
     L1.addSegment(LiveRange::Segment(I->start, I->end, NewVN));
   }
-  while (!L2.empty())
+  while (L2.begin() != L2.end())
     L2.removeSegment(*L2.begin());
   LIS->removeInterval(R2.Reg);
 
@@ -1188,8 +1186,8 @@ bool HexagonExpandCondsets::coalesceRegisters(RegisterRef R1, RegisterRef R2) {
 /// the destination register. This could lead to having only one predicated
 /// instruction in the end instead of two.
 bool HexagonExpandCondsets::coalesceSegments(
-    const SmallVectorImpl<MachineInstr *> &Condsets,
-    std::set<Register> &UpdRegs) {
+      const SmallVectorImpl<MachineInstr*> &Condsets,
+      std::set<unsigned> &UpdRegs) {
   SmallVector<MachineInstr*,16> TwoRegs;
   for (MachineInstr *MI : Condsets) {
     MachineOperand &S1 = MI->getOperand(2), &S2 = MI->getOperand(3);
@@ -1263,7 +1261,7 @@ bool HexagonExpandCondsets::runOnMachineFunction(MachineFunction &MF) {
                         MF.getFunction().getParent()));
 
   bool Changed = false;
-  std::set<Register> CoalUpd, PredUpd;
+  std::set<unsigned> CoalUpd, PredUpd;
 
   SmallVector<MachineInstr*,16> Condsets;
   for (auto &B : MF)
@@ -1280,7 +1278,7 @@ bool HexagonExpandCondsets::runOnMachineFunction(MachineFunction &MF) {
   // in the IR (they have been removed by live range analysis).
   // Updating them right before we split is the easiest, because splitting
   // adds definitions which would interfere with updating kills afterwards.
-  std::set<Register> KillUpd;
+  std::set<unsigned> KillUpd;
   for (MachineInstr *MI : Condsets)
     for (MachineOperand &Op : MI->operands())
       if (Op.isReg() && Op.isUse())

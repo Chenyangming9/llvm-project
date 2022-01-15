@@ -36,24 +36,28 @@ SymbolicFile::~SymbolicFile() = default;
 
 Expected<std::unique_ptr<SymbolicFile>>
 SymbolicFile::createSymbolicFile(MemoryBufferRef Object, file_magic Type,
-                                 LLVMContext *Context, bool InitContent) {
+                                 LLVMContext *Context) {
   StringRef Data = Object.getBuffer();
   if (Type == file_magic::unknown)
     Type = identify_magic(Data);
 
-  if (!isSymbolicFile(Type, Context))
-    return errorCodeToError(object_error::invalid_file_type);
-
   switch (Type) {
   case file_magic::bitcode:
-    // Context is guaranteed to be non-null here, because bitcode magic only
-    // indicates a symbolic file when Context is non-null.
-    return IRObjectFile::create(Object, *Context);
+    if (Context)
+      return IRObjectFile::create(Object, *Context);
+    LLVM_FALLTHROUGH;
+  case file_magic::unknown:
+  case file_magic::archive:
+  case file_magic::coff_cl_gl_object:
+  case file_magic::macho_universal_binary:
+  case file_magic::windows_resource:
+  case file_magic::pdb:
+  case file_magic::minidump:
+    return errorCodeToError(object_error::invalid_file_type);
   case file_magic::elf:
   case file_magic::elf_executable:
   case file_magic::elf_shared_object:
   case file_magic::elf_core:
-  case file_magic::goff_object:
   case file_magic::macho_executable:
   case file_magic::macho_fixed_virtual_memory_shared_lib:
   case file_magic::macho_core:
@@ -68,14 +72,14 @@ SymbolicFile::createSymbolicFile(MemoryBufferRef Object, file_magic Type,
   case file_magic::xcoff_object_32:
   case file_magic::xcoff_object_64:
   case file_magic::wasm_object:
-    return ObjectFile::createObjectFile(Object, Type, InitContent);
+    return ObjectFile::createObjectFile(Object, Type);
   case file_magic::coff_import_library:
     return std::unique_ptr<SymbolicFile>(new COFFImportFile(Object));
   case file_magic::elf_relocatable:
   case file_magic::macho_object:
   case file_magic::coff_object: {
     Expected<std::unique_ptr<ObjectFile>> Obj =
-        ObjectFile::createObjectFile(Object, Type, InitContent);
+        ObjectFile::createObjectFile(Object, Type);
     if (!Obj || !Context)
       return std::move(Obj);
 
@@ -90,40 +94,6 @@ SymbolicFile::createSymbolicFile(MemoryBufferRef Object, file_magic Type,
         MemoryBufferRef(BCData->getBuffer(), Object.getBufferIdentifier()),
         *Context);
   }
-  default:
-    llvm_unreachable("Unexpected Binary File Type");
   }
-}
-
-bool SymbolicFile::isSymbolicFile(file_magic Type, const LLVMContext *Context) {
-  switch (Type) {
-  case file_magic::bitcode:
-    return Context != nullptr;
-  case file_magic::elf:
-  case file_magic::elf_executable:
-  case file_magic::elf_shared_object:
-  case file_magic::elf_core:
-  case file_magic::goff_object:
-  case file_magic::macho_executable:
-  case file_magic::macho_fixed_virtual_memory_shared_lib:
-  case file_magic::macho_core:
-  case file_magic::macho_preload_executable:
-  case file_magic::macho_dynamically_linked_shared_lib:
-  case file_magic::macho_dynamic_linker:
-  case file_magic::macho_bundle:
-  case file_magic::macho_dynamically_linked_shared_lib_stub:
-  case file_magic::macho_dsym_companion:
-  case file_magic::macho_kext_bundle:
-  case file_magic::pecoff_executable:
-  case file_magic::xcoff_object_32:
-  case file_magic::xcoff_object_64:
-  case file_magic::wasm_object:
-  case file_magic::coff_import_library:
-  case file_magic::elf_relocatable:
-  case file_magic::macho_object:
-  case file_magic::coff_object:
-    return true;
-  default:
-    return false;
-  }
+  llvm_unreachable("Unexpected Binary File Type");
 }

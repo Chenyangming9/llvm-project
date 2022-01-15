@@ -131,12 +131,10 @@ class ExplodedNode : public llvm::FoldingSetNode {
   /// Succs - The successors of this node.
   NodeGroup Succs;
 
-  int64_t Id;
-
 public:
   explicit ExplodedNode(const ProgramPoint &loc, ProgramStateRef state,
-                        int64_t Id, bool IsSink)
-      : Location(loc), State(std::move(state)), Succs(IsSink), Id(Id) {
+                        bool IsSink)
+      : Location(loc), State(std::move(state)), Succs(IsSink) {
     assert(isSink() == IsSink);
   }
 
@@ -155,11 +153,7 @@ public:
 
   CFG &getCFG() const { return *getLocationContext()->getCFG(); }
 
-  const CFGBlock *getCFGBlock() const;
-
-  const ParentMap &getParentMap() const {
-    return getLocationContext()->getParentMap();
-  }
+  ParentMap &getParentMap() const {return getLocationContext()->getParentMap();}
 
   template <typename T>
   T &getAnalysis() const {
@@ -225,20 +219,12 @@ public:
 
   // Iterators over successor and predecessor vertices.
   using succ_iterator = ExplodedNode * const *;
-  using succ_range = llvm::iterator_range<succ_iterator>;
-
   using const_succ_iterator = const ExplodedNode * const *;
-  using const_succ_range = llvm::iterator_range<const_succ_iterator>;
-
   using pred_iterator = ExplodedNode * const *;
-  using pred_range = llvm::iterator_range<pred_iterator>;
-
   using const_pred_iterator = const ExplodedNode * const *;
-  using const_pred_range = llvm::iterator_range<const_pred_iterator>;
 
   pred_iterator pred_begin() { return Preds.begin(); }
   pred_iterator pred_end() { return Preds.end(); }
-  pred_range preds() { return {Preds.begin(), Preds.end()}; }
 
   const_pred_iterator pred_begin() const {
     return const_cast<ExplodedNode*>(this)->pred_begin();
@@ -246,11 +232,9 @@ public:
   const_pred_iterator pred_end() const {
     return const_cast<ExplodedNode*>(this)->pred_end();
   }
-  const_pred_range preds() const { return {Preds.begin(), Preds.end()}; }
 
   succ_iterator succ_begin() { return Succs.begin(); }
   succ_iterator succ_end() { return Succs.end(); }
-  succ_range succs() { return {Succs.begin(), Succs.end()}; }
 
   const_succ_iterator succ_begin() const {
     return const_cast<ExplodedNode*>(this)->succ_begin();
@@ -258,9 +242,8 @@ public:
   const_succ_iterator succ_end() const {
     return const_cast<ExplodedNode*>(this)->succ_end();
   }
-  const_succ_range succs() const { return {Succs.begin(), Succs.end()}; }
 
-  int64_t getID() const { return Id; }
+  int64_t getID(ExplodedGraph *G) const;
 
   /// The node is trivial if it has only one successor, only one predecessor,
   /// it's predecessor has only one successor,
@@ -268,30 +251,6 @@ public:
   /// node.
   /// Trivial nodes may be skipped while printing exploded graph.
   bool isTrivial() const;
-
-  /// If the node's program point corresponds to a statement, retrieve that
-  /// statement. Useful for figuring out where to put a warning or a note.
-  /// If the statement belongs to a body-farmed definition,
-  /// retrieve the call site for that definition.
-  const Stmt *getStmtForDiagnostics() const;
-
-  /// Find the next statement that was executed on this node's execution path.
-  /// Useful for explaining control flow that follows the current node.
-  /// If the statement belongs to a body-farmed definition, retrieve the
-  /// call site for that definition.
-  const Stmt *getNextStmtForDiagnostics() const;
-
-  /// Find the statement that was executed immediately before this node.
-  /// Useful when the node corresponds to a CFG block entrance.
-  /// If the statement belongs to a body-farmed definition, retrieve the
-  /// call site for that definition.
-  const Stmt *getPreviousStmtForDiagnostics() const;
-
-  /// Find the statement that was executed at or immediately before this node.
-  /// Useful when any nearby statement will do.
-  /// If the statement belongs to a body-farmed definition, retrieve the
-  /// call site for that definition.
-  const Stmt *getCurrentOrPreviousStmtForDiagnostics() const;
 
 private:
   void replaceSuccessor(ExplodedNode *node) { Succs.replaceNode(node); }
@@ -326,7 +285,7 @@ protected:
   BumpVectorContext BVC;
 
   /// NumNodes - The number of nodes in the graph.
-  int64_t NumNodes = 0;
+  unsigned NumNodes = 0;
 
   /// A list of recently allocated nodes that can potentially be recycled.
   NodeVector ChangedNodes;
@@ -360,11 +319,10 @@ public:
   ///  ExplodedGraph for further processing.
   ExplodedNode *createUncachedNode(const ProgramPoint &L,
     ProgramStateRef State,
-    int64_t Id,
     bool IsSink = false);
 
   std::unique_ptr<ExplodedGraph> MakeEmptyGraph() const {
-    return std::make_unique<ExplodedGraph>();
+    return llvm::make_unique<ExplodedGraph>();
   }
 
   /// addRoot - Add an untyped node to the set of roots.

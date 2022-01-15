@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: libcpp-has-no-threads
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <future>
 
@@ -18,7 +18,6 @@
 #include <future>
 #include <cassert>
 
-#include "make_test_thread.h"
 #include "test_macros.h"
 
 void func1(std::promise<int> p)
@@ -50,7 +49,7 @@ int main(int, char**)
         typedef int T;
         std::promise<T> p;
         std::shared_future<T> f = p.get_future();
-        support::make_test_thread(func1, std::move(p)).detach();
+        std::thread(func1, std::move(p)).detach();
         assert(f.valid());
         f.wait();
         assert(f.valid());
@@ -64,7 +63,7 @@ int main(int, char**)
         typedef int& T;
         std::promise<T> p;
         std::shared_future<T> f = p.get_future();
-        support::make_test_thread(func3, std::move(p)).detach();
+        std::thread(func3, std::move(p)).detach();
         assert(f.valid());
         f.wait();
         assert(f.valid());
@@ -78,7 +77,7 @@ int main(int, char**)
         typedef void T;
         std::promise<T> p;
         std::shared_future<T> f = p.get_future();
-        support::make_test_thread(func5, std::move(p)).detach();
+        std::thread(func5, std::move(p)).detach();
         assert(f.valid());
         f.wait();
         assert(f.valid());

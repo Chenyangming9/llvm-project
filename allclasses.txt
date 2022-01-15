@@ -1,0 +1,2739 @@
+./lib/AsmParser/LLLexer.h:  class LLLexer {
+./lib/AsmParser/LLParser.h:  class LLParser {
+./lib/AsmParser/LLParser.h:    class PerFunctionState {
+./lib/TableGen/TGLexer.h:class TGLexer {
+./lib/TableGen/JSONBackend.cpp:class JSONEmitter {
+./lib/TableGen/TGLexer.cpp:        //     #define MACRO class Class {}
+./lib/TableGen/TGLexer.cpp:        //                      to ... */ class Class {}
+./lib/TableGen/TGParser.h:class TGParser {
+./lib/LTO/ThinLTOCodeGenerator.cpp:class ModuleCacheEntry {
+./lib/LTO/UpdateCompilerUsed.cpp:class PreserveLibCallsAndAsmUsed {
+./lib/Support/Windows/WindowsSupport.h:class ScopedHandle {
+./lib/Support/Signposts.cpp:class SignpostEmitterImpl {
+./lib/Support/JSON.cpp:class Parser {
+./lib/Support/VirtualFileSystem.cpp:class InMemoryNode {
+./lib/Support/VirtualFileSystem.cpp:class JSONWriter {
+./lib/Support/Signals.cpp:  enum class Status { Empty, Initializing, Initialized, Executing };
+./lib/Support/Timer.cpp:class Name2PairMap {
+./lib/Support/Z3Solver.cpp:class Z3Config {
+./lib/Support/Z3Solver.cpp:class Z3Context {
+./lib/Support/Z3Solver.cpp:class Z3Model {
+./lib/Support/ItaniumManglingCanonicalizer.cpp:class FoldingNodeAllocator {
+./lib/Support/Unix/Process.inc:class FDCloser {
+./lib/Support/Unix/Signals.inc:class FileToRemoveList {
+./lib/Support/Unix/Signals.inc:  enum class SignalKind { IsKill, IsInfo };
+./lib/Support/CommandLine.cpp:class PrintArg {
+./lib/Support/CommandLine.cpp:class CommandLineParser {
+./lib/Support/CommandLine.cpp:class HelpPrinter {
+./lib/Support/CommandLine.cpp:class HelpPrinterWrapper {
+./lib/Support/CommandLine.cpp:class VersionPrinter {
+./lib/Support/YAMLParser.cpp:class Scanner {
+./lib/Support/LockFileManager.cpp:class RemoveUniqueLockFileOnSignal {
+./lib/Support/Parallel.cpp:class Executor {
+./lib/Support/DAGDeltaAlgorithm.cpp:class DAGDeltaAlgorithmImpl {
+./lib/Support/Statistic.cpp:class StatisticInfo {
+./lib/Transforms/AggressiveInstCombine/AggressiveInstCombineInternal.h:class TruncInstCombine {
+./lib/Transforms/Scalar/LoopUnswitch.cpp:  class LUAnalysisCache {
+./lib/Transforms/Scalar/InductiveRangeCheckElimination.cpp:class InductiveRangeCheck {
+./lib/Transforms/Scalar/InductiveRangeCheckElimination.cpp:  class Range {
+./lib/Transforms/Scalar/InductiveRangeCheckElimination.cpp:class InductiveRangeCheckElimination {
+./lib/Transforms/Scalar/InductiveRangeCheckElimination.cpp:class LoopConstrainer {
+./lib/Transforms/Scalar/NewGVN.cpp:class CongruenceClass {
+./lib/Transforms/Scalar/NewGVN.cpp:class NewGVN {
+./lib/Transforms/Scalar/NewGVN.cpp:class ValueDFSStack {
+./lib/Transforms/Scalar/LoopVersioningLICM.cpp:  class AutoResetter {
+./lib/Transforms/Scalar/MergedLoadStoreMotion.cpp:class MergedLoadStoreMotion {
+./lib/Transforms/Scalar/LoopPredication.cpp:class LoopPredication {
+./lib/Transforms/Scalar/LoopSimplifyCFG.cpp:class ConstantTerminatorFoldingImpl {
+./lib/Transforms/Scalar/EarlyCSE.cpp:class EarlyCSE {
+./lib/Transforms/Scalar/EarlyCSE.cpp:  class NodeScope {
+./lib/Transforms/Scalar/EarlyCSE.cpp:  class StackNode {
+./lib/Transforms/Scalar/EarlyCSE.cpp:  class ParseMemoryInst {
+./lib/Transforms/Scalar/LoopInterchange.cpp:class LoopInterchangeLegality {
+./lib/Transforms/Scalar/LoopInterchange.cpp:class LoopInterchangeProfitability {
+./lib/Transforms/Scalar/LoopInterchange.cpp:class LoopInterchangeTransform {
+./lib/Transforms/Scalar/GuardWidening.cpp:class GuardWideningImpl {
+./lib/Transforms/Scalar/GuardWidening.cpp:  class RangeCheck {
+./lib/Transforms/Scalar/SROA.cpp:class Slice {
+./lib/Transforms/Scalar/SROA.cpp:  template <typename Derived> class OpSplitter {
+./lib/Transforms/Scalar/ADCE.cpp:class AggressiveDeadCodeElimination {
+./lib/Transforms/Scalar/MergeICmps.cpp:class BaseIdentifier {
+./lib/Transforms/Scalar/MergeICmps.cpp:class BCECmpBlock {
+./lib/Transforms/Scalar/MergeICmps.cpp:class BCECmpChain {
+./lib/Transforms/Scalar/MergeICmps.cpp:class MergedBlockName {
+./lib/Transforms/Scalar/LoopLoadElimination.cpp:class LoadEliminationForLoop {
+./lib/Transforms/Scalar/Scalarizer.cpp:class Scatterer {
+./lib/Transforms/Scalar/LoopIdiomRecognize.cpp:class LoopIdiomRecognize {
+./lib/Transforms/Scalar/LoopIdiomRecognize.cpp:  enum class ForMemset { No, Yes };
+./lib/Transforms/Scalar/StructurizeCFG.cpp:class NearestCommonDominator {
+./lib/Transforms/Scalar/MemCpyOptimizer.cpp:class MemsetRanges {
+./lib/Transforms/Scalar/LoopDistribute.cpp:class InstPartition {
+./lib/Transforms/Scalar/LoopDistribute.cpp:class InstPartitionContainer {
+./lib/Transforms/Scalar/LoopDistribute.cpp:class MemoryInstructionDependences {
+./lib/Transforms/Scalar/LoopDistribute.cpp:class LoopDistributeForLoop {
+./lib/Transforms/Scalar/RewriteStatepointsForGC.cpp:class BDVState {
+./lib/Transforms/Scalar/RewriteStatepointsForGC.cpp:class DeferredReplacement {
+./lib/Transforms/Scalar/SCCP.cpp:class LatticeVal {
+./lib/Transforms/Scalar/GVNHoist.cpp:class InsnInfo {
+./lib/Transforms/Scalar/GVNHoist.cpp:class LoadInfo {
+./lib/Transforms/Scalar/GVNHoist.cpp:class StoreInfo {
+./lib/Transforms/Scalar/GVNHoist.cpp:class CallInfo {
+./lib/Transforms/Scalar/GVNHoist.cpp:class GVNHoist {
+./lib/Transforms/Scalar/GVNSink.cpp:class LockstepReverseIterator {
+./lib/Transforms/Scalar/GVNSink.cpp:class ModelledPHI {
+./lib/Transforms/Scalar/GVNSink.cpp:class ValueTable {
+./lib/Transforms/Scalar/GVNSink.cpp:class GVNSink {
+./lib/Transforms/Scalar/LoopDataPrefetch.cpp:class LoopDataPrefetch {
+./lib/Transforms/Scalar/LICM.cpp:class ControlFlowHoister {
+./lib/Transforms/Scalar/LoopDeletion.cpp:enum class LoopDeletionResult {
+./lib/Transforms/Scalar/LoopStrengthReduce.cpp:class RegSortData {
+./lib/Transforms/Scalar/LoopStrengthReduce.cpp:class RegUseTracker {
+./lib/Transforms/Scalar/LoopStrengthReduce.cpp:class Cost {
+./lib/Transforms/Scalar/LoopStrengthReduce.cpp:class LSRUse {
+./lib/Transforms/Scalar/LoopStrengthReduce.cpp:class LSRInstance {
+./lib/Transforms/Scalar/SeparateConstOffsetFromGEP.cpp:class ConstantOffsetExtractor {
+./lib/Transforms/Scalar/IndVarSimplify.cpp:class IndVarSimplify {
+./lib/Transforms/Scalar/IndVarSimplify.cpp:class WidenIV {
+./lib/Transforms/IPO/Inliner.cpp:enum class InlinerFunctionImportStatsOpts {
+./lib/Transforms/IPO/HotColdSplitting.cpp:class HotColdSplitting {
+./lib/Transforms/IPO/HotColdSplitting.cpp:class OutliningRegion {
+./lib/Transforms/IPO/SampleProfile.cpp:class SampleCoverageTracker {
+./lib/Transforms/IPO/SampleProfile.cpp:class SampleProfileLoader {
+./lib/Transforms/IPO/CalledValuePropagation.cpp:enum class IPOGrouping { Register, Return, Memory };
+./lib/Transforms/IPO/CalledValuePropagation.cpp:class CVPLatticeVal {
+./lib/Transforms/IPO/GlobalOpt.cpp:class LLVMUsed {
+./lib/Transforms/IPO/FunctionAttrs.cpp:class ArgumentGraph {
+./lib/Transforms/IPO/FunctionAttrs.cpp:class AttributeInferer {
+./lib/Transforms/IPO/MergeFunctions.cpp:class FunctionNode {
+./lib/Transforms/IPO/MergeFunctions.cpp:  class FunctionNodeCmp {
+./lib/Transforms/IPO/PassManagerBuilder.cpp:enum class CFLAAType { None, Steensgaard, Andersen, Both };
+./lib/Transforms/IPO/LowerTypeTests.cpp:class LowerTypeTestsModule {
+./lib/Transforms/IPO/ConstantMerge.cpp:enum class CanMerge { No, Yes };
+./lib/Transforms/IPO/Internalize.cpp:class PreserveAPIList {
+./lib/Transforms/ObjCARC/ObjCARCOpts.cpp:  class BBState {
+./lib/Transforms/ObjCARC/ProvenanceAnalysis.h:class ProvenanceAnalysis {
+./lib/Transforms/ObjCARC/BlotMapVector.h:template <class KeyT, class ValueT> class BlotMapVector {
+./lib/Transforms/ObjCARC/PtrState.h:class PtrState {
+./lib/Transforms/ObjCARC/ARCRuntimeEntryPoints.h:enum class ARCRuntimeEntryPointKind {
+./lib/Transforms/ObjCARC/ARCRuntimeEntryPoints.h:class ARCRuntimeEntryPoints {
+./lib/Transforms/Instrumentation/MaximumSpanningTree.h:  class MaximumSpanningTree {
+./lib/Transforms/Instrumentation/DataFlowSanitizer.cpp:class DFSanABIList {
+./lib/Transforms/Instrumentation/CFGMST.h:template <class Edge, class BBInfo> class CFGMST {
+./lib/Transforms/Instrumentation/MemorySanitizer.cpp:class MemorySanitizer {
+./lib/Transforms/Instrumentation/MemorySanitizer.cpp:  class Combiner {
+./lib/Transforms/Instrumentation/PGOInstrumentation.cpp:template <class Edge, class BBInfo> class FuncPGOInstrumentation {
+./lib/Transforms/Instrumentation/PGOInstrumentation.cpp:class PGOUseFunc {
+./lib/Transforms/Instrumentation/GCOVProfiling.cpp:class GCOVProfiler {
+./lib/Transforms/Instrumentation/GCOVProfiling.cpp:  enum class GCovFileType { GCNO, GCDA };
+./lib/Transforms/Instrumentation/GCOVProfiling.cpp:  class GCOVRecord {
+./lib/Transforms/Instrumentation/HWAddressSanitizer.cpp:class HWAddressSanitizer {
+./lib/Transforms/Instrumentation/AddressSanitizer.cpp:class ModuleAddressSanitizer {
+./lib/Transforms/Instrumentation/ControlHeightReduction.cpp:class CHRScope {
+./lib/Transforms/Instrumentation/ControlHeightReduction.cpp:class CHR {
+./lib/Transforms/Instrumentation/InstrProfiling.cpp:class PGOCounterPromoter {
+./lib/Transforms/Instrumentation/IndirectCallPromotion.cpp:class ICallPromotionFunc {
+./lib/Transforms/Vectorize/VPlanHCFGTransforms.h:class VPlanHCFGTransforms {
+./lib/Transforms/Vectorize/VPlanPredicator.h:class VPlanPredicator {
+./lib/Transforms/Vectorize/VPlanPredicator.h:  enum class EdgeType {
+./lib/Transforms/Vectorize/VPlan.h:class VPBlockBase {
+./lib/Transforms/Vectorize/VPlan.h:class VPlan {
+./lib/Transforms/Vectorize/VPlan.h:class VPlanPrinter {
+./lib/Transforms/Vectorize/VPlan.h:class VPBlockUtils {
+./lib/Transforms/Vectorize/VPlan.h:class VPInterleavedAccessInfo {
+./lib/Transforms/Vectorize/VPlan.h:class VPlanSlp {
+./lib/Transforms/Vectorize/VPlan.h:  enum class OpMode { Failed, Load, Opcode };
+./lib/Transforms/Vectorize/VPlanValue.h:class VPValue {
+./lib/Transforms/Vectorize/SLPVectorizer.cpp:class BoUpSLP {
+./lib/Transforms/Vectorize/SLPVectorizer.cpp:  class VLOperands {
+./lib/Transforms/Vectorize/SLPVectorizer.cpp:    enum class ReorderingMode {
+./lib/Transforms/Vectorize/SLPVectorizer.cpp:  class nodes_iterator {
+./lib/Transforms/Vectorize/SLPVectorizer.cpp:class HorizontalReduction {
+./lib/Transforms/Vectorize/SLPVectorizer.cpp:  class OperationData {
+./lib/Transforms/Vectorize/VPRecipeBuilder.h:class VPRecipeBuilder {
+./lib/Transforms/Vectorize/VPlanVerifier.h:class VPlanVerifier {
+./lib/Transforms/Vectorize/VPlanHCFGBuilder.cpp:class PlainCFGBuilder {
+./lib/Transforms/Vectorize/LoopVectorize.cpp:class InnerLoopVectorizer {
+./lib/Transforms/Vectorize/LoopVectorize.cpp:class LoopVectorizationCostModel {
+./lib/Transforms/Vectorize/LoadStoreVectorizer.cpp:class Vectorizer {
+./lib/Transforms/Vectorize/LoopVectorizationPlanner.h:class VPBuilder {
+./lib/Transforms/Vectorize/LoopVectorizationPlanner.h:  class VPInsertPoint {
+./lib/Transforms/Vectorize/LoopVectorizationPlanner.h:  class InsertPointGuard {
+./lib/Transforms/Vectorize/LoopVectorizationPlanner.h:class LoopVectorizationPlanner {
+./lib/Transforms/Vectorize/VPlanHCFGBuilder.h:class VPlanHCFGBuilder {
+./lib/Transforms/Coroutines/CoroFrame.cpp:class BlockToIndexMapping {
+./lib/Transforms/Coroutines/CoroFrame.cpp:class Spill {
+./lib/Transforms/InstCombine/InstCombineLoadStoreAlloca.cpp:class PointerReplacer {
+./lib/Transforms/InstCombine/InstCombineAddSub.cpp:  class FAddendCoef {
+./lib/Transforms/InstCombine/InstCombineAddSub.cpp:  class FAddend {
+./lib/Transforms/InstCombine/InstCombineAddSub.cpp:  class FAddCombine {
+./lib/Transforms/Utils/ValueMapper.cpp:class Mapper {
+./lib/Transforms/Utils/ValueMapper.cpp:class MDNodeMapper {
+./lib/Transforms/Utils/ValueMapper.cpp:class FlushingMapper {
+./lib/Transforms/Utils/InlineFunction.cpp:  class LandingPadInliningInfo {
+./lib/Transforms/Utils/FunctionComparator.cpp:class HashAccumulator64 {
+./lib/Transforms/Utils/BypassSlowDivision.cpp:class FastDivInsertionTask {
+./lib/Transforms/Utils/SimplifyIndVar.cpp:  class SimplifyIndvar {
+./lib/Transforms/Utils/PromoteMemoryToRegister.cpp:class LargeBlockInfo {
+./lib/Transforms/Utils/FlattenCFG.cpp:class FlattenCFGOpt {
+./lib/Transforms/Utils/LoopRotationUtils.cpp:class LoopRotate {
+./lib/Transforms/Utils/NameAnonGlobals.cpp:class ModuleHasher {
+./lib/Transforms/Utils/SSAUpdater.cpp:  class PHI_iterator {
+./lib/Transforms/Utils/SimplifyCFG.cpp:class SimplifyCFGOpt {
+./lib/Transforms/Utils/SimplifyCFG.cpp:  class LockstepReverseIterator {
+./lib/Transforms/Utils/SimplifyCFG.cpp:class SwitchLookupTable {
+./lib/ExecutionEngine/Interpreter/Interpreter.h:class AllocaHolder {
+./lib/ExecutionEngine/MCJIT/MCJIT.h:  class OwningModuleContainer {
+./lib/ExecutionEngine/Orc/OrcCBindingsStack.h:class GenericLayer {
+./lib/ExecutionEngine/Orc/OrcCBindingsStack.h:class OrcCBindingsStack {
+./lib/ExecutionEngine/Orc/OrcMCJITReplacement.h:  class NotifyObjectLoadedT {
+./lib/ExecutionEngine/Orc/OrcMCJITReplacement.h:  class NotifyFinalizedT {
+./lib/ExecutionEngine/Orc/Core.cpp:class SetPrinter {
+./lib/ExecutionEngine/IntelJITEvents/IntelJITEventsWrapper.h:class IntelJITEventsWrapper {
+./lib/ExecutionEngine/JITLink/JITLinkGeneric.h:class JITLinkerBase {
+./lib/ExecutionEngine/JITLink/EHFrameSupportImpl.h:class EHFrameParser {
+./lib/ExecutionEngine/JITLink/BasicGOTAndStubsBuilder.h:template <typename BuilderImpl> class BasicGOTAndStubsBuilder {
+./lib/ExecutionEngine/JITLink/MachOAtomGraphBuilder.h:class MachOAtomGraphBuilder {
+./lib/ExecutionEngine/JITLink/MachOAtomGraphBuilder.h:  class MachOSection {
+./lib/ExecutionEngine/RuntimeDyld/RuntimeDyldCheckerImpl.h:class RuntimeDyldCheckerImpl {
+./lib/ExecutionEngine/RuntimeDyld/RuntimeDyldImpl.h:class SectionEntry {
+./lib/ExecutionEngine/RuntimeDyld/RuntimeDyldImpl.h:class RelocationEntry {
+./lib/ExecutionEngine/RuntimeDyld/RuntimeDyldImpl.h:class RelocationValueRef {
+./lib/ExecutionEngine/RuntimeDyld/RuntimeDyldImpl.h:class SymbolTableEntry {
+./lib/ExecutionEngine/RuntimeDyld/RuntimeDyldImpl.h:class RuntimeDyldImpl {
+./lib/ExecutionEngine/RuntimeDyld/RuntimeDyldChecker.cpp:class RuntimeDyldCheckerExprEval {
+./lib/ExecutionEngine/RuntimeDyld/RuntimeDyldChecker.cpp:  class EvalResult {
+./lib/ExecutionEngine/ExecutionEngine.cpp:class ArgvArray {
+./lib/Bitcode/Writer/BitcodeWriter.cpp:class BitcodeWriterBase {
+./lib/Bitcode/Writer/ValueEnumerator.h:class ValueEnumerator {
+./lib/Bitcode/Reader/ValueList.h:class BitcodeReaderValueList {
+./lib/Bitcode/Reader/MetadataLoader.cpp:class BitcodeReaderMetadataList {
+./lib/Bitcode/Reader/MetadataLoader.cpp:class PlaceholderQueue {
+./lib/Bitcode/Reader/MetadataLoader.h:class MetadataLoader {
+./lib/Bitcode/Reader/BitcodeReader.cpp:class BitcodeReaderBase {
+./lib/Target/WebAssembly/WebAssemblyRegStackify.cpp:class TreeWalkerState {
+./lib/Target/WebAssembly/WebAssemblyRegStackify.cpp:class CommutingState {
+./lib/Target/WebAssembly/WebAssemblyDebugValueManager.h:class WebAssemblyDebugValueManager {
+./lib/Target/WebAssembly/WebAssemblyExceptionInfo.h:class WebAssemblyException {
+./lib/Target/WebAssembly/WebAssemblyCFGSort.cpp:class Region {
+./lib/Target/WebAssembly/WebAssemblyCFGSort.cpp:class RegionInfo {
+./lib/Target/WebAssembly/WebAssemblyFixIrreducibleControlFlow.cpp:class ReachabilityGraph {
+./lib/Target/WebAssembly/WebAssemblyFixIrreducibleControlFlow.cpp:class LoopBlocks {
+./lib/Target/WebAssembly/WebAssemblyFastISel.cpp:  class Address {
+./lib/Target/AVR/AVRMCInstLower.h:class AVRMCInstLower {
+./lib/Target/BPF/BTFDebug.h:class BTFTypeBase {
+./lib/Target/BPF/BTFDebug.h:class BTFStringTable {
+./lib/Target/BPF/BPFCORE.h:class BPFCoreSharedInfo {
+./lib/Target/AArch64/AsmParser/AArch64AsmParser.cpp:enum class RegKind {
+./lib/Target/AArch64/AsmParser/AArch64AsmParser.cpp:  class PrefixInfo {
+./lib/Target/AArch64/AArch64FastISel.cpp:  class Address {
+./lib/Target/AArch64/AArch64ConditionalCompares.cpp:class SSACCmpConv {
+./lib/Target/AArch64/AArch64A57FPLoadBalancing.cpp:enum class Color { Even, Odd };
+./lib/Target/AArch64/AArch64A57FPLoadBalancing.cpp:class Chain {
+./lib/Target/AArch64/AArch64InstrInfo.cpp:enum class FMAInstKind { Default, Indexed, Accumulator };
+./lib/Target/AArch64/AArch64.td:class AArch64Unsupported { list<Predicate> F; }
+./lib/Target/AArch64/AArch64InstrFormats.td:multiclass SIMDVectorLShiftLongBySizeBHS {
+./lib/Target/AArch64/AArch64InstrFormats.td:multiclass SMov {
+./lib/Target/AArch64/AArch64InstrFormats.td:multiclass UMov {
+./lib/Target/AArch64/AArch64InstrFormats.td:multiclass SIMDIns {
+./lib/Target/AArch64/AArch64ISelDAGToDAG.cpp:class WidenVector {
+./lib/Target/AArch64/AArch64FalkorHWPFFix.cpp:class FalkorMarkStridedAccesses {
+./lib/Target/AArch64/AArch64MachineFunctionInfo.h:  class MILOHDirective {
+./lib/Target/Mips/AsmParser/MipsAsmParser.cpp:class MipsAssemblerOptions {
+./lib/Target/Mips/Mips32r6InstrInfo.td:class BRANCH_DESC_BASE {
+./lib/Target/Mips/Mips32r6InstrInfo.td:class SDBBP_R6_DESC {
+./lib/Target/Mips/Mips32r6InstrInfo.td:class SIGRIE_DESC {
+./lib/Target/Mips/MipsSubtarget.h:  enum class CPU { P5600 };
+./lib/Target/Mips/MicroMips32r6InstrInfo.td:class JALRC_HB_MMR6_DESC {
+./lib/Target/Mips/MicroMips32r6InstrInfo.td:class EXT_MMR6_DESC {
+./lib/Target/Mips/MicroMips32r6InstrInfo.td:class INS_MMR6_DESC {
+./lib/Target/Mips/MicroMips32r6InstrInfo.td:class JALRC_MMR6_DESC {
+./lib/Target/Mips/MipsOptionRecord.h:class MipsOptionRecord {
+./lib/Target/Mips/MipsRegisterInfo.h:  enum class MipsPtrClass {
+./lib/Target/Mips/MipsSEFrameLowering.cpp:class ExpandPseudo {
+./lib/Target/Mips/MCTargetDesc/MipsABIInfo.h:class MipsABIInfo {
+./lib/Target/Mips/MCTargetDesc/MipsABIInfo.h:  enum class ABI { Unknown, O32, N32, N64 };
+./lib/Target/Mips/MCTargetDesc/MipsABIFlagsSection.h:  enum class FpABIKind { ANY, XX, S32, S64, SOFT };
+./lib/Target/Mips/MipsMTInstrInfo.td:class MFTR_DESC {
+./lib/Target/Mips/MipsMTInstrInfo.td:class MTTR_DESC {
+./lib/Target/Mips/MipsMTInstrInfo.td:class FORK_DESC {
+./lib/Target/Mips/MipsMTInstrInfo.td:class YIELD_DESC {
+./lib/Target/Mips/MipsDSPInstrFormats.td:class ISA_DSPR2 {
+./lib/Target/Mips/MipsDSPInstrFormats.td:class ISA_DSPR3 {
+./lib/Target/Mips/MipsCallLowering.h:  class MipsHandler {
+./lib/Target/Mips/Mips.td:class PredicateControl {
+./lib/Target/Mips/MipsInstrFormats.td:class StdArch {
+./lib/Target/Mips/MipsInstrFormats.td:class JALR_FM {
+./lib/Target/Mips/MipsInstrInfo.td:class GPR_32 { list<Predicate> GPRPredicates = [IsGP32bit]; }
+./lib/Target/Mips/MipsInstrInfo.td:class GPR_64 { list<Predicate> GPRPredicates = [IsGP64bit]; }
+./lib/Target/Mips/MipsInstrInfo.td:class PTR_32 { list<Predicate> PTRPredicates = [IsPTR32bit]; }
+./lib/Target/Mips/MipsInstrInfo.td:class PTR_64 { list<Predicate> PTRPredicates = [IsPTR64bit]; }
+./lib/Target/Mips/MipsInstrInfo.td:class SYM_32 { list<Predicate> SYMPredicates = [IsSym32]; }
+./lib/Target/Mips/MipsInstrInfo.td:class SYM_64 { list<Predicate> SYMPredicates = [IsSym64]; }
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS1 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS1_NOT_MIPS3 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS1_NOT_4_32 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS1_NOT_32R6_64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS2 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS2_NOT_32R6_64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS3 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS3_NOT_32R6_64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS32 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS32_NOT_32R6_64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS32R2 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS32R2_NOT_32R6_64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS32R5 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS64 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS64_NOT_64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS64R2 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS64R5 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS32R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MIPS64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MICROMIPS {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MICROMIPS32R5 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MICROMIPS32R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MICROMIPS64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ISA_MICROMIPS32_NOT_MIPS32R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ASE_EVA { list<Predicate> ASEPredicate = [HasEVA]; }
+./lib/Target/Mips/MipsInstrInfo.td:class INSN_MIPS3_32 {
+./lib/Target/Mips/MipsInstrInfo.td:class INSN_MIPS3_32_NOT_32R6_64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class INSN_MIPS3_32R2 {
+./lib/Target/Mips/MipsInstrInfo.td:class INSN_MIPS4_32 {
+./lib/Target/Mips/MipsInstrInfo.td:class INSN_MIPS4_32_NOT_32R6_64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class INSN_MIPS4_32R2_NOT_32R6_64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class INSN_MIPS4_32R2 {
+./lib/Target/Mips/MipsInstrInfo.td:class INSN_MIPS5_32R2_NOT_32R6_64R6 {
+./lib/Target/Mips/MipsInstrInfo.td:class ASE_CNMIPS {
+./lib/Target/Mips/MipsInstrInfo.td:class NOT_ASE_CNMIPS {
+./lib/Target/Mips/MipsInstrInfo.td:class ASE_MIPS64_CNMIPS {
+./lib/Target/Mips/MipsInstrInfo.td:class ASE_MSA {
+./lib/Target/Mips/MipsInstrInfo.td:class ASE_MSA_NOT_MSA64 {
+./lib/Target/Mips/MipsInstrInfo.td:class ASE_MSA64 {
+./lib/Target/Mips/MipsInstrInfo.td:class ASE_MT {
+./lib/Target/Mips/MipsInstrInfo.td:class ASE_CRC {
+./lib/Target/Mips/MipsInstrInfo.td:class ASE_VIRT {
+./lib/Target/Mips/MipsInstrInfo.td:class ASE_GINV {
+./lib/Target/Mips/MipsInstrInfo.td:class ASE_NOT_DSP {
+./lib/Target/Mips/MipsInstrInfo.td:class MADD4 {
+./lib/Target/Mips/MipsInstrInfo.td:class ABI_N64 {
+./lib/Target/Mips/MipsInstrInfo.td:class ABI_NOT_N64 {
+./lib/Target/Mips/MipsInstrInfo.td:class FPOP_FUSION_FAST {
+./lib/Target/Mips/MipsInstrInfo.td:class IsCommutable {
+./lib/Target/Mips/MipsInstrInfo.td:class IsBranch {
+./lib/Target/Mips/MipsInstrInfo.td:class IsReturn {
+./lib/Target/Mips/MipsInstrInfo.td:class IsCall {
+./lib/Target/Mips/MipsInstrInfo.td:class IsTailCall {
+./lib/Target/Mips/MipsInstrInfo.td:class IsAsCheapAsAMove {
+./lib/Target/Mips/MipsInstrInfo.td:class NeverHasSideEffects {
+./lib/Target/Mips/MicroMipsInstrFormats.td:class ADDIUR2_FM_MM16 {
+./lib/Target/Mips/MicroMipsInstrFormats.td:class ADDIUS5_FM_MM16 {
+./lib/Target/Mips/MicroMipsInstrFormats.td:class ADDIUSP_FM_MM16 {
+./lib/Target/Mips/MicroMipsInstrFormats.td:class LI_FM_MM16 {
+./lib/Target/Mips/MicroMipsInstrFormats.td:class ADDIUR1SP_FM_MM16 {
+./lib/Target/Mips/MicroMipsInstrFormats.td:class B16_FM {
+./lib/Target/Mips/MicroMipsInstrFormats.td:class MOVEP_FM_MM16 {
+./lib/Target/Mips/MicroMipsInstrFormats.td:class MMArch {
+./lib/Target/Mips/MicroMipsInstrFormats.td:class ADDIUPC_FM_MM {
+./lib/Target/Mips/MicroMips32r6InstrFormats.td:class BC16_FM_MM16R6 {
+./lib/Target/Mips/MicroMips32r6InstrFormats.td:class POOL32A_RDHWR_FM_MMR6 {
+./lib/Target/Mips/MicroMips32r6InstrFormats.td:class POOL32A_SYNC_FM_MMR6 {
+./lib/Target/Mips/MicroMips32r6InstrFormats.td:class POOL32I_SYNCI_FM_MMR6 {
+./lib/Target/Mips/MicroMips32r6InstrFormats.td:class LOAD_WORD_FM_MMR6 {
+./lib/Target/Mips/MicroMips32r6InstrFormats.td:class LOAD_UPPER_IMM_FM_MMR6 {
+./lib/Target/Mips/MicroMips32r6InstrFormats.td:class POOL16A_ADDU16_FM_MMR6 {
+./lib/Target/Mips/MicroMips32r6InstrFormats.td:class POOL16C_AND16_FM_MMR6 {
+./lib/Target/Mips/MicroMips32r6InstrFormats.td:class POOL16C_NOT16_FM_MMR6 {
+./lib/Target/Mips/MicroMips32r6InstrFormats.td:class POOL16C_MOVEP16_FM_MMR6 {
+./lib/Target/Mips/MicroMips32r6InstrFormats.td:class POOL16A_SUBU16_FM_MMR6 {
+./lib/Target/Mips/MipsAnalyzeImmediate.h:  class MipsAnalyzeImmediate {
+./lib/Target/Mips/MipsDelaySlotFiller.cpp:  class RegDefsUses {
+./lib/Target/Mips/MipsDelaySlotFiller.cpp:  class InspectMemInstr {
+./lib/Target/Mips/MipsFastISel.cpp:  class Address {
+./lib/Target/Mips/MipsOptimizePICCall.cpp:class MBBInfo {
+./lib/Target/Mips/MicroMipsDSPInstrInfo.td:class RADDU_W_QB_MM_DESC {
+./lib/Target/Mips/MicroMipsDSPInstrInfo.td:class RDDSP_MM_DESC {
+./lib/Target/Mips/MicroMipsDSPInstrInfo.td:class REPL_QB_MM_DESC {
+./lib/Target/Mips/MicroMipsDSPInstrInfo.td:class WRDSP_MM_DESC {
+./lib/Target/Mips/MicroMipsDSPInstrInfo.td:class BPOSGE32C_MMR3_DESC {
+./lib/Target/Mips/MicroMipsDSPInstrInfo.td:class BALIGN_MMR2_DESC {
+./lib/Target/Mips/MipsInstrFPU.td:class FGR_32 { list<Predicate> FGRPredicates = [NotFP64bit]; }
+./lib/Target/Mips/MipsInstrFPU.td:class FGR_64 { list<Predicate> FGRPredicates = [IsFP64bit]; }
+./lib/Target/Mips/MipsInstrFPU.td:class HARDFLOAT { list<Predicate> HardFloatPredicate = [IsNotSoftFloat]; }
+./lib/Target/Mips/MipsRegisterInfo.td:class Unallocatable {
+./lib/Target/Mips/MipsRegisterBankInfo.h:  class AmbiguousRegDefUseContainer {
+./lib/Target/Mips/MipsRegisterBankInfo.h:  class TypeInfoForMF {
+./lib/Target/Mips/Mips16InstrInfo.td:class branch16 {
+./lib/Target/Mips/Mips16InstrInfo.td:class cbranch16 {
+./lib/Target/Mips/Mips16InstrInfo.td:class MayLoad {
+./lib/Target/Mips/Mips16InstrInfo.td:class MayStore {
+./lib/Target/Mips/MipsMSAInstrInfo.td:class BMNZ_V_DESC {
+./lib/Target/Mips/MipsMSAInstrInfo.td:class BMNZI_B_DESC {
+./lib/Target/Mips/MipsMSAInstrInfo.td:class BMZ_V_DESC {
+./lib/Target/Mips/MipsMSAInstrInfo.td:class BMZI_B_DESC {
+./lib/Target/Mips/MipsMSAInstrInfo.td:class BSEL_V_DESC {
+./lib/Target/Mips/MipsMSAInstrInfo.td:class BSELI_B_DESC {
+./lib/Target/Mips/MipsMSAInstrInfo.td:class CFCMSA_DESC {
+./lib/Target/Mips/MipsMSAInstrInfo.td:class CTCMSA_DESC {
+./lib/Target/Mips/MipsMSAInstrInfo.td:class MOVE_V_DESC {
+./lib/Target/PowerPC/PPCISelDAGToDAG.cpp:class BitPermutationSelector {
+./lib/Target/PowerPC/PPCISelDAGToDAG.cpp:class IntegerCompareEliminator {
+./lib/Target/PowerPC/PPCInstrInfo.td:class isPPC64 { bit PPC64 = 1; }
+./lib/Target/PowerPC/PPC.td:class AltVSXFMARel {
+./lib/Target/PowerPC/PPCInstrFormats.td:class PPC970_DGroup_Cracked { bits<1> PPC970_Cracked = 1; }
+./lib/Target/PowerPC/PPCInstrFormats.td:class XFormMemOp { bits<1> XFormMemOp = 1; }
+./lib/Target/AMDGPU/AsmParser/AMDGPUAsmParser.cpp:class KernelScopeInfo {
+./lib/Target/AMDGPU/GCNRegPressure.h:class GCNRPTracker {
+./lib/Target/AMDGPU/R600OptimizeVectorRegisters.cpp:class RegSeqInfo {
+./lib/Target/AMDGPU/SIInstrFormats.td:class Enc32 {
+./lib/Target/AMDGPU/SIInstrFormats.td:class Enc64 {
+./lib/Target/AMDGPU/AMDGPULibCalls.cpp:class AMDGPULibCalls {
+./lib/Target/AMDGPU/SILowerI1Copies.cpp:class PhiIncomingAnalysis {
+./lib/Target/AMDGPU/SILowerI1Copies.cpp:class LoopFinder {
+./lib/Target/AMDGPU/R600InstrFormats.td:class R600_ALU_LDS_Word0 {
+./lib/Target/AMDGPU/R600InstrFormats.td:class R600ALU_Word1 {
+./lib/Target/AMDGPU/R600InstrFormats.td:class R600LDS_Word1 {
+./lib/Target/AMDGPU/R600InstrFormats.td:class VTX_WORD0 {
+./lib/Target/AMDGPU/R600InstrFormats.td:class VTX_WORD1_GPR {
+./lib/Target/AMDGPU/R600InstrFormats.td:class TEX_WORD0 {
+./lib/Target/AMDGPU/R600InstrFormats.td:class TEX_WORD1 {
+./lib/Target/AMDGPU/R600InstrFormats.td:class TEX_WORD2 {
+./lib/Target/AMDGPU/R600InstrFormats.td:class CF_WORD1_R600 {
+./lib/Target/AMDGPU/R600InstrFormats.td:class CF_WORD0_EG {
+./lib/Target/AMDGPU/R600InstrFormats.td:class CF_WORD1_EG {
+./lib/Target/AMDGPU/R600InstrFormats.td:class CF_ALU_WORD0 {
+./lib/Target/AMDGPU/R600InstrFormats.td:class CF_ALU_WORD1 {
+./lib/Target/AMDGPU/R600InstrFormats.td:class CF_ALLOC_EXPORT_WORD0_RAT {
+./lib/Target/AMDGPU/R600InstrFormats.td:class CF_ALLOC_EXPORT_WORD1_BUF {
+./lib/Target/AMDGPU/AMDGPUPropagateAttributes.cpp:class AMDGPUPropagateAttributes {
+./lib/Target/AMDGPU/AMDGPULibFunc.cpp:class UnmangledFuncInfo {
+./lib/Target/AMDGPU/AMDGPULibFunc.cpp:class ParamIterator {
+./lib/Target/AMDGPU/AMDGPULibFunc.cpp:class ItaniumMangler {
+./lib/Target/AMDGPU/AMDGPUSubtarget.h:class AMDGPUSubtarget {
+./lib/Target/AMDGPU/SIMemoryLegalizer.cpp:enum class SIMemOp {
+./lib/Target/AMDGPU/SIMemoryLegalizer.cpp:enum class Position {
+./lib/Target/AMDGPU/SIMemoryLegalizer.cpp:enum class SIAtomicScope {
+./lib/Target/AMDGPU/SIMemoryLegalizer.cpp:enum class SIAtomicAddrSpace {
+./lib/Target/AMDGPU/SIMemoryLegalizer.cpp:class SICacheControl {
+./lib/Target/AMDGPU/AMDGPUInstrInfo.h:class AMDGPUInstrInfo {
+./lib/Target/AMDGPU/AMDGPUMachineCFGStructurizer.cpp:class PHILinearize {
+./lib/Target/AMDGPU/AMDGPUMachineCFGStructurizer.cpp:class PHILinearizeDestIterator {
+./lib/Target/AMDGPU/AMDGPUMachineCFGStructurizer.cpp:class LinearizedRegion {
+./lib/Target/AMDGPU/AMDGPUMachineCFGStructurizer.cpp:class MRT {
+./lib/Target/AMDGPU/AMDILCFGStructurizer.cpp:class BlockInformation {
+./lib/Target/AMDGPU/SISchedule.td:multiclass SICommonWriteRes {
+./lib/Target/AMDGPU/SIPeepholeSDWA.cpp:class SDWAOperand {
+./lib/Target/AMDGPU/SIMachineScheduler.h:class SIScheduleBlock {
+./lib/Target/AMDGPU/SIMachineScheduler.h:class SIScheduleBlockCreator {
+./lib/Target/AMDGPU/SIMachineScheduler.h:class SIScheduleBlockScheduler {
+./lib/Target/AMDGPU/SIMachineScheduler.h:class SIScheduler {
+./lib/Target/AMDGPU/GCNMinRegStrategy.cpp:class GCNMinRegScheduler {
+./lib/Target/AMDGPU/AMDGPUHSAMetadataStreamer.h:class MetadataStreamer {
+./lib/Target/AMDGPU/R600Instructions.td:class ExportWord0 {
+./lib/Target/AMDGPU/R600Instructions.td:class ExportSwzWord1 {
+./lib/Target/AMDGPU/R600Instructions.td:class ExportBufWord1 {
+./lib/Target/AMDGPU/R600Instructions.td:class CF_WORD0_R600 {
+./lib/Target/AMDGPU/AMDGPUInstructions.td:class AddressSpacesImpl {
+./lib/Target/AMDGPU/AMDGPUInstructions.td:class PredicateControl {
+./lib/Target/AMDGPU/AMDGPUInstructions.td:class Constants {
+./lib/Target/AMDGPU/GCNILPSched.cpp:class GCNILPScheduler {
+./lib/Target/AMDGPU/AMDGPUMCInstLower.cpp:class AMDGPUMCInstLower {
+./lib/Target/AMDGPU/MIMGInstructions.td:class MIMGBaseOpcode {
+./lib/Target/AMDGPU/Utils/AMDGPUPALMetadata.h:class AMDGPUPALMetadata {
+./lib/Target/AMDGPU/AMDGPULibFunc.h:class AMDGPULibFuncBase {
+./lib/Target/AMDGPU/SIModeRegister.cpp:class BlockData {
+./lib/Target/AMDGPU/SIInsertWaitcnts.cpp:class WaitcntBrackets {
+./lib/Target/AMDGPU/GCNRegBankReassign.cpp:  class OperandMask {
+./lib/Target/AMDGPU/GCNRegBankReassign.cpp:  class Candidate {
+./lib/Target/AMDGPU/VOPInstructions.td:class LetDummies {
+./lib/Target/ARC/ARCInstrFormats.td:class Encoding64 {
+./lib/Target/ARM/AsmParser/ARMAsmParser.cpp:enum class ImplicitItModeTy { Always, Never, ARMOnly, ThumbOnly };
+./lib/Target/ARM/AsmParser/ARMAsmParser.cpp:class UnwindContext {
+./lib/Target/ARM/ARMInstrMVE.td:class MVE_VMOV_lane_direction {
+./lib/Target/ARM/MCTargetDesc/ARMUnwindOpAsm.cpp:  class UnwindOpcodeStreamer {
+./lib/Target/ARM/MCTargetDesc/ARMUnwindOpAsm.h:class UnwindOpcodeAssembler {
+./lib/Target/ARM/ARMBasicBlockInfo.h:class ARMBasicBlockUtils {
+./lib/Target/ARM/ARMParallelDSP.cpp:  class Reduction {
+./lib/Target/ARM/ARMParallelDSP.cpp:  class WidenedLoad {
+./lib/Target/ARM/ARMCodeGenPrepare.cpp:class IRPromoter {
+./lib/Target/ARM/ARMInstrFormats.td:class Xform16Bit { bit canXformTo16Bit = 1; }
+./lib/Target/ARM/ARMInstrFormats.td:class Encoding {
+./lib/Target/NVPTX/NVPTXAsmPrinter.h:  class AggBuffer {
+./lib/Target/NVPTX/NVPTXIntrinsics.td:class PTX {
+./lib/Target/NVPTX/ManagedStringPool.h:class ManagedStringPool {
+./lib/Target/Hexagon/HexagonVectorLoopCarriedReuse.cpp:  class DepChain {
+./lib/Target/Hexagon/HexagonLoopIdiomRecognition.cpp:  class PolynomialMultiplyRecognize {
+./lib/Target/Hexagon/HexagonDepIICHVX.td:class DepHVXItinV55 {
+./lib/Target/Hexagon/HexagonDepIICHVX.td:class DepHVXItinV60 {
+./lib/Target/Hexagon/HexagonDepIICHVX.td:class DepHVXItinV62 {
+./lib/Target/Hexagon/HexagonDepIICHVX.td:class DepHVXItinV65 {
+./lib/Target/Hexagon/HexagonDepIICHVX.td:class DepHVXItinV66 {
+./lib/Target/Hexagon/HexagonInstrFormats.td:class OpcodeHexagon {
+./lib/Target/Hexagon/HexagonBitSimplify.cpp:  class Transformation {
+./lib/Target/Hexagon/HexagonBitSimplify.cpp:  class DeadCodeElimination {
+./lib/Target/Hexagon/HexagonScheduleV55.td:class HexagonV55PseudoItin {
+./lib/Target/Hexagon/HexagonIICScalar.td:class PseudoItin {
+./lib/Target/Hexagon/HexagonIICScalar.td:class ScalarItin {
+./lib/Target/Hexagon/HexagonDepIICScalar.td:class DepScalarItinV5 {
+./lib/Target/Hexagon/HexagonDepIICScalar.td:class DepScalarItinV55 {
+./lib/Target/Hexagon/HexagonDepIICScalar.td:class DepScalarItinV60 {
+./lib/Target/Hexagon/HexagonDepIICScalar.td:class DepScalarItinV62 {
+./lib/Target/Hexagon/HexagonDepIICScalar.td:class DepScalarItinV65 {
+./lib/Target/Hexagon/HexagonDepIICScalar.td:class DepScalarItinV66 {
+./lib/Target/Hexagon/HexagonGenInsert.cpp:  class OrderedRegisterList {
+./lib/Target/Hexagon/MCTargetDesc/HexagonMCChecker.h:class HexagonMCChecker {
+./lib/Target/Hexagon/MCTargetDesc/HexagonShuffler.h:class HexagonResource {
+./lib/Target/Hexagon/MCTargetDesc/HexagonShuffler.h:class HexagonInstr {
+./lib/Target/Hexagon/MCTargetDesc/HexagonShuffler.h:class HexagonShuffler {
+./lib/Target/Hexagon/MCTargetDesc/HexagonShuffler.cpp:class HexagonBid {
+./lib/Target/Hexagon/MCTargetDesc/HexagonShuffler.cpp:class HexagonUnitAuction {
+./lib/Target/Hexagon/MCTargetDesc/HexagonMCInstrInfo.h:class DuplexCandidate {
+./lib/Target/Hexagon/MCTargetDesc/HexagonMCInstrInfo.h:class PacketIterator {
+./lib/Target/Hexagon/MCTargetDesc/HexagonMCInstrInfo.h:class PredicateInfo {
+./lib/Target/Hexagon/HexagonISelDAGToDAG.cpp:class LeafPrioQueue {
+./lib/Target/Hexagon/HexagonMachineScheduler.h:class VLIWResourceModel {
+./lib/Target/Hexagon/HexagonHardwareLoops.cpp:  class CountValue {
+./lib/Target/Hexagon/HexagonISelDAGToDAGHVX.cpp:enum class ColorKind { None, Red, Black };
+./lib/Target/Hexagon/HexagonBitTracker.cpp:class RegisterRefs {
+./lib/Target/Hexagon/HexagonIICHVX.td:class HVXItin {
+./lib/Target/Hexagon/HexagonBlockRanges.h:  class IndexType {
+./lib/Target/Hexagon/HexagonBlockRanges.h:  class InstrIndexMap {
+./lib/Target/Hexagon/HexagonScheduleV5.td:class HexagonV5PseudoItin {
+./lib/Target/Hexagon/HexagonInstrFormatsV5.td:class OpcodeDuplex {
+./lib/Target/Hexagon/HexagonConstPropagation.cpp:  class ConstantProperties {
+./lib/Target/Hexagon/HexagonConstPropagation.cpp:  class LatticeCell {
+./lib/Target/Hexagon/HexagonConstPropagation.cpp:  class MachineConstPropagator {
+./lib/Target/Hexagon/HexagonConstPropagation.cpp:    class CellMap {
+./lib/Target/Hexagon/HexagonConstPropagation.cpp:  class MachineConstEvaluator {
+./lib/Target/Hexagon/HexagonDepArch.h:enum class ArchEnum { NoArch, Generic, V5, V55, V60, V62, V65, V66 };
+./lib/Target/X86/AsmParser/X86AsmParser.cpp:  class InfixCalculator {
+./lib/Target/X86/AsmParser/X86AsmParser.cpp:  class IntelExprStateMachine {
+./lib/Target/X86/X86DomainReassignment.cpp:class InstrConverterBase {
+./lib/Target/X86/X86DomainReassignment.cpp:class Closure {
+./lib/Target/X86/X86CallingConv.td:class RC_X86_RegCall {
+./lib/Target/X86/X86InstrFormats.td:class OpSize16 { OperandSize OpSize = OpSize16; }
+./lib/Target/X86/X86InstrFormats.td:class OpSize32 { OperandSize OpSize = OpSize32; }
+./lib/Target/X86/X86InstrFormats.td:class AdSize16 { AddressSize AdSize = AdSize16; }
+./lib/Target/X86/X86InstrFormats.td:class AdSize32 { AddressSize AdSize = AdSize32; }
+./lib/Target/X86/X86InstrFormats.td:class AdSize64 { AddressSize AdSize = AdSize64; }
+./lib/Target/X86/X86InstrFormats.td:class ThreeDNow { Map OpMap = ThreeDNow; }
+./lib/Target/X86/X86InstrFormats.td:class VEX_LIG { bit ignoresVEX_L = 1; }
+./lib/Target/X86/X86InstrFormats.td:class EVEX_K { bit hasEVEX_K = 1; }
+./lib/Target/X86/X86InstrFormats.td:class EVEX_B { bit hasEVEX_B = 1; }
+./lib/Target/X86/X86InstrFormats.td:class EVEX_RC { bit hasEVEX_RC = 1; }
+./lib/Target/X86/X86InstrFormats.td:class EVEX_V512 { bit hasEVEX_L2 = 1; bit hasVEX_L = 0; }
+./lib/Target/X86/X86InstrFormats.td:class EVEX_V256 { bit hasEVEX_L2 = 0; bit hasVEX_L = 1; }
+./lib/Target/X86/X86InstrFormats.td:class EVEX_V128 { bit hasEVEX_L2 = 0; bit hasVEX_L = 0; }
+./lib/Target/X86/X86InstrFormats.td:class NOTRACK { bit hasNoTrackPrefix = 1; }
+./lib/Target/X86/X86InstrFormats.td:class XOP { Encoding OpEnc = EncXOP; }
+./lib/Target/X86/X86InstrFormats.td:class NotMemoryFoldable { bit isMemoryFoldable = 0; }
+./lib/Target/X86/X86InstrFormats.td:class NotEVEX2VEXConvertible { bit notEVEX2VEXConvertible = 1; }
+./lib/Target/X86/X86FlagsCopyLowering.cpp:enum class FlagArithMnemonic {
+./lib/Target/X86/X86SchedSkylakeClient.td:// class FMASC { X86FoldableSchedWrite Sched = WriteFAdd; }
+./lib/Target/X86/X86SchedSkylakeServer.td:// class FMASC { X86FoldableSchedWrite Sched = WriteFAdd; }
+./lib/Target/X86/X86OptimizeLEAs.cpp:class MemOpKey {
+./lib/Target/X86/X86Schedule.td:class FMASC { X86FoldableSchedWrite Sched = WriteFAdd; }
+./lib/Target/X86/X86SchedBroadwell.td:// class FMASC { X86FoldableSchedWrite Sched = WriteFAdd; }
+./lib/Target/X86/X86MCInstLower.cpp:class X86MCInstLower {
+./lib/Target/X86/X86AsmPrinter.h:  class StackMapShadowTracker {
+./lib/Target/X86/X86MacroFusion.cpp:enum class FirstInstrKind { Test, Cmp, And, ALU, IncDec, Invalid };
+./lib/Target/X86/X86MacroFusion.cpp:enum class JumpKind {
+./lib/Target/X86/X86InterleavedAccess.cpp:class X86InterleavedAccessGroup {
+./lib/Target/X86/X86CondBrFolding.cpp:class X86CondBrFolding {
+./lib/Target/SystemZ/SystemZInstrInfo.h:class Branch {
+./lib/Target/Sparc/SparcInstrInfo.td:multiclass FPredBranch {
+./lib/DebugInfo/CodeView/TypeStreamMerger.cpp:class TypeStreamMerger {
+./lib/DebugInfo/CodeView/CVTypeVisitor.cpp:class CVTypeVisitor {
+./lib/ProfileData/InstrProfWriter.cpp:class ProfOStream {
+./lib/ProfileData/InstrProfWriter.cpp:class InstrProfRecordWriterTrait {
+./lib/ProfileData/Coverage/CoverageMappingWriter.cpp:class CounterExpressionsMinimizer {
+./lib/ProfileData/Coverage/CoverageMapping.cpp:class FunctionInstantiationSetCollector {
+./lib/ProfileData/Coverage/CoverageMapping.cpp:class SegmentBuilder {
+./lib/ProfileData/GCOV.cpp:class LineConsumer {
+./lib/Analysis/StratifiedSets.h:template <typename T> class StratifiedSets {
+./lib/Analysis/StratifiedSets.h:template <typename T> class StratifiedSetsBuilder {
+./lib/Analysis/MemorySSA.cpp:class MemoryLocOrCall {
+./lib/Analysis/MemorySSA.cpp:template <class AliasAnalysisType> class ClobberWalker {
+./lib/Analysis/StackSafetyAnalysis.cpp:class StackSafetyLocalAnalysis {
+./lib/Analysis/StackSafetyAnalysis.cpp:class StackSafetyDataFlowAnalysis {
+./lib/Analysis/TypeBasedAliasAnalysis.cpp:class TBAANodeImpl {
+./lib/Analysis/TypeBasedAliasAnalysis.cpp:class TBAAStructTagNodeImpl {
+./lib/Analysis/TypeBasedAliasAnalysis.cpp:class TBAAStructTypeNode {
+./lib/Analysis/CFLGraph.h:class CFLGraph {
+./lib/Analysis/CFLGraph.h:  class ValueInfo {
+./lib/Analysis/CFLGraph.h:template <typename CFLAA> class CFLGraphBuilder {
+./lib/Analysis/LazyValueInfo.cpp:  class LazyValueInfoCache {
+./lib/Analysis/LazyValueInfo.cpp:  class LazyValueInfoImpl {
+./lib/Analysis/LegacyDivergenceAnalysis.cpp:class DivergencePropagator {
+./lib/Analysis/ScalarEvolutionExpander.cpp:class LoopCompare {
+./lib/Analysis/CFLAndersAliasAnalysis.cpp:class ReachabilitySet {
+./lib/Analysis/CFLAndersAliasAnalysis.cpp:class AliasMemSet {
+./lib/Analysis/CFLAndersAliasAnalysis.cpp:class AliasAttrMap {
+./lib/Analysis/LoopInfo.cpp:class UnloopUpdater {
+./lib/Analysis/LoopAccessAnalysis.cpp:class AccessAnalysis {
+./lib/Analysis/ScopedNoAliasAA.cpp:class AliasScopeNode {
+./lib/Demangle/ItaniumDemangle.cpp:class BumpPointerAllocator {
+./lib/Demangle/ItaniumDemangle.cpp:class DefaultAllocator {
+./lib/Object/WindowsResource.cpp:class WindowsResourceCOFFWriter {
+./lib/Object/COFFImportFile.cpp:class ObjectFactory {
+./lib/Object/COFFModuleDefinition.cpp:class Lexer {
+./lib/Object/COFFModuleDefinition.cpp:class Parser {
+./lib/Linker/LinkModules.cpp:class ModuleLinker {
+./lib/Linker/IRMover.cpp:class IRLinker {
+./lib/IR/ConstantsContext.h:template <class ConstantClass> class ConstantUniqueMap {
+./lib/IR/LLVMContextImpl.h:class MDNodeOpsKey {
+./lib/IR/LLVMContextImpl.h:class MDAttachmentMap {
+./lib/IR/LLVMContextImpl.h:class MDGlobalAttachmentMap {
+./lib/IR/LLVMContextImpl.h:class LLVMContextImpl {
+./lib/IR/PassTimingInfo.cpp:class PassTimingInfo {
+./lib/IR/DataLayout.cpp:class StructLayoutMap {
+./lib/IR/DebugInfo.cpp:class DebugTypeInfoRemoval {
+./lib/IR/AsmWriter.cpp:class TypePrinting {
+./lib/IR/AsmWriter.cpp:class SlotTracker {
+./lib/IR/AsmWriter.cpp:class AssemblyWriter {
+./lib/IR/SafepointIRVerifier.cpp:class CFGDeadness {
+./lib/IR/SafepointIRVerifier.cpp:class GCPtrTracker {
+./lib/IR/SafepointIRVerifier.cpp:class InstructionVerifier {
+./lib/ObjectYAML/MinidumpYAML.cpp:class BlobAllocator {
+./lib/ObjectYAML/DWARFVisitor.h:template <typename T> class VisitorImpl {
+./lib/CodeGen/SafeStack.cpp:class SafeStack {
+./lib/CodeGen/AsmPrinter/DIEHash.h:class DIEHash {
+./lib/CodeGen/AsmPrinter/DwarfExpression.h:class DIExpressionCursor {
+./lib/CodeGen/AsmPrinter/DwarfExpression.h:class DwarfExpression {
+./lib/CodeGen/AsmPrinter/DwarfFile.h:class RangeSpan {
+./lib/CodeGen/AsmPrinter/DwarfFile.h:class RangeSpanList {
+./lib/CodeGen/AsmPrinter/DwarfFile.h:class DwarfFile {
+./lib/CodeGen/AsmPrinter/DebugLocStream.h:class DebugLocStream {
+./lib/CodeGen/AsmPrinter/WinException.cpp:class InvokeStateChangeIterator {
+./lib/CodeGen/AsmPrinter/DebugLocEntry.h:class DbgValueLoc {
+./lib/CodeGen/AsmPrinter/DebugLocEntry.h:class DebugLocEntry {
+./lib/CodeGen/AsmPrinter/AddressPool.h:class AddressPool {
+./lib/CodeGen/AsmPrinter/ByteStreamer.h:class ByteStreamer {
+./lib/CodeGen/AsmPrinter/DwarfStringPool.h:class DwarfStringPool {
+./lib/CodeGen/AsmPrinter/AccelTable.cpp:class AccelTableWriter {
+./lib/CodeGen/AsmPrinter/DwarfDebug.h:class DbgEntity {
+./lib/CodeGen/AsmPrinter/DwarfDebug.h:enum class AccelTableKind {
+./lib/CodeGen/AsmPrinter/DwarfDebug.h:  class NonTypeUnitContext {
+./lib/CodeGen/MIRParser/MIRParser.cpp:class MIRParserImpl {
+./lib/CodeGen/MIRParser/MILexer.cpp:class Cursor {
+./lib/CodeGen/MIRParser/MIParser.cpp:class MIParser {
+./lib/CodeGen/RegisterCoalescer.cpp:class JoinVals {
+./lib/CodeGen/PeepholeOptimizer.cpp:  class RecurrenceInstr {
+./lib/CodeGen/PeepholeOptimizer.cpp:  class ValueTrackerResult {
+./lib/CodeGen/PeepholeOptimizer.cpp:  class ValueTracker {
+./lib/CodeGen/PeepholeOptimizer.cpp:class Rewriter {
+./lib/CodeGen/LocalStackSlotAllocation.cpp:  class FrameRef {
+./lib/CodeGen/Spiller.h:  class Spiller {
+./lib/CodeGen/LiveInterval.cpp:class CalcLiveRangeUtilBase {
+./lib/CodeGen/BranchFolding.h:    class MergePotentialsElt {
+./lib/CodeGen/BranchFolding.h:    class SameTailElt {
+./lib/CodeGen/BranchFolding.h:    class MBFIWrapper {
+./lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp:class ExtraFlags {
+./lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h:class SelectionDAGBuilder {
+./lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h:  class DanglingDebugInfo {
+./lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h:  class StackProtectorDescriptor {
+./lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp:  class OptLevelChanger {
+./lib/CodeGen/SelectionDAG/LegalizeDAG.cpp:class SelectionDAGLegalize {
+./lib/CodeGen/SelectionDAG/LegalizeVectorOps.cpp:class VectorLegalizer {
+./lib/CodeGen/SelectionDAG/DAGCombiner.cpp:  class DAGCombiner {
+./lib/CodeGen/SelectionDAG/StatepointLowering.h:class StatepointLoweringState {
+./lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.h:    class RegDefIter {
+./lib/CodeGen/SelectionDAG/SDNodeDbgValue.h:class SDDbgValue {
+./lib/CodeGen/SelectionDAG/SDNodeDbgValue.h:class SDDbgLabel {
+./lib/CodeGen/ImplicitNullChecks.cpp:  class NullCheck {
+./lib/CodeGen/MIRPrinter.cpp:class MIRPrinter {
+./lib/CodeGen/MIRPrinter.cpp:class MIPrinter {
+./lib/CodeGen/CodeGenPrepare.cpp:class TypePromotionTransaction {
+./lib/CodeGen/CodeGenPrepare.cpp:  class TypePromotionAction {
+./lib/CodeGen/CodeGenPrepare.cpp:  class InsertionHandler {
+./lib/CodeGen/CodeGenPrepare.cpp:class AddressingModeMatcher {
+./lib/CodeGen/CodeGenPrepare.cpp:class PhiNodeSetIterator {
+./lib/CodeGen/CodeGenPrepare.cpp:class PhiNodeSet {
+./lib/CodeGen/CodeGenPrepare.cpp:class SimplificationTracker {
+./lib/CodeGen/CodeGenPrepare.cpp:class AddressingModeCombiner {
+./lib/CodeGen/CodeGenPrepare.cpp:class TypePromotionHelper {
+./lib/CodeGen/CodeGenPrepare.cpp:class VectorPromoteHelper {
+./lib/CodeGen/MachineOutliner.cpp:class SuffixTree {
+./lib/CodeGen/InterferenceCache.h:  class Entry {
+./lib/CodeGen/InterferenceCache.h:  class Cursor {
+./lib/CodeGen/LiveRangeCalc.h:class LiveRangeCalc {
+./lib/CodeGen/LiveDebugVariables.cpp:class DbgValueLocation {
+./lib/CodeGen/LiveDebugVariables.cpp:class UserValue {
+./lib/CodeGen/LiveDebugVariables.cpp:class UserLabel {
+./lib/CodeGen/LiveDebugVariables.cpp:class LDVImpl {
+./lib/CodeGen/MachineSSAUpdater.cpp:  class PHI_iterator {
+./lib/CodeGen/MachineCopyPropagation.cpp:class CopyTracker {
+./lib/CodeGen/MachineModuleInfo.cpp:class MMIAddrLabelMap {
+./lib/CodeGen/EarlyIfConversion.cpp:class SSAIfConv {
+./lib/CodeGen/SafeStackLayout.h:class StackLayout {
+./lib/CodeGen/RegisterCoalescer.h:  class CoalescerPair {
+./lib/CodeGen/ExpandMemCmp.cpp:class MemCmpExpansion {
+./lib/CodeGen/InterleavedLoadCombinePass.cpp:class Polynomial {
+./lib/CodeGen/RegAllocBase.h:class RegAllocBase {
+./lib/CodeGen/HardwareLoops.cpp:  class HardwareLoop {
+./lib/CodeGen/MachineBlockPlacement.cpp:class BlockChain {
+./lib/CodeGen/RegisterPressure.cpp:class RegisterOperandsCollector {
+./lib/CodeGen/RegAllocGreedy.cpp:  class EvictionTrack {
+./lib/CodeGen/TargetPassConfig.cpp:enum class CFLAAType { None, Steensgaard, Andersen, Both };
+./lib/CodeGen/TargetPassConfig.cpp:class PassConfigImpl {
+./lib/CodeGen/TargetPassConfig.cpp:  enum class SelectorType { SelectionDAG, FastISel, GlobalISel };
+./lib/CodeGen/SafeStackColoring.h:class StackColoring {
+./lib/CodeGen/MachineCombiner.cpp:enum class CombinerObjective {
+./lib/CodeGen/LiveDebugValues.cpp:  class UserValueScopes {
+./lib/CodeGen/LiveDebugValues.cpp:  class DebugVariable {
+./lib/CodeGen/LiveDebugValues.cpp:  class OpenRangesSet {
+./lib/CodeGen/MIRCanonicalizerPass.cpp:class TypedVReg {
+./lib/CodeGen/MIRCanonicalizerPass.cpp:class NamedVRegCursor {
+./lib/CodeGen/ScheduleDAGInstrs.cpp:class SchedDFSImpl {
+./lib/CodeGen/ScheduleDAGInstrs.cpp:class SchedDAGReverseDFS {
+./lib/MC/ELFObjectWriter.cpp:class SymbolTableWriter {
+./lib/MC/MCDisassembler/Disassembler.h:class LLVMDisasmContext {
+./lib/MC/MCParser/AsmParser.cpp:class AsmLexerSkipSpaceRAII {
+./lib/MC/WinCOFFObjectWriter.cpp:class COFFSymbol {
+./lib/MC/WinCOFFObjectWriter.cpp:class COFFSection {
+./lib/MC/MCDwarf.cpp:class FrameEmitterImpl {
+./test/TableGen/defmclass.td:class XD { bits<4> Prefix = 11; }
+./test/TableGen/defmclass.td:class XS { bits<4> Prefix = 12; }
+./test/TableGen/defmclass.td:class VEX { bit hasVEX_4VPrefix = 1; }
+./test/TableGen/defmclass.td:class BaseI {
+./test/TableGen/defmclass.td:multiclass R {
+./test/TableGen/defmclass.td:multiclass M {
+./test/TableGen/defmclass.td:multiclass Y {
+./test/TableGen/JSON.td:class Base {}
+./test/TableGen/JSON.td:class Variables {
+./test/TableGen/GeneralList.td:class foo {
+./test/TableGen/TargetInstrInfo.td:class Instruction {   // Would have other stuff eventually
+./test/TableGen/String.td:class x {
+./test/TableGen/foreach-range-parse-errors2.td:class ConstantsImpl {
+./test/TableGen/MultiClass-def-fail.td:multiclass M2 {
+./test/TableGen/MultiClass-defm-fail.td:class A {}
+./test/TableGen/LazyChange.td:class C {
+./test/TableGen/DuplicateFieldValues.td:class isAForm { string ABCForm = "A"; }
+./test/TableGen/DuplicateFieldValues.td:class isBForm { string ABCForm = "B"; }
+./test/TableGen/DuplicateFieldValues.td:class isCForm { string ABCForm = "C"; }
+./test/TableGen/DuplicateFieldValues.td:class isDForm { string ABCForm = "D"; }
+./test/TableGen/DuplicateFieldValues.td:class isEForm { string ABCForm = "E"; }
+./test/TableGen/ForwardRef.td:class bar {
+./test/TableGen/ForwardRef.td:class baz { list<foo> y; }
+./test/TableGen/ForwardRef.td:class foo {
+./test/TableGen/foreach-variable-range.td:class ConstantsImpl {
+./test/TableGen/usevalname.td:class Reg {
+./test/TableGen/name-resolution-consistency.td:class Cbase {
+./test/TableGen/foreach-range-parse-errors0.td:class ConstantsImpl {
+./test/TableGen/Paste.td:multiclass Test {
+./test/TableGen/MultiClass-defm.td:class A {}
+./test/TableGen/MultiClass-defm.td:multiclass M2 {
+./test/TableGen/UnsetBitInit.td:class x {
+./test/TableGen/foreach.td:class Names {
+./test/TableGen/generic-tables-instruction.td:class Instruction {
+./test/TableGen/SuperSubclassSameName.td:class Arg { int a; }
+./test/TableGen/Slice.td:class SDNode {}
+./test/ThinLTO/X86/devirt-after-icp.ll:; class A {
+./test/tools/llvm-readobj/codeview-types.test:class Class {
+./test/tools/dsymutil/X86/odr-uniquing.cpp:class C {};
+./test/tools/dsymutil/X86/odr-uniquing.cpp:  class C {} C;
+./test/tools/dsymutil/X86/odr-uniquing.cpp:class AnonC {};
+./test/tools/dsymutil/X86/modules-pruning.cpp:class Template {
+./test/tools/dsymutil/X86/odr-anon-namespace.cpp:class C {};
+./test/tools/llvm-cov/Inputs/instrprof-comdat.h:template <class T> class FOO {
+./test/tools/llvm-pdbutil/Inputs/TypeQualifiersTest.cpp:  class Class {
+./test/tools/llvm-pdbutil/Inputs/PrettyFuncDumperTest.cpp:  class A {
+./test/tools/llvm-pdbutil/Inputs/ClassLayoutTest.cpp:  class A {
+./test/tools/llvm-pdbutil/Inputs/ClassLayoutTest.cpp:  class A {};
+./test/tools/llvm-pdbutil/Inputs/ClassLayoutTest.cpp:  class B {};
+Binary file ./test/tools/llvm-pdbutil/Inputs/dotnet_contents_uncompressed.pdb matches
+./test/tools/llvm-pdbutil/Inputs/FilterTest.cpp:class FilterTestClass {
+./test/Transforms/SROA/mem-par-metadata-sroa.ll:; class Complex {
+./test/Transforms/LoopVectorize/interleaved-accesses-1.ll:; class Complex {
+./test/Transforms/LoopVectorize/pr31098.ll:; class Complex {
+./test/Transforms/Util/clone-dicompileunit.ll:; class A {
+./test/DebugInfo/Inputs/dwarfdump-test-zlib.cc:class DummyClass {
+./test/DebugInfo/Inputs/dwarfdump-test.cc:class DummyClass {
+./test/DebugInfo/Generic/template-recursive-void.ll:; class base { };
+./test/DebugInfo/Generic/debug-info-qualifiers.ll:; class A {
+./test/DebugInfo/PDB/Inputs/every-class.cpp:class Class {};
+./test/DebugInfo/PDB/Inputs/every-class.cpp:enum class Enum {A};
+./test/DebugInfo/PDB/Inputs/symbolformat.cpp:enum class TestEnumClass {
+./test/DebugInfo/PDB/Inputs/every-enum.cpp:enum class EC {
+./test/DebugInfo/PDB/Inputs/every-type.cpp:class FooClass {                           // LF_CLASS
+./test/DebugInfo/PDB/Inputs/every-type.yaml:  # class FooClass {
+./test/DebugInfo/PDB/Inputs/every-type.yaml:  # const volatile class FooClass {                          [Index: 0x1018]
+./test/DebugInfo/X86/constant-aggregate.ll:; class C { public: unsigned i; };
+./test/DebugInfo/X86/generate-odr-hash.ll:; class fluffy {
+./test/DebugInfo/X86/align_cpp11.ll:; class C1 {
+./test/DebugInfo/X86/cu-ranges-odr.ll:; class A {
+./test/DebugInfo/X86/void-typedef.ll:;   class A {
+./test/DebugInfo/X86/void-typedef.ll:;   class B {
+./test/DebugInfo/X86/xray-split-dwarf-interaction.ll:; class a {
+./test/DebugInfo/X86/dbg-declare-arg.ll:; class A { public: int x; int y; int z; int o; ~A() { x = 1; }};
+./test/DebugInfo/X86/this-stack_value.ll:;   class A {
+./test/DebugInfo/COFF/types-data-members.ll:; class Class {
+./test/DebugInfo/COFF/class-options-common.ll:; class EmptyClass {}; // Expect: CO = ForwardReference | HasUniqueName
+./test/DebugInfo/COFF/class-options-common.ll:; class ExplicitCtorClass { // Expect CO = ForwardReference | HasUniqueName
+./test/DebugInfo/COFF/class-options-common.ll:; class DefaultedCtorClass { // Expect: CO = ForwardReference | HasUniqueName
+./test/DebugInfo/COFF/class-options-common.ll:; class DefaultArgumentCtorClass { // Expect: CO = ForwardReference | HasUniqueName
+./test/DebugInfo/COFF/class-options-common.ll:; class UserDtorClass { // Expect: CO = ForwardReference | HasUniqueName
+./test/DebugInfo/COFF/class-options-common.ll:; class DefaultedDtorClass { // Expect: CO = ForwardReference | HasUniqueName
+./test/DebugInfo/COFF/class-options-common.ll:; class BClass { static int x; }; // Expect: CO = ForwardReference | HasUniqueName
+./test/DebugInfo/COFF/enum-co.ll:; enum class EnumClass { RED, BLUE, NOTCARE }; // Expect: CO = HasUniqueName
+./test/DebugInfo/COFF/function-options.ll:; class AClass {};
+./test/DebugInfo/COFF/function-options.ll:; class BClass {
+./test/DebugInfo/COFF/function-options.ll:; class C1Class {
+./test/DebugInfo/COFF/function-options.ll:; class C2Class { // Note: MSVC-specific dtor, i.e. __vecDelDtor won't be verified in this case.
+./test/DebugInfo/COFF/function-options.ll:; class FClass { static int x; };
+./test/DebugInfo/COFF/types-non-virtual-methods.ll:; class B {
+./test/DebugInfo/COFF/thunk.ll:; class A { public: virtual bool MyMethod() { return true; } }; 
+./test/DebugInfo/COFF/thunk.ll:; class B { public: virtual bool MyMethod() { return true; } }; 
+./test/DebugInfo/COFF/types-cvarargs.ll:;   class A {
+./test/Analysis/LoopAccessAnalysis/pr31098.ll:; class Complex {
+./test/Demangle/ms-operators.test:;   class C {  static int i; };
+./test/Linker/Inputs/odr-lambda-2.ll:; class Error {};
+./test/Linker/Inputs/type-unique-inheritance-a.ll:; class Base {
+./test/Linker/Inputs/type-unique-inheritance-a.ll:; class B {
+./test/Linker/type-unique-type-array-b.ll:;     5	class B {
+./test/Linker/odr-lambda-1.ll:; class Error {};
+./test/Linker/type-unique-odr-b.ll:;     2	class A {
+./test/Linker/type-unique-odr-a.ll:;     1	class A {
+./test/Linker/type-unique-type-array-a.ll:;     5	class A {
+./test/Linker/type-unique-simple2-a.ll:; class A {
+./test/CodeGen/ARM/Windows/wineh-basic.ll:; class field { ~field(); };
+./test/CodeGen/X86/post-ra-sched-with-debug.mir:# class b {
+./test/CodeGen/X86/post-ra-sched-with-debug.mir:# class l {
+./test/CodeGen/X86/post-ra-sched-with-debug.mir:# class p {
+./test/CodeGen/X86/post-ra-sched-with-debug.mir:# class ad {
+./test/CodeGen/X86/post-ra-sched-with-debug.mir:#   class y {
+./test/CodeGen/X86/post-ra-sched-with-debug.mir:# class ag {
+./test/CodeGen/X86/post-ra-sched-with-debug.mir:# class aj {
+./test/CodeGen/X86/misched-code-difference-with-debug.ll:; class C {
+./test/MC/ELF/debug-mixed-md5.ll:; template <class> class b {};
+./cmake-build-release/lib64/cmake/llvm/HandleLLVMOptions.cmake:    CHECK_CXX_SOURCE_COMPILES("class base {public: virtual void anchor();protected: ~base();};
+./docs/TableGen/LangRef.rst:     class Foo {
+./docs/TableGen/LangIntro.rst:  class C { bit V = 1; }
+./docs/TableGen/LangIntro.rst:  class XD { bits<4> Prefix = 11; }
+./docs/TableGen/LangIntro.rst:  class XS { bits<4> Prefix = 12; }
+./docs/TableGen/LangIntro.rst:  multiclass R {
+./docs/TableGen/LangIntro.rst:  multiclass Y {
+./docs/WritingAnLLVMBackend.rst:  class Instruction {
+./docs/HowToSetUpLLVMStyleRTTI.rst:   class Shape {
+./docs/HowToSetUpLLVMStyleRTTI.rst:       class Shape {
+./docs/HowToSetUpLLVMStyleRTTI.rst:       class Shape {
+./docs/HowToSetUpLLVMStyleRTTI.rst:       class Shape {
+./docs/HowToSetUpLLVMStyleRTTI.rst:      class Foo {
+./docs/CodingStandards.rst:  class Something {
+./docs/CodingStandards.rst:  class Something {
+./docs/CodingStandards.rst:  class Something {
+./docs/CodingStandards.rst:  class Foo {
+./docs/CodingStandards.rst:  class VehicleMaker {
+./docs/CodingStandards.rst:  class Foo {
+./docs/CodingStandards.rst:  class Foo {
+./docs/CodingStandards.rst:  class Grokable {
+./docs/CodingStandards.rst:  class StringSort {
+./docs/CodingStandards.rst:  class StringSort {
+./docs/YamlIO.rst:      class NormalizedPolar {
+./docs/ProgrammersManual.rst:  class Foo {
+./docs/ProgrammersManual.rst:  class FallibleChildIterator {
+./docs/ProgrammersManual.rst:  class Archive {
+./docs/HowToUseInstrMappings.rst:  class InstrMapping {
+./docs/tutorial/LangImpl02.rst:    class ExprAST {
+./docs/tutorial/LangImpl02.rst:    class PrototypeAST {
+./docs/tutorial/LangImpl02.rst:    class FunctionAST {
+./docs/tutorial/BuildingAJIT2.rst:  class KaleidoscopeJIT {
+./docs/tutorial/LangImpl06.rst:    class PrototypeAST {
+./docs/tutorial/MyFirstLanguageFrontend/LangImpl02.rst:    class ExprAST {
+./docs/tutorial/MyFirstLanguageFrontend/LangImpl02.rst:    class PrototypeAST {
+./docs/tutorial/MyFirstLanguageFrontend/LangImpl02.rst:    class FunctionAST {
+./docs/tutorial/MyFirstLanguageFrontend/LangImpl06.rst:    class PrototypeAST {
+./docs/tutorial/MyFirstLanguageFrontend/LangImpl03.rst:    class ExprAST {
+./docs/tutorial/MyFirstLanguageFrontend/LangImpl09.rst:   class ExprAST {
+./docs/tutorial/LangImpl03.rst:    class ExprAST {
+./docs/tutorial/BuildingAJIT3.rst:  class KaleidoscopeJIT {
+./docs/tutorial/LangImpl09.rst:   class ExprAST {
+./docs/tutorial/BuildingAJIT1.rst:  class KaleidoscopeJIT {
+./tools/llvm-lto/llvm-lto.cpp:class ThinLTOProcessing {
+./tools/llvm-objdump/llvm-objdump.cpp:class SourcePrinter {
+./tools/llvm-objdump/llvm-objdump.cpp:class PrettyPrinter {
+./tools/llvm-objdump/llvm-objdump.h:class SectionFilterIterator {
+./tools/llvm-objdump/llvm-objdump.h:class SectionFilter {
+./tools/llvm-readobj/DwarfCFIEHPrinter.h:class PrinterContext {
+./tools/llvm-readobj/ELFDumper.cpp:template <typename ELFT> class DumpStyle {
+./tools/llvm-readobj/ELFDumper.cpp:template <class ELFT> class MipsGOTParser {
+./tools/llvm-readobj/ObjDumper.h:class ObjDumper {
+./tools/llvm-readobj/ARMEHABIPrinter.h:class OpcodeDecoder {
+./tools/llvm-readobj/ARMEHABIPrinter.h:class PrinterContext {
+./tools/llvm-readobj/ARMWinEHPrinter.h:class Decoder {
+./tools/llvm-readobj/Win64EHDumper.h:class Dumper {
+./tools/llvm-readobj/Error.h:enum class readobj_error {
+./tools/llvm-readobj/WindowsResourceDumper.h:class Dumper {
+./tools/dsymutil/CompileUnit.h:class CompileUnit {
+./tools/dsymutil/DwarfStreamer.h:class DwarfStreamer {
+./tools/dsymutil/DebugMap.h:class DebugMap {
+./tools/dsymutil/DebugMap.h:class DebugMapObject {
+./tools/dsymutil/NonRelocatableStringpool.h:class NonRelocatableStringpool {
+./tools/dsymutil/DeclContext.h:class CachedPathResolver {
+./tools/dsymutil/DeclContext.h:class DeclContext {
+./tools/dsymutil/DeclContext.h:class DeclContextTree {
+./tools/dsymutil/SymbolMap.h:class SymbolMapTranslator {
+./tools/dsymutil/SymbolMap.h:class SymbolMapLoader {
+./tools/dsymutil/MachODebugMapParser.cpp:class MachODebugMapParser {
+./tools/dsymutil/LinkUtils.h:enum class OutputFileType {
+./tools/dsymutil/LinkUtils.h:enum class AccelTableKind {
+./tools/dsymutil/DwarfLinker.h:class DwarfLinker {
+./tools/dsymutil/DwarfLinker.h:  class RelocationManager {
+./tools/dsymutil/DwarfLinker.h:  class DIECloner {
+./tools/dsymutil/BinaryHolder.h:class BinaryHolder {
+./tools/dsymutil/BinaryHolder.h:  class EntryBase {
+./tools/llvm-elfabi/llvm-elfabi.cpp:enum class FileFormat {
+./tools/llvm-elfabi/ErrorCollector.h:class ErrorCollector {
+./tools/llvm-diff/DiffConsumer.h:  class Consumer {
+./tools/llvm-diff/DiffLog.h:  class LogBuilder {
+./tools/llvm-diff/DiffLog.h:  class DiffLogBuilder {
+./tools/llvm-diff/DifferenceEngine.h:  class DifferenceEngine {
+./tools/llvm-diff/DifferenceEngine.h:    class Oracle {
+./tools/llvm-diff/DifferenceEngine.cpp:class PriorityQueue {
+./tools/llvm-diff/DifferenceEngine.cpp:class FunctionDifferenceEngine {
+./tools/lli/lli.cpp:  enum class JITKind { MCJIT, OrcMCJITReplacement, OrcLazy };
+./tools/lli/lli.cpp:  enum class DumpKind {
+./tools/llvm-symbolizer/llvm-symbolizer.cpp:enum class Command {
+./tools/obj2yaml/xcoff2yaml.cpp:class XCOFFDumper {
+./tools/obj2yaml/coff2yaml.cpp:class COFFDumper {
+./tools/obj2yaml/wasm2yaml.cpp:class WasmDumper {
+./tools/obj2yaml/macho2yaml.cpp:class MachODumper {
+./tools/obj2yaml/Error.h:enum class obj2yaml_error {
+./tools/obj2yaml/elf2yaml.cpp:class ELFDumper {
+./tools/llvm-link/llvm-link.cpp:class ModuleLazyLoaderCache {
+./tools/llvm-cfi-verify/lib/FileAnalysis.h:enum class CFIProtectionStatus {
+./tools/llvm-cfi-verify/lib/FileAnalysis.h:class FileAnalysis {
+./tools/llvm-cfi-verify/lib/GraphBuilder.h:class GraphBuilder {
+./tools/llvm-cxxdump/Error.h:enum class cxxdump_error {
+./tools/bugpoint/ToolRunner.h:class CC {
+./tools/bugpoint/ToolRunner.h:class AbstractInterpreter {
+./tools/bugpoint/BugDriver.h:class BugDriver {
+./tools/llvm-cov/CodeCoverage.cpp:class CodeCoverageTool {
+./tools/llvm-cov/SourceCoverageView.h:class CoveragePrinter {
+./tools/llvm-cov/SourceCoverageView.h:class SourceCoverageView {
+./tools/llvm-cov/CoverageViewOptions.h:  enum class OutputFormat {
+./tools/llvm-cov/CoverageFilters.h:class CoverageFilter {
+./tools/llvm-cov/CoverageFilters.h:template <typename T> class StatisticThresholdFilter {
+./tools/llvm-cov/CoverageSummaryInfo.h:class RegionCoverageInfo {
+./tools/llvm-cov/CoverageSummaryInfo.h:class LineCoverageInfo {
+./tools/llvm-cov/CoverageSummaryInfo.h:class FunctionCoverageInfo {
+./tools/llvm-cov/RenderingSupport.h:class ColoredRawOstream {
+./tools/llvm-cov/CoverageExporter.h:class CoverageExporter {
+./tools/llvm-cov/CoverageReport.h:class CoverageReport {
+./tools/llvm-rc/ResourceScriptStmt.h:class RCInt {
+./tools/llvm-rc/ResourceScriptStmt.h:class IntWithNotMask {
+./tools/llvm-rc/ResourceScriptStmt.h:class IntOrString {
+./tools/llvm-rc/ResourceScriptStmt.h:class RCResource {
+./tools/llvm-rc/ResourceScriptStmt.h:  class Accelerator {
+./tools/llvm-rc/ResourceScriptStmt.h:class MenuDefinition {
+./tools/llvm-rc/ResourceScriptStmt.h:class Control {
+./tools/llvm-rc/ResourceScriptStmt.h:class VersionInfoStmt {
+./tools/llvm-rc/ResourceScriptStmt.h:  class VersionInfoFixed {
+./tools/llvm-rc/ResourceFileWriter.cpp:class ContextKeeper {
+./tools/llvm-rc/ResourceFileWriter.cpp:enum class NullHandlingMethod {
+./tools/llvm-rc/ResourceFileWriter.cpp:enum class IconCursorGroupType { Icon, Cursor };
+./tools/llvm-rc/ResourceScriptToken.h:class RCToken {
+./tools/llvm-rc/ResourceScriptToken.h:  enum class Kind {
+./tools/llvm-rc/ResourceVisitor.h:class Visitor {
+./tools/llvm-rc/ResourceScriptParser.h:class RCParser {
+./tools/llvm-rc/ResourceScriptParser.h:  enum class OptStmtType { BasicStmt, DialogStmt, DialogExStmt };
+./tools/llvm-rc/ResourceScriptCppFilter.cpp:class Filter {
+./tools/llvm-rc/ResourceScriptToken.cpp:class Tokenizer {
+./tools/llvm-mca/Views/BottleneckAnalysis.h:class PressureTracker {
+./tools/llvm-mca/Views/BottleneckAnalysis.h:class DependencyGraph {
+./tools/llvm-mca/CodeRegionGenerator.h:class CodeRegionGenerator {
+./tools/llvm-mca/CodeRegion.h:class CodeRegion {
+./tools/llvm-mca/CodeRegion.h:class CodeRegions {
+./tools/llvm-mca/PipelinePrinter.h:class PipelinePrinter {
+./tools/llvm-profdata/llvm-profdata.cpp:class SymbolRemapper {
+./tools/llvm-objcopy/ELF/Object.h:class SectionTableRef {
+./tools/llvm-objcopy/ELF/Object.h:class SectionVisitor {
+./tools/llvm-objcopy/ELF/Object.h:class MutableSectionVisitor {
+./tools/llvm-objcopy/ELF/Object.h:class Writer {
+./tools/llvm-objcopy/ELF/Object.h:class SectionBase {
+./tools/llvm-objcopy/ELF/Object.h:class Segment {
+./tools/llvm-objcopy/ELF/Object.h:class Reader {
+./tools/llvm-objcopy/ELF/Object.h:class BasicELFBuilder {
+./tools/llvm-objcopy/ELF/Object.h:template <class ELFT> class ELFBuilder {
+./tools/llvm-objcopy/ELF/Object.h:class Object {
+./tools/llvm-objcopy/MachO/MachOWriter.h:class MachOWriter {
+./tools/llvm-objcopy/MachO/MachOReader.h:class Reader {
+./tools/llvm-objcopy/CopyConfig.h:enum class FileFormat {
+./tools/llvm-objcopy/CopyConfig.h:enum class DiscardType {
+./tools/llvm-objcopy/CopyConfig.h:class NameOrRegex {
+./tools/llvm-objcopy/COFF/Writer.h:class COFFWriter {
+./tools/llvm-objcopy/COFF/Reader.h:class COFFReader {
+./tools/llvm-objcopy/Buffer.h:class Buffer {
+./tools/llvm-dwp/DWPStringPool.h:class DWPStringPool {
+./tools/llvm-exegesis/lib/Analysis.h:class Analysis {
+./tools/llvm-exegesis/lib/Analysis.h:  class SchedClassCluster {
+./tools/llvm-exegesis/lib/Clustering.h:class InstructionBenchmarkClustering {
+./tools/llvm-exegesis/lib/Clustering.h:  class ClusterId {
+./tools/llvm-exegesis/lib/Clustering.h:class SchedClassClusterCentroid {
+./tools/llvm-exegesis/lib/RegisterValue.h:enum class PredefinedValues {
+./tools/llvm-exegesis/lib/PerfHelper.h:class PerfEvent {
+./tools/llvm-exegesis/lib/SnippetGenerator.h:class SnippetGenerator {
+./tools/llvm-exegesis/lib/LlvmState.h:class LLVMState {
+./tools/llvm-exegesis/lib/BenchmarkRunner.h:class BenchmarkRunner {
+./tools/llvm-exegesis/lib/BenchmarkRunner.h:  class FunctionExecutor {
+./tools/llvm-exegesis/lib/Target.h:class ExegesisTarget {
+./tools/llvm-exegesis/lib/BenchmarkResult.h:class PerInstructionStats {
+./tools/llvm-stress/llvm-stress.cpp:class Random {
+./tools/llvm-jitlistener/llvm-jitlistener.cpp:class JitEventListenerTest {
+./tools/sancov/sancov.cpp:class JSONWriter {
+./tools/sancov/sancov.cpp:  class Object {
+./tools/sancov/sancov.cpp:  class Array {
+./tools/sancov/sancov.cpp:class Blacklists {
+./tools/llvm-pdbutil/StreamUtil.h:enum class StreamPurpose {
+./tools/llvm-pdbutil/InputFile.h:class InputFile {
+./tools/llvm-pdbutil/InputFile.h:class SymbolGroup {
+./tools/llvm-pdbutil/OutputStyle.h:class OutputStyle {
+./tools/llvm-pdbutil/TypeReferenceTracker.h:class TypeReferenceTracker {
+./tools/llvm-pdbutil/LinePrinter.h:class LinePrinter {
+./tools/llvm-pdbutil/LinePrinter.h:enum class PDB_ColorItem {
+./tools/llvm-pdbutil/LinePrinter.h:class WithColor {
+./tools/llvm-pdbutil/FormatUtil.h:enum class CharacteristicStyle {
+./tools/llvm-pdbutil/PrettyFunctionDumper.h:  enum class PointerType { None, Pointer, Reference };
+./tools/llvm-pdbutil/llvm-pdbutil.h:enum class DumpLevel { None, Basic, Verbose };
+./tools/llvm-pdbutil/llvm-pdbutil.h:enum class ModuleSubsection {
+./tools/llvm-pdbutil/llvm-pdbutil.h:enum class ClassDefinitionFormat { None, Layout, All };
+./tools/llvm-pdbutil/llvm-pdbutil.h:enum class ClassSortMode {
+./tools/llvm-pdbutil/llvm-pdbutil.h:enum class SymbolSortMode { None, Name, Size };
+./tools/llvm-pdbutil/llvm-pdbutil.h:enum class SymLevel { Functions, Data, Thunks, All };
+./tools/llvm-pdbutil/llvm-pdbutil.h:enum class InputFileType { PDBFile, PDBStream, DBIStream, Names, ModuleStream };
+./tools/llvm-xray/xray-color-helper.h:class ColorHelper {
+./tools/llvm-xray/xray-color-helper.h:  enum class SequentialScheme {
+./tools/llvm-xray/xray-color-helper.h:  enum class DivergingScheme {
+./tools/llvm-xray/xray-stacks.cpp:enum class AggregationType {
+./tools/llvm-xray/xray-stacks.cpp:class StackTrie {
+./tools/llvm-xray/xray-stacks.cpp:  enum class AccountRecordStatus {
+./tools/llvm-xray/xray-converter.h:class TraceConverter {
+./tools/llvm-xray/xray-graph-diff.h:class GraphDiffRenderer {
+./tools/llvm-xray/xray-graph-diff.h:  class Factory {
+./tools/llvm-xray/xray-account.h:class LatencyAccountant {
+./tools/llvm-xray/xray-converter.cpp:enum class ConvertFormats { BINARY, YAML, CHROME_TRACE_EVENT };
+./tools/llvm-xray/func-id-helper.h:class FuncIdConversionHelper {
+./tools/llvm-xray/xray-account.cpp:enum class AccountOutputFormats { TEXT, CSV };
+./tools/llvm-xray/xray-account.cpp:enum class SortField {
+./tools/llvm-xray/xray-account.cpp:enum class SortDirection {
+./tools/llvm-xray/xray-graph.h:class GraphRenderer {
+./tools/llvm-xray/xray-graph.h:  enum class StatType { NONE, COUNT, MIN, MED, PCT90, PCT99, MAX, SUM };
+./tools/llvm-xray/xray-graph.h:  class Factory {
+./tools/yaml2obj/yaml2wasm.cpp:class WasmWriter {
+./tools/yaml2obj/yaml2wasm.cpp:class SubSectionWriter {
+./tools/yaml2obj/yaml2elf.cpp:class ContiguousBlobAccumulator {
+./tools/yaml2obj/yaml2elf.cpp:class NameToIdxMap {
+./tools/yaml2obj/yaml2elf.cpp:class ELFState {
+./tools/yaml2obj/yaml2elf.cpp:  enum class SymtabType { Static, Dynamic };
+./tools/yaml2obj/yaml2macho.cpp:class MachOWriter {
+./tools/yaml2obj/yaml2macho.cpp:class UniversalWriter {
+./tools/llvm-ar/llvm-ar.cpp:  enum class MRICommand { AddLib, AddMod, Create, CreateThin, Delete, Save, End, Invalid };
+./tools/llvm-mc/Disassembler.h:class Disassembler {
+./tools/llvm-lipo/llvm-lipo.cpp:enum class LipoAction {
+./examples/BrainF/BrainF.h:class BrainF {
+./examples/Kaleidoscope/Chapter6/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/Chapter6/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/Chapter6/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/Chapter7/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/Chapter7/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/Chapter7/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/MCJIT/lazy/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/MCJIT/lazy/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/MCJIT/lazy/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/MCJIT/lazy/toy-jit.cpp:class ExprAST {
+./examples/Kaleidoscope/MCJIT/lazy/toy-jit.cpp:class PrototypeAST {
+./examples/Kaleidoscope/MCJIT/lazy/toy-jit.cpp:class FunctionAST {
+./examples/Kaleidoscope/MCJIT/cached/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/MCJIT/cached/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/MCJIT/cached/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/MCJIT/cached/toy-jit.cpp:class ExprAST {
+./examples/Kaleidoscope/MCJIT/cached/toy-jit.cpp:class PrototypeAST {
+./examples/Kaleidoscope/MCJIT/cached/toy-jit.cpp:class FunctionAST {
+./examples/Kaleidoscope/MCJIT/initial/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/MCJIT/initial/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/MCJIT/initial/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/MCJIT/complete/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/MCJIT/complete/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/MCJIT/complete/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/Chapter2/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/Chapter2/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/Chapter2/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/Chapter9/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/Chapter9/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/Chapter9/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/Chapter3/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/Chapter3/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/Chapter3/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/Chapter4/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/Chapter4/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/Chapter4/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/include/KaleidoscopeJIT.h:class KaleidoscopeJIT {
+./examples/Kaleidoscope/Chapter8/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/Chapter8/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/Chapter8/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/Chapter5/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/Chapter5/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/Chapter5/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter2/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter2/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter2/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter2/KaleidoscopeJIT.h:class KaleidoscopeJIT {
+./examples/Kaleidoscope/BuildingAJIT/Chapter1/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter1/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter1/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter1/KaleidoscopeJIT.h:class KaleidoscopeJIT {
+./examples/Kaleidoscope/BuildingAJIT/Chapter3/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter3/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter3/toy.cpp:class FunctionAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter3/KaleidoscopeJIT.h:class KaleidoscopeJIT {
+./examples/Kaleidoscope/BuildingAJIT/Chapter4/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter4/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter4/KaleidoscopeJIT.h:class FunctionAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter4/KaleidoscopeJIT.h:class KaleidoscopeJIT {
+./examples/Kaleidoscope/BuildingAJIT/Chapter5/toy.cpp:class ExprAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter5/toy.cpp:class PrototypeAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter5/KaleidoscopeJIT.h:class FunctionAST {
+./examples/Kaleidoscope/BuildingAJIT/Chapter5/KaleidoscopeJIT.h:class KaleidoscopeJIT {
+./cmake-build-debug/lib/cmake/llvm/HandleLLVMOptions.cmake:    CHECK_CXX_SOURCE_COMPILES("class base {public: virtual void anchor();protected: ~base();};
+./unittests/ADT/RangeAdapterTest.cpp:class ReverseOnlyVector {
+./unittests/ADT/RangeAdapterTest.cpp:class BidirectionalVector {
+./unittests/ADT/RangeAdapterTest.cpp:class BidirectionalVectorConsts {
+./unittests/ADT/RangeAdapterTest.cpp:class CustomIteratorVector {
+./unittests/ADT/RangeAdapterTest.cpp:  class reverse_iterator {
+./unittests/ADT/BitmaskEnumTest.cpp:enum class FlagsClass {
+./unittests/ADT/StringSwitchTest.cpp:  enum class Suffix { Possible, PastTense, Process, InProgressAction, Unknown };
+./unittests/ADT/StringSwitchTest.cpp:  enum class Suffix { Possible, PastTense, Process, InProgressAction, Unknown };
+./unittests/ADT/StringSwitchTest.cpp:  enum class OSType { Windows, Linux, Unknown };
+./unittests/ADT/StringSwitchTest.cpp:  enum class OSType { Windows, Linux, Unknown };
+./unittests/ADT/DenseMapTest.cpp:class CtorTester {
+./unittests/ADT/TestGraph.h:class Graph {
+./unittests/ADT/TestGraph.h:  class NodeSubset {
+./unittests/ADT/TestGraph.h:  class ChildIterator {
+./unittests/ADT/SmallVectorTest.cpp:class Constructable {
+./unittests/ADT/PointerIntPairTest.cpp:  class FixnumPointerTraits {
+./unittests/ADT/FallibleIteratorTest.cpp:class Item {
+./unittests/ADT/FallibleIteratorTest.cpp:class FallibleCollectionWalker {
+./unittests/ADT/STLExtrasTest.cpp:class apply_variadic {
+./unittests/Support/AllocatorTest.cpp:class MockSlabAllocator {
+./unittests/Support/YAMLIOTest.cpp:    class NormalizedSeconds {
+./unittests/Support/TypeNameTest.cpp:class C1 {};
+./unittests/Support/Casting.cpp:class Base {
+./unittests/Support/Casting.cpp:class UseInferredUpcast {
+./unittests/Support/Casting.cpp:class PTy {
+./unittests/Support/CommandLineTest.cpp:class TempEnvVar {
+./unittests/Support/CommandLineTest.cpp:class OutputRedirector {
+./unittests/Support/CommandLineTest.cpp:  enum class OptionValue { Val };
+./unittests/Support/CommandLineTest.cpp:  enum class OptionValue { Val };
+./unittests/Support/ErrorTest.cpp:  class B {};
+./unittests/Support/ErrorTest.cpp:enum class test_error_code {
+./unittests/Support/FileCheckTest.cpp:class PatternTester {
+./unittests/Support/ReplaceFileTest.cpp:class ScopedFD {
+./unittests/Transforms/Scalar/LoopPassManagerTest.cpp:class MockAnalysisHandleBase {
+./unittests/Transforms/Scalar/LoopPassManagerTest.cpp:    class Result {
+./unittests/Transforms/Scalar/LoopPassManagerTest.cpp:class MockPassHandleBase {
+./unittests/ExecutionEngine/MCJIT/MCJITTestBase.h:class TrivialModuleBuilder {
+./unittests/ExecutionEngine/MCJIT/MCJITTestAPICommon.h:class MCJITTestAPICommon {
+./unittests/ExecutionEngine/Orc/ObjectTransformLayerTest.cpp:class MockBaseLayer {
+./unittests/ExecutionEngine/Orc/RPCUtilsTest.cpp:class RPCFoo {};
+./unittests/ExecutionEngine/Orc/RPCUtilsTest.cpp:class RPCBar {};
+./unittests/ExecutionEngine/Orc/RPCUtilsTest.cpp:  class Dummy {
+./unittests/ExecutionEngine/Orc/RemoteObjectLayerTest.cpp:class MockObjectLayer {
+./unittests/ExecutionEngine/Orc/CoreAPIsTest.cpp:  class BadGenerator {
+./unittests/ExecutionEngine/Orc/OrcTestCommon.h:class OrcNativeTarget {
+./unittests/ExecutionEngine/Orc/OrcTestCommon.h:class OrcExecutionTest {
+./unittests/ExecutionEngine/Orc/OrcTestCommon.h:class ModuleBuilder {
+./unittests/ExecutionEngine/Orc/OrcTestCommon.h:class MockBaseLayer {
+./unittests/ExecutionEngine/Orc/OrcTestCommon.h:class ReturnNullJITSymbol {
+./unittests/ExecutionEngine/Orc/OrcTestCommon.h:class DoNothingAndReturn {
+./unittests/ExecutionEngine/JITLink/JITLinkTestCommon.h:class JITLinkTestCommon {
+./unittests/ExecutionEngine/JITLink/JITLinkTestCommon.h:  class TestResources {
+./unittests/DebugInfo/DWARF/DwarfGenerator.h:class DIE {
+./unittests/DebugInfo/DWARF/DwarfGenerator.h:class CompileUnit {
+./unittests/DebugInfo/DWARF/DwarfGenerator.h:class LineTable {
+./unittests/DebugInfo/DWARF/DwarfGenerator.h:class Generator {
+./unittests/Analysis/SparsePropagation.cpp:enum class IPOGrouping { Register, Return, Memory };
+./unittests/Analysis/SparsePropagation.cpp:class TestLatticeVal {
+./unittests/Demangle/ItaniumDemangleTest.cpp:class TestAllocator {
+./unittests/IR/PassBuilderCallbacksTest.cpp:class MockAnalysisHandleBase {
+./unittests/IR/PassBuilderCallbacksTest.cpp:    class Result {
+./unittests/IR/PassBuilderCallbacksTest.cpp:class MockPassHandleBase {
+./unittests/IR/CFGBuilder.h:class CFGBuilder {
+./unittests/IR/CFGBuilder.h:  enum class ActionKind { Insert, Delete };
+./cmake/modules/HandleLLVMOptions.cmake:    CHECK_CXX_SOURCE_COMPILES("class base {public: virtual void anchor();protected: ~base();};
+./utils/TableGen/DFAPacketizerEmitter.cpp:class DFAPacketizerEmitter {
+./utils/TableGen/DFAPacketizerEmitter.cpp:class State {
+./utils/TableGen/DFAPacketizerEmitter.cpp:class DFA {
+./utils/TableGen/X86DisassemblerTables.h:class DisassemblerTables {
+./utils/TableGen/IntrinsicEmitter.cpp:class IntrinsicEmitter {
+./utils/TableGen/GlobalISelEmitter.cpp:class LLTCodeGen {
+./utils/TableGen/GlobalISelEmitter.cpp:class MatchTable {
+./utils/TableGen/GlobalISelEmitter.cpp:class Matcher {
+./utils/TableGen/GlobalISelEmitter.cpp:template <class PredicateTy> class PredicateListMatcher {
+./utils/TableGen/GlobalISelEmitter.cpp:class PredicateMatcher {
+./utils/TableGen/GlobalISelEmitter.cpp:class OperandRenderer {
+./utils/TableGen/GlobalISelEmitter.cpp:class MatchAction {
+./utils/TableGen/GlobalISelEmitter.cpp:class GlobalISelEmitter {
+./utils/TableGen/AsmWriterEmitter.cpp:class AsmWriterEmitter {
+./utils/TableGen/AsmWriterEmitter.cpp:class IAPrinter {
+./utils/TableGen/DAGISelMatcherEmitter.cpp:class MatcherTableEmitter {
+./utils/TableGen/Attributes.cpp:class Attributes {
+./utils/TableGen/SequenceToOffsetTable.h:class SequenceToOffsetTable {
+./utils/TableGen/InstrInfoEmitter.cpp:class InstrInfoEmitter {
+./utils/TableGen/CodeGenSchedule.cpp:class PredTransitions {
+./utils/TableGen/DAGISelMatcherGen.cpp:  class MatcherGen {
+./utils/TableGen/CodeGenSchedule.h:class OpcodeInfo {
+./utils/TableGen/CodeGenSchedule.h:class OpcodeGroup {
+./utils/TableGen/CodeGenSchedule.h:class STIPredicateFunction {
+./utils/TableGen/CodeGenSchedule.h:class CodeGenSchedModels {
+./utils/TableGen/FastISelEmitter.cpp:class ImmPredicateSet {
+./utils/TableGen/FastISelEmitter.cpp:  class OpKind {
+./utils/TableGen/FastISelEmitter.cpp:class FastISelMap {
+./utils/TableGen/DAGISelMatcher.h:class Matcher {
+./utils/TableGen/CodeEmitterGen.cpp:class CodeEmitterGen {
+./utils/TableGen/X86ModRMFilters.h:class ModRMFilter {
+./utils/TableGen/RISCVCompressInstEmitter.cpp:class RISCVCompressInstEmitter {
+./utils/TableGen/CodeGenIntrinsics.h:class CodeGenIntrinsicTable {
+./utils/TableGen/AsmWriterInst.h:  class AsmWriterInst {
+./utils/TableGen/CTagsEmitter.cpp:class Tag {
+./utils/TableGen/CTagsEmitter.cpp:class CTagsEmitter {
+./utils/TableGen/ExegesisEmitter.cpp:class ExegesisEmitter {
+./utils/TableGen/DAGISelEmitter.cpp:class DAGISelEmitter {
+./utils/TableGen/CodeGenInstruction.h:  class CGIOperandList {
+./utils/TableGen/CodeGenInstruction.h:    class ConstraintInfo {
+./utils/TableGen/CodeGenInstruction.h:  class CodeGenInstruction {
+./utils/TableGen/CodeGenInstruction.h:  class CodeGenInstAlias {
+./utils/TableGen/CodeGenDAGPatterns.h:class ScopedName {
+./utils/TableGen/CodeGenDAGPatterns.h:class SDNodeInfo {
+./utils/TableGen/CodeGenDAGPatterns.h:class TreePredicateFn {
+./utils/TableGen/CodeGenDAGPatterns.h:class TreePatternNode {
+./utils/TableGen/CodeGenDAGPatterns.h:class TreePattern {
+./utils/TableGen/CodeGenDAGPatterns.h:class DAGInstruction {
+./utils/TableGen/CodeGenDAGPatterns.h:class Predicate {
+./utils/TableGen/CodeGenDAGPatterns.h:class PatternToMatch {
+./utils/TableGen/CodeGenDAGPatterns.h:class CodeGenDAGPatterns {
+./utils/TableGen/X86EVEX2VEXTablesEmitter.cpp:class X86EVEX2VEXTablesEmitter {
+./utils/TableGen/X86EVEX2VEXTablesEmitter.cpp:class IsMatch {
+./utils/TableGen/PseudoLoweringEmitter.cpp:class PseudoLoweringEmitter {
+./utils/TableGen/PredicateExpander.h:class PredicateExpander {
+./utils/TableGen/CallingConvEmitter.cpp:class CallingConvEmitter {
+./utils/TableGen/CodeGenRegisters.h:  class CodeGenSubRegIndex {
+./utils/TableGen/CodeGenRegisters.h:  class CodeGenRegisterClass {
+./utils/TableGen/CodeGenRegisters.h:  class CodeGenRegBank {
+./utils/TableGen/RegisterBankEmitter.cpp:class RegisterBank {
+./utils/TableGen/RegisterBankEmitter.cpp:class RegisterBankEmitter {
+./utils/TableGen/FixedLenDecoderEmitter.cpp:class FixedLenDecoderEmitter {
+./utils/TableGen/FixedLenDecoderEmitter.cpp:class Filter {
+./utils/TableGen/FixedLenDecoderEmitter.cpp:class FilterChooser {
+./utils/TableGen/CodeGenMapTable.cpp:class InstrMap {
+./utils/TableGen/CodeGenMapTable.cpp:class MapTableEmitter {
+./utils/TableGen/CodeGenTarget.h:class CodeGenTarget {
+./utils/TableGen/CodeGenTarget.h:class ComplexPattern {
+./utils/TableGen/SearchableTableEmitter.cpp:class SearchableTableEmitter {
+./utils/TableGen/AsmMatcherEmitter.cpp:class AsmMatcherEmitter {
+./utils/TableGen/AsmMatcherEmitter.cpp:class AsmVariantInfo {
+./utils/TableGen/AsmMatcherEmitter.cpp:class AsmMatcherInfo {
+./utils/TableGen/SubtargetEmitter.cpp:class SubtargetEmitter {
+./utils/TableGen/CodeGenDAGPatterns.cpp:class InstAnalyzer {
+./utils/TableGen/X86FoldTablesEmitter.cpp:class X86FoldTablesEmitter {
+./utils/TableGen/X86FoldTablesEmitter.cpp:  class X86FoldTableEntry {
+./utils/TableGen/X86FoldTablesEmitter.cpp:class IsMatch {
+./utils/TableGen/RegisterInfoEmitter.cpp:class RegisterInfoEmitter {
+./utils/TableGen/RegisterInfoEmitter.cpp:class BitVectorEmitter {
+./utils/TableGen/X86RecognizableInstr.h:class RecognizableInstr {
+./utils/TableGen/CodeGenRegisters.cpp:class RegUnitIterator {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class BuiltInDefaultValue {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class DefaultValue {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:  class ValueProducer {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class ActionInterface {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class Action {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h://   class FooAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class PolymorphicAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class ReturnAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class ReturnNullAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class ReturnVoidAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class ReturnRefAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class ReturnRefOfCopyAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class DoDefaultAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class AssignAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class SetErrnoAndReturnAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class SetArgumentPointeeAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class InvokeWithoutArgsAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class InvokeMethodWithoutArgsAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class IgnoreResultAction {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class ReferenceWrapper {
+./utils/unittest/googlemock/include/gmock/gmock-actions.h:class DoBothAction {
+./utils/unittest/googlemock/include/gmock/gmock-generated-matchers.h:class TupleFields {
+./utils/unittest/googlemock/include/gmock/gmock-generated-matchers.h:class ArgsMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-spec-builders.h:class UntypedOnCallSpecBase {
+./utils/unittest/googlemock/include/gmock/gmock-spec-builders.h:  class Less {
+./utils/unittest/googlemock/include/gmock/gmock-spec-builders.h:class ExpectationSet {
+./utils/unittest/googlemock/include/gmock/gmock-spec-builders.h:class MockSpec {
+./utils/unittest/googlemock/include/gmock/gmock-spec-builders.h:class ReferenceOrValueWrapper {
+./utils/unittest/googlemock/include/gmock/gmock-spec-builders.h:class UntypedActionResultHolderBase {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class MatchResultListener {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class MatcherDescriberInterface {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class MatcherBase {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class PolymorphicMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class MatcherCastImpl {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class SafeMatcherCastImpl {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class TuplePrefix {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class TransformTupleValuesHelper {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class AnythingMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class ComparisonBase {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class IsNullMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class NotNullMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class StrEqualityMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class HasSubstrMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class StartsWithMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class EndsWithMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class MatchesRegexMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class PairMatchBase {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class NotMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class VariadicMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class BothOfMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class EitherOfMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class TrulyMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class MatcherAsPredicate {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class PredicateFormatterFromMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class FloatingEqMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class PointeeMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class WhenDynamicCastToMatcherBase {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class FieldMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class PropertyMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class ResultOfMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class SizeIsMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class BeginEndDistanceIsMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class ContainerEqMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class WhenSortedByMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class PointwiseMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class ContainsMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class EachMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class KeyMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class PairMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class UnorderedElementsAreMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class ElementsAreMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class UnorderedElementsAreArrayMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class ElementsAreArrayMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-matchers.h:class BoundSecondMatcher {
+./utils/unittest/googlemock/include/gmock/gmock-cardinalities.h:class CardinalityInterface {
+./utils/unittest/googlemock/include/gmock/internal/gmock-internal-utils.h:class FailureReporterInterface {
+./utils/unittest/googlemock/include/gmock/internal/gmock-internal-utils.h:class StlContainerView {
+./utils/unittest/googlemock/include/gmock/internal/gmock-generated-internal-utils.h:class IgnoredValue {
+./utils/unittest/googlemock/include/gmock/gmock-more-actions.h:class InvokeAction {
+./utils/unittest/googlemock/include/gmock/gmock-more-actions.h:class InvokeMethodAction {
+./utils/unittest/googlemock/include/gmock/gmock-generated-actions.h:class SelectArgs {
+./utils/unittest/googlemock/include/gmock/gmock-generated-actions.h:class WithArgsAction {
+./utils/unittest/googlemock/include/gmock/gmock-generated-actions.h:class ActionHelper {
+./utils/unittest/googlemock/src/gmock-spec-builders.cc:class MockObjectRegistry {
+./utils/unittest/googlemock/src/gmock-matchers.cc:class MaxBipartiteMatchState {
+./utils/unittest/googletest/include/gtest/gtest_prod.h:// class MyClass {
+./utils/unittest/googletest/include/gtest/gtest-printers.h:class TypeWithoutFormatter {
+./utils/unittest/googletest/include/gtest/gtest-printers.h:class FormatForComparison {
+./utils/unittest/googletest/include/gtest/gtest-printers.h:class UniversalPrinter {
+./utils/unittest/googletest/include/gtest/gtest-printers.h:class UniversalTersePrinter {
+./utils/unittest/googletest/include/gtest/gtest-test-part.h:class TestPartResultReporterInterface {
+./utils/unittest/googletest/include/gtest/gtest.h:class TestProperty {
+./utils/unittest/googletest/include/gtest/gtest.h:class Environment {
+./utils/unittest/googletest/include/gtest/gtest.h:class TestEventListener {
+./utils/unittest/googletest/include/gtest/gtest.h:// The helper class for {ASSERT|EXPECT}_EQ.  The template argument
+./utils/unittest/googletest/include/gtest/gtest.h:class EqHelper {
+./utils/unittest/googletest/include/gtest/gtest.h:class WithParamInterface {
+./utils/unittest/googletest/include/gtest/gtest.h://   template <typename T> class Foo {
+./utils/unittest/googletest/include/gtest/gtest-spi.h:    class GTestExpectFatalFailureHelper {\
+./utils/unittest/googletest/include/gtest/gtest-spi.h:    class GTestExpectFatalFailureHelper {\
+./utils/unittest/googletest/include/gtest/internal/gtest-internal.h:class FloatingPoint {
+./utils/unittest/googletest/include/gtest/internal/gtest-internal.h:class TypeIdHelper {
+./utils/unittest/googletest/include/gtest/internal/gtest-internal.h:class TestFactoryBase {
+./utils/unittest/googletest/include/gtest/internal/gtest-internal.h:class TypeParameterizedTest {
+./utils/unittest/googletest/include/gtest/internal/gtest-internal.h:class TypeParameterizedTestCase {
+./utils/unittest/googletest/include/gtest/internal/gtest-internal.h:class ImplicitlyConvertible {
+./utils/unittest/googletest/include/gtest/internal/gtest-internal.h:class NativeArray {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class scoped_ptr {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class Notification {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class ThreadWithParamBase {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class GTestMutexLock {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class ThreadLocalValueHolderBase {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class ThreadLocalBase {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:  class Runnable {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:  class ValueHolderFactory {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class MutexBase {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class GTestMutexLock {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class ThreadLocalValueHolderBase {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class ThreadLocal {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:  class ValueHolderFactory {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class Mutex {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class GTestMutexLock {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class ThreadLocal {
+./utils/unittest/googletest/include/gtest/internal/gtest-port.h:class TypeWithSize {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray1 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray2 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray3 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray4 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray5 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray6 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray7 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray8 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray9 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray10 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray11 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray12 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray13 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray14 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray15 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray16 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray17 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray18 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray19 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray20 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray21 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray22 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray23 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray24 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray25 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray26 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray27 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray28 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray29 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray30 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray31 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray32 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray33 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray34 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray35 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray36 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray37 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray38 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray39 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray40 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray41 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray42 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray43 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray44 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray45 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray46 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray47 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray48 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray49 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class ValueArray50 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class CartesianProductHolder2 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class CartesianProductHolder3 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class CartesianProductHolder4 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class CartesianProductHolder5 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class CartesianProductHolder6 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class CartesianProductHolder7 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class CartesianProductHolder8 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class CartesianProductHolder9 {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util-generated.h:class CartesianProductHolder10 {
+./utils/unittest/googletest/include/gtest/internal/gtest-death-test-internal.h:  class ReturnSentinel {
+./utils/unittest/googletest/include/gtest/internal/gtest-death-test-internal.h:class DeathTestFactory {
+./utils/unittest/googletest/include/gtest/internal/gtest-death-test-internal.h:class InternalRunDeathTestFlag {
+./utils/unittest/googletest/include/gtest/internal/gtest-linked_ptr.h:class linked_ptr_internal {
+./utils/unittest/googletest/include/gtest/internal/gtest-linked_ptr.h:class linked_ptr {
+./utils/unittest/googletest/include/gtest/internal/gtest-tuple.h:class tuple {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util.h:class ParamIteratorInterface {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util.h:class ParamIterator {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util.h:class ParamGeneratorInterface {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util.h:class ParamGenerator {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util.h:class TestMetaFactoryBase {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util.h:class ParameterizedTestCaseInfoBase {
+./utils/unittest/googletest/include/gtest/internal/gtest-param-util.h:class ParameterizedTestCaseRegistry {
+./utils/unittest/googletest/src/gtest-death-test.cc:class Arguments {
+./utils/unittest/googletest/src/gtest-internal-inl.h:class GTestFlagSaver {
+./utils/unittest/googletest/src/gtest-internal-inl.h:class TestPropertyKeyIs {
+./utils/unittest/googletest/src/gtest-internal-inl.h:class OsStackTraceGetterInterface {
+./utils/unittest/googletest/src/gtest-internal-inl.h:class TestResultAccessor {
+./utils/unittest/googletest/src/gtest-internal-inl.h:  class AbstractSocketWriter {
+./utils/unittest/googletest/src/gtest-port.cc:class ThreadLocalRegistryImpl {
+./utils/unittest/googletest/src/gtest-port.cc:class CapturedStream {
+./utils/unittest/googletest/src/gtest.cc:class InternalStrings {
+./utils/unittest/googletest/src/gtest.cc:class Hunk {
+./utils/unittest/googletest/src/gtest.cc:class TestNameIs {
+./utils/unittest/googletest/src/gtest.cc:class ScopedPrematureExitFile {
+./utils/unittest/googletest/src/gtest.cc:class TestCaseNameIs {
+./utils/unittest/googletest/src/gtest.cc:class ClassUniqueToAlwaysTrue {};
+./utils/KillTheDoctor/KillTheDoctor.cpp:  class ScopedHandle {
+./utils/benchmark/test/output_test_helper.cc:class ResultsChecker {
+./utils/benchmark/include/benchmark/benchmark.h:class Counter {
+./utils/benchmark/include/benchmark/benchmark.h:class State {
+./utils/benchmark/include/benchmark/benchmark.h:class Benchmark {
+./utils/benchmark/include/benchmark/benchmark.h:class BenchmarkReporter {
+./utils/benchmark/src/re.h:class Regex {
+./utils/benchmark/src/thread_timer.h:class ThreadTimer {
+./utils/benchmark/src/benchmark_register.cc:class BenchmarkFamilies {
+./utils/benchmark/src/thread_manager.h:class ThreadManager {
+./utils/benchmark/src/check.h:class CheckHandler {
+./utils/benchmark/src/log.h:class LogType {
+./utils/benchmark/src/mutex.h:class Barrier {
+./include/llvm/Bitstream/BitstreamWriter.h:class BitstreamWriter {
+./include/llvm/Bitstream/BitCodes.h:class BitCodeAbbrevOp {
+./include/llvm/Bitstream/BitCodes.h:class BitCodeAbbrev {
+./include/llvm/Bitstream/BitstreamReader.h:class BitstreamBlockInfo {
+./include/llvm/Bitstream/BitstreamReader.h:class SimpleBitstreamCursor {
+./include/llvm/MCA/Stages/Stage.h:class Stage {
+./include/llvm/MCA/Support.h:class ResourceCycles {
+./include/llvm/MCA/HardwareUnits/ResourceManager.h:class ResourceStrategy {
+./include/llvm/MCA/HardwareUnits/ResourceManager.h:class ResourceState {
+./include/llvm/MCA/HardwareUnits/ResourceManager.h:class ResourceManager {
+./include/llvm/MCA/HardwareUnits/HardwareUnit.h:class HardwareUnit {
+./include/llvm/MCA/HardwareUnits/LSUnit.h:class MemoryGroup {
+./include/llvm/MCA/HardwareUnits/Scheduler.h:class SchedulerStrategy {
+./include/llvm/MCA/HWEventListener.h:class HWInstructionEvent {
+./include/llvm/MCA/HWEventListener.h:class HWStallEvent {
+./include/llvm/MCA/HWEventListener.h:class HWPressureEvent {
+./include/llvm/MCA/HWEventListener.h:class HWEventListener {
+./include/llvm/MCA/Context.h:class Context {
+./include/llvm/MCA/Pipeline.h:class Pipeline {
+./include/llvm/MCA/SourceMgr.h:class SourceMgr {
+./include/llvm/MCA/Instruction.h:class WriteState {
+./include/llvm/MCA/Instruction.h:class ReadState {
+./include/llvm/MCA/Instruction.h:class CycleSegment {
+./include/llvm/MCA/Instruction.h:class InstructionBase {
+./include/llvm/MCA/Instruction.h:class InstRef {
+./include/llvm/MCA/Instruction.h:class WriteRef {
+./include/llvm/MCA/InstrBuilder.h:class InstrBuilder {
+./include/llvm/BinaryFormat/MsgPackDocument.h:class DocNode {
+./include/llvm/BinaryFormat/MsgPackDocument.h:class Document {
+./include/llvm/BinaryFormat/AMDGPUMetadataVerifier.h:class MetadataVerifier {
+./include/llvm/BinaryFormat/MsgPackWriter.h:class Writer {
+./include/llvm/BinaryFormat/Wasm.h:enum class ValType {
+./include/llvm/BinaryFormat/MsgPackReader.h:class Reader {
+./include/llvm/Pass.h:class Pass {
+./include/llvm/TableGen/Record.h:class RecTy {
+./include/llvm/TableGen/Record.h:class Init {
+./include/llvm/TableGen/Record.h:class RecordVal {
+./include/llvm/TableGen/Record.h:class Record {
+./include/llvm/TableGen/Record.h:class RecordKeeper {
+./include/llvm/TableGen/Record.h:class Resolver {
+./include/llvm/TableGen/StringMatcher.h:class StringMatcher {
+./include/llvm/TableGen/StringToOffsetTable.h:class StringToOffsetTable {
+./include/llvm/TableGen/SearchableTable.td:class GenericEnum {
+./include/llvm/TableGen/SearchableTable.td:class GenericTable {
+./include/llvm/TableGen/SearchableTable.td:  //   class MyTableEntry {
+./include/llvm/TableGen/SearchableTable.td:class SearchIndex {
+./include/llvm/TableGen/SearchableTable.td:class SearchableTable {
+./include/llvm/TableGen/SetTheory.h:class SetTheory {
+./include/llvm/TableGen/SetTheory.h:  class Operator {
+./include/llvm/TableGen/SetTheory.h:  class Expander {
+./include/llvm/ADT/Triple.h:class Triple {
+./include/llvm/ADT/APInt.h:  enum class Rounding {
+./include/llvm/ADT/StringMap.h:class StringMapEntryBase {
+./include/llvm/ADT/StringMap.h:class StringMapImpl {
+./include/llvm/ADT/iterator.h:  class ReferenceProxy {
+./include/llvm/ADT/STLExtras.h:template <typename Ty> class has_rbegin_impl {
+./include/llvm/ADT/STLExtras.h:template <template <typename...> class ItType, typename... Args> class zippy {
+./include/llvm/ADT/STLExtras.h:template <typename... Args> class zip_longest_range {
+./include/llvm/ADT/STLExtras.h:template <typename ValueT, typename... RangeTs> class concat_range {
+./include/llvm/ADT/STLExtras.h:template <typename R> class enumerator {
+./include/llvm/ADT/TinyPtrVector.h:class TinyPtrVector {
+./include/llvm/ADT/SetVector.h:class SetVector {
+./include/llvm/ADT/SetVector.h:  class TestAndEraseFromSet {
+./include/llvm/ADT/ImmutableList.h:class ImmutableList {
+./include/llvm/ADT/ImmutableList.h:  class iterator {
+./include/llvm/ADT/ImmutableList.h:class ImmutableListFactory {
+./include/llvm/ADT/ScopedHashTable.h:class ScopedHashTableVal {
+./include/llvm/ADT/ScopedHashTable.h:class ScopedHashTableScope {
+./include/llvm/ADT/ScopedHashTable.h:class ScopedHashTableIterator {
+./include/llvm/ADT/ScopedHashTable.h:class ScopedHashTable {
+./include/llvm/ADT/iterator_range.h:class iterator_range {
+./include/llvm/ADT/IndexedMap.h:  class IndexedMap {
+./include/llvm/ADT/IntEqClasses.h:class IntEqClasses {
+./include/llvm/ADT/None.h:enum class NoneType { None = 1 };
+./include/llvm/ADT/DepthFirstIterator.h:class df_iterator_storage {
+./include/llvm/ADT/PriorityWorklist.h:class PriorityWorklist {
+./include/llvm/ADT/PriorityWorklist.h:  class TestAndEraseFromMap {
+./include/llvm/ADT/DeltaAlgorithm.h:class DeltaAlgorithm {
+./include/llvm/ADT/EpochTracker.h:class DebugEpochBase {
+./include/llvm/ADT/EpochTracker.h:  class HandleBase {
+./include/llvm/ADT/EpochTracker.h:class DebugEpochBase {
+./include/llvm/ADT/EpochTracker.h:  class HandleBase {
+./include/llvm/ADT/IntrusiveRefCntPtr.h:template <class Derived> class RefCountedBase {
+./include/llvm/ADT/IntrusiveRefCntPtr.h:template <class Derived> class ThreadSafeRefCountedBase {
+./include/llvm/ADT/IntrusiveRefCntPtr.h:template <typename T> class IntrusiveRefCntPtr {
+./include/llvm/ADT/DenseSet.h:class DenseSetImpl {
+./include/llvm/ADT/DenseSet.h:  class Iterator {
+./include/llvm/ADT/DenseSet.h:  class ConstIterator {
+./include/llvm/ADT/StringRef.h:  class StringRef {
+./include/llvm/ADT/BreadthFirstIterator.h:template <class SetType> class bf_iterator_storage {
+./include/llvm/ADT/ScopeExit.h:template <typename Callable> class scope_exit {
+./include/llvm/ADT/ImmutableMap.h:class ImmutableMap {
+./include/llvm/ADT/ImmutableMap.h:  class Factory {
+./include/llvm/ADT/ImmutableMap.h:class ImmutableMapRef {
+./include/llvm/ADT/UniqueVector.h:template<class T> class UniqueVector {
+./include/llvm/ADT/SmallSet.h:class SmallSet {
+./include/llvm/ADT/SmallPtrSet.h:class SmallPtrSetIteratorImpl {
+./include/llvm/ADT/Hashing.h:class hash_code {
+./include/llvm/ADT/SparseBitVector.h:class SparseBitVector {
+./include/llvm/ADT/SparseBitVector.h:  class SparseBitVectorIterator {
+./include/llvm/ADT/SmallVector.h:class SmallVectorBase {
+./include/llvm/ADT/fallible_iterator.h:///   class Archive { // E.g. Potentially malformed on-disk archive
+./include/llvm/ADT/fallible_iterator.h:template <typename Underlying> class fallible_iterator {
+./include/llvm/ADT/PackedVector.h:  class reference {
+./include/llvm/ADT/Optional.h:class OptionalStorage {
+./include/llvm/ADT/Optional.h:template <typename T> class Optional {
+./include/llvm/ADT/PointerUnion.h:  template <typename ...PTs> class PointerUnionUIntTraits {
+./include/llvm/ADT/SparseMultiSet.h:class SparseMultiSet {
+./include/llvm/ADT/Twine.h:  class Twine {
+./include/llvm/ADT/MapVector.h:class MapVector {
+./include/llvm/ADT/StringSwitch.h:class StringSwitch {
+./include/llvm/ADT/FoldingSet.h:class FoldingSetBase {
+./include/llvm/ADT/FoldingSet.h:  class Node {
+./include/llvm/ADT/FoldingSet.h:class FoldingSetNodeIDRef {
+./include/llvm/ADT/FoldingSet.h:class FoldingSetNodeID {
+./include/llvm/ADT/FoldingSet.h:class FoldingSetVector {
+./include/llvm/ADT/FoldingSet.h:class FoldingSetIteratorImpl {
+./include/llvm/ADT/FoldingSet.h:class FoldingSetBucketIteratorImpl {
+./include/llvm/ADT/PointerEmbeddedInt.h:class PointerEmbeddedInt {
+./include/llvm/ADT/DAGDeltaAlgorithm.h:class DAGDeltaAlgorithm {
+./include/llvm/ADT/ilist_base.h:template <bool EnableSentinelTracking> class ilist_base {
+./include/llvm/ADT/EquivalenceClasses.h:class EquivalenceClasses {
+./include/llvm/ADT/EquivalenceClasses.h:  class ECValue {
+./include/llvm/ADT/CachedHashString.h:class CachedHashStringRef {
+./include/llvm/ADT/CachedHashString.h:class CachedHashString {
+./include/llvm/ADT/IntervalMap.h:// class IntervalMap {
+./include/llvm/ADT/IntervalMap.h:class NodeBase {
+./include/llvm/ADT/IntervalMap.h:class NodeRef {
+./include/llvm/ADT/IntervalMap.h:class Path {
+./include/llvm/ADT/IntervalMap.h:class IntervalMap {
+./include/llvm/ADT/IntervalMap.h:class IntervalMapOverlaps {
+./include/llvm/ADT/PostOrderIterator.h:class po_iterator_storage {
+./include/llvm/ADT/PostOrderIterator.h:class ReversePostOrderTraversal {
+./include/llvm/ADT/BitVector.h:template <typename BitVectorT> class const_set_bits_iterator_impl {
+./include/llvm/ADT/BitVector.h:class BitVector {
+./include/llvm/ADT/BitVector.h:  class reference {
+./include/llvm/ADT/PointerSumType.h:template <typename TagT, typename... MemberTs> class PointerSumType {
+./include/llvm/ADT/SmallBitVector.h:class SmallBitVector {
+./include/llvm/ADT/SmallBitVector.h:  class reference {
+./include/llvm/ADT/SparseSet.h:class SparseSet {
+./include/llvm/ADT/Any.h:class Any {
+./include/llvm/ADT/PointerIntPair.h:class PointerIntPair {
+./include/llvm/ADT/ImmutableSet.h:class ImutAVLTree {
+./include/llvm/ADT/ImmutableSet.h:class ImutAVLFactory {
+./include/llvm/ADT/ImmutableSet.h:class ImmutableSet {
+./include/llvm/ADT/ImmutableSet.h:  class Factory {
+./include/llvm/ADT/ImmutableSet.h:class ImmutableSetRef {
+./include/llvm/ADT/Statistic.h:class Statistic {
+./include/llvm/LTO/legacy/ThinLTOCodeGenerator.h:class ThinLTOCodeGenerator {
+./include/llvm/LTO/LTO.h:class InputFile {
+./include/llvm/LTO/LTO.h:class NativeObjectStream {
+./include/llvm/LTO/LTO.h:class LTO {
+./include/llvm/Support/ScalableSize.h:class ElementCount {
+./include/llvm/Support/SpecialCaseList.h:class SpecialCaseList {
+./include/llvm/Support/SpecialCaseList.h:  class Matcher {
+./include/llvm/Support/Watchdog.h:    class Watchdog {
+./include/llvm/Support/TarWriter.h:class TarWriter {
+./include/llvm/Support/BinaryStreamWriter.h:class BinaryStreamWriter {
+./include/llvm/Support/ARMAttributeParser.h:class ARMAttributeParser {
+./include/llvm/Support/MemoryBuffer.h:class MemoryBuffer {
+./include/llvm/Support/MemoryBuffer.h:class MemoryBufferRef {
+./include/llvm/Support/TrigramIndex.h:class TrigramIndex {
+./include/llvm/Support/FileCheck.h:class FileCheckExpressionAST {
+./include/llvm/Support/FileCheck.h:class FileCheckNumericVariable {
+./include/llvm/Support/FileCheck.h:class FileCheckSubstitution {
+./include/llvm/Support/FileCheck.h:class FileCheckType {
+./include/llvm/Support/FileCheck.h:class FileCheckPatternContext {
+./include/llvm/Support/FileCheck.h:class FileCheckPattern {
+./include/llvm/Support/FileCheck.h:  enum class AllowedOperand { LineVar, Literal, Any };
+./include/llvm/Support/FileCheck.h:class FileCheck {
+./include/llvm/Support/MachineValueType.h:  class MVT {
+./include/llvm/Support/MachineValueType.h:    class ElementCount {
+./include/llvm/Support/ThreadLocal.h:    class ThreadLocalImpl {
+./include/llvm/Support/Recycler.h:class Recycler {
+./include/llvm/Support/Options.h:template <typename ValT, typename Base, ValT(Base::*Mem)> class OptionKey {
+./include/llvm/Support/Options.h:class OptionRegistry {
+./include/llvm/Support/AArch64TargetParser.h:enum class ArchKind {
+./include/llvm/Support/SHA1.h:class SHA1 {
+./include/llvm/Support/Mutex.h:    class SmartMutex {
+./include/llvm/Support/Errc.h:enum class errc {
+./include/llvm/Support/NativeFormatting.h:enum class FloatStyle { Exponent, ExponentUpper, Fixed, Percent };
+./include/llvm/Support/NativeFormatting.h:enum class IntegerStyle {
+./include/llvm/Support/NativeFormatting.h:enum class HexPrintStyle { Upper, Lower, PrefixUpper, PrefixLower };
+./include/llvm/Support/Allocator.h:template <typename DerivedT> class AllocatorBase {
+./include/llvm/Support/Allocator.h:template <typename T> class SpecificBumpPtrAllocator {
+./include/llvm/Support/Threading.h:  enum class ThreadPriority {
+./include/llvm/Support/Threading.h:  enum class SetThreadPriorityResult { FAILURE, SUCCESS };
+./include/llvm/Support/UniqueLock.h:  class unique_lock {
+./include/llvm/Support/InitLLVM.h:class InitLLVM {
+./include/llvm/Support/YAMLTraits.h:enum class QuotingType { None, Single, Double };
+./include/llvm/Support/YAMLTraits.h:class IO {
+./include/llvm/Support/YAMLTraits.h:  class HNode {
+./include/llvm/Support/BinaryStreamError.h:enum class stream_error_code {
+./include/llvm/Support/Memory.h:  class MemoryBlock {
+./include/llvm/Support/Memory.h:  class Memory {
+./include/llvm/Support/Memory.h:  class OwningMemoryBlock {
+./include/llvm/Support/UnicodeCharRanges.h:class UnicodeCharSet {
+./include/llvm/Support/CodeGenCoverage.h:class CodeGenCoverage {
+./include/llvm/Support/MutexGuard.h:  class MutexGuard {
+./include/llvm/Support/Format.h:class format_object_base {
+./include/llvm/Support/Format.h:class FormattedString {
+./include/llvm/Support/Format.h:class FormattedNumber {
+./include/llvm/Support/Format.h:class FormattedBytes {
+./include/llvm/Support/Process.h:class Process {
+./include/llvm/Support/AtomicOrdering.h:enum class AtomicOrderingCABI {
+./include/llvm/Support/AtomicOrdering.h:enum class AtomicOrdering {
+./include/llvm/Support/RandomNumberGenerator.h:class RandomNumberGenerator {
+./include/llvm/Support/ToolOutputFile.h:class ToolOutputFile {
+./include/llvm/Support/ToolOutputFile.h:  class CleanupInstaller {
+./include/llvm/Support/BinaryStream.h:class BinaryStream {
+./include/llvm/Support/GraphWriter.h:class GraphWriter {
+./include/llvm/Support/JSON.h:class Object {
+./include/llvm/Support/JSON.h:class Array {
+./include/llvm/Support/JSON.h:class Value {
+./include/llvm/Support/JSON.h:class ObjectKey {
+./include/llvm/Support/JSON.h:class ObjectMapper {
+./include/llvm/Support/JSON.h:class OStream {
+./include/llvm/Support/BlockFrequency.h:class BlockFrequency {
+./include/llvm/Support/LockFileManager.h:class LockFileManager {
+./include/llvm/Support/FormatProviders.h:class HelperFunctions {
+./include/llvm/Support/SMTAPI.h:class SMTSort {
+./include/llvm/Support/SMTAPI.h:class SMTExpr {
+./include/llvm/Support/SMTAPI.h:class SMTSolver {
+./include/llvm/Support/FileOutputBuffer.h:class FileOutputBuffer {
+./include/llvm/Support/RecyclingAllocator.h:class RecyclingAllocator {
+./include/llvm/Support/Timer.h:class TimeRecord {
+./include/llvm/Support/Timer.h:class Timer {
+./include/llvm/Support/Timer.h:class TimeRegion {
+./include/llvm/Support/Timer.h:class TimerGroup {
+./include/llvm/Support/GenericIteratedDominanceFrontier.h:template <class NodeTy, bool IsPostDom> class IDFCalculatorBase {
+./include/llvm/Support/FormatVariadic.h:enum class ReplacementType { Empty, Format, Literal };
+./include/llvm/Support/FormatVariadic.h:class formatv_object_base {
+./include/llvm/Support/PrettyStackTrace.h:  class PrettyStackTraceEntry {
+./include/llvm/Support/FileSystem.h:enum class file_type {
+./include/llvm/Support/FileSystem.h:class UniqueID {
+./include/llvm/Support/FileSystem.h:class basic_file_status {
+./include/llvm/Support/FileSystem.h:enum class AccessMode { Exist, Write, Execute };
+./include/llvm/Support/FileSystem.h:class TempFile {
+./include/llvm/Support/FileSystem.h:class mapped_file_region {
+./include/llvm/Support/FileSystem.h:class directory_entry {
+./include/llvm/Support/FileSystem.h:class directory_iterator {
+./include/llvm/Support/FileSystem.h:class recursive_directory_iterator {
+./include/llvm/Support/MD5.h:class MD5 {
+./include/llvm/Support/FileUtilities.h:  class FileRemover {
+./include/llvm/Support/GenericDomTree.h:template <class NodeT> class DomTreeNodeBase {
+./include/llvm/Support/GenericDomTree.h:class DominatorTreeBase {
+./include/llvm/Support/GenericDomTree.h:  enum class VerificationLevel { Fast, Basic, Full };
+./include/llvm/Support/OnDiskHashTable.h:/// class ExampleInfo {
+./include/llvm/Support/OnDiskHashTable.h:template <typename Info> class OnDiskChainedHashTableGenerator {
+./include/llvm/Support/OnDiskHashTable.h:  class Item {
+./include/llvm/Support/OnDiskHashTable.h:/// class ExampleLookupInfo {
+./include/llvm/Support/OnDiskHashTable.h:template <typename Info> class OnDiskChainedHashTable {
+./include/llvm/Support/OnDiskHashTable.h:  class iterator {
+./include/llvm/Support/OnDiskHashTable.h:  class iterator_base {
+./include/llvm/Support/ErrorOr.h:class ErrorOr {
+./include/llvm/Support/ManagedStatic.h:class ManagedStaticBase {
+./include/llvm/Support/type_traits.h:template <typename T> class is_integral_or_enum {
+./include/llvm/Support/type_traits.h:class is_trivially_copyable {
+./include/llvm/Support/VirtualFileSystem.h:class Status {
+./include/llvm/Support/VirtualFileSystem.h:class File {
+./include/llvm/Support/VirtualFileSystem.h:class directory_entry {
+./include/llvm/Support/VirtualFileSystem.h:class directory_iterator {
+./include/llvm/Support/VirtualFileSystem.h:class recursive_directory_iterator {
+./include/llvm/Support/VirtualFileSystem.h:  class Entry {
+./include/llvm/Support/VirtualFileSystem.h:class YAMLVFSWriter {
+./include/llvm/Support/VersionTuple.h:class VersionTuple {
+./include/llvm/Support/CommandLine.h:class OptionCategory {
+./include/llvm/Support/CommandLine.h:class SubCommand {
+./include/llvm/Support/CommandLine.h:class Option {
+./include/llvm/Support/CommandLine.h:class ValuesClass {
+./include/llvm/Support/CommandLine.h:class generic_parser_base {
+./include/llvm/Support/CommandLine.h:  class GenericOptionInfo {
+./include/llvm/Support/CommandLine.h:class basic_parser_impl { // non-template implementation of basic_parser<t>
+./include/llvm/Support/CommandLine.h:class opt_storage {
+./include/llvm/Support/CommandLine.h:template <class DataType, class StorageClass> class list_storage {
+./include/llvm/Support/CommandLine.h:template <class DataType, class StorageClass> class bits_storage {
+./include/llvm/Support/ItaniumManglingCanonicalizer.h:class ItaniumManglingCanonicalizer {
+./include/llvm/Support/ItaniumManglingCanonicalizer.h:  enum class EquivalenceError {
+./include/llvm/Support/ItaniumManglingCanonicalizer.h:  enum class FragmentKind {
+./include/llvm/Support/FormatVariadicDetails.h:class format_adapter {
+./include/llvm/Support/FormatVariadicDetails.h:template <class T> class has_FormatProvider {
+./include/llvm/Support/FormatVariadicDetails.h:template <class T> class has_StreamOperator {
+./include/llvm/Support/Parallel.h:class Latch {
+./include/llvm/Support/Parallel.h:class TaskGroup {
+./include/llvm/Support/DynamicLibrary.h:  class DynamicLibrary {
+./include/llvm/Support/ThreadPool.h:class ThreadPool {
+./include/llvm/Support/SourceMgr.h:class SourceMgr {
+./include/llvm/Support/SourceMgr.h:class SMFixIt {
+./include/llvm/Support/SourceMgr.h:class SMDiagnostic {
+./include/llvm/Support/BranchProbability.h:class BranchProbability {
+./include/llvm/Support/Error.h:class ErrorInfoBase {
+./include/llvm/Support/Error.h:class ErrorAsOutParameter {
+./include/llvm/Support/Error.h:class ExpectedAsOutParameter {
+./include/llvm/Support/Error.h:class ExitOnError {
+./include/llvm/Support/DebugCounter.h:class DebugCounter {
+./include/llvm/Support/raw_ostream.h:class raw_ostream {
+./include/llvm/Support/LowLevelTypeImpl.h:class LLT {
+./include/llvm/Support/TaskQueue.h:class TaskQueue {
+./include/llvm/Support/RWMutex.h:    class SmartRWMutex {
+./include/llvm/Support/Regex.h:  class Regex {
+./include/llvm/Support/ARMTargetParser.h:enum class ArchKind {
+./include/llvm/Support/ARMTargetParser.h:enum class FPUVersion {
+./include/llvm/Support/ARMTargetParser.h:enum class FPURestriction {
+./include/llvm/Support/ARMTargetParser.h:enum class NeonSupportLevel {
+./include/llvm/Support/ARMTargetParser.h:enum class ISAKind { INVALID = 0, ARM, THUMB, AARCH64 };
+./include/llvm/Support/ARMTargetParser.h:enum class EndianKind { INVALID = 0, LITTLE, BIG };
+./include/llvm/Support/ARMTargetParser.h:enum class ProfileKind { INVALID = 0, A, R, M };
+./include/llvm/Support/Path.h:enum class Style { windows, posix, native };
+./include/llvm/Support/ArrayRecycler.h:template <class T, size_t Align = alignof(T)> class ArrayRecycler {
+./include/llvm/Support/ArrayRecycler.h:  class Capacity {
+./include/llvm/Support/SymbolRemappingReader.h:class SymbolRemappingReader {
+./include/llvm/Support/COM.h:enum class COMThreadingMode { SingleThreaded, MultiThreaded };
+./include/llvm/Support/COM.h:class InitializeCOMRAII {
+./include/llvm/Support/GlobPattern.h:class GlobPattern {
+./include/llvm/Support/ScopedPrinter.h:class ScopedPrinter {
+./include/llvm/Support/BinaryStreamReader.h:class BinaryStreamReader {
+./include/llvm/Support/ARMWinEH.h:enum class RuntimeFunctionFlag {
+./include/llvm/Support/ARMWinEH.h:enum class ReturnType {
+./include/llvm/Support/ARMWinEH.h:class RuntimeFunction {
+./include/llvm/Support/Signposts.h:class SignpostEmitter {
+./include/llvm/Support/TargetRegistry.h:class Target {
+./include/llvm/Support/ScaledNumber.h:class ScaledNumberBase {
+./include/llvm/Support/Printable.h:class Printable {
+./include/llvm/Support/DataExtractor.h:class DataExtractor {
+./include/llvm/Support/CrashRecoveryContext.h:class CrashRecoveryContext {
+./include/llvm/Support/CrashRecoveryContext.h:class CrashRecoveryContextCleanup {
+./include/llvm/Support/CrashRecoveryContext.h:class CrashRecoveryContextCleanupRegistrar {
+./include/llvm/Support/WithColor.h:enum class HighlightColor {
+./include/llvm/Support/WithColor.h:class WithColor {
+./include/llvm/Support/BinaryStreamArray.h:class VarStreamArray {
+./include/llvm/Support/BinaryStreamArray.h:template <typename T> class FixedStreamArray {
+./include/llvm/Support/AlignOf.h:class AlignerImpl {
+./include/llvm/Support/YAMLParser.h:class Stream {
+./include/llvm/Support/YAMLParser.h:class Node {
+./include/llvm/Support/YAMLParser.h:class Document {
+./include/llvm/Support/YAMLParser.h:class document_iterator {
+./include/llvm/Support/SMLoc.h:class SMLoc {
+./include/llvm/Support/SMLoc.h:class SMRange {
+./include/llvm/Support/BinaryStreamRef.h:template <class RefType, class StreamType> class BinaryStreamRefBase {
+./include/llvm/Support/TrailingObjects.h:template <typename First, typename... Rest> class AlignmentCalcHelper {
+./include/llvm/Support/TrailingObjects.h:class TrailingObjectsBase {
+./include/llvm/Support/TrailingObjects.h:class TrailingObjectsImpl {
+./include/llvm/Support/TrailingObjects.h:  template <typename... Tys> class Foo {};
+./include/llvm/Support/TrailingObjects.h:  class FixedSizeStorageOwner {
+./include/llvm/Support/CFGUpdate.h:template <typename NodePtr> class Update {
+./include/llvm/Support/FormatCommon.h:enum class AlignStyle { Left, Center, Right };
+./include/llvm/Support/Registry.h:  class SimpleRegistryEntry {
+./include/llvm/Support/Registry.h:  class Registry {
+./include/llvm/Support/Registry.h:    class node {
+./include/llvm/Support/Registry.h:    class Add {
+./include/llvm/Support/JamCRC.h:class JamCRC {
+./include/llvm/Support/StringPool.h:  class StringPool {
+./include/llvm/Support/StringPool.h:  class PooledStringPtr {
+./include/llvm/Remarks/Remark.h:enum class Type {
+./include/llvm/Remarks/RemarkFormat.h:enum class Format { Unknown, YAML };
+./include/llvm/Remarks/RemarkSerializer.h:enum class UseStringTable { No, Yes };
+./include/llvm/Transforms/Scalar/GVN.h:  class ValueTable {
+./include/llvm/Transforms/Scalar/GVNExpression.h:class Expression {
+./include/llvm/Transforms/Scalar/LoopPassManager.h:class LPMUpdater {
+./include/llvm/Transforms/IPO/Attributor.h:enum class ChangeStatus {
+./include/llvm/Transforms/IPO/PassManagerBuilder.h:class PassManagerBuilder {
+./include/llvm/Transforms/IPO/FunctionImport.h:class FunctionImporter {
+./include/llvm/Transforms/IPO/FunctionImport.h:enum class PrevailingType { Yes, No, Unknown };
+./include/llvm/Transforms/Instrumentation/AddressSanitizer.h:class GlobalsMetadata {
+./include/llvm/Transforms/IPO.h:enum class PassSummaryAction {
+./include/llvm/Transforms/Vectorize/LoopVectorizationLegality.h:class LoopVectorizeHints {
+./include/llvm/Transforms/Vectorize/LoopVectorizationLegality.h:class LoopVectorizationRequirements {
+./include/llvm/Transforms/Vectorize/LoopVectorizationLegality.h:class LoopVectorizationLegality {
+./include/llvm/Transforms/InstCombine/InstCombineWorklist.h:class InstCombineWorklist {
+./include/llvm/Transforms/Utils/SSAUpdaterBulk.h:class SSAUpdaterBulk {
+./include/llvm/Transforms/Utils/FunctionComparator.h:class GlobalNumberState {
+./include/llvm/Transforms/Utils/FunctionComparator.h:class FunctionComparator {
+./include/llvm/Transforms/Utils/FunctionImportUtils.h:class FunctionImportGlobalProcessing {
+./include/llvm/Transforms/Utils/ValueMapper.h:class ValueMapTypeRemapper {
+./include/llvm/Transforms/Utils/ValueMapper.h:class ValueMaterializer {
+./include/llvm/Transforms/Utils/ValueMapper.h:class ValueMapper {
+./include/llvm/Transforms/Utils/LoopVersioning.h:class LoopVersioning {
+./include/llvm/Transforms/Utils/ImportedFunctionsInliningStatistics.h:class ImportedFunctionsInliningStatistics {
+./include/llvm/Transforms/Utils/Cloning.h:class InlineFunctionInfo {
+./include/llvm/Transforms/Utils/PredicateInfo.h:class PredicateInfo {
+./include/llvm/Transforms/Utils/SymbolRewriter.h:class RewriteDescriptor {
+./include/llvm/Transforms/Utils/SymbolRewriter.h:  enum class Type {
+./include/llvm/Transforms/Utils/SymbolRewriter.h:class RewriteMapParser {
+./include/llvm/Transforms/Utils/SimplifyIndVar.h:class IVVisitor {
+./include/llvm/Transforms/Utils/UnrollLoop.h:enum class LoopUnrollResult {
+./include/llvm/Transforms/Utils/SSAUpdater.h:class SSAUpdater {
+./include/llvm/Transforms/Utils/SSAUpdater.h:class LoadAndStorePromoter {
+./include/llvm/Transforms/Utils/SSAUpdaterImpl.h:class SSAUpdaterImpl {
+./include/llvm/Transforms/Utils/SSAUpdaterImpl.h:  class BBInfo {
+./include/llvm/Transforms/Utils/CodeExtractor.h:  class CodeExtractor {
+./include/llvm/Transforms/Utils/Evaluator.h:class Evaluator {
+./include/llvm/Transforms/Utils/SimplifyLibCalls.h:class FortifiedLibCallSimplifier {
+./include/llvm/Transforms/Utils/SimplifyLibCalls.h:class LibCallSimplifier {
+./include/llvm/Transforms/Utils/EscapeEnumerator.h:class EscapeEnumerator {
+./include/llvm/ExecutionEngine/ExecutionEngine.h:class ExecutionEngineState {
+./include/llvm/ExecutionEngine/ExecutionEngine.h:class ExecutionEngine {
+./include/llvm/ExecutionEngine/ExecutionEngine.h:class EngineBuilder {
+./include/llvm/ExecutionEngine/RuntimeDyld.h:class RuntimeDyld {
+./include/llvm/ExecutionEngine/RuntimeDyld.h:  class MemoryManager {
+./include/llvm/ExecutionEngine/SectionMemoryManager.h:  enum class AllocationPurpose {
+./include/llvm/ExecutionEngine/SectionMemoryManager.h:  class MemoryMapper {
+./include/llvm/ExecutionEngine/Orc/SymbolStringPool.h:class SymbolStringPool {
+./include/llvm/ExecutionEngine/Orc/SymbolStringPool.h:class SymbolStringPtr {
+./include/llvm/ExecutionEngine/Orc/IRCompileLayer.h:class LegacyIRCompileLayer {
+./include/llvm/ExecutionEngine/Orc/ObjectTransformLayer.h:class LegacyObjectTransformLayer {
+./include/llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h:class LegacyRTDyldObjectLinkingLayerBase {
+./include/llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h:  class LinkedObject {
+./include/llvm/ExecutionEngine/Orc/LazyReexports.h:class LazyCallThroughManager {
+./include/llvm/ExecutionEngine/Orc/LazyReexports.h:  class NotifyResolvedFunction {
+./include/llvm/ExecutionEngine/Orc/Core.h:class MaterializationResponsibility {
+./include/llvm/ExecutionEngine/Orc/Core.h:class MaterializationUnit {
+./include/llvm/ExecutionEngine/Orc/Core.h:class ReexportsGenerator {
+./include/llvm/ExecutionEngine/Orc/Core.h:class AsynchronousSymbolQuery {
+./include/llvm/ExecutionEngine/Orc/Core.h:class JITDylib {
+./include/llvm/ExecutionEngine/Orc/Core.h:  class SymbolTableEntry {
+./include/llvm/ExecutionEngine/Orc/Core.h:class ExecutionSession {
+./include/llvm/ExecutionEngine/Orc/Core.h:class MangleAndInterner {
+./include/llvm/ExecutionEngine/Orc/LazyEmittingLayer.h:template <typename BaseLayerT> class LazyEmittingLayer {
+./include/llvm/ExecutionEngine/Orc/LazyEmittingLayer.h:  class EmissionDeferredModule {
+./include/llvm/ExecutionEngine/Orc/GlobalMappingLayer.h:class GlobalMappingLayer {
+./include/llvm/ExecutionEngine/Orc/CompileUtils.h:class SimpleCompiler {
+./include/llvm/ExecutionEngine/Orc/CompileUtils.h:class ConcurrentIRCompiler {
+./include/llvm/ExecutionEngine/Orc/Layer.h:class IRLayer {
+./include/llvm/ExecutionEngine/Orc/Layer.h:class ObjectLayer {
+./include/llvm/ExecutionEngine/Orc/OrcRemoteTargetRPCAPI.h:class DirectBufferWriter {
+./include/llvm/ExecutionEngine/Orc/OrcRemoteTargetRPCAPI.h:class ResourceIdMgr {
+./include/llvm/ExecutionEngine/Orc/ExecutionUtils.h:class CtorDtorIterator {
+./include/llvm/ExecutionEngine/Orc/ExecutionUtils.h:class LegacyCtorDtorRunner {
+./include/llvm/ExecutionEngine/Orc/ExecutionUtils.h:class CtorDtorRunner {
+./include/llvm/ExecutionEngine/Orc/ExecutionUtils.h:class LocalCXXRuntimeOverridesBase {
+./include/llvm/ExecutionEngine/Orc/ExecutionUtils.h:class DynamicLibrarySearchGenerator {
+./include/llvm/ExecutionEngine/Orc/Legacy.h:class SymbolResolver {
+./include/llvm/ExecutionEngine/Orc/IRTransformLayer.h:class LegacyIRTransformLayer {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:template <typename RetT> class ResultTraits {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:class SupportsErrorReturn {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:template <typename T> class WrappedHandlerReturn {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:template <typename ChannelT> class ResponseHandler {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:class MemberFnWrapper {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:template <typename... ArgTs> class ReadArgs {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:template <typename SequenceNumberT> class SequenceNumberManager {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:class RPCArgTypeCheck {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:class CanSerialize {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:class CanDeserialize {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:class RPCEndpointBase {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:class RPCAsyncDispatch {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:class ParallelCallGroup {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:class APICalls {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:  class Contains {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:  class Contains {
+./include/llvm/ExecutionEngine/Orc/RPCUtils.h:  class Contains {
+./include/llvm/ExecutionEngine/Orc/ThreadSafeModule.h:class ThreadSafeContext {
+./include/llvm/ExecutionEngine/Orc/ThreadSafeModule.h:class ThreadSafeModule {
+./include/llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h:  class Plugin {
+./include/llvm/ExecutionEngine/Orc/OrcABISupport.h:class OrcGenericABI {
+./include/llvm/ExecutionEngine/Orc/OrcABISupport.h:  class IndirectStubsInfo {
+./include/llvm/ExecutionEngine/Orc/OrcABISupport.h:template <unsigned StubSizeVal> class GenericIndirectStubsInfo {
+./include/llvm/ExecutionEngine/Orc/OrcABISupport.h:class OrcAArch64 {
+./include/llvm/ExecutionEngine/Orc/OrcABISupport.h:class OrcX86_64_Base {
+./include/llvm/ExecutionEngine/Orc/OrcABISupport.h:class OrcI386 {
+./include/llvm/ExecutionEngine/Orc/OrcABISupport.h:class OrcMips32_Base {
+./include/llvm/ExecutionEngine/Orc/OrcABISupport.h:class OrcMips64 {
+./include/llvm/ExecutionEngine/Orc/RemoteObjectLayer.h:class RemoteObjectLayerAPI {
+./include/llvm/ExecutionEngine/Orc/RemoteObjectLayer.h:  class RemoteSymbolMaterializer {
+./include/llvm/ExecutionEngine/Orc/CompileOnDemandLayer.h:class LegacyCompileOnDemandLayer {
+./include/llvm/ExecutionEngine/Orc/CompileOnDemandLayer.h:  class ResourceOwner {
+./include/llvm/ExecutionEngine/Orc/LLJIT.h:class LLJIT {
+./include/llvm/ExecutionEngine/Orc/LLJIT.h:class LLJITBuilderState {
+./include/llvm/ExecutionEngine/Orc/LLJIT.h:class LLJITBuilderSetters {
+./include/llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h:class JITTargetMachineBuilder {
+./include/llvm/ExecutionEngine/Orc/OrcRemoteTargetClient.h:    class Alloc {
+./include/llvm/ExecutionEngine/Orc/IndirectionUtils.h:class TrampolinePool {
+./include/llvm/ExecutionEngine/Orc/IndirectionUtils.h:class JITCompileCallbackManager {
+./include/llvm/ExecutionEngine/Orc/IndirectionUtils.h:class IndirectStubsManager {
+./include/llvm/ExecutionEngine/Orc/IndirectionUtils.h:class SymbolLinkagePromoter {
+./include/llvm/ExecutionEngine/Orc/RPCSerialization.h:template <typename... ArgTs> class RPCTypeNameSequence {};
+./include/llvm/ExecutionEngine/Orc/RPCSerialization.h:///   class MyVirtualChannel { ... };
+./include/llvm/ExecutionEngine/Orc/RPCSerialization.h:class SequenceTraits {
+./include/llvm/ExecutionEngine/Orc/RawByteChannel.h:class RawByteChannel {
+./include/llvm/ExecutionEngine/JITSymbol.h:class JITSymbolFlags {
+./include/llvm/ExecutionEngine/JITSymbol.h:class ARMJITSymbolFlags {
+./include/llvm/ExecutionEngine/JITSymbol.h:class JITEvaluatedSymbol {
+./include/llvm/ExecutionEngine/JITSymbol.h:class JITSymbol {
+./include/llvm/ExecutionEngine/JITSymbol.h:class JITSymbolResolver {
+./include/llvm/ExecutionEngine/JITLink/JITLink.h:class Edge {
+./include/llvm/ExecutionEngine/JITLink/JITLink.h:class Atom {
+./include/llvm/ExecutionEngine/JITLink/JITLink.h:class SectionRange {
+./include/llvm/ExecutionEngine/JITLink/JITLink.h:class Section {
+./include/llvm/ExecutionEngine/JITLink/JITLink.h:class AtomGraph {
+./include/llvm/ExecutionEngine/JITLink/JITLink.h:class JITLinkContext {
+./include/llvm/ExecutionEngine/JITLink/JITLinkMemoryManager.h:class JITLinkMemoryManager {
+./include/llvm/ExecutionEngine/JITLink/JITLinkMemoryManager.h:  class SegmentRequest {
+./include/llvm/ExecutionEngine/JITLink/JITLinkMemoryManager.h:  class Allocation {
+./include/llvm/ExecutionEngine/JITLink/EHFrameSupport.h:class EHFrameRegistrar {
+./include/llvm/ExecutionEngine/JITEventListener.h:class JITEventListener {
+./include/llvm/ExecutionEngine/RuntimeDyldChecker.h:class RuntimeDyldChecker {
+./include/llvm/ExecutionEngine/RuntimeDyldChecker.h:  class MemoryRegionInfo {
+./include/llvm/ExecutionEngine/ObjectCache.h:class ObjectCache {
+./include/llvm/ExecutionEngine/OProfileWrapper.h:class OProfileWrapper {
+./include/llvm/Bitcode/BitcodeWriter.h:  class BitcodeWriter {
+./include/llvm/Bitcode/BitcodeAnalyzer.h:class BitcodeAnalyzer {
+./include/llvm/Bitcode/BitcodeReader.h:  class BitcodeModule {
+./include/llvm/Bitcode/BitcodeReader.h:  enum class BitcodeError { CorruptedBitcode = 1 };
+./include/llvm/WindowsResource/ResourceScriptToken.h:class RCToken {
+./include/llvm/WindowsResource/ResourceScriptToken.h:  enum class Kind {
+./include/llvm/WindowsResource/ResourceProcessor.h:class WindowsResourceProcessor {
+./include/llvm/PassInfo.h:class PassInfo {
+./include/llvm/Target/TargetMachine.h:class TargetMachine {
+./include/llvm/Target/TargetIntrinsicInfo.h:class TargetIntrinsicInfo {
+./include/llvm/Target/TargetPfmCounters.td:class ProcPfmCounters {
+./include/llvm/Target/TargetOptions.h:  enum class EABI {
+./include/llvm/Target/TargetOptions.h:  enum class DebuggerKind {
+./include/llvm/Target/TargetOptions.h:  enum class GlobalISelAbortMode {
+./include/llvm/Target/TargetOptions.h:  class TargetOptions {
+./include/llvm/Target/TargetSchedule.td:class SchedMachineModel {
+./include/llvm/Target/Target.td:class RegAltNameIndex {
+./include/llvm/Target/Target.td:class DAGOperand {
+./include/llvm/Target/Target.td:class InstructionEncoding {
+./include/llvm/Target/Target.td:class AsmOperandClass {
+./include/llvm/Target/Target.td:class InstrInfo {
+./include/llvm/Target/Target.td:class AsmParser {
+./include/llvm/Target/Target.td:class AsmParserVariant {
+./include/llvm/Target/Target.td:class AsmWriter {
+./include/llvm/Target/Target.td:class Target {
+./include/llvm/Target/Target.td:class InstrMapping {
+./include/llvm/Option/OptTable.h:class OptTable {
+./include/llvm/Option/Arg.h:class Arg {
+./include/llvm/Option/OptSpecifier.h:class OptSpecifier {
+./include/llvm/Option/ArgList.h:class arg_iterator {
+./include/llvm/Option/ArgList.h:class ArgList {
+./include/llvm/Option/OptParser.td:class OptionFlag {}
+./include/llvm/Option/Option.h:class Option {
+./include/llvm/TextAPI/ELF/ELFStub.h:enum class ELFSymbolType {
+./include/llvm/TextAPI/ELF/ELFStub.h:class ELFStub {
+./include/llvm/TextAPI/MachO/TextAPIWriter.h:class TextAPIWriter {
+./include/llvm/TextAPI/MachO/PackedVersion.h:class PackedVersion {
+./include/llvm/TextAPI/MachO/ArchitectureSet.h:class ArchitectureSet {
+./include/llvm/TextAPI/MachO/InterfaceFile.h:class InterfaceFileRef {
+./include/llvm/TextAPI/MachO/InterfaceFile.h:class InterfaceFile {
+./include/llvm/TextAPI/MachO/Symbol.h:class Symbol {
+./include/llvm/TextAPI/MachO/TextAPIReader.h:class TextAPIReader {
+./include/llvm/XRay/Trace.h:class Trace {
+./include/llvm/XRay/FDRRecordProducer.h:class RecordProducer {
+./include/llvm/XRay/FDRLogBuilder.h:class LogBuilder {
+./include/llvm/XRay/Graph.h:class Graph {
+./include/llvm/XRay/Graph.h:  template <bool isConst, bool isOut> class InOutEdgeView {
+./include/llvm/XRay/Graph.h:  template <bool isConst> class VertexView {
+./include/llvm/XRay/Graph.h:  template <bool isConst> class EdgeView {
+./include/llvm/XRay/InstrumentationMap.h:  enum class FunctionKinds { ENTRY, EXIT, TAIL, LOG_ARGS_ENTER, CUSTOM_EVENT };
+./include/llvm/XRay/InstrumentationMap.h:class InstrumentationMap {
+./include/llvm/XRay/FDRRecords.h:class Record {
+./include/llvm/XRay/FDRRecords.h:  enum class RecordKind {
+./include/llvm/XRay/FDRRecords.h:class RecordVisitor {
+./include/llvm/XRay/FDRRecordConsumer.h:class RecordConsumer {
+./include/llvm/XRay/XRayRecord.h:enum class RecordTypes {
+./include/llvm/XRay/Profile.h:class Profile {
+./include/llvm/XRay/BlockPrinter.h:  enum class State {
+./include/llvm/DebugInfo/GSYM/Range.h:class AddressRanges {
+./include/llvm/DebugInfo/DWARF/DWARFExpression.h:class DWARFExpression {
+./include/llvm/DebugInfo/DWARF/DWARFExpression.h:  class Operation {
+./include/llvm/DebugInfo/DWARF/DWARFContext.h:enum class ErrorPolicy { Halt, Continue };
+./include/llvm/DebugInfo/DWARF/DWARFDebugInfoEntry.h:class DWARFDebugInfoEntry {
+./include/llvm/DebugInfo/DWARF/DWARFUnitIndex.h:class DWARFUnitIndex {
+./include/llvm/DebugInfo/DWARF/DWARFUnitIndex.h:  class Entry {
+./include/llvm/DebugInfo/DWARF/DWARFDebugArangeSet.h:class DWARFDebugArangeSet {
+./include/llvm/DebugInfo/DWARF/DWARFDebugLine.h:class DWARFDebugLine {
+./include/llvm/DebugInfo/DWARF/DWARFDebugLine.h:  class SectionParser {
+./include/llvm/DebugInfo/DWARF/DWARFDebugAranges.h:class DWARFDebugAranges {
+./include/llvm/DebugInfo/DWARF/DWARFDebugLoc.h:class DWARFDebugLoc {
+./include/llvm/DebugInfo/DWARF/DWARFDebugLoc.h:class DWARFDebugLoclists {
+./include/llvm/DebugInfo/DWARF/DWARFObject.h:class DWARFObject {
+./include/llvm/DebugInfo/DWARF/DWARFDebugRangeList.h:class DWARFDebugRangeList {
+./include/llvm/DebugInfo/DWARF/DWARFDebugAddr.h:class DWARFDebugAddrTable {
+./include/llvm/DebugInfo/DWARF/DWARFGdbIndex.h:class DWARFGdbIndex {
+./include/llvm/DebugInfo/DWARF/DWARFAcceleratorTable.h:class DWARFAcceleratorTable {
+./include/llvm/DebugInfo/DWARF/DWARFAcceleratorTable.h:  class Entry {
+./include/llvm/DebugInfo/DWARF/DWARFAcceleratorTable.h:  class NameTableEntry {
+./include/llvm/DebugInfo/DWARF/DWARFAcceleratorTable.h:  class NameIndex {
+./include/llvm/DebugInfo/DWARF/DWARFAcceleratorTable.h:  class NameIterator {
+./include/llvm/DebugInfo/DWARF/DWARFAbbreviationDeclaration.h:class DWARFAbbreviationDeclaration {
+./include/llvm/DebugInfo/DWARF/DWARFDebugMacro.h:class DWARFDebugMacro {
+./include/llvm/DebugInfo/DWARF/DWARFDie.h:class DWARFDie {
+./include/llvm/DebugInfo/DWARF/DWARFDebugPubTable.h:class DWARFDebugPubTable {
+./include/llvm/DebugInfo/DWARF/DWARFDebugAbbrev.h:class DWARFAbbreviationDeclarationSet {
+./include/llvm/DebugInfo/DWARF/DWARFDebugAbbrev.h:class DWARFDebugAbbrev {
+./include/llvm/DebugInfo/DWARF/DWARFVerifier.h:class DWARFVerifier {
+./include/llvm/DebugInfo/DWARF/DWARFUnit.h:class DWARFUnitHeader {
+./include/llvm/DebugInfo/DWARF/DWARFUnit.h:class DWARFUnit {
+./include/llvm/DebugInfo/DWARF/DWARFDebugFrame.h:class CFIProgram {
+./include/llvm/DebugInfo/DWARF/DWARFDebugFrame.h:class FrameEntry {
+./include/llvm/DebugInfo/DWARF/DWARFDebugFrame.h:class DWARFDebugFrame {
+./include/llvm/DebugInfo/DWARF/DWARFFormValue.h:class DWARFFormValue {
+./include/llvm/DebugInfo/DWARF/DWARFListTable.h:template <typename ListEntryType> class DWARFListType {
+./include/llvm/DebugInfo/DWARF/DWARFListTable.h:class DWARFListTableHeader {
+./include/llvm/DebugInfo/DWARF/DWARFListTable.h:template <typename DWARFListType> class DWARFListTableBase {
+./include/llvm/DebugInfo/MSF/MSFError.h:enum class msf_error_code {
+./include/llvm/DebugInfo/MSF/MSFBuilder.h:class MSFBuilder {
+./include/llvm/DebugInfo/MSF/MSFCommon.h:class MSFStreamLayout {
+./include/llvm/DebugInfo/MSF/IMSFFile.h:class IMSFFile {
+./include/llvm/DebugInfo/Symbolize/Symbolize.h:class LLVMSymbolizer {
+./include/llvm/DebugInfo/Symbolize/SymbolizableModule.h:class SymbolizableModule {
+./include/llvm/DebugInfo/Symbolize/DIPrinter.h:class DIPrinter {
+./include/llvm/DebugInfo/Symbolize/DIPrinter.h:  enum class OutputStyle { LLVM, GNU };
+./include/llvm/DebugInfo/PDB/PDBSymDumper.h:class PDBSymDumper {
+./include/llvm/DebugInfo/PDB/IPDBLineNumber.h:class IPDBLineNumber {
+./include/llvm/DebugInfo/PDB/IPDBEnumChildren.h:template <typename ChildType> class IPDBEnumChildren {
+./include/llvm/DebugInfo/PDB/UDTLayout.h:class LayoutItemBase {
+./include/llvm/DebugInfo/PDB/IPDBInjectedSource.h:class IPDBInjectedSource {
+./include/llvm/DebugInfo/PDB/IPDBSourceFile.h:class IPDBSourceFile {
+./include/llvm/DebugInfo/PDB/IPDBFrameData.h:class IPDBFrameData {
+./include/llvm/DebugInfo/PDB/IPDBTable.h:class IPDBTable {
+./include/llvm/DebugInfo/PDB/GenericError.h:enum class pdb_error_code {
+./include/llvm/DebugInfo/PDB/PDBTypes.h:enum class PDB_ReaderType {
+./include/llvm/DebugInfo/PDB/PDBTypes.h:enum class PDB_TableType {
+./include/llvm/DebugInfo/PDB/PDBTypes.h:enum class PDB_Checksum { None = 0, MD5 = 1, SHA1 = 2, SHA256 = 3 };
+./include/llvm/DebugInfo/PDB/PDBTypes.h:enum class PDB_Machine {
+./include/llvm/DebugInfo/PDB/PDBTypes.h:enum class PDB_DataKind {
+./include/llvm/DebugInfo/PDB/PDBTypes.h:enum class PDB_SymType {
+./include/llvm/DebugInfo/PDB/PDBTypes.h:enum class PDB_LocType {
+./include/llvm/DebugInfo/PDB/PDBTypes.h:enum class PDB_UdtType { Struct, Class, Union, Interface };
+./include/llvm/DebugInfo/PDB/PDBTypes.h:enum class PDB_BuiltinType {
+./include/llvm/DebugInfo/PDB/PDBTypes.h:enum class PDB_MemberAccess { Private = 1, Protected = 2, Public = 3 };
+./include/llvm/DebugInfo/PDB/DIA/DIAError.h:enum class dia_error_code {
+./include/llvm/DebugInfo/PDB/IPDBRawSymbol.h:class IPDBRawSymbol {
+./include/llvm/DebugInfo/PDB/IPDBSession.h:class IPDBSession {
+./include/llvm/DebugInfo/PDB/IPDBDataStream.h:class IPDBDataStream {
+./include/llvm/DebugInfo/PDB/Native/RawError.h:enum class raw_error_code {
+./include/llvm/DebugInfo/PDB/Native/TpiStream.h:class TpiStream {
+./include/llvm/DebugInfo/PDB/Native/PDBStringTableBuilder.h:class PDBStringTableBuilder {
+./include/llvm/DebugInfo/PDB/Native/PDBFileBuilder.h:class PDBFileBuilder {
+./include/llvm/DebugInfo/PDB/Native/SymbolStream.h:class SymbolStream {
+./include/llvm/DebugInfo/PDB/Native/InfoStreamBuilder.h:class InfoStreamBuilder {
+./include/llvm/DebugInfo/PDB/Native/SymbolCache.h:class SymbolCache {
+./include/llvm/DebugInfo/PDB/Native/DbiStream.h:class DbiStream {
+./include/llvm/DebugInfo/PDB/Native/DbiModuleDescriptorBuilder.h:class DbiModuleDescriptorBuilder {
+./include/llvm/DebugInfo/PDB/Native/InfoStream.h:class InfoStream {
+./include/llvm/DebugInfo/PDB/Native/HashTable.h:class HashTable {
+./include/llvm/DebugInfo/PDB/Native/DbiStreamBuilder.h:class DbiStreamBuilder {
+./include/llvm/DebugInfo/PDB/Native/InjectedSourceStream.h:class InjectedSourceStream {
+./include/llvm/DebugInfo/PDB/Native/PDBStringTable.h:class PDBStringTable {
+./include/llvm/DebugInfo/PDB/Native/DbiModuleList.h:class DbiModuleList {
+./include/llvm/DebugInfo/PDB/Native/NamedStreamMap.h:class NamedStreamMap {
+./include/llvm/DebugInfo/PDB/Native/TpiStreamBuilder.h:class TpiStreamBuilder {
+./include/llvm/DebugInfo/PDB/Native/GlobalsStream.h:class GSIHashTable {
+./include/llvm/DebugInfo/PDB/Native/GlobalsStream.h:class GlobalsStream {
+./include/llvm/DebugInfo/PDB/Native/ISectionContribVisitor.h:class ISectionContribVisitor {
+./include/llvm/DebugInfo/PDB/Native/ModuleDebugStream.h:class ModuleDebugStreamRef {
+./include/llvm/DebugInfo/PDB/Native/DbiModuleDescriptor.h:class DbiModuleDescriptor {
+./include/llvm/DebugInfo/PDB/Native/GSIStreamBuilder.h:class GSIStreamBuilder {
+./include/llvm/DebugInfo/PDB/Native/PublicsStream.h:class PublicsStream {
+./include/llvm/DebugInfo/PDB/IPDBSectionContrib.h:class IPDBSectionContrib {
+./include/llvm/DebugInfo/PDB/PDBSymbol.h:class PDBSymbol {
+./include/llvm/DebugInfo/DIContext.h:class DIInliningInfo {
+./include/llvm/DebugInfo/DIContext.h:enum class DINameKind { None, ShortName, LinkageName };
+./include/llvm/DebugInfo/DIContext.h:  enum class FileLineInfoKind { None, Default, AbsoluteFilePath };
+./include/llvm/DebugInfo/DIContext.h:class DIContext {
+./include/llvm/DebugInfo/DIContext.h:class LoadedObjectInfo {
+./include/llvm/DebugInfo/CodeView/StringsAndChecksums.h:class StringsAndChecksumsRef {
+./include/llvm/DebugInfo/CodeView/StringsAndChecksums.h:class StringsAndChecksums {
+./include/llvm/DebugInfo/CodeView/DebugSubsection.h:class DebugSubsectionRef {
+./include/llvm/DebugInfo/CodeView/DebugSubsection.h:class DebugSubsection {
+./include/llvm/DebugInfo/CodeView/FunctionId.h:class FunctionId {
+./include/llvm/DebugInfo/CodeView/TypeRecord.h:class MemberPointerInfo {
+./include/llvm/DebugInfo/CodeView/TypeRecord.h:class TypeRecord {
+./include/llvm/DebugInfo/CodeView/DebugSubsectionRecord.h:class DebugSubsectionRecord {
+./include/llvm/DebugInfo/CodeView/DebugSubsectionRecord.h:class DebugSubsectionRecordBuilder {
+./include/llvm/DebugInfo/CodeView/DebugSubsectionVisitor.h:class DebugSubsectionVisitor {
+./include/llvm/DebugInfo/CodeView/SymbolVisitorCallbacks.h:class SymbolVisitorCallbacks {
+./include/llvm/DebugInfo/CodeView/SimpleTypeSerializer.h:class SimpleTypeSerializer {
+./include/llvm/DebugInfo/CodeView/CodeViewError.h:enum class cv_error_code {
+./include/llvm/DebugInfo/CodeView/SymbolRecord.h:class SymbolRecord {
+./include/llvm/DebugInfo/CodeView/CodeViewRecordIO.h:class CodeViewRecordStreamer {
+./include/llvm/DebugInfo/CodeView/CodeViewRecordIO.h:class CodeViewRecordIO {
+./include/llvm/DebugInfo/CodeView/TypeCollection.h:class TypeCollection {
+./include/llvm/DebugInfo/CodeView/Line.h:class LineInfo {
+./include/llvm/DebugInfo/CodeView/Line.h:class ColumnInfo {
+./include/llvm/DebugInfo/CodeView/Line.h:class Line {
+./include/llvm/DebugInfo/CodeView/TypeIndex.h:class TypeIndex {
+./include/llvm/DebugInfo/CodeView/CVRecord.h:template <typename Kind> class CVRecord {
+./include/llvm/DebugInfo/CodeView/TypeIndexDiscovery.h:enum class TiRefKind { TypeRef, IndexRef };
+./include/llvm/DebugInfo/CodeView/TypeSymbolEmitter.h:class TypeSymbolEmitter {
+./include/llvm/DebugInfo/CodeView/SymbolVisitorDelegate.h:class SymbolVisitorDelegate {
+./include/llvm/DebugInfo/CodeView/TypeVisitorCallbacks.h:class TypeVisitorCallbacks {
+./include/llvm/DebugInfo/CodeView/CodeView.h:enum class CodeViewContainer { ObjectFile, Pdb };
+./include/llvm/DebugInfo/CodeView/ContinuationRecordBuilder.h:enum class ContinuationRecordKind { FieldList, MethodOverloadList };
+./include/llvm/DebugInfo/CodeView/ContinuationRecordBuilder.h:class ContinuationRecordBuilder {
+./include/llvm/DebugInfo/CodeView/CVSymbolVisitor.h:class CVSymbolVisitor {
+./include/llvm/DebugInfo/CodeView/SymbolDumper.h:class CVSymbolDumper {
+./include/llvm/DebugInfo/CodeView/DebugLinesSubsection.h:class LineColumnExtractor {
+./include/llvm/LineEditor/LineEditor.h:class LineEditor {
+./include/llvm/ProfileData/SampleProf.h:enum class sampleprof_error {
+./include/llvm/ProfileData/SampleProf.h:class SampleRecord {
+./include/llvm/ProfileData/SampleProf.h:class FunctionSamples {
+./include/llvm/ProfileData/SampleProf.h:  class GUIDToFuncNameMapper {
+./include/llvm/ProfileData/SampleProf.h:template <class LocationT, class SampleT> class SampleSorter {
+./include/llvm/ProfileData/InstrProfReader.h:class InstrProfReader {
+./include/llvm/ProfileData/InstrProfReader.h:class InstrProfLookupTrait {
+./include/llvm/ProfileData/InstrProfReader.h:class InstrProfReaderRemapper {
+./include/llvm/ProfileData/SampleProfWriter.h:class SampleProfileWriter {
+./include/llvm/ProfileData/ProfileCommon.h:class ProfileSummaryBuilder {
+./include/llvm/ProfileData/SampleProfReader.h:class SampleProfileReader {
+./include/llvm/ProfileData/InstrProfWriter.h:class InstrProfWriter {
+./include/llvm/ProfileData/Coverage/CoverageMapping.h:enum class coveragemap_error {
+./include/llvm/ProfileData/Coverage/CoverageMapping.h:class CounterExpressionBuilder {
+./include/llvm/ProfileData/Coverage/CoverageMapping.h:class CounterMappingContext {
+./include/llvm/ProfileData/Coverage/CoverageMapping.h:class InstantiationGroup {
+./include/llvm/ProfileData/Coverage/CoverageMapping.h:class CoverageData {
+./include/llvm/ProfileData/Coverage/CoverageMapping.h:class CoverageMapping {
+./include/llvm/ProfileData/Coverage/CoverageMapping.h:class LineCoverageStats {
+./include/llvm/ProfileData/Coverage/CoverageMappingWriter.h:class CoverageFilenamesSectionWriter {
+./include/llvm/ProfileData/Coverage/CoverageMappingWriter.h:class CoverageMappingWriter {
+./include/llvm/ProfileData/Coverage/CoverageMappingReader.h:class CoverageMappingReader {
+./include/llvm/ProfileData/Coverage/CoverageMappingReader.h:class RawCoverageReader {
+./include/llvm/ProfileData/InstrProf.h:enum class instrprof_error {
+./include/llvm/ProfileData/InstrProf.h:class SoftInstrProfErrors {
+./include/llvm/ProfileData/InstrProf.h:class InstrProfSymtab {
+./include/llvm/ProfileData/GCOV.h:class GCOVBuffer {
+./include/llvm/ProfileData/GCOV.h:class GCOVFile {
+./include/llvm/ProfileData/GCOV.h:class GCOVFunction {
+./include/llvm/ProfileData/GCOV.h:class GCOVBlock {
+./include/llvm/ProfileData/GCOV.h:class FileInfo {
+./include/llvm/PassRegistry.h:class PassRegistry {
+./include/llvm/Testing/Support/SupportHelpers.h:template <class InnerMatcher> class ValueIsMatcher {
+./include/llvm/Testing/Support/Error.h:class ValueMatchesPoly {
+./include/llvm/Testing/Support/Annotations.h:class Annotations {
+./include/llvm/Analysis/MemorySSA.h:class MemorySSA {
+./include/llvm/Analysis/MemorySSA.h:class MemorySSAUtil {
+./include/llvm/Analysis/MemorySSA.h:class MemorySSAWalker {
+./include/llvm/Analysis/BlockFrequencyInfo.h:class BlockFrequencyInfo {
+./include/llvm/Analysis/AliasAnalysis.h:class AAQueryInfo {
+./include/llvm/Analysis/AliasAnalysis.h:class AAResults {
+./include/llvm/Analysis/AliasAnalysis.h:class BatchAAResults {
+./include/llvm/Analysis/AliasAnalysis.h:template <typename DerivedT> class AAResultBase {
+./include/llvm/Analysis/AliasAnalysis.h:  class AAResultsProxy {
+./include/llvm/Analysis/ScalarEvolutionExpressions.h:  class SCEVTraversal {
+./include/llvm/Analysis/Trace.h:class Trace {
+./include/llvm/Analysis/IVUsers.h:class IVUsers {
+./include/llvm/Analysis/TargetLibraryInfo.h:class TargetLibraryInfoImpl {
+./include/llvm/Analysis/TargetLibraryInfo.h:class TargetLibraryInfo {
+./include/llvm/Analysis/DomTreeUpdater.h:class DomTreeUpdater {
+./include/llvm/Analysis/StackSafetyAnalysis.h:class StackSafetyInfo {
+./include/llvm/Analysis/PtrUseVisitor.h:class PtrUseVisitorBase {
+./include/llvm/Analysis/PtrUseVisitor.h:  class PtrInfo {
+./include/llvm/Analysis/EHPersonalities.h:enum class EHPersonality {
+./include/llvm/Analysis/BasicAliasAnalysis.h:class LegacyAARGetter {
+./include/llvm/Analysis/DominanceFrontier.h:class DominanceFrontierBase {
+./include/llvm/Analysis/RegionInfo.h:class FlatIt {};
+./include/llvm/Analysis/RegionInfo.h:class RegionNodeBase {
+./include/llvm/Analysis/RegionInfo.h:class RegionInfoBase {
+./include/llvm/Analysis/LoopInfo.h:template <class BlockT, class LoopT> class LoopBase {
+./include/llvm/Analysis/LoopInfo.h:  class LocRange {
+./include/llvm/Analysis/LoopInfo.h:    enum class Direction { Increasing, Decreasing, Unknown };
+./include/llvm/Analysis/LoopInfo.h:template <class BlockT, class LoopT> class LoopInfoBase {
+./include/llvm/Analysis/TargetTransformInfo.h:class TargetTransformInfo {
+./include/llvm/Analysis/TargetTransformInfo.h:  enum class CacheLevel {
+./include/llvm/Analysis/TargetFolder.h:class TargetFolder {
+./include/llvm/Analysis/SparsePropagation.h:template <class LatticeKey, class LatticeVal> class AbstractLatticeFunction {
+./include/llvm/Analysis/SparsePropagation.h:class SparseSolver {
+./include/llvm/Analysis/OrderedInstructions.h:class OrderedInstructions {
+./include/llvm/Analysis/MemoryLocation.h:class LocationSize {
+./include/llvm/Analysis/MemoryLocation.h:class MemoryLocation {
+./include/llvm/Analysis/ScalarEvolution.h:class ScalarEvolution {
+./include/llvm/Analysis/ScalarEvolution.h:  class BackedgeTakenInfo {
+./include/llvm/Analysis/ScalarEvolution.h:  class ExitLimitCache {
+./include/llvm/Analysis/ScalarEvolution.h:class PredicatedScalarEvolution {
+./include/llvm/Analysis/SyncDependenceAnalysis.h:class SyncDependenceAnalysis {
+./include/llvm/Analysis/InlineCost.h:class InlineCost {
+./include/llvm/Analysis/LazyBlockFrequencyInfo.h:class LazyBlockFrequencyInfo {
+./include/llvm/Analysis/LoopAccessAnalysis.h:class MemoryDepChecker {
+./include/llvm/Analysis/LoopAccessAnalysis.h:  enum class VectorizationSafetyStatus {
+./include/llvm/Analysis/LoopAccessAnalysis.h:class RuntimePointerChecking {
+./include/llvm/Analysis/LoopAccessAnalysis.h:class LoopAccessInfo {
+./include/llvm/Analysis/DominanceFrontierImpl.h:class DFCalculateWorkObject {
+./include/llvm/Analysis/DivergenceAnalysis.h:class DivergenceAnalysis {
+./include/llvm/Analysis/DivergenceAnalysis.h:class GPUDivergenceAnalysis {
+./include/llvm/Analysis/CGSCCPassManager.h:  class Result {
+./include/llvm/Analysis/IntervalIterator.h:class IntervalIterator {
+./include/llvm/Analysis/LoopIterator.h:class LoopBlocksDFS {
+./include/llvm/Analysis/LoopIterator.h:class LoopBlocksRPO {
+./include/llvm/Analysis/LoopIterator.h:class LoopBlocksTraversal {
+./include/llvm/Analysis/TargetTransformInfoImpl.h:class TargetTransformInfoImplBase {
+./include/llvm/Analysis/MustExecute.h:class LoopSafetyInfo {
+./include/llvm/Analysis/BlockFrequencyInfoImpl.h:class BlockMass {
+./include/llvm/Analysis/BlockFrequencyInfoImpl.h:class BlockFrequencyInfoImplBase {
+./include/llvm/Analysis/MemorySSAUpdater.h:class MemorySSAUpdater {
+./include/llvm/Analysis/ValueTracking.h:  enum class OverflowResult {
+./include/llvm/Analysis/ObjCARCAnalysisUtils.h:enum class ARCMDKindID {
+./include/llvm/Analysis/ObjCARCAnalysisUtils.h:class ARCMDKindCache {
+./include/llvm/Analysis/OptimizationRemarkEmitter.h:class OptimizationRemarkEmitter {
+./include/llvm/Analysis/PHITransAddr.h:class PHITransAddr {
+./include/llvm/Analysis/CallGraph.h:class CallGraph {
+./include/llvm/Analysis/CallGraph.h:class CallGraphNode {
+./include/llvm/Analysis/LazyValueInfo.h:class LazyValueInfo {
+./include/llvm/Analysis/ScalarEvolutionExpander.h:    class SCEVInsertPointGuard {
+./include/llvm/Analysis/LoopInfoImpl.h:template <class BlockT, class LoopT> class PopulateLoopsDFS {
+./include/llvm/Analysis/SyntheticCountsUtils.h:template <typename CallGraphType> class SyntheticCountsUtils {
+./include/llvm/Analysis/AliasSetTracker.h:  class PointerRec {
+./include/llvm/Analysis/AliasSetTracker.h:class AliasSetTracker {
+./include/llvm/Analysis/VectorUtils.h:template <typename InstTy> class InterleaveGroup {
+./include/llvm/Analysis/VectorUtils.h:class InterleavedAccessInfo {
+./include/llvm/Analysis/PhiValues.h:class PhiValues {
+./include/llvm/Analysis/ObjCARCInstKind.h:enum class ARCInstKind {
+./include/llvm/Analysis/MemoryDependenceAnalysis.h:class MemDepResult {
+./include/llvm/Analysis/MemoryDependenceAnalysis.h:class NonLocalDepEntry {
+./include/llvm/Analysis/MemoryDependenceAnalysis.h:class NonLocalDepResult {
+./include/llvm/Analysis/MemoryDependenceAnalysis.h:class MemoryDependenceResults {
+./include/llvm/Analysis/CallGraphSCCPass.h:class CallGraphSCC {
+./include/llvm/Analysis/DependenceAnalysis.h:  class Dependence {
+./include/llvm/Analysis/DependenceAnalysis.h:  class DependenceInfo {
+./include/llvm/Analysis/DependenceAnalysis.h:    class Constraint {
+./include/llvm/Analysis/IndirectCallPromotionAnalysis.h:class ICallPromotionAnalysis {
+./include/llvm/Analysis/AssumptionCache.h:class AssumptionCache {
+./include/llvm/Analysis/LazyBranchProbabilityInfo.h:  class LazyBranchProbabilityInfo {
+./include/llvm/Analysis/LazyCallGraph.h:class LazyCallGraph {
+./include/llvm/Analysis/LazyCallGraph.h:  class Edge {
+./include/llvm/Analysis/LazyCallGraph.h:  class EdgeSequence {
+./include/llvm/Analysis/LazyCallGraph.h:  class Node {
+./include/llvm/Analysis/LazyCallGraph.h:  class SCC {
+./include/llvm/Analysis/LazyCallGraph.h:  class RefSCC {
+./include/llvm/Analysis/IVDescriptors.h:class RecurrenceDescriptor {
+./include/llvm/Analysis/IVDescriptors.h:  class InstDesc {
+./include/llvm/Analysis/IVDescriptors.h:class InductionDescriptor {
+./include/llvm/Analysis/InstructionPrecedenceTracking.h:class InstructionPrecedenceTracking {
+./include/llvm/Analysis/Interval.h:class Interval {
+./include/llvm/Analysis/BranchProbabilityInfo.h:class BranchProbabilityInfo {
+./include/llvm/Analysis/OrderedBasicBlock.h:class OrderedBasicBlock {
+./include/llvm/Analysis/DemandedBits.h:class DemandedBits {
+./include/llvm/Analysis/ProfileSummaryInfo.h:class ProfileSummaryInfo {
+./include/llvm/Analysis/ValueLattice.h:class ValueLatticeElement {
+./include/llvm/PassAnalysisSupport.h:class AnalysisUsage {
+./include/llvm/PassAnalysisSupport.h:class AnalysisResolver {
+./include/llvm/FuzzMutate/OpDescriptor.h:class SourcePred {
+./include/llvm/FuzzMutate/IRMutator.h:class IRMutationStrategy {
+./include/llvm/FuzzMutate/IRMutator.h:class IRMutator {
+./include/llvm/FuzzMutate/Random.h:template <typename T, typename GenT> class ReservoirSampler {
+./include/llvm/WindowsManifest/WindowsManifestMerger.h:class WindowsManifestMerger {
+./include/llvm/Demangle/Utility.h:class OutputStream {
+./include/llvm/Demangle/Utility.h:template <class T> class SwapAndRestore {
+./include/llvm/Demangle/MicrosoftDemangleNodes.h:enum class PointerAffinity { None, Pointer, Reference, RValueReference };
+./include/llvm/Demangle/MicrosoftDemangleNodes.h:enum class FunctionRefQualifier { None, Reference, RValueReference };
+./include/llvm/Demangle/MicrosoftDemangleNodes.h:enum class PrimitiveKind {
+./include/llvm/Demangle/MicrosoftDemangleNodes.h:enum class CharKind {
+./include/llvm/Demangle/MicrosoftDemangleNodes.h:enum class SpecialIntrinsicKind {
+./include/llvm/Demangle/MicrosoftDemangleNodes.h:enum class TagKind { Class, Struct, Union, Enum };
+./include/llvm/Demangle/MicrosoftDemangleNodes.h:enum class NodeKind {
+./include/llvm/Demangle/MicrosoftDemangle.h:class ArenaAllocator {
+./include/llvm/Demangle/MicrosoftDemangle.h:enum class QualifierMangleMode { Drop, Mangle, Result };
+./include/llvm/Demangle/MicrosoftDemangle.h:enum class FunctionIdentifierCodeGroup { Basic, Under, DoubleUnder };
+./include/llvm/Demangle/MicrosoftDemangle.h:class Demangler {
+./include/llvm/Demangle/ItaniumDemangle.h:class Node {
+./include/llvm/Demangle/ItaniumDemangle.h:class NodeArray {
+./include/llvm/Demangle/ItaniumDemangle.h:enum class ReferenceKind {
+./include/llvm/Demangle/ItaniumDemangle.h:class NodeOrString {
+./include/llvm/Demangle/ItaniumDemangle.h:enum class SpecialSubKind {
+./include/llvm/Demangle/ItaniumDemangle.h:class PODSmallVector {
+./include/llvm/Demangle/StringView.h:class StringView {
+./include/llvm/Passes/StandardInstrumentations.h:class PrintIRInstrumentation {
+./include/llvm/Passes/StandardInstrumentations.h:class StandardInstrumentations {
+./include/llvm/Passes/PassBuilder.h:class PipelineTuningOptions {
+./include/llvm/Passes/PassBuilder.h:class PassBuilder {
+./include/llvm/Passes/PassBuilder.h:  enum class ThinLTOPhase {
+./include/llvm/Passes/PassPlugin.h:class PassPlugin {
+./include/llvm/Object/ModuleSymbolTable.h:class ModuleSymbolTable {
+./include/llvm/Object/IRSymtab.h:class Reader {
+./include/llvm/Object/ObjectFile.h:class RelocationRef {
+./include/llvm/Object/ObjectFile.h:class SectionRef {
+./include/llvm/Object/COFF.h:class COFFSymbolRef {
+./include/llvm/Object/COFF.h:class ImportDirectoryEntryRef {
+./include/llvm/Object/COFF.h:class DelayImportDirectoryEntryRef {
+./include/llvm/Object/COFF.h:class ExportDirectoryEntryRef {
+./include/llvm/Object/COFF.h:class ImportedSymbolRef {
+./include/llvm/Object/COFF.h:class BaseRelocRef {
+./include/llvm/Object/COFF.h:class ResourceSectionRef {
+./include/llvm/Object/ELF.h:class ELFFile {
+./include/llvm/Object/MachO.h:class DiceRef {
+./include/llvm/Object/MachO.h:class ExportEntry {
+./include/llvm/Object/MachO.h:class BindRebaseSegInfo {
+./include/llvm/Object/MachO.h:class MachORebaseEntry {
+./include/llvm/Object/MachO.h:class MachOBindEntry {
+./include/llvm/Object/MachO.h:  enum class Kind { Regular, Lazy, Weak };
+./include/llvm/Object/Decompressor.h:class Decompressor {
+./include/llvm/Object/SymbolicFile.h:class BasicSymbolRef {
+./include/llvm/Object/Archive.h:class ArchiveMemberHeader {
+./include/llvm/Object/Archive.h:  class Child {
+./include/llvm/Object/Archive.h:  class ChildFallibleIterator {
+./include/llvm/Object/Archive.h:  class Symbol {
+./include/llvm/Object/Archive.h:  class symbol_iterator {
+./include/llvm/Object/ELFTypes.h:class Elf_Note_Impl {
+./include/llvm/Object/MachOUniversal.h:  class ObjectForArch {
+./include/llvm/Object/MachOUniversal.h:  class object_iterator {
+./include/llvm/Object/Error.h:enum class object_error {
+./include/llvm/Object/Wasm.h:class WasmSymbol {
+./include/llvm/Object/Wasm.h:class WasmSectionOrderChecker {
+./include/llvm/Object/Binary.h:class Binary {
+./include/llvm/Object/Binary.h:template <typename T> class OwningBinary {
+./include/llvm/Object/StackMapParser.h:class StackMapParser {
+./include/llvm/Object/StackMapParser.h:  class AccessorIterator {
+./include/llvm/Object/StackMapParser.h:  class FunctionAccessor {
+./include/llvm/Object/StackMapParser.h:  class ConstantAccessor {
+./include/llvm/Object/StackMapParser.h:  class LocationAccessor {
+./include/llvm/Object/StackMapParser.h:  class LiveOutAccessor {
+./include/llvm/Object/StackMapParser.h:  class RecordAccessor {
+./include/llvm/Object/WindowsResource.h:class ResourceEntryRef {
+./include/llvm/Object/WindowsResource.h:class WindowsResourceParser {
+./include/llvm/Object/WindowsResource.h:  class TreeNode {
+./include/llvm/Linker/IRMover.h:class IRMover {
+./include/llvm/Linker/IRMover.h:  class IdentifiedStructTypeSet {
+./include/llvm/Linker/Linker.h:class Linker {
+./include/llvm/IR/CallSite.h:class CallSiteBase {
+./include/llvm/IR/CallSite.h:class AbstractCallSite {
+./include/llvm/IR/PredIteratorCache.h:class PredIteratorCache {
+./include/llvm/IR/CFG.h:  class SuccessorProxy {
+./include/llvm/IR/ValueHandle.h:class ValueHandleBase {
+./include/llvm/IR/ValueHandle.h:template <typename ValueTy> class TrackingVH {
+./include/llvm/IR/PassManagerInternal.h:template <typename IRUnitT, typename ResultT> class ResultHasInvalidateMethod {
+./include/llvm/IR/GVMaterializer.h:class GVMaterializer {
+./include/llvm/IR/IntrinsicsSystemZ.td:multiclass SystemZUnaryCCBHF {
+./include/llvm/IR/IntrinsicsSystemZ.td:multiclass SystemZBinaryTruncCCHFG {
+./include/llvm/IR/IntrinsicsSystemZ.td:multiclass SystemZBinaryCCBHF {
+./include/llvm/IR/IntrinsicsSystemZ.td:multiclass SystemZTernaryIntCCBHF {
+./include/llvm/IR/IntrinsicsSystemZ.td:multiclass SystemZQuaternaryIntCCBHF {
+./include/llvm/IR/Mangler.h:class Mangler {
+./include/llvm/IR/RemarkStreamer.h:class RemarkStreamer {
+./include/llvm/IR/MDBuilder.h:class MDBuilder {
+./include/llvm/IR/DataLayout.h:class DataLayout {
+./include/llvm/IR/DataLayout.h:  enum class FunctionPtrAlignType {
+./include/llvm/IR/DataLayout.h:class StructLayout {
+./include/llvm/IR/Verifier.h:class TBAAVerifier {
+./include/llvm/IR/IRPrintingPasses.h:class PrintModulePass {
+./include/llvm/IR/IRPrintingPasses.h:class PrintFunctionPass {
+./include/llvm/IR/CFGDiff.h:template <typename NodePtr, bool InverseGraph = false> class GraphDiff {
+./include/llvm/IR/ConstantFolder.h:class ConstantFolder {
+./include/llvm/IR/IntrinsicsNVVM.td:  multiclass PTXAtomicWithScope2_fi {
+./include/llvm/IR/NoFolder.h:class NoFolder {
+./include/llvm/IR/TrackingMDRef.h:class TrackingMDRef {
+./include/llvm/IR/TrackingMDRef.h:template <class T> class TypedTrackingMDRef {
+./include/llvm/IR/DiagnosticInfo.h:class DiagnosticInfo {
+./include/llvm/IR/DiagnosticInfo.h:class DiagnosticLocation {
+./include/llvm/IR/ProfileSummary.h:class ProfileSummary {
+./include/llvm/IR/LegacyPassManager.h:class PassManagerBase {
+./include/llvm/IR/Module.h:class Module {
+./include/llvm/IR/Statepoint.h:enum class StatepointFlags {
+./include/llvm/IR/Statepoint.h:class StatepointBase {
+./include/llvm/IR/OptBisect.h:class OptPassGate {
+./include/llvm/IR/InstVisitor.h:class InstVisitor {
+./include/llvm/IR/LegacyPassManagers.h:class PMStack {
+./include/llvm/IR/LegacyPassManagers.h:class PMTopLevelManager {
+./include/llvm/IR/LegacyPassManagers.h:class PMDataManager {
+./include/llvm/IR/IRBuilder.h:class IRBuilderDefaultInserter {
+./include/llvm/IR/IRBuilder.h:class IRBuilderBase {
+./include/llvm/IR/IRBuilder.h:  class InsertPoint {
+./include/llvm/IR/IRBuilder.h:  class InsertPointGuard {
+./include/llvm/IR/IRBuilder.h:  class FastMathFlagGuard {
+./include/llvm/IR/LLVMContext.h:class LLVMContext {
+./include/llvm/IR/Attributes.h:class Attribute {
+./include/llvm/IR/Attributes.h:class AttributeSet {
+./include/llvm/IR/Attributes.h:class AttributeList {
+./include/llvm/IR/Attributes.h:class AttrBuilder {
+./include/llvm/IR/DiagnosticPrinter.h:class DiagnosticPrinter {
+./include/llvm/IR/ConstantRange.h:  enum class OverflowResult {
+./include/llvm/IR/DebugInfoMetadata.h:class DITypeRefArray {
+./include/llvm/IR/DebugInfoMetadata.h:  enum class Signedness { Signed, Unsigned };
+./include/llvm/IR/DebugInfoMetadata.h:  class ExprOperand {
+./include/llvm/IR/DebugInfo.h:class DebugInfoFinder {
+./include/llvm/IR/Comdat.h:class Comdat {
+./include/llvm/IR/Value.h:class Value {
+./include/llvm/IR/Value.h:  enum class ReplaceMetadataUses { No, Yes };
+./include/llvm/IR/DerivedTypes.h:class FunctionCallee {
+./include/llvm/IR/ValueMap.h:class ValueMap {
+./include/llvm/IR/InstIterator.h:template <class BB_t, class BB_i_t, class BI_t, class II_t> class InstIterator {
+./include/llvm/IR/DIBuilder.h:  class DIBuilder {
+./include/llvm/IR/LegacyPassNameParser.h:class PassArgFilter {
+./include/llvm/IR/Use.h:class Use {
+./include/llvm/IR/PassInstrumentation.h:class PassInstrumentationCallbacks {
+./include/llvm/IR/PassInstrumentation.h:class PassInstrumentation {
+./include/llvm/IR/ModuleSlotTracker.h:class ModuleSlotTracker {
+./include/llvm/IR/Instructions.h:  class CaseHandleImpl {
+./include/llvm/IR/Instructions.h:class SwitchInstProfUpdateWrapper {
+./include/llvm/IR/GlobalValue.h:  enum class UnnamedAddr {
+./include/llvm/IR/AssemblyAnnotationWriter.h:class AssemblyAnnotationWriter {
+./include/llvm/IR/ValueSymbolTable.h:class ValueSymbolTable {
+./include/llvm/IR/PassTimingInfo.h:class TimePassesHandler {
+./include/llvm/IR/TypeFinder.h:class TypeFinder {
+./include/llvm/IR/ModuleSummaryIndex.h:class GlobalValueSummary {
+./include/llvm/IR/ModuleSummaryIndex.h:class ModuleSummaryIndex {
+./include/llvm/IR/Type.h:class Type {
+./include/llvm/IR/Metadata.h:class Metadata {
+./include/llvm/IR/Metadata.h:class MetadataTracking {
+./include/llvm/IR/Metadata.h:class ReplaceableMetadataImpl {
+./include/llvm/IR/Metadata.h:class MDOperand {
+./include/llvm/IR/Metadata.h:class ContextAndReplaceableUses {
+./include/llvm/IR/Metadata.h:template <class T> class MDTupleTypedArrayWrapper {
+./include/llvm/IR/InstrTypes.h:template <typename InputTy> class OperandBundleDefT {
+./include/llvm/IR/Operator.h:class FastMathFlags {
+./include/llvm/IR/Dominators.h:class BasicBlockEdge {
+./include/llvm/IR/PassManager.h:template <typename IRUnitT> class AllAnalysesOn {
+./include/llvm/IR/PassManager.h:class CFGAnalyses {
+./include/llvm/IR/PassManager.h:class PreservedAnalyses {
+./include/llvm/IR/PassManager.h:  class PreservedAnalysisChecker {
+./include/llvm/IR/PassManager.h:template <typename IRUnitT, typename... ExtraArgTs> class AnalysisManager {
+./include/llvm/IR/PassManager.h:  class Invalidator {
+./include/llvm/IR/PassManager.h:  class Result {
+./include/llvm/IR/PassManager.h:  class Result {
+./include/llvm/IR/DebugLoc.h:  class DebugLoc {
+./include/llvm/IR/Function.h:  class ProfileCount {
+./include/llvm/IR/IntrinsicsAMDGPU.td:multiclass AMDGPUReadPreloadRegisterIntrinsic_xyz {
+./include/llvm/ObjectYAML/ELFYAML.h:  enum class SectionKind {
+./include/llvm/ObjectYAML/YAML.h:class BinaryRef {
+./include/llvm/ObjectYAML/MinidumpYAML.h:  enum class StreamKind {
+./include/llvm/CodeGen/TargetPassConfig.h:class IdentifyingPassPtr {
+./include/llvm/CodeGen/MachineRegisterInfo.h:class MachineRegisterInfo {
+./include/llvm/CodeGen/MachineRegisterInfo.h:  class Delegate {
+./include/llvm/CodeGen/MachineRegisterInfo.h:class PSetIterator {
+./include/llvm/CodeGen/MIRParser/MIRParser.h:class MIRParser {
+./include/llvm/CodeGen/CallingConvLower.h:class CCValAssign {
+./include/llvm/CodeGen/CallingConvLower.h:class CCState {
+./include/llvm/CodeGen/SelectionDAGAddressAnalysis.h:class BaseIndexOffset {
+./include/llvm/CodeGen/ScheduleDAG.h:  class SDep {
+./include/llvm/CodeGen/ScheduleDAG.h:  class SUnit {
+./include/llvm/CodeGen/ScheduleDAG.h:  class SchedulingPriorityQueue {
+./include/llvm/CodeGen/ScheduleDAG.h:  class ScheduleDAG {
+./include/llvm/CodeGen/ScheduleDAG.h:  class ScheduleDAGTopologicalSort {
+./include/llvm/CodeGen/AsmPrinterHandler.h:class AsmPrinterHandler {
+./include/llvm/CodeGen/MachineModuleInfo.h:class MachineModuleInfoImpl {
+./include/llvm/CodeGen/LoopTraversal.h:class LoopTraversal {
+./include/llvm/CodeGen/FaultMaps.h:class FaultMaps {
+./include/llvm/CodeGen/FaultMaps.h:class FaultMapParser {
+./include/llvm/CodeGen/FaultMaps.h:  class FunctionFaultInfoAccessor {
+./include/llvm/CodeGen/FaultMaps.h:  class FunctionInfoAccessor {
+./include/llvm/CodeGen/LivePhysRegs.h:class LivePhysRegs {
+./include/llvm/CodeGen/Register.h:class Register {
+./include/llvm/CodeGen/PBQPRAConstraint.h:class PBQPRAConstraint {
+./include/llvm/CodeGen/SelectionDAGNodes.h:class SDValue {
+./include/llvm/CodeGen/SelectionDAGNodes.h:class SDUse {
+./include/llvm/CodeGen/SelectionDAGNodes.h:  class SDNodeBitfields {
+./include/llvm/CodeGen/SelectionDAGNodes.h:  class ConstantSDNodeBitfields {
+./include/llvm/CodeGen/SelectionDAGNodes.h:  class MemSDNodeBitfields {
+./include/llvm/CodeGen/SelectionDAGNodes.h:  class LSBaseSDNodeBitfields {
+./include/llvm/CodeGen/SelectionDAGNodes.h:  class LoadSDNodeBitfields {
+./include/llvm/CodeGen/SelectionDAGNodes.h:  class StoreSDNodeBitfields {
+./include/llvm/CodeGen/SelectionDAGNodes.h:class SDLoc {
+./include/llvm/CodeGen/CSEConfigBase.h:class CSEConfigBase {
+./include/llvm/CodeGen/RegisterPressure.h:class PressureChange {
+./include/llvm/CodeGen/RegisterPressure.h:class PressureDiff {
+./include/llvm/CodeGen/RegisterPressure.h:class RegisterOperands {
+./include/llvm/CodeGen/RegisterPressure.h:class PressureDiffs {
+./include/llvm/CodeGen/RegisterPressure.h:class LiveRegSet {
+./include/llvm/CodeGen/RegisterPressure.h:class RegPressureTracker {
+./include/llvm/CodeGen/TargetRegisterInfo.h:class TargetRegisterClass {
+./include/llvm/CodeGen/TargetRegisterInfo.h:class SuperRegClassIterator {
+./include/llvm/CodeGen/TargetRegisterInfo.h:class BitMaskClassIterator {
+./include/llvm/CodeGen/MachinePipeliner.h:  class Circuits {
+./include/llvm/CodeGen/MachinePipeliner.h:class NodeSet {
+./include/llvm/CodeGen/MachinePipeliner.h:class ResourceManager {
+./include/llvm/CodeGen/MachinePipeliner.h:class SMSchedule {
+./include/llvm/CodeGen/RegAllocPBQP.h:class MatrixMetadata {
+./include/llvm/CodeGen/RegAllocPBQP.h:class AllowedRegVector {
+./include/llvm/CodeGen/RegAllocPBQP.h:class GraphMetadata {
+./include/llvm/CodeGen/RegAllocPBQP.h:class NodeMetadata {
+./include/llvm/CodeGen/RegAllocPBQP.h:class RegAllocSolverImpl {
+./include/llvm/CodeGen/RegAllocPBQP.h:  class SpillCostComparator {
+./include/llvm/CodeGen/DwarfStringPoolEntry.h:class DwarfStringPoolEntryRef {
+./include/llvm/CodeGen/SwitchLoweringUtils.h:class SwitchLowering {
+./include/llvm/CodeGen/MachineScheduler.h:class MachineSchedStrategy {
+./include/llvm/CodeGen/MachineScheduler.h:class ReadyQueue {
+./include/llvm/CodeGen/MachineScheduler.h:class SchedBoundary {
+./include/llvm/CodeGen/ScheduleHazardRecognizer.h:class ScheduleHazardRecognizer {
+./include/llvm/CodeGen/MachineInstrBuilder.h:class MachineInstrBuilder {
+./include/llvm/CodeGen/MachineInstrBuilder.h:class MIBundleBuilder {
+./include/llvm/CodeGen/LiveIntervalUnion.h:class LiveIntervalUnion {
+./include/llvm/CodeGen/LiveIntervalUnion.h:  class Query {
+./include/llvm/CodeGen/LiveIntervalUnion.h:  class Array {
+./include/llvm/CodeGen/MachineJumpTableInfo.h:class MachineJumpTableInfo {
+./include/llvm/CodeGen/ScheduleDAGMutation.h:class ScheduleDAGMutation {
+./include/llvm/CodeGen/SDNodeProperties.td:class SDPatternOperator {
+./include/llvm/CodeGen/CalcSpillWeights.h:  class VirtRegAuxInfo {
+./include/llvm/CodeGen/SwiftErrorValueTracking.h:class SwiftErrorValueTracking {
+./include/llvm/CodeGen/DbgEntityHistoryCalculator.h:class DbgValueHistoryMap {
+./include/llvm/CodeGen/DbgEntityHistoryCalculator.h:  class Entry {
+./include/llvm/CodeGen/DbgEntityHistoryCalculator.h:class DbgLabelInstrMap {
+./include/llvm/CodeGen/DIE.h:class DIEAbbrevData {
+./include/llvm/CodeGen/DIE.h:class DIEAbbrevSet {
+./include/llvm/CodeGen/DIE.h:class DIEInteger {
+./include/llvm/CodeGen/DIE.h:class DIEExpr {
+./include/llvm/CodeGen/DIE.h:class DIELabel {
+./include/llvm/CodeGen/DIE.h:class DIEBaseTypeRef {
+./include/llvm/CodeGen/DIE.h:class DIEDelta {
+./include/llvm/CodeGen/DIE.h:class DIEString {
+./include/llvm/CodeGen/DIE.h:class DIEInlineString {
+./include/llvm/CodeGen/DIE.h:class DIEEntry {
+./include/llvm/CodeGen/DIE.h:class DIELocList {
+./include/llvm/CodeGen/DIE.h:class DIEValue {
+./include/llvm/CodeGen/DIE.h:class DIEValueList {
+./include/llvm/CodeGen/DIE.h:class DIEUnit {
+./include/llvm/CodeGen/WinEHFuncInfo.h:enum class ClrHandlerType { Catch, Finally, Fault, Filter };
+./include/llvm/CodeGen/TargetLowering.h:class TargetLoweringBase {
+./include/llvm/CodeGen/TargetLowering.h:  enum class AtomicExpansionKind {
+./include/llvm/CodeGen/TargetLowering.h:  enum class MulExpansionKind {
+./include/llvm/CodeGen/TargetLowering.h:  class ArgListEntry {
+./include/llvm/CodeGen/TargetLowering.h:  class ValueTypeActionImpl {
+./include/llvm/CodeGen/FastISel.h:class FastISel {
+./include/llvm/CodeGen/SelectionDAGTargetInfo.h:class SelectionDAGTargetInfo {
+./include/llvm/CodeGen/MachineBasicBlock.h:class MachineInstrSpan {
+./include/llvm/CodeGen/PseudoSourceValue.h:class PseudoSourceValue {
+./include/llvm/CodeGen/PseudoSourceValue.h:class PseudoSourceValueManager {
+./include/llvm/CodeGen/LiveRangeEdit.h:  class Delegate {
+./include/llvm/CodeGen/GCMetadataPrinter.h:class GCMetadataPrinter {
+./include/llvm/CodeGen/MachineConstantPool.h:class MachineConstantPoolValue {
+./include/llvm/CodeGen/MachineConstantPool.h:class MachineConstantPoolEntry {
+./include/llvm/CodeGen/MachineConstantPool.h:class MachineConstantPool {
+./include/llvm/CodeGen/ScoreboardHazardRecognizer.h:  class Scoreboard {
+./include/llvm/CodeGen/MachineFunction.h:class MachineFunctionProperties {
+./include/llvm/CodeGen/MachineFunction.h:class MachineFunction {
+./include/llvm/CodeGen/MachineFunction.h:  class Delegate {
+./include/llvm/CodeGen/PBQP/CostAllocator.h:template <typename ValueT> class ValuePool {
+./include/llvm/CodeGen/PBQP/CostAllocator.h:  class PoolEntryDSInfo {
+./include/llvm/CodeGen/PBQP/CostAllocator.h:template <typename VectorT, typename MatrixT> class PoolCostAllocator {
+./include/llvm/CodeGen/PBQP/Graph.h:  class GraphBase {
+./include/llvm/CodeGen/PBQP/Graph.h:    class NodeEntry {
+./include/llvm/CodeGen/PBQP/Graph.h:    class EdgeEntry {
+./include/llvm/CodeGen/PBQP/Graph.h:    class NodeItr {
+./include/llvm/CodeGen/PBQP/Graph.h:    class EdgeItr {
+./include/llvm/CodeGen/PBQP/Graph.h:    class NodeIdSet {
+./include/llvm/CodeGen/PBQP/Graph.h:    class EdgeIdSet {
+./include/llvm/CodeGen/PBQP/Graph.h:    class AdjEdgeIdSet {
+./include/llvm/CodeGen/PBQP/Solution.h:  class Solution {
+./include/llvm/CodeGen/PBQP/Math.h:class Vector {
+./include/llvm/CodeGen/PBQP/Math.h:class Matrix {
+./include/llvm/CodeGen/ScheduleDFS.h:class SchedDFSResult {
+./include/llvm/CodeGen/StackMaps.h:class StackMapOpers {
+./include/llvm/CodeGen/StackMaps.h:class PatchPointOpers {
+./include/llvm/CodeGen/StackMaps.h:class StatepointOpers {
+./include/llvm/CodeGen/StackMaps.h:class StackMaps {
+./include/llvm/CodeGen/GlobalISel/GISelWorkList.h:class GISelWorkList {
+./include/llvm/CodeGen/GlobalISel/RegBankSelect.h:  class InsertPoint {
+./include/llvm/CodeGen/GlobalISel/RegBankSelect.h:  class RepairingPlacement {
+./include/llvm/CodeGen/GlobalISel/RegBankSelect.h:  class MappingCost {
+./include/llvm/CodeGen/GlobalISel/RegisterBankInfo.h:class RegisterBankInfo {
+./include/llvm/CodeGen/GlobalISel/RegisterBankInfo.h:  class InstructionMapping {
+./include/llvm/CodeGen/GlobalISel/RegisterBankInfo.h:  class OperandsMapper {
+./include/llvm/CodeGen/GlobalISel/Combiner.h:class Combiner {
+./include/llvm/CodeGen/GlobalISel/LegalizerHelper.h:class LegalizerHelper {
+./include/llvm/CodeGen/GlobalISel/IRTranslator.h:  class ValueToVRegInfo {
+./include/llvm/CodeGen/GlobalISel/CombinerHelper.h:class CombinerHelper {
+./include/llvm/CodeGen/GlobalISel/LegalizerInfo.h:class LegalizeRule {
+./include/llvm/CodeGen/GlobalISel/LegalizerInfo.h:class LegalizeRuleSet {
+./include/llvm/CodeGen/GlobalISel/LegalizerInfo.h:class LegalizerInfo {
+./include/llvm/CodeGen/GlobalISel/RegisterBank.h:class RegisterBank {
+./include/llvm/CodeGen/GlobalISel/CallLowering.h:class CallLowering {
+./include/llvm/CodeGen/GlobalISel/CombinerInfo.h:class CombinerInfo {
+./include/llvm/CodeGen/GlobalISel/LegalizationArtifactCombiner.h:class LegalizationArtifactCombiner {
+./include/llvm/CodeGen/GlobalISel/GISelChangeObserver.h:class GISelChangeObserver {
+./include/llvm/CodeGen/GlobalISel/GISelChangeObserver.h:class RAIIDelegateInstaller {
+./include/llvm/CodeGen/GlobalISel/InstructionSelector.h:class InstructionSelector {
+./include/llvm/CodeGen/GlobalISel/CSEInfo.h:class GISelInstProfileBuilder {
+./include/llvm/CodeGen/GlobalISel/CSEInfo.h:class GISelCSEAnalysisWrapper {
+./include/llvm/CodeGen/GlobalISel/MachineIRBuilder.h:class DstOp {
+./include/llvm/CodeGen/GlobalISel/MachineIRBuilder.h:  enum class DstType { Ty_LLT, Ty_Reg, Ty_RC };
+./include/llvm/CodeGen/GlobalISel/MachineIRBuilder.h:class SrcOp {
+./include/llvm/CodeGen/GlobalISel/MachineIRBuilder.h:  enum class SrcType { Ty_Reg, Ty_MIB, Ty_Predicate };
+./include/llvm/CodeGen/GlobalISel/MachineIRBuilder.h:class FlagsOp {
+./include/llvm/CodeGen/GlobalISel/MachineIRBuilder.h:class MachineIRBuilder {
+./include/llvm/CodeGen/MachineTraceMetrics.h:  class Trace {
+./include/llvm/CodeGen/MachineTraceMetrics.h:  class Ensemble {
+./include/llvm/CodeGen/MachineOperand.h:class MachineOperand {
+./include/llvm/CodeGen/LexicalScopes.h:class LexicalScope {
+./include/llvm/CodeGen/LexicalScopes.h:class LexicalScopes {
+./include/llvm/CodeGen/MachineInstrBundle.h:class MachineOperandIteratorBase {
+./include/llvm/CodeGen/SelectionDAG.h:class SDDbgInfo {
+./include/llvm/CodeGen/SelectionDAG.h:class SelectionDAG {
+./include/llvm/CodeGen/AccelTable.h:class AccelTableData {
+./include/llvm/CodeGen/AccelTable.h:class AccelTableBase {
+./include/llvm/CodeGen/MachineFrameInfo.h:class CalleeSavedInfo {
+./include/llvm/CodeGen/MachineFrameInfo.h:class MachineFrameInfo {
+./include/llvm/CodeGen/MachineMemOperand.h:class MachineMemOperand {
+./include/llvm/CodeGen/SlotIndexes.h:  class SlotIndex {
+./include/llvm/CodeGen/LiveRegUnits.h:class LiveRegUnits {
+./include/llvm/CodeGen/TargetFrameLowering.h:class TargetFrameLowering {
+./include/llvm/CodeGen/FunctionLoweringInfo.h:class FunctionLoweringInfo {
+./include/llvm/CodeGen/IntrinsicLowering.h:class IntrinsicLowering {
+./include/llvm/CodeGen/TargetSchedule.h:class TargetSchedModel {
+./include/llvm/CodeGen/MachinePassRegistry.h:template <class PassCtorTy> class MachinePassRegistryListener {
+./include/llvm/CodeGen/MachinePassRegistry.h:template <typename PassCtorTy> class MachinePassRegistryNode {
+./include/llvm/CodeGen/MachinePassRegistry.h:template <typename PassCtorTy> class MachinePassRegistry {
+./include/llvm/CodeGen/MachineOptimizationRemarkEmitter.h:class MachineOptimizationRemarkEmitter {
+./include/llvm/CodeGen/MachineSSAUpdater.h:class MachineSSAUpdater {
+./include/llvm/CodeGen/MachORelocation.h:  class MachORelocation {
+./include/llvm/CodeGen/RegisterClassInfo.h:class RegisterClassInfo {
+./include/llvm/CodeGen/GCMetadata.h:class GCFunctionInfo {
+./include/llvm/CodeGen/MachineCombinerPattern.h:enum class MachineCombinerPattern {
+./include/llvm/CodeGen/DFAPacketizer.h:class DFAPacketizer {
+./include/llvm/CodeGen/DFAPacketizer.h:class VLIWPacketizerList {
+./include/llvm/CodeGen/TailDuplicator.h:class TailDuplicator {
+./include/llvm/CodeGen/LiveInterval.h:  class VNInfo {
+./include/llvm/CodeGen/LiveInterval.h:  class LiveQueryResult {
+./include/llvm/CodeGen/LiveInterval.h:  class LiveRange {
+./include/llvm/CodeGen/LiveInterval.h:    class SingleLinkedListIterator {
+./include/llvm/CodeGen/LiveInterval.h:  class LiveRangeUpdater {
+./include/llvm/CodeGen/LiveInterval.h:  class ConnectedVNInfoEqClasses {
+./include/llvm/CodeGen/GCStrategy.h:class GCStrategy {
+./include/llvm/CodeGen/RegisterScavenging.h:class RegScavenger {
+./include/llvm/CryptoUtils.h:class CryptoUtils {
+./include/llvm/MC/MCLabel.h:class MCLabel {
+./include/llvm/MC/MCLinkerOptimizationHint.h:class MCLOHDirective {
+./include/llvm/MC/MCLinkerOptimizationHint.h:class MCLOHContainer {
+./include/llvm/MC/MCAsmLayout.h:class MCAsmLayout {
+./include/llvm/MC/MCInstBuilder.h:class MCInstBuilder {
+./include/llvm/MC/MCInstrInfo.h:class MCInstrInfo {
+./include/llvm/MC/MCValue.h:class MCValue {
+./include/llvm/MC/MCObjectWriter.h:class MCObjectWriter {
+./include/llvm/MC/MCObjectWriter.h:class MCObjectTargetWriter {
+./include/llvm/MC/MCRegisterInfo.h:class MCRegisterClass {
+./include/llvm/MC/MCRegisterInfo.h:class MCRegisterInfo {
+./include/llvm/MC/MCRegisterInfo.h:  class DiffListIterator {
+./include/llvm/MC/MCRegisterInfo.h:class MCSubRegIndexIterator {
+./include/llvm/MC/MCRegisterInfo.h:class MCRegUnitMaskIterator {
+./include/llvm/MC/MCRegisterInfo.h:class MCRegUnitRootIterator {
+./include/llvm/MC/MCRegisterInfo.h:class MCRegAliasIterator {
+./include/llvm/MC/MCSection.h:class MCSection {
+./include/llvm/MC/MCSymbol.h:class MCSymbol {
+./include/llvm/MC/SectionKind.h:class SectionKind {
+./include/llvm/MC/MCCodeView.h:class MCCVLoc {
+./include/llvm/MC/MCCodeView.h:class CodeViewContext {
+./include/llvm/MC/StringTableBuilder.h:class StringTableBuilder {
+./include/llvm/MC/MCInst.h:class MCOperand {
+./include/llvm/MC/MCInst.h:class MCInst {
+./include/llvm/MC/MCObjectFileInfo.h:class MCObjectFileInfo {
+./include/llvm/MC/MCContext.h:  class MCContext {
+./include/llvm/MC/MCInstrItineraries.h:class InstrItineraryData {
+./include/llvm/MC/MCCodeEmitter.h:class MCCodeEmitter {
+./include/llvm/MC/MCInstPrinter.h:class MCInstPrinter {
+./include/llvm/MC/MCDwarf.h:class MCDwarfLoc {
+./include/llvm/MC/MCDwarf.h:class MCLineSection {
+./include/llvm/MC/MCDwarf.h:class MCDwarfDwoLineTable {
+./include/llvm/MC/MCDwarf.h:class MCDwarfLineTable {
+./include/llvm/MC/MCDwarf.h:class MCDwarfLineAddr {
+./include/llvm/MC/MCDwarf.h:class MCGenDwarfInfo {
+./include/llvm/MC/MCDwarf.h:class MCGenDwarfLabelEntry {
+./include/llvm/MC/MCDwarf.h:class MCCFIInstruction {
+./include/llvm/MC/MCDwarf.h:class MCDwarfFrameEmitter {
+./include/llvm/MC/MCTargetOptions.h:enum class ExceptionHandling {
+./include/llvm/MC/MCTargetOptions.h:enum class DebugCompressionType {
+./include/llvm/MC/MCTargetOptions.h:class MCTargetOptions {
+./include/llvm/MC/MCAsmInfo.h:enum class EncodingType {
+./include/llvm/MC/MCAsmInfo.h:class MCAsmInfo {
+./include/llvm/MC/MCAsmMacro.h:class AsmToken {
+./include/llvm/MC/MCDisassembler/MCRelocationInfo.h:class MCRelocationInfo {
+./include/llvm/MC/MCDisassembler/MCSymbolizer.h:class MCSymbolizer {
+./include/llvm/MC/MCDisassembler/MCDisassembler.h:class MCDisassembler {
+./include/llvm/MC/MCAsmBackend.h:class MCAsmBackend {
+./include/llvm/MC/MCCodePadder.h:class MCCodePadder {
+./include/llvm/MC/MCCodePadder.h:class MCCodePaddingPolicy {
+./include/llvm/MC/MCParser/MCTargetAsmParser.h:enum class DiagnosticPredicateTy {
+./include/llvm/MC/MCParser/MCTargetAsmParser.h:class NearMissInfo {
+./include/llvm/MC/MCParser/MCAsmParserExtension.h:class MCAsmParserExtension {
+./include/llvm/MC/MCParser/MCParsedAsmOperand.h:class MCParsedAsmOperand {
+./include/llvm/MC/MCParser/MCAsmParser.h:class MCAsmParserSemaCallback {
+./include/llvm/MC/MCParser/MCAsmParser.h:class MCAsmParser {
+./include/llvm/MC/MCParser/AsmCond.h:class AsmCond {
+./include/llvm/MC/MCParser/MCAsmLexer.h:class AsmCommentConsumer {
+./include/llvm/MC/MCParser/MCAsmLexer.h:class MCAsmLexer {
+./include/llvm/MC/MCExpr.h:class MCExpr {
+./include/llvm/MC/MCInstrDesc.h:class MCOperandInfo {
+./include/llvm/MC/MCInstrDesc.h:class MCInstrDesc {
+./include/llvm/MC/MCWinEH.h:class UnwindEmitter {
+./include/llvm/MC/MCStreamer.h:class MCTargetStreamer {
+./include/llvm/MC/MCStreamer.h:class MCStreamer {
+./include/llvm/MC/SubtargetFeature.h:class FeatureBitArray {
+./include/llvm/MC/SubtargetFeature.h:class SubtargetFeatures {
+./include/llvm/MC/ConstantPools.h:class ConstantPool {
+./include/llvm/MC/ConstantPools.h:class AssemblerConstantPools {
+./include/llvm/MC/MCAssembler.h:class MCAssembler {
+./include/llvm/MC/MCFixup.h:class MCFixup {
+./include/llvm/MC/MCInstrAnalysis.h:class MCInstrAnalysis {
+./include/llvm/MC/MCSubtargetInfo.h:class MCSubtargetInfo {
+./include/llvm/MC/MachineLocation.h:class MachineLocation {

@@ -42,7 +42,6 @@
 #include "llvm/Option/Option.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Host.h"
 #include "llvm/Support/Path.h"
 
 #if !defined(_MSC_VER) && !defined(__MINGW32__)
@@ -83,10 +82,10 @@ public:
 } // namespace
 
 static void printHelp(const char *argv0) {
-  MinGWOptTable().printHelp(
-      lld::outs(), (std::string(argv0) + " [options] file...").c_str(), "lld",
+  MinGWOptTable().PrintHelp(
+      outs(), (std::string(argv0) + " [options] file...").c_str(), "lld",
       false /*ShowHidden*/, true /*ShowAllAliases*/);
-  lld::outs() << "\n";
+  outs() << "\n";
 }
 
 static cl::TokenizerCallback getQuotingStyle() {
@@ -104,9 +103,9 @@ opt::InputArgList MinGWOptTable::parse(ArrayRef<const char *> argv) {
   opt::InputArgList args = this->ParseArgs(vec, missingIndex, missingCount);
 
   if (missingCount)
-    error(StringRef(args.getArgString(missingIndex)) + ": missing argument");
+    fatal(StringRef(args.getArgString(missingIndex)) + ": missing argument");
   for (auto *arg : args.filtered(OPT_UNKNOWN))
-    error("unknown argument: " + arg->getAsString(args));
+    fatal("unknown argument: " + arg->getAsString(args));
   return args;
 }
 
@@ -115,7 +114,7 @@ static Optional<std::string> findFile(StringRef path1, const Twine &path2) {
   SmallString<128> s;
   sys::path::append(s, path1, path2);
   if (sys::fs::exists(s))
-    return std::string(s);
+    return s.str().str();
   return None;
 }
 
@@ -126,46 +125,24 @@ searchLibrary(StringRef name, ArrayRef<StringRef> searchPaths, bool bStatic) {
     for (StringRef dir : searchPaths)
       if (Optional<std::string> s = findFile(dir, name.substr(1)))
         return *s;
-    error("unable to find library -l" + name);
-    return "";
+    fatal("unable to find library -l" + name);
   }
 
   for (StringRef dir : searchPaths) {
-    if (!bStatic) {
+    if (!bStatic)
       if (Optional<std::string> s = findFile(dir, "lib" + name + ".dll.a"))
         return *s;
-      if (Optional<std::string> s = findFile(dir, name + ".dll.a"))
-        return *s;
-    }
     if (Optional<std::string> s = findFile(dir, "lib" + name + ".a"))
       return *s;
-    if (!bStatic) {
-      if (Optional<std::string> s = findFile(dir, name + ".lib"))
-        return *s;
-      if (Optional<std::string> s = findFile(dir, "lib" + name + ".dll"))
-        return *s;
-      if (Optional<std::string> s = findFile(dir, name + ".dll"))
-        return *s;
-    }
   }
-  error("unable to find library -l" + name);
-  return "";
+  fatal("unable to find library -l" + name);
 }
 
 // Convert Unix-ish command line arguments to Windows-ish ones and
 // then call coff::link.
-bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
-                 raw_ostream &stdoutOS, raw_ostream &stderrOS) {
-  lld::stdoutOS = &stdoutOS;
-  lld::stderrOS = &stderrOS;
-
-  stderrOS.enable_colors(stderrOS.has_colors());
-
+bool mingw::link(ArrayRef<const char *> argsArr, raw_ostream &diag) {
   MinGWOptTable parser;
   opt::InputArgList args = parser.parse(argsArr.slice(1));
-
-  if (errorCount())
-    return false;
 
   if (args.hasArg(OPT_help)) {
     printHelp(argsArr[0]);
@@ -187,10 +164,8 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
   if (args.hasArg(OPT_version))
     return true;
 
-  if (!args.hasArg(OPT_INPUT) && !args.hasArg(OPT_l)) {
-    error("no input files");
-    return false;
-  }
+  if (!args.hasArg(OPT_INPUT) && !args.hasArg(OPT_l))
+    fatal("no input files");
 
   std::vector<std::string> linkArgs;
   auto add = [&](const Twine &s) { linkArgs.push_back(s.str()); };
@@ -208,43 +183,27 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
 
   if (args.hasArg(OPT_major_os_version, OPT_minor_os_version,
                   OPT_major_subsystem_version, OPT_minor_subsystem_version)) {
-    StringRef majOSVer = args.getLastArgValue(OPT_major_os_version, "6");
-    StringRef minOSVer = args.getLastArgValue(OPT_minor_os_version, "0");
-    StringRef majSubSysVer = "6";
-    StringRef minSubSysVer = "0";
-    StringRef subSysName = "default";
-    StringRef subSysVer;
-    // Iterate over --{major,minor}-subsystem-version and --subsystem, and pick
-    // the version number components from the last one of them that specifies
-    // a version.
-    for (auto *a : args.filtered(OPT_major_subsystem_version,
-                                 OPT_minor_subsystem_version, OPT_subs)) {
-      switch (a->getOption().getID()) {
-      case OPT_major_subsystem_version:
-        majSubSysVer = a->getValue();
-        break;
-      case OPT_minor_subsystem_version:
-        minSubSysVer = a->getValue();
-        break;
-      case OPT_subs:
-        std::tie(subSysName, subSysVer) = StringRef(a->getValue()).split(':');
-        if (!subSysVer.empty()) {
-          if (subSysVer.contains('.'))
-            std::tie(majSubSysVer, minSubSysVer) = subSysVer.split('.');
-          else
-            majSubSysVer = subSysVer;
-        }
-        break;
-      }
-    }
-    add("-osversion:" + majOSVer + "." + minOSVer);
-    add("-subsystem:" + subSysName + "," + majSubSysVer + "." + minSubSysVer);
-  } else if (args.hasArg(OPT_subs)) {
+    auto *majOSVer = args.getLastArg(OPT_major_os_version);
+    auto *minOSVer = args.getLastArg(OPT_minor_os_version);
+    auto *majSubSysVer = args.getLastArg(OPT_major_subsystem_version);
+    auto *minSubSysVer = args.getLastArg(OPT_minor_subsystem_version);
+    if (majOSVer && majSubSysVer &&
+        StringRef(majOSVer->getValue()) != StringRef(majSubSysVer->getValue()))
+      warn("--major-os-version and --major-subsystem-version set to differing "
+           "versions, not supported");
+    if (minOSVer && minSubSysVer &&
+        StringRef(minOSVer->getValue()) != StringRef(minSubSysVer->getValue()))
+      warn("--minor-os-version and --minor-subsystem-version set to differing "
+           "versions, not supported");
     StringRef subSys = args.getLastArgValue(OPT_subs, "default");
-    StringRef subSysName, subSysVer;
-    std::tie(subSysName, subSysVer) = subSys.split(':');
-    StringRef sep = subSysVer.empty() ? "" : ",";
-    add("-subsystem:" + subSysName + sep + subSysVer);
+    StringRef major = majOSVer ? majOSVer->getValue()
+                               : majSubSysVer ? majSubSysVer->getValue() : "6";
+    StringRef minor = minOSVer ? minOSVer->getValue()
+                               : minSubSysVer ? minSubSysVer->getValue() : "";
+    StringRef sep = minor.empty() ? "" : ".";
+    add("-subsystem:" + subSys + "," + major + sep + minor);
+  } else if (auto *a = args.getLastArg(OPT_subs)) {
+    add("-subsystem:" + StringRef(a->getValue()));
   }
 
   if (auto *a = args.getLastArg(OPT_out_implib))
@@ -257,14 +216,6 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     add("-base:" + StringRef(a->getValue()));
   if (auto *a = args.getLastArg(OPT_map))
     add("-lldmap:" + StringRef(a->getValue()));
-  if (auto *a = args.getLastArg(OPT_reproduce))
-    add("-reproduce:" + StringRef(a->getValue()));
-  if (auto *a = args.getLastArg(OPT_thinlto_cache_dir))
-    add("-lldltocache:" + StringRef(a->getValue()));
-  if (auto *a = args.getLastArg(OPT_file_alignment))
-    add("-filealign:" + StringRef(a->getValue()));
-  if (auto *a = args.getLastArg(OPT_section_alignment))
-    add("-align:" + StringRef(a->getValue()));
 
   if (auto *a = args.getLastArg(OPT_o))
     add("-out:" + StringRef(a->getValue()));
@@ -284,16 +235,6 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     add("-debug:dwarf");
   }
 
-  if (args.hasFlag(OPT_fatal_warnings, OPT_no_fatal_warnings, false))
-    add("-WX");
-  else
-    add("-WX:no");
-
-  if (args.hasFlag(OPT_enable_stdcall_fixup, OPT_disable_stdcall_fixup, false))
-    add("-stdcall-fixup");
-  else if (args.hasArg(OPT_disable_stdcall_fixup))
-    add("-stdcall-fixup:no");
-
   if (args.hasArg(OPT_shared))
     add("-dll");
   if (args.hasArg(OPT_verbose))
@@ -308,19 +249,10 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     add("-kill-at");
   if (args.hasArg(OPT_appcontainer))
     add("-appcontainer");
-  if (args.hasFlag(OPT_no_seh, OPT_disable_no_seh, false))
-    add("-noseh");
 
   if (args.getLastArgValue(OPT_m) != "thumb2pe" &&
-      args.getLastArgValue(OPT_m) != "arm64pe" &&
-      args.hasFlag(OPT_disable_dynamicbase, OPT_dynamicbase, false))
+      args.getLastArgValue(OPT_m) != "arm64pe" && !args.hasArg(OPT_dynamicbase))
     add("-dynamicbase:no");
-  if (args.hasFlag(OPT_disable_high_entropy_va, OPT_high_entropy_va, false))
-    add("-highentropyva:no");
-  if (args.hasFlag(OPT_disable_nxcompat, OPT_nxcompat, false))
-    add("-nxcompat:no");
-  if (args.hasFlag(OPT_disable_tsaware, OPT_tsaware, false))
-    add("-tsaware:no");
 
   if (args.hasFlag(OPT_no_insert_timestamp, OPT_insert_timestamp, false))
     add("-timestamp:0");
@@ -330,25 +262,6 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
   else
     add("-opt:noref");
 
-  if (args.hasFlag(OPT_demangle, OPT_no_demangle, true))
-    add("-demangle");
-  else
-    add("-demangle:no");
-
-  if (args.hasFlag(OPT_enable_auto_import, OPT_disable_auto_import, true))
-    add("-auto-import");
-  else
-    add("-auto-import:no");
-  if (args.hasFlag(OPT_enable_runtime_pseudo_reloc,
-                   OPT_disable_runtime_pseudo_reloc, true))
-    add("-runtime-pseudo-reloc");
-  else
-    add("-runtime-pseudo-reloc:no");
-
-  if (args.hasFlag(OPT_allow_multiple_definition,
-                   OPT_no_allow_multiple_definition, false))
-    add("-force:multiple");
-
   if (auto *a = args.getLastArg(OPT_icf)) {
     StringRef s = a->getValue();
     if (s == "all")
@@ -356,7 +269,7 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     else if (s == "safe" || s == "none")
       add("-opt:noicf");
     else
-      error("unknown parameter: --icf=" + s);
+      fatal("unknown parameter: --icf=" + s);
   } else {
     add("-opt:noicf");
   }
@@ -372,7 +285,7 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     else if (s == "arm64pe")
       add("-machine:arm64");
     else
-      error("unknown parameter: -m" + s);
+      fatal("unknown parameter: -m" + s);
   }
 
   for (auto *a : args.filtered(OPT_mllvm))
@@ -392,8 +305,6 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     add("-includeoptional:" + StringRef(a->getValue()));
   for (auto *a : args.filtered(OPT_delayload))
     add("-delayload:" + StringRef(a->getValue()));
-  for (auto *a : args.filtered(OPT_wrap))
-    add("-wrap:" + StringRef(a->getValue()));
 
   std::vector<StringRef> searchPaths;
   for (auto *a : args.filtered(OPT_L)) {
@@ -406,7 +317,7 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
   for (auto *a : args) {
     switch (a->getOption().getID()) {
     case OPT_INPUT:
-      if (StringRef(a->getValue()).endswith_insensitive(".def"))
+      if (StringRef(a->getValue()).endswith_lower(".def"))
         add("-def:" + StringRef(a->getValue()));
       else
         add(prefix + StringRef(a->getValue()));
@@ -429,11 +340,8 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     }
   }
 
-  if (errorCount())
-    return false;
-
   if (args.hasArg(OPT_verbose) || args.hasArg(OPT__HASH_HASH_HASH))
-    lld::errs() << llvm::join(linkArgs, " ") << "\n";
+    outs() << llvm::join(linkArgs, " ") << "\n";
 
   if (args.hasArg(OPT__HASH_HASH_HASH))
     return true;
@@ -442,8 +350,5 @@ bool mingw::link(ArrayRef<const char *> argsArr, bool canExitEarly,
   std::vector<const char *> vec;
   for (const std::string &s : linkArgs)
     vec.push_back(s.c_str());
-  // Pass the actual binary name, to make error messages be printed with
-  // the right prefix.
-  vec[0] = argsArr[0];
-  return coff::link(vec, canExitEarly, stdoutOS, stderrOS);
+  return coff::link(vec, true);
 }

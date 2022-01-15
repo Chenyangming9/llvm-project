@@ -22,7 +22,6 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/Function.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -140,7 +139,8 @@ static bool dominatesAllUsesOf(const MachineInstr *MI, unsigned VReg,
                                MachineDominatorTree *MDT,
                                MachineRegisterInfo *MRI) {
 
-  assert(Register::isVirtualRegister(VReg) && "Expected virtual register!");
+  assert(TargetRegisterInfo::isVirtualRegister(VReg) &&
+         "Expected virtual register!");
 
   for (auto it = MRI->use_nodbg_begin(VReg), end = MRI->use_nodbg_end();
        it != end; ++it) {
@@ -181,12 +181,12 @@ static bool isLoadStoreThatCanHandleDisplacement(const TargetInstrInfo *TII,
 
 bool ARCOptAddrMode::noUseOfAddBeforeLoadOrStore(const MachineInstr *Add,
                                                  const MachineInstr *Ldst) {
-  Register R = Add->getOperand(0).getReg();
+  unsigned R = Add->getOperand(0).getReg();
   return dominatesAllUsesOf(Ldst, R, MDT, MRI);
 }
 
 MachineInstr *ARCOptAddrMode::tryToCombine(MachineInstr &Ldst) {
-  assert(Ldst.mayLoadOrStore() && "LD/ST instruction expected");
+  assert((Ldst.mayLoad() || Ldst.mayStore()) && "LD/ST instruction expected");
 
   unsigned BasePos, OffsetPos;
 
@@ -205,8 +205,9 @@ MachineInstr *ARCOptAddrMode::tryToCombine(MachineInstr &Ldst) {
     return nullptr;
   }
 
-  Register B = Base.getReg();
-  if (Register::isStackSlot(B) || !Register::isVirtualRegister(B)) {
+  unsigned B = Base.getReg();
+  if (TargetRegisterInfo::isStackSlot(B) ||
+      !TargetRegisterInfo::isVirtualRegister(B)) {
     LLVM_DEBUG(dbgs() << "[ABAW] Base is not VReg\n");
     return nullptr;
   }
@@ -284,7 +285,7 @@ ARCOptAddrMode::canJoinInstructions(MachineInstr *Ldst, MachineInstr *Add,
     return nullptr;
   }
 
-  Register BaseReg = Ldst->getOperand(BasePos).getReg();
+  unsigned BaseReg = Ldst->getOperand(BasePos).getReg();
 
   // prohibit this:
   //   v1 = add v0, c
@@ -293,7 +294,7 @@ ARCOptAddrMode::canJoinInstructions(MachineInstr *Ldst, MachineInstr *Add,
   //   st v0, [v0, 0]
   //   v1 = add v0, c
   if (Ldst->mayStore() && Ldst->getOperand(0).isReg()) {
-    Register StReg = Ldst->getOperand(0).getReg();
+    unsigned StReg = Ldst->getOperand(0).getReg();
     if (Add->getOperand(0).getReg() == StReg || BaseReg == StReg) {
       LLVM_DEBUG(dbgs() << "[canJoinInstructions] Store uses result of Add\n");
       return nullptr;
@@ -446,7 +447,7 @@ void ARCOptAddrMode::changeToAddrMode(MachineInstr &Ldst, unsigned NewOpcode,
   MachineOperand Src = MachineOperand::CreateImm(0xDEADBEEF);
   AII->getBaseAndOffsetPosition(Ldst, BasePos, OffPos);
 
-  Register BaseReg = Ldst.getOperand(BasePos).getReg();
+  unsigned BaseReg = Ldst.getOperand(BasePos).getReg();
 
   Ldst.RemoveOperand(OffPos);
   Ldst.RemoveOperand(BasePos);

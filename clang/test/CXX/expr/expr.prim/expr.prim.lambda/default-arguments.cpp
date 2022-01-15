@@ -1,5 +1,4 @@
 // RUN: %clang_cc1 -fsyntax-only -std=c++11 %s -verify
-// RUN: %clang_cc1 -fsyntax-only -std=c++11 %s -verify -triple i386-windows
 
 void defargs() {
   auto l1 = [](int i, int j = 17, int k = 18) { return i + j + k; };
@@ -10,8 +9,8 @@ void defargs() {
 
 
 void defargs_errors() {
-  auto l1 = [](int i,
-               int j = 17,
+  auto l1 = [](int i, 
+               int j = 17, 
                int k) { }; // expected-error{{missing default argument on parameter 'k'}}
 
   auto l2 = [](int i, int j = i) {}; // expected-error{{default argument references parameter 'i'}}
@@ -44,12 +43,8 @@ template void defargs_in_template_unused(NoDefaultCtor);  // expected-note{{in i
 template<typename T>
 void defargs_in_template_used() {
   auto l1 = [](const T& value = T()) { }; // expected-error{{no matching constructor for initialization of 'NoDefaultCtor'}} \
-                                          // expected-note{{candidate function not viable: requires single argument 'value', but no arguments were provided}}
-#if defined(_WIN32) && !defined(_WIN64)
-                                          // expected-note@46{{conversion candidate of type 'void (*)(const NoDefaultCtor &) __attribute__((thiscall))'}}
-#else
-                                          // expected-note@46{{conversion candidate of type 'void (*)(const NoDefaultCtor &)'}}
-#endif
+                                          // expected-note{{candidate function not viable: requires single argument 'value', but no arguments were provided}} \
+                                          // expected-note{{conversion candidate of type 'void (*)(const NoDefaultCtor &)'}}
   l1(); // expected-error{{no matching function for call to object of type '(lambda at }}
 }
 

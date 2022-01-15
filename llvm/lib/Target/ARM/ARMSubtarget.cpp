@@ -72,9 +72,6 @@ static cl::opt<bool>
 ForceFastISel("arm-force-fast-isel",
                cl::init(false), cl::Hidden);
 
-static cl::opt<bool> EnableSubRegLiveness("arm-enable-subreg-liveness",
-                                          cl::init(false), cl::Hidden);
-
 /// initializeSubtargetDependencies - Initializes using a CPU and feature string
 /// so that we can use initializer lists for subtarget initialization.
 ARMSubtarget &ARMSubtarget::initializeSubtargetDependencies(StringRef CPU,
@@ -97,9 +94,9 @@ ARMSubtarget::ARMSubtarget(const Triple &TT, const std::string &CPU,
                            const std::string &FS,
                            const ARMBaseTargetMachine &TM, bool IsLittle,
                            bool MinSize)
-    : ARMGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS),
-      UseMulOps(UseFusedMulOps), CPUString(CPU), OptMinSize(MinSize),
-      IsLittle(IsLittle), TargetTriple(TT), Options(TM.Options), TM(TM),
+    : ARMGenSubtargetInfo(TT, CPU, FS), UseMulOps(UseFusedMulOps),
+      CPUString(CPU), OptMinSize(MinSize), IsLittle(IsLittle),
+      TargetTriple(TT), Options(TM.Options), TM(TM),
       FrameLowering(initializeFrameLowering(CPU, FS)),
       // At this point initializeSubtargetDependencies has been called so
       // we can query directly.
@@ -128,7 +125,7 @@ const CallLowering *ARMSubtarget::getCallLowering() const {
   return CallLoweringInfo.get();
 }
 
-InstructionSelector *ARMSubtarget::getInstructionSelector() const {
+const InstructionSelector *ARMSubtarget::getInstructionSelector() const {
   return InstSelector.get();
 }
 
@@ -183,9 +180,9 @@ void ARMSubtarget::initSubtargetFeatures(StringRef CPU, StringRef FS) {
     if (!ArchFS.empty())
       ArchFS = (Twine(ArchFS) + "," + FS).str();
     else
-      ArchFS = std::string(FS);
+      ArchFS = FS;
   }
-  ParseSubtargetFeatures(CPUString, /*TuneCPU*/ CPUString, ArchFS);
+  ParseSubtargetFeatures(CPUString, ArchFS);
 
   // FIXME: This used enable V6T2 support implicitly for Thumb2 mode.
   // Assert this for now to make the change obvious.
@@ -208,9 +205,9 @@ void ARMSubtarget::initSubtargetFeatures(StringRef CPU, StringRef FS) {
     NoARM = true;
 
   if (isAAPCS_ABI())
-    stackAlignment = Align(8);
+    stackAlignment = 8;
   if (isTargetNaCl() || isAAPCS16_ABI())
-    stackAlignment = Align(16);
+    stackAlignment = 16;
 
   // FIXME: Completely disable sibcall for Thumb1 since ThumbRegisterInfo::
   // emitEpilogue is not ready for them. Thumb tail calls also use t2B, as
@@ -230,14 +227,14 @@ void ARMSubtarget::initSubtargetFeatures(StringRef CPU, StringRef FS) {
   // registers are the 4 used for parameters.  We don't currently do this
   // case.
 
-  SupportsTailCall = !isThumb1Only() || hasV8MBaselineOps();
+  SupportsTailCall = !isThumb() || hasV8MBaselineOps();
 
   if (isTargetMachO() && isTargetIOS() && getTargetTriple().isOSVersionLT(5, 0))
     SupportsTailCall = false;
 
   switch (IT) {
   case DefaultIT:
-    RestrictIT = hasV8Ops() && !hasMinSize();
+    RestrictIT = hasV8Ops();
     break;
   case RestrictedIT:
     RestrictIT = true;
@@ -255,10 +252,6 @@ void ARMSubtarget::initSubtargetFeatures(StringRef CPU, StringRef FS) {
 
   if (isRWPI())
     ReserveR9 = true;
-
-  // If MVEVectorCostFactor is still 0 (has not been set to anything else), default it to 2
-  if (MVEVectorCostFactor == 0)
-    MVEVectorCostFactor = 2;
 
   // FIXME: Teach TableGen to deal with these instead of doing it manually here.
   switch (ARMProcFamily) {
@@ -292,32 +285,23 @@ void ARMSubtarget::initSubtargetFeatures(StringRef CPU, StringRef FS) {
   case CortexA73:
   case CortexA75:
   case CortexA76:
-  case CortexA77:
-  case CortexA78:
-  case CortexA78C:
   case CortexR4:
   case CortexR4F:
   case CortexR5:
   case CortexR7:
   case CortexM3:
-  case CortexM7:
   case CortexR52:
-  case CortexX1:
     break;
   case Exynos:
     LdStMultipleTiming = SingleIssuePlusExtras;
     MaxInterleaveFactor = 4;
     if (!isThumb())
-      PrefLoopLogAlignment = 3;
+      PrefLoopAlignment = 3;
     break;
   case Kryo:
     break;
   case Krait:
     PreISelOperandLatencyAdjustment = 1;
-    break;
-  case NeoverseN1:
-  case NeoverseN2:
-  case NeoverseV1:
     break;
   case Swift:
     MaxInterleaveFactor = 2;
@@ -389,23 +373,11 @@ bool ARMSubtarget::enableMachineScheduler() const {
   return useMachineScheduler();
 }
 
-bool ARMSubtarget::enableSubRegLiveness() const { return EnableSubRegLiveness; }
-
 // This overrides the PostRAScheduler bit in the SchedModel for any CPU.
 bool ARMSubtarget::enablePostRAScheduler() const {
-  if (enableMachineScheduler())
-    return false;
   if (disablePostRAScheduler())
     return false;
-  // Thumb1 cores will generally not benefit from post-ra scheduling
-  return !isThumb1Only();
-}
-
-bool ARMSubtarget::enablePostRAMachineScheduler() const {
-  if (!enableMachineScheduler())
-    return false;
-  if (disablePostRAScheduler())
-    return false;
+  // Don't reschedule potential IT blocks.
   return !isThumb1Only();
 }
 

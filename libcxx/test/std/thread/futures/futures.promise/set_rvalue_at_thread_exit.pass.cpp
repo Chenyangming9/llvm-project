@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// UNSUPPORTED: libcpp-has-no-threads, c++03
+// UNSUPPORTED: libcpp-has-no-threads, c++98, c++03
 
 // <future>
 
@@ -18,7 +18,6 @@
 #include <memory>
 #include <cassert>
 
-#include "make_test_thread.h"
 #include "test_macros.h"
 
 void func(std::promise<std::unique_ptr<int>> p)
@@ -31,7 +30,7 @@ int main(int, char**)
     {
         std::promise<std::unique_ptr<int>> p;
         std::future<std::unique_ptr<int>> f = p.get_future();
-        support::make_test_thread(func, std::move(p)).detach();
+        std::thread(func, std::move(p)).detach();
         assert(*f.get() == 5);
     }
 

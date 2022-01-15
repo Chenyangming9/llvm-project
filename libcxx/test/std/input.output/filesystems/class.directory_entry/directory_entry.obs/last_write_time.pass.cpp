@@ -6,11 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
-
-// The string reported on errors changed, which makes those tests fail when run
-// against already-released libc++'s.
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.15
+// UNSUPPORTED: c++98, c++03
 
 // <filesystem>
 
@@ -19,12 +15,12 @@
 // file_time_type last_write_time() const;
 // file_time_type last_write_time(error_code const&) const noexcept;
 
-#include "filesystem_include.h"
+#include "filesystem_include.hpp"
 #include <type_traits>
 #include <cassert>
 
-#include "filesystem_test_helper.h"
-#include "rapid-cxx-test.h"
+#include "filesystem_test_helper.hpp"
+#include "rapid-cxx-test.hpp"
 
 #include "test_macros.h"
 
@@ -87,7 +83,6 @@ TEST_CASE(basic) {
 TEST_CASE(error_reporting) {
   using namespace fs;
 
-  static_test_env static_env;
   scoped_test_env env;
 
   const path dir = env.create_dir("dir");
@@ -96,24 +91,22 @@ TEST_CASE(error_reporting) {
   const path sym_out_of_dir = env.create_symlink("dir/file", "sym");
   const path sym_in_dir = env.create_symlink("file2", "dir/sym2");
 
-#ifndef TEST_WIN_NO_FILESYSTEM_PERMS_NONE
   const perms old_perms = status(dir).permissions();
-#endif
 
   // test a file which doesn't exist
   {
     directory_entry ent;
 
     std::error_code ec = GetTestEC();
-    ent.assign(static_env.DNE, ec);
-    TEST_REQUIRE(ent.path() == static_env.DNE);
+    ent.assign(StaticEnv::DNE, ec);
+    TEST_REQUIRE(ent.path() == StaticEnv::DNE);
     TEST_CHECK(ErrorIs(ec, std::errc::no_such_file_or_directory));
 
     ec = GetTestEC();
     TEST_CHECK(ent.last_write_time(ec) == file_time_type::min());
     TEST_CHECK(ErrorIs(ec, std::errc::no_such_file_or_directory));
 
-    ExceptionChecker Checker(static_env.DNE,
+    ExceptionChecker Checker(StaticEnv::DNE,
                              std::errc::no_such_file_or_directory,
                              "directory_entry::last_write_time");
     TEST_CHECK_THROW_RESULT(filesystem_error, Checker, ent.last_write_time());
@@ -123,27 +116,24 @@ TEST_CASE(error_reporting) {
     directory_entry ent;
 
     std::error_code ec = GetTestEC();
-    file_time_type expect_bad = last_write_time(static_env.BadSymlink, ec);
+    file_time_type expect_bad = last_write_time(StaticEnv::BadSymlink, ec);
     TEST_CHECK(expect_bad == file_time_type::min());
     TEST_CHECK(ErrorIs(ec, std::errc::no_such_file_or_directory));
 
     ec = GetTestEC();
-    ent.assign(static_env.BadSymlink, ec);
-    TEST_REQUIRE(ent.path() == static_env.BadSymlink);
+    ent.assign(StaticEnv::BadSymlink, ec);
+    TEST_REQUIRE(ent.path() == StaticEnv::BadSymlink);
     TEST_CHECK(!ec);
 
     ec = GetTestEC();
     TEST_CHECK(ent.last_write_time(ec) == expect_bad);
     TEST_CHECK(ErrorIs(ec, std::errc::no_such_file_or_directory));
 
-    ExceptionChecker Checker(static_env.BadSymlink,
+    ExceptionChecker Checker(StaticEnv::BadSymlink,
                              std::errc::no_such_file_or_directory,
                              "directory_entry::last_write_time");
     TEST_CHECK_THROW_RESULT(filesystem_error, Checker, ent.last_write_time());
   }
-  // Windows doesn't support setting perms::none to trigger failures
-  // reading directories.
-#ifndef TEST_WIN_NO_FILESYSTEM_PERMS_NONE
   // test a file w/o appropriate permissions.
   {
     directory_entry ent;
@@ -221,7 +211,6 @@ TEST_CASE(error_reporting) {
     TEST_CHECK(!ec);
     TEST_CHECK_NO_THROW(ent.last_write_time());
   }
-#endif
 }
 
 TEST_SUITE_END()

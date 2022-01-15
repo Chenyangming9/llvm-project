@@ -69,9 +69,8 @@ static const char KnownStringCompareFunctions[] = "__builtin_memcmp;"
 SuspiciousStringCompareCheck::SuspiciousStringCompareCheck(
     StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      WarnOnImplicitComparison(Options.get("WarnOnImplicitComparison", true)),
-      WarnOnLogicalNotComparison(
-          Options.get("WarnOnLogicalNotComparison", false)),
+      WarnOnImplicitComparison(Options.get("WarnOnImplicitComparison", 1)),
+      WarnOnLogicalNotComparison(Options.get("WarnOnLogicalNotComparison", 0)),
       StringCompareLikeFunctions(
           Options.get("StringCompareLikeFunctions", "")) {}
 
@@ -85,7 +84,8 @@ void SuspiciousStringCompareCheck::storeOptions(
 void SuspiciousStringCompareCheck::registerMatchers(MatchFinder *Finder) {
   // Match relational operators.
   const auto ComparisonUnaryOperator = unaryOperator(hasOperatorName("!"));
-  const auto ComparisonBinaryOperator = binaryOperator(isComparisonOperator());
+  const auto ComparisonBinaryOperator =
+      binaryOperator(matchers::isComparisonOperator());
   const auto ComparisonOperator =
       expr(anyOf(ComparisonUnaryOperator, ComparisonBinaryOperator));
 
@@ -113,10 +113,13 @@ void SuspiciousStringCompareCheck::registerMatchers(MatchFinder *Finder) {
     // Detect suspicious calls to string compare:
     //     'if (strcmp())'  ->  'if (strcmp() != 0)'
     Finder->addMatcher(
-        stmt(anyOf(mapAnyOf(ifStmt, whileStmt, doStmt, forStmt)
-                       .with(hasCondition(StringCompareCallExpr)),
-                   binaryOperator(hasAnyOperatorName("&&", "||"),
-                                  hasEitherOperand(StringCompareCallExpr))))
+        stmt(anyOf(ifStmt(hasCondition(StringCompareCallExpr)),
+                   whileStmt(hasCondition(StringCompareCallExpr)),
+                   doStmt(hasCondition(StringCompareCallExpr)),
+                   forStmt(hasCondition(StringCompareCallExpr)),
+                   binaryOperator(
+                       anyOf(hasOperatorName("&&"), hasOperatorName("||")),
+                       hasEitherOperand(StringCompareCallExpr))))
             .bind("missing-comparison"),
         this);
   }
@@ -133,17 +136,17 @@ void SuspiciousStringCompareCheck::registerMatchers(MatchFinder *Finder) {
 
   // Detect suspicious cast to an inconsistant type (i.e. not integer type).
   Finder->addMatcher(
-      traverse(TK_AsIs,
-               implicitCastExpr(unless(hasType(isInteger())),
-                                hasSourceExpression(StringCompareCallExpr))
-                   .bind("invalid-conversion")),
+      implicitCastExpr(unless(hasType(isInteger())),
+                       hasSourceExpression(StringCompareCallExpr))
+          .bind("invalid-conversion"),
       this);
 
   // Detect suspicious operator with string compare function as operand.
   Finder->addMatcher(
-      binaryOperator(unless(anyOf(isComparisonOperator(), hasOperatorName("&&"),
-                                  hasOperatorName("||"), hasOperatorName("="))),
-                     hasEitherOperand(StringCompareCallExpr))
+      binaryOperator(
+          unless(anyOf(matchers::isComparisonOperator(), hasOperatorName("&&"),
+                       hasOperatorName("||"), hasOperatorName("="))),
+          hasEitherOperand(StringCompareCallExpr))
           .bind("suspicious-operator"),
       this);
 
@@ -155,11 +158,11 @@ void SuspiciousStringCompareCheck::registerMatchers(MatchFinder *Finder) {
                 has(ignoringParenImpCasts(integerLiteral(unless(equals(0)))))),
             characterLiteral(), cxxBoolLiteral()));
 
-  Finder->addMatcher(
-      binaryOperator(isComparisonOperator(),
-                     hasOperands(StringCompareCallExpr, InvalidLiteral))
-          .bind("invalid-comparison"),
-      this);
+  Finder->addMatcher(binaryOperator(matchers::isComparisonOperator(),
+                                    hasEitherOperand(StringCompareCallExpr),
+                                    hasEitherOperand(InvalidLiteral))
+                         .bind("invalid-comparison"),
+                     this);
 }
 
 void SuspiciousStringCompareCheck::check(

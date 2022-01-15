@@ -1,4 +1,4 @@
-//===-- OptionValueEnumeration.cpp ----------------------------------------===//
+//===-- OptionValueEnumeration.cpp ------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -15,9 +15,12 @@ using namespace lldb_private;
 
 OptionValueEnumeration::OptionValueEnumeration(
     const OptionEnumValues &enumerators, enum_type value)
-    : m_current_value(value), m_default_value(value) {
+    : OptionValue(), m_current_value(value), m_default_value(value),
+      m_enumerations() {
   SetEnumerations(enumerators);
 }
+
+OptionValueEnumeration::~OptionValueEnumeration() {}
 
 void OptionValueEnumeration::DumpValue(const ExecutionContext *exe_ctx,
                                        Stream &strm, uint32_t dump_mask) {
@@ -95,16 +98,25 @@ void OptionValueEnumeration::SetEnumerations(
   m_enumerations.Sort();
 }
 
-void OptionValueEnumeration::AutoComplete(CommandInterpreter &interpreter,
-                                          CompletionRequest &request) {
+lldb::OptionValueSP OptionValueEnumeration::DeepCopy() const {
+  return OptionValueSP(new OptionValueEnumeration(*this));
+}
+
+size_t OptionValueEnumeration::AutoComplete(CommandInterpreter &interpreter,
+                                            CompletionRequest &request) {
+  request.SetWordComplete(false);
+
   const uint32_t num_enumerators = m_enumerations.GetSize();
   if (!request.GetCursorArgumentPrefix().empty()) {
     for (size_t i = 0; i < num_enumerators; ++i) {
       llvm::StringRef name = m_enumerations.GetCStringAtIndex(i).GetStringRef();
-      request.TryCompleteCurrentArg(name);
+      if (name.startswith(request.GetCursorArgumentPrefix()))
+        request.AddCompletion(name);
     }
-    return;
-  }
+  } else {
+    // only suggest "true" or "false" by default
     for (size_t i = 0; i < num_enumerators; ++i)
       request.AddCompletion(m_enumerations.GetCStringAtIndex(i).GetStringRef());
+  }
+  return request.GetNumberOfMatches();
 }

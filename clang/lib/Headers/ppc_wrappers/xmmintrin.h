@@ -28,13 +28,11 @@
    Most SSE scalar float intrinsic operations can be performed more
    efficiently as C language float scalar operations or optimized to
    use vector SIMD operations. We recommend this for new applications. */
-#error "Please read comment above. Use -DNO_WARN_X86_INTRINSICS to disable this error."
+#error "Please read comment above.  Use -DNO_WARN_X86_INTRINSICS to disable this error."
 #endif
 
 #ifndef _XMMINTRIN_H_INCLUDED
 #define _XMMINTRIN_H_INCLUDED
-
-#if defined(__linux__) && defined(__ppc64__)
 
 /* Define four value permute mask */
 #define _MM_SHUFFLE(w,x,y,z) (((w) << 6) | ((x) << 4) | ((y) << 2) | (z))
@@ -62,13 +60,14 @@
 
 /* The Intel API is flexible enough that we must allow aliasing with other
    vector types, and their scalar components.  */
-typedef vector float __m128 __attribute__((__may_alias__));
+typedef float __m128 __attribute__ ((__vector_size__ (16), __may_alias__));
 
 /* Unaligned version of the same type.  */
-typedef vector float __m128_u __attribute__((__may_alias__, __aligned__(1)));
+typedef float __m128_u __attribute__ ((__vector_size__ (16), __may_alias__,
+				       __aligned__ (1)));
 
 /* Internal data types for implementing the intrinsics.  */
-typedef vector float __v4sf;
+typedef float __v4sf __attribute__ ((__vector_size__ (16)));
 
 /* Create an undefined vector.  */
 extern __inline __m128 __attribute__((__gnu_inline__, __always_inline__, __artificial__))
@@ -1835,9 +1834,5 @@ do {									\
 
 /* For backward source compatibility.  */
 //# include <emmintrin.h>
-
-#else
-#include_next <xmmintrin.h>
-#endif /* defined(__linux__) && defined(__ppc64__) */
 
 #endif /* _XMMINTRIN_H_INCLUDED */

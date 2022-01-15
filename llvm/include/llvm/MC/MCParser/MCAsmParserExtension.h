@@ -89,7 +89,6 @@ public:
                   const Twine &Msg = "unexpected token") {
     return getParser().parseToken(T, Msg);
   }
-  bool parseEOL() { return getParser().parseEOL(); }
 
   bool parseMany(function_ref<bool()> parseOne, bool hasComma = true) {
     return getParser().parseMany(parseOne, hasComma);
@@ -98,8 +97,6 @@ public:
   bool parseOptionalToken(AsmToken::TokenKind T) {
     return getParser().parseOptionalToken(T);
   }
-
-  bool ParseDirectiveCGProfile(StringRef, SMLoc);
 
   bool check(bool P, const Twine &Msg) {
     return getParser().check(P, Msg);

@@ -19,7 +19,7 @@
 #include <malloc.h>
 
 // The Windows.h header must be after LLVM and standard headers.
-#include "llvm/Support/Windows/WindowsSupport.h"
+#include "WindowsSupport.h"
 
 #include <direct.h>
 #include <io.h>
@@ -42,12 +42,6 @@
 #endif
 
 using namespace llvm;
-
-Process::Pid Process::getProcessId() {
-  static_assert(sizeof(Pid) >= sizeof(DWORD),
-                "Process::Pid should be big enough to store DWORD");
-  return Pid(::GetCurrentProcessId());
-}
 
 // This function retrieves the page size using GetNativeSystemInfo() and is
 // present solely so it can be called once to initialize the self_process member
@@ -194,7 +188,7 @@ static std::error_code WildcardExpand(StringRef Arg,
 
     // Append FileName to Dir, and remove it afterwards.
     llvm::sys::path::append(Dir, FileName);
-    Args.push_back(Saver.save(Dir.str()).data());
+    Args.push_back(Saver.save(StringRef(Dir)).data());
     Dir.resize(DirSize);
   } while (FindNextFileW(FindHandle, &FileData));
 
@@ -228,8 +222,7 @@ static std::error_code GetExecutableName(SmallVectorImpl<char> &Filename) {
   if (EC)
     return EC;
 
-  // Make a copy of the filename since assign makes the StringRef invalid.
-  std::string Base = sys::path::filename(Filename.data()).str();
+  StringRef Base = sys::path::filename(Filename.data());
   Filename.assign(Base.begin(), Base.end());
   return std::error_code();
 }
@@ -446,38 +439,25 @@ const char *Process::ResetColor() {
   return 0;
 }
 
-static unsigned GetRandomNumberSeed() {
-  // Generate a random number seed from the millisecond-resolution Windows
-  // system clock and the current process id.
-  FILETIME Time;
-  GetSystemTimeAsFileTime(&Time);
-  DWORD Pid = GetCurrentProcessId();
-  return hash_combine(Time.dwHighDateTime, Time.dwLowDateTime, Pid);
-}
-
-static unsigned GetPseudoRandomNumber() {
-  // Arrange to call srand once when this function is first used, and
-  // otherwise (if GetRandomNumber always succeeds in using
-  // CryptGenRandom) don't bother at all.
-  static int x = (static_cast<void>(::srand(GetRandomNumberSeed())), 0);
-  (void)x;
-  return ::rand();
+// Include GetLastError() in a fatal error message.
+static void ReportLastErrorFatal(const char *Msg) {
+  std::string ErrMsg;
+  MakeErrMsg(&ErrMsg, Msg);
+  report_fatal_error(ErrMsg);
 }
 
 unsigned Process::GetRandomNumber() {
-  // Try to use CryptGenRandom.
   HCRYPTPROV HCPC;
-  if (::CryptAcquireContextW(&HCPC, NULL, NULL, PROV_RSA_FULL,
-                             CRYPT_VERIFYCONTEXT)) {
-    ScopedCryptContext CryptoProvider(HCPC);
-    unsigned Ret;
-    if (::CryptGenRandom(CryptoProvider, sizeof(Ret),
-                         reinterpret_cast<BYTE *>(&Ret)))
-      return Ret;
-  }
+  if (!::CryptAcquireContextW(&HCPC, NULL, NULL, PROV_RSA_FULL,
+                              CRYPT_VERIFYCONTEXT))
+    ReportLastErrorFatal("Could not acquire a cryptographic context");
 
-  // If that fails, fall back to pseudo-random numbers.
-  return GetPseudoRandomNumber();
+  ScopedCryptContext CryptoProvider(HCPC);
+  unsigned Ret;
+  if (!::CryptGenRandom(CryptoProvider, sizeof(Ret),
+                        reinterpret_cast<BYTE *>(&Ret)))
+    ReportLastErrorFatal("Could not generate a random number");
+  return Ret;
 }
 
 typedef NTSTATUS(WINAPI* RtlGetVersionPtr)(PRTL_OSVERSIONINFOW);
@@ -502,10 +482,4 @@ llvm::VersionTuple llvm::GetWindowsOSVersion() {
 bool llvm::RunningWindows8OrGreater() {
   // Windows 8 is version 6.2, service pack 0.
   return GetWindowsOSVersion() >= llvm::VersionTuple(6, 2, 0, 0);
-}
-
-LLVM_ATTRIBUTE_NORETURN
-void Process::ExitNoCleanup(int RetCode) {
-  TerminateProcess(GetCurrentProcess(), RetCode);
-  llvm_unreachable("TerminateProcess doesn't return");
 }

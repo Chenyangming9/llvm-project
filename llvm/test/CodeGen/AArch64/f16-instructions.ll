@@ -1,14 +1,14 @@
-; RUN: llc < %s -mtriple aarch64-unknown-unknown -aarch64-neon-syntax=apple -asm-verbose=false -disable-post-ra -frame-pointer=non-leaf | FileCheck %s --check-prefix=CHECK-CVT --check-prefix=CHECK-COMMON
-; RUN: llc < %s -mtriple aarch64-unknown-unknown -mattr=+fullfp16 -aarch64-neon-syntax=apple -asm-verbose=false -disable-post-ra -frame-pointer=non-leaf | FileCheck %s --check-prefix=CHECK-COMMON --check-prefix=CHECK-FP16
+; RUN: llc < %s -mtriple aarch64-unknown-unknown -aarch64-neon-syntax=apple -asm-verbose=false -disable-post-ra -frame-pointer=all | FileCheck %s --check-prefix=CHECK-CVT --check-prefix=CHECK-COMMON
+; RUN: llc < %s -mtriple aarch64-unknown-unknown -mattr=+fullfp16 -aarch64-neon-syntax=apple -asm-verbose=false -disable-post-ra -frame-pointer=all | FileCheck %s --check-prefix=CHECK-COMMON --check-prefix=CHECK-FP16
 
 ; RUN: llc < %s -mtriple aarch64-unknown-unknown -aarch64-neon-syntax=apple \
-; RUN: -asm-verbose=false -disable-post-ra -frame-pointer=non-leaf -global-isel \
+; RUN: -asm-verbose=false -disable-post-ra -frame-pointer=all -global-isel \
 ; RUN: -global-isel-abort=2 -pass-remarks-missed=gisel-* 2>&1 | FileCheck %s \
 ; RUN: --check-prefixes=FALLBACK,GISEL-CVT,GISEL
 
 ; RUN: llc < %s -mtriple aarch64-unknown-unknown -mattr=+fullfp16 \
 ; RUN: -aarch64-neon-syntax=apple -asm-verbose=false -disable-post-ra \
-; RUN: -frame-pointer=non-leaf -global-isel -global-isel-abort=2 \
+; RUN: -frame-pointer=all -global-isel -global-isel-abort=2 \
 ; RUN: -pass-remarks-missed=gisel-* 2>&1 | FileCheck %s \
 ; RUN: --check-prefixes=FALLBACK-FP16,GISEL-FP16,GISEL
 
@@ -62,26 +62,6 @@ define half @test_fmul(half %a, half %b) #0 {
   ret half %r
 }
 
-; CHECK-CVT-LABEL: test_fmadd:
-; CHECK-CVT-NEXT: fcvt s1, h1
-; CHECK-CVT-NEXT: fcvt s0, h0
-; CHECK-CVT-NEXT: fmul s0, s0, s1
-; CHECK-CVT-NEXT: fcvt h0, s0
-; CHECK-CVT-NEXT: fcvt s0, h0
-; CHECK-CVT-NEXT: fcvt s1, h2
-; CHECK-CVT-NEXT: fadd s0, s0, s1
-; CHECK-CVT-NEXT: fcvt h0, s0
-; CHECK-CVT-NEXT: ret
-
-; CHECK-FP16-LABEL: test_fmadd:
-; CHECK-FP16-NEXT: fmadd h0, h0, h1, h2
-; CHECK-FP16-NEXT: ret
-
-define half @test_fmadd(half %a, half %b, half %c) #0 {
-  %mul = fmul fast half %a, %b
-  %r = fadd fast half %mul, %c
-  ret half %r
-}
 ; CHECK-CVT-LABEL: test_fdiv:
 ; CHECK-CVT-NEXT: fcvt s1, h1
 ; CHECK-CVT-NEXT: fcvt s0, h0
@@ -189,6 +169,8 @@ define half @test_select(half %a, half %b, i1 zeroext %c) #0 {
 ; CHECK-CVT-DAG: fcvt s1, h1
 ; CHECK-CVT-DAG: fcvt s0, h0
 ; CHECK-CVT-DAG: fcmp s2, s3
+; CHECK-CVT-DAG: cset [[CC:w[0-9]+]], ne
+; CHECK-CVT-DAG: cmp [[CC]], #0
 ; CHECK-CVT-NEXT: fcsel s0, s0, s1, ne
 ; CHECK-CVT-NEXT: fcvt h0, s0
 ; CHECK-CVT-NEXT: ret
@@ -226,6 +208,8 @@ define float @test_select_cc_f32_f16(float %a, float %b, half %c, half %d) #0 {
 ; CHECK-CVT-DAG:  fcvt s0, h0
 ; CHECK-CVT-DAG:  fcvt s1, h1
 ; CHECK-CVT-DAG:  fcmp s2, s3
+; CHECK-CVT-DAG:  cset w8, ne
+; CHECK-CVT-NEXT: cmp w8, #0
 ; CHECK-CVT-NEXT: fcsel s0, s0, s1, ne
 ; CHECK-CVT-NEXT: fcvt h0, s0
 ; CHECK-CVT-NEXT: ret
@@ -517,14 +501,20 @@ define void @test_fccmp(half %in, half* %out) {
 ; CHECK-CVT-NEXT: fcvt s1, h1
 ; CHECK-CVT-NEXT: fcvt s0, h0
 ; CHECK-CVT-NEXT: fcmp s0, s1
-; CHECK-CVT-NEXT: csel x8, x0, x1, pl
-; CHECK-CVT-NEXT: str wzr, [x8]
+; CHECK-CVT-NEXT: b.mi [[BRCC_ELSE:.?LBB[0-9_]+]]
+; CHECK-CVT-NEXT: str  wzr, [x0]
+; CHECK-CVT-NEXT: ret
+; CHECK-CVT-NEXT: [[BRCC_ELSE]]:
+; CHECK-CVT-NEXT: str  wzr, [x1]
 ; CHECK-CVT-NEXT: ret
 
 ; CHECK-FP16-LABEL: test_br_cc:
 ; CHECK-FP16-NEXT: fcmp h0, h1
-; CHECK-FP16-NEXT: csel x8, x0, x1, pl
-; CHECK-FP16-NEXT: str wzr, [x8]
+; CHECK-FP16-NEXT: b.mi [[BRCC_ELSE:.?LBB[0-9_]+]]
+; CHECK-FP16-NEXT: str  wzr, [x0]
+; CHECK-FP16-NEXT: ret
+; CHECK-FP16-NEXT: [[BRCC_ELSE]]:
+; CHECK-FP16-NEXT: str  wzr, [x1]
 ; CHECK-FP16-NEXT: ret
 
 define void @test_br_cc(half %a, half %b, i32* %p1, i32* %p2) #0 {
@@ -766,7 +756,7 @@ define half @test_bitcast_i16tohalf(i16 %a) #0 {
 
 
 declare half @llvm.sqrt.f16(half %a) #0
-declare half @llvm.powi.f16.i32(half %a, i32 %b) #0
+declare half @llvm.powi.f16(half %a, i32 %b) #0
 declare half @llvm.sin.f16(half %a) #0
 declare half @llvm.cos.f16(half %a) #0
 declare half @llvm.pow.f16(half %a, half %b) #0
@@ -786,7 +776,6 @@ declare half @llvm.trunc.f16(half %a) #0
 declare half @llvm.rint.f16(half %a) #0
 declare half @llvm.nearbyint.f16(half %a) #0
 declare half @llvm.round.f16(half %a) #0
-declare half @llvm.roundeven.f16(half %a) #0
 declare half @llvm.fmuladd.f16(half %a, half %b, half %c) #0
 declare half @llvm.aarch64.neon.frecpe.f16(half %a) #0
 declare half @llvm.aarch64.neon.frecpx.f16(half %a) #0
@@ -829,7 +818,7 @@ define half @test_sqrt(half %a) #0 {
 ; CHECK-COMMON-NEXT: ldp x29, x30, [sp], #16
 ; CHECK-COMMON-NEXT: ret
 define half @test_powi(half %a, i32 %b) #0 {
-  %r = call half @llvm.powi.f16.i32(half %a, i32 %b)
+  %r = call half @llvm.powi.f16(half %a, i32 %b)
   ret half %r
 }
 
@@ -1304,32 +1293,6 @@ define half @test_round(half %a) #0 {
   ret half %r
 }
 
-; CHECK-CVT-LABEL: test_roundeven:
-; CHECK-CVT-NEXT: fcvt [[FLOAT32:s[0-9]+]], h0
-; CHECK-CVT-NEXT: frintn [[INT32:s[0-9]+]], [[FLOAT32]]
-; CHECK-CVT-NEXT: fcvt h0, [[INT32]]
-; CHECK-CVT-NEXT: ret
-
-; GISEL-CVT-LABEL: test_roundeven:
-; GISEL-CVT-NEXT: fcvt [[FLOAT32:s[0-9]+]], h0
-; GISEL-CVT-NEXT: frintn [[INT32:s[0-9]+]], [[FLOAT32]]
-; GISEL-CVT-NEXT: fcvt h0, [[INT32]]
-; GISEL-CVT-NEXT: ret
-
-
-; CHECK-FP16-LABEL: test_roundeven:
-; CHECK-FP16-NEXT: frintn h0, h0
-; CHECK-FP16-NEXT: ret
-
-; GISEL-FP16-LABEL: test_roundeven:
-; GISEL-FP16-NEXT: frintn h0, h0
-; GISEL-FP16-NEXT: ret
-
-define half @test_roundeven(half %a) #0 {
-  %r = call half @llvm.roundeven.f16(half %a)
-  ret half %r
-}
-
 ; CHECK-CVT-LABEL: test_fmuladd:
 ; CHECK-CVT-NEXT: fcvt s1, h1
 ; CHECK-CVT-NEXT: fcvt s0, h0
@@ -1342,7 +1305,8 @@ define half @test_roundeven(half %a) #0 {
 ; CHECK-CVT-NEXT: ret
 
 ; CHECK-FP16-LABEL: test_fmuladd:
-; CHECK-FP16-NEXT: fmadd h0, h0, h1, h2
+; CHECK-FP16-NEXT: fmul h0, h0, h1
+; CHECK-FP16-NEXT: fadd h0, h0, h2
 ; CHECK-FP16-NEXT: ret
 
 define half @test_fmuladd(half %a, half %b, half %c) #0 {

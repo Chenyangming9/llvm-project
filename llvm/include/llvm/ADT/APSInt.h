@@ -18,7 +18,6 @@
 
 namespace llvm {
 
-/// An arbitrary precision integer that knows its signedness.
 class LLVM_NODISCARD APSInt : public APInt {
   bool IsUnsigned;
 
@@ -26,7 +25,8 @@ public:
   /// Default constructor that creates an uninitialized APInt.
   explicit APSInt() : IsUnsigned(false) {}
 
-  /// Create an APSInt with the specified width, default to unsigned.
+  /// APSInt ctor - Create an APSInt with the specified width, default to
+  /// unsigned.
   explicit APSInt(uint32_t BitWidth, bool isUnsigned = true)
    : APInt(BitWidth, 0), IsUnsigned(isUnsigned) {}
 
@@ -78,9 +78,14 @@ public:
   void setIsUnsigned(bool Val) { IsUnsigned = Val; }
   void setIsSigned(bool Val) { IsUnsigned = !Val; }
 
-  /// Append this APSInt to the specified SmallString.
+  /// toString - Append this APSInt to the specified SmallString.
   void toString(SmallVectorImpl<char> &Str, unsigned Radix = 10) const {
     APInt::toString(Str, Radix, isSigned());
+  }
+  /// toString - Converts an APInt to a std::string.  This is an inefficient
+  /// method; you should prefer passing in a SmallString instead.
+  std::string toString(unsigned Radix) const {
+    return APInt::toString(Radix, isSigned());
   }
   using APInt::toString;
 
@@ -277,15 +282,15 @@ public:
     return APSInt(~static_cast<const APInt&>(*this), IsUnsigned);
   }
 
-  /// Return the APSInt representing the maximum integer value with the given
-  /// bit width and signedness.
+  /// getMaxValue - Return the APSInt representing the maximum integer value
+  ///  with the given bit width and signedness.
   static APSInt getMaxValue(uint32_t numBits, bool Unsigned) {
     return APSInt(Unsigned ? APInt::getMaxValue(numBits)
                            : APInt::getSignedMaxValue(numBits), Unsigned);
   }
 
-  /// Return the APSInt representing the minimum integer value with the given
-  /// bit width and signedness.
+  /// getMinValue - Return the APSInt representing the minimum integer value
+  ///  with the given bit width and signedness.
   static APSInt getMinValue(uint32_t numBits, bool Unsigned) {
     return APSInt(Unsigned ? APInt::getMinValue(numBits)
                            : APInt::getSignedMinValue(numBits), Unsigned);
@@ -326,8 +331,8 @@ public:
   static APSInt get(int64_t X) { return APSInt(APInt(64, X), false); }
   static APSInt getUnsigned(uint64_t X) { return APSInt(APInt(64, X), true); }
 
-  /// Used to insert APSInt objects, or objects that contain APSInt objects,
-  /// into FoldingSets.
+  /// Profile - Used to insert APSInt objects, or objects that contain APSInt
+  ///  objects, into FoldingSets.
   void Profile(FoldingSetNodeID& ID) const;
 };
 
@@ -342,26 +347,6 @@ inline raw_ostream &operator<<(raw_ostream &OS, const APSInt &I) {
   I.print(OS, I.isSigned());
   return OS;
 }
-
-/// Provide DenseMapInfo for APSInt, using the DenseMapInfo for APInt.
-template <> struct DenseMapInfo<APSInt> {
-  static inline APSInt getEmptyKey() {
-    return APSInt(DenseMapInfo<APInt>::getEmptyKey());
-  }
-
-  static inline APSInt getTombstoneKey() {
-    return APSInt(DenseMapInfo<APInt>::getTombstoneKey());
-  }
-
-  static unsigned getHashValue(const APSInt &Key) {
-    return DenseMapInfo<APInt>::getHashValue(Key);
-  }
-
-  static bool isEqual(const APSInt &LHS, const APSInt &RHS) {
-    return LHS.getBitWidth() == RHS.getBitWidth() &&
-           LHS.isUnsigned() == RHS.isUnsigned() && LHS == RHS;
-  }
-};
 
 } // end namespace llvm
 

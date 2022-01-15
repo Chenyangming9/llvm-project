@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONGROUPARCHITECTURE_H
-#define LLDB_INTERPRETER_OPTIONGROUPARCHITECTURE_H
+#ifndef liblldb_OptionGroupArchitecture_h_
+#define liblldb_OptionGroupArchitecture_h_
 
 #include "lldb/Interpreter/Options.h"
 #include "lldb/Utility/ArchSpec.h"
@@ -18,9 +18,9 @@ namespace lldb_private {
 
 class OptionGroupArchitecture : public OptionGroup {
 public:
-  OptionGroupArchitecture() = default;
+  OptionGroupArchitecture();
 
-  ~OptionGroupArchitecture() override = default;
+  ~OptionGroupArchitecture() override;
 
   llvm::ArrayRef<OptionDefinition> GetDefinitions() override;
 
@@ -42,4 +42,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONGROUPARCHITECTURE_H
+#endif // liblldb_OptionGroupArchitecture_h_

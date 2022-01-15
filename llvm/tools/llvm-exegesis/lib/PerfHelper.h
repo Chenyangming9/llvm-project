@@ -15,12 +15,8 @@
 #define LLVM_TOOLS_LLVM_EXEGESIS_PERFHELPER_H
 
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Config/config.h"
-#include "llvm/Support/Error.h"
-
-#include <cstdint>
 #include <functional>
 #include <memory>
 
@@ -40,14 +36,14 @@ class PerfEvent {
 public:
   // http://perfmon2.sourceforge.net/manv4/libpfm.html
   // Events are expressed as strings. e.g. "INSTRUCTION_RETIRED"
-  explicit PerfEvent(StringRef PfmEventString);
+  explicit PerfEvent(llvm::StringRef pfm_event_string);
 
   PerfEvent(const PerfEvent &) = delete;
   PerfEvent(PerfEvent &&other);
   ~PerfEvent();
 
   // The pfm_event_string passed at construction time.
-  StringRef name() const;
+  llvm::StringRef name() const;
 
   // Whether the event was successfully created.
   bool valid() const;
@@ -57,53 +53,52 @@ public:
 
   // The fully qualified name for the event.
   // e.g. "snb_ep::INSTRUCTION_RETIRED:e=0:i=0:c=0:t=0:u=1:k=0:mg=0:mh=1"
-  StringRef getPfmEventString() const;
+  llvm::StringRef getPfmEventString() const;
 
-protected:
-  PerfEvent() = default;
-  std::string EventString;
+private:
+  const std::string EventString;
   std::string FullQualifiedEventString;
   perf_event_attr *Attr;
 };
 
 // Uses a valid PerfEvent to configure the Kernel so we can measure the
 // underlying event.
-class Counter {
-public:
+struct Counter {
   // event: the PerfEvent to measure.
-  explicit Counter(PerfEvent &&event);
+  explicit Counter(const PerfEvent &event);
 
   Counter(const Counter &) = delete;
   Counter(Counter &&other) = default;
 
-  virtual ~Counter();
+  ~Counter();
 
-  /// Starts the measurement of the event.
-  virtual void start();
+  void start();         // Starts the measurement of the event.
+  void stop();          // Stops the measurement of the event.
+  int64_t read() const; // Return the current value of the counter.
 
-  /// Stops the measurement of the event.
-  void stop();
-
-  /// Returns the current value of the counter or -1 if it cannot be read.
-  int64_t read() const;
-
-  /// Returns the current value of the counter or error if it cannot be read.
-  /// FunctionBytes: The benchmark function being executed.
-  /// This is used to filter out the measurements to ensure they are only
-  /// within the benchmarked code.
-  /// If empty (or not specified), then no filtering will be done.
-  /// Not all counters choose to use this.
-  virtual llvm::Expected<llvm::SmallVector<int64_t, 4>>
-  readOrError(StringRef FunctionBytes = StringRef()) const;
-
-  virtual int numValues() const;
-
-protected:
-  PerfEvent Event;
+private:
 #ifdef HAVE_LIBPFM
   int FileDescriptor = -1;
 #endif
 };
+
+// Helper to measure a list of PerfEvent for a particular function.
+// callback is called for each successful measure (PerfEvent needs to be valid).
+template <typename Function>
+void Measure(
+    llvm::ArrayRef<PerfEvent> Events,
+    const std::function<void(const PerfEvent &Event, int64_t Value)> &Callback,
+    Function Fn) {
+  for (const auto &Event : Events) {
+    if (!Event.valid())
+      continue;
+    Counter Cnt(Event);
+    Cnt.start();
+    Fn();
+    Cnt.stop();
+    Callback(Event, Cnt.read());
+  }
+}
 
 } // namespace pfm
 } // namespace exegesis

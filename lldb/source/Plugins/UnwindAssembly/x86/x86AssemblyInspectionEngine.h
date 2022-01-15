@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_UNWINDASSEMBLY_X86_X86ASSEMBLYINSPECTIONENGINE_H
-#define LLDB_SOURCE_PLUGINS_UNWINDASSEMBLY_X86_X86ASSEMBLYINSPECTIONENGINE_H
+#ifndef liblldb_x86AssemblyInspectionEngine_h_
+#define liblldb_x86AssemblyInspectionEngine_h_
 
 #include "llvm-c/Disassembler.h"
 
@@ -45,9 +45,9 @@ public:
   /// are called.  This one takes a vector of register name and lldb
   /// register numbers.
   struct lldb_reg_info {
-    const char *name = nullptr;
-    uint32_t lldb_regnum = LLDB_INVALID_REGNUM;
-    lldb_reg_info() = default;
+    const char *name;
+    uint32_t lldb_regnum;
+    lldb_reg_info() : name(nullptr), lldb_regnum(LLDB_INVALID_REGNUM) {}
   };
   void Initialize(std::vector<lldb_reg_info> &reg_info);
 
@@ -191,11 +191,9 @@ private:
 
   ::LLVMDisasmContextRef m_disasm_context;
 
-  x86AssemblyInspectionEngine(const x86AssemblyInspectionEngine &) = delete;
-  const x86AssemblyInspectionEngine &
-  operator=(const x86AssemblyInspectionEngine &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(x86AssemblyInspectionEngine);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_UNWINDASSEMBLY_X86_X86ASSEMBLYINSPECTIONENGINE_H
+#endif // liblldb_x86AssemblyInspectionEngine_h_

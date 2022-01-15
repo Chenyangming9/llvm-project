@@ -9,5 +9,7 @@ executable("clang-reorder-fields") {
     "//clang/lib/Tooling",
     "//clang/lib/Tooling/Core",
   ]
-  sources = [ "ClangReorderFields.cpp" ]
+  sources = [
+    "ClangReorderFields.cpp",
+  ]
 }

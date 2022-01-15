@@ -13,7 +13,6 @@
 #include "llvm/LTO/Caching.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Errc.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
@@ -143,9 +142,9 @@ Expected<NativeObjectCache> lto::localCache(StringRef CacheDirectoryPath,
       }
 
       // This CacheStream will move the temporary file into the cache when done.
-      return std::make_unique<CacheStream>(
-          std::make_unique<raw_fd_ostream>(Temp->FD, /* ShouldClose */ false),
-          AddBuffer, std::move(*Temp), std::string(EntryPath.str()), Task);
+      return llvm::make_unique<CacheStream>(
+          llvm::make_unique<raw_fd_ostream>(Temp->FD, /* ShouldClose */ false),
+          AddBuffer, std::move(*Temp), EntryPath.str(), Task);
     };
   };
 }

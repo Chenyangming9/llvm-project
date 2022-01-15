@@ -16,8 +16,6 @@
 #define LLVM_IR_INSTRUCTIONS_H
 
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/Bitfields.h"
-#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -28,7 +26,6 @@
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CallingConv.h"
-#include "llvm/IR/CFG.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
@@ -62,13 +59,6 @@ class LLVMContext;
 class AllocaInst : public UnaryInstruction {
   Type *AllocatedType;
 
-  using AlignmentField = AlignmentBitfieldElementT<0>;
-  using UsedWithInAllocaField = BoolBitfieldElementT<AlignmentField::NextBit>;
-  using SwiftErrorField = BoolBitfieldElementT<UsedWithInAllocaField::NextBit>;
-  static_assert(Bitfield::areContiguous<AlignmentField, UsedWithInAllocaField,
-                                        SwiftErrorField>(),
-                "Bitfields must be contiguous");
-
 protected:
   // Note: Instruction needs to be a friend here to call cloneImpl.
   friend class Instruction;
@@ -76,19 +66,21 @@ protected:
   AllocaInst *cloneImpl() const;
 
 public:
-  explicit AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize,
-                      const Twine &Name, Instruction *InsertBefore);
+  explicit AllocaInst(Type *Ty, unsigned AddrSpace,
+                      Value *ArraySize = nullptr,
+                      const Twine &Name = "",
+                      Instruction *InsertBefore = nullptr);
   AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize,
              const Twine &Name, BasicBlock *InsertAtEnd);
 
-  AllocaInst(Type *Ty, unsigned AddrSpace, const Twine &Name,
-             Instruction *InsertBefore);
+  AllocaInst(Type *Ty, unsigned AddrSpace,
+             const Twine &Name, Instruction *InsertBefore = nullptr);
   AllocaInst(Type *Ty, unsigned AddrSpace,
              const Twine &Name, BasicBlock *InsertAtEnd);
 
-  AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize, Align Align,
+  AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize, unsigned Align,
              const Twine &Name = "", Instruction *InsertBefore = nullptr);
-  AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize, Align Align,
+  AllocaInst(Type *Ty, unsigned AddrSpace, Value *ArraySize, unsigned Align,
              const Twine &Name, BasicBlock *InsertAtEnd);
 
   /// Return true if there is an allocation size parameter to the allocation
@@ -107,7 +99,7 @@ public:
 
   /// Get allocation size in bits. Returns None if size can't be determined,
   /// e.g. in case of a VLA.
-  Optional<TypeSize> getAllocationSizeInBits(const DataLayout &DL) const;
+  Optional<uint64_t> getAllocationSizeInBits(const DataLayout &DL) const;
 
   /// Return the type that is being allocated by the instruction.
   Type *getAllocatedType() const { return AllocatedType; }
@@ -117,16 +109,10 @@ public:
 
   /// Return the alignment of the memory that is being allocated by the
   /// instruction.
-  Align getAlign() const {
-    return Align(1ULL << getSubclassData<AlignmentField>());
+  unsigned getAlignment() const {
+    return (1u << (getSubclassDataFromInstruction() & 31)) >> 1;
   }
-
-  void setAlignment(Align Align) {
-    setSubclassData<AlignmentField>(Log2(Align));
-  }
-
-  // FIXME: Remove this one transition to Align is over.
-  unsigned getAlignment() const { return getAlign().value(); }
+  void setAlignment(unsigned Align);
 
   /// Return true if this alloca is in the entry block of the function and is a
   /// constant size. If so, the code generator will fold it into the
@@ -136,18 +122,25 @@ public:
   /// Return true if this alloca is used as an inalloca argument to a call. Such
   /// allocas are never considered static even if they are in the entry block.
   bool isUsedWithInAlloca() const {
-    return getSubclassData<UsedWithInAllocaField>();
+    return getSubclassDataFromInstruction() & 32;
   }
 
   /// Specify whether this alloca is used to represent the arguments to a call.
   void setUsedWithInAlloca(bool V) {
-    setSubclassData<UsedWithInAllocaField>(V);
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~32) |
+                               (V ? 32 : 0));
   }
 
   /// Return true if this alloca is used as a swifterror argument to a call.
-  bool isSwiftError() const { return getSubclassData<SwiftErrorField>(); }
+  bool isSwiftError() const {
+    return getSubclassDataFromInstruction() & 64;
+  }
+
   /// Specify whether this alloca is used to represent a swifterror.
-  void setSwiftError(bool V) { setSubclassData<SwiftErrorField>(V); }
+  void setSwiftError(bool V) {
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~64) |
+                               (V ? 64 : 0));
+  }
 
   // Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Instruction *I) {
@@ -160,9 +153,8 @@ public:
 private:
   // Shadow Instruction::setInstructionSubclassData with a private forwarding
   // method so that subclasses cannot accidentally use it.
-  template <typename Bitfield>
-  void setSubclassData(typename Bitfield::Type Value) {
-    Instruction::setSubclassData<Bitfield>(Value);
+  void setInstructionSubclassData(unsigned short D) {
+    Instruction::setInstructionSubclassData(D);
   }
 };
 
@@ -173,13 +165,6 @@ private:
 /// An instruction for reading from memory. This uses the SubclassData field in
 /// Value to store whether or not the load is volatile.
 class LoadInst : public UnaryInstruction {
-  using VolatileField = BoolBitfieldElementT<0>;
-  using AlignmentField = AlignmentBitfieldElementT<VolatileField::NextBit>;
-  using OrderingField = AtomicOrderingBitfieldElementT<AlignmentField::NextBit>;
-  static_assert(
-      Bitfield::areContiguous<VolatileField, AlignmentField, OrderingField>(),
-      "Bitfields must be contiguous");
-
   void AssertOK();
 
 protected:
@@ -189,53 +174,85 @@ protected:
   LoadInst *cloneImpl() const;
 
 public:
-  LoadInst(Type *Ty, Value *Ptr, const Twine &NameStr,
-           Instruction *InsertBefore);
+  LoadInst(Type *Ty, Value *Ptr, const Twine &NameStr = "",
+           Instruction *InsertBefore = nullptr);
   LoadInst(Type *Ty, Value *Ptr, const Twine &NameStr, BasicBlock *InsertAtEnd);
   LoadInst(Type *Ty, Value *Ptr, const Twine &NameStr, bool isVolatile,
-           Instruction *InsertBefore);
+           Instruction *InsertBefore = nullptr);
   LoadInst(Type *Ty, Value *Ptr, const Twine &NameStr, bool isVolatile,
            BasicBlock *InsertAtEnd);
   LoadInst(Type *Ty, Value *Ptr, const Twine &NameStr, bool isVolatile,
-           Align Align, Instruction *InsertBefore = nullptr);
+           unsigned Align, Instruction *InsertBefore = nullptr);
   LoadInst(Type *Ty, Value *Ptr, const Twine &NameStr, bool isVolatile,
-           Align Align, BasicBlock *InsertAtEnd);
+           unsigned Align, BasicBlock *InsertAtEnd);
   LoadInst(Type *Ty, Value *Ptr, const Twine &NameStr, bool isVolatile,
-           Align Align, AtomicOrdering Order,
+           unsigned Align, AtomicOrdering Order,
            SyncScope::ID SSID = SyncScope::System,
            Instruction *InsertBefore = nullptr);
   LoadInst(Type *Ty, Value *Ptr, const Twine &NameStr, bool isVolatile,
-           Align Align, AtomicOrdering Order, SyncScope::ID SSID,
+           unsigned Align, AtomicOrdering Order, SyncScope::ID SSID,
            BasicBlock *InsertAtEnd);
 
+  // Deprecated [opaque pointer types]
+  explicit LoadInst(Value *Ptr, const Twine &NameStr = "",
+                    Instruction *InsertBefore = nullptr)
+      : LoadInst(Ptr->getType()->getPointerElementType(), Ptr, NameStr,
+                 InsertBefore) {}
+  LoadInst(Value *Ptr, const Twine &NameStr, BasicBlock *InsertAtEnd)
+      : LoadInst(Ptr->getType()->getPointerElementType(), Ptr, NameStr,
+                 InsertAtEnd) {}
+  LoadInst(Value *Ptr, const Twine &NameStr, bool isVolatile,
+           Instruction *InsertBefore = nullptr)
+      : LoadInst(Ptr->getType()->getPointerElementType(), Ptr, NameStr,
+                 isVolatile, InsertBefore) {}
+  LoadInst(Value *Ptr, const Twine &NameStr, bool isVolatile,
+           BasicBlock *InsertAtEnd)
+      : LoadInst(Ptr->getType()->getPointerElementType(), Ptr, NameStr,
+                 isVolatile, InsertAtEnd) {}
+  LoadInst(Value *Ptr, const Twine &NameStr, bool isVolatile, unsigned Align,
+           Instruction *InsertBefore = nullptr)
+      : LoadInst(Ptr->getType()->getPointerElementType(), Ptr, NameStr,
+                 isVolatile, Align, InsertBefore) {}
+  LoadInst(Value *Ptr, const Twine &NameStr, bool isVolatile, unsigned Align,
+           BasicBlock *InsertAtEnd)
+      : LoadInst(Ptr->getType()->getPointerElementType(), Ptr, NameStr,
+                 isVolatile, Align, InsertAtEnd) {}
+  LoadInst(Value *Ptr, const Twine &NameStr, bool isVolatile, unsigned Align,
+           AtomicOrdering Order, SyncScope::ID SSID = SyncScope::System,
+           Instruction *InsertBefore = nullptr)
+      : LoadInst(Ptr->getType()->getPointerElementType(), Ptr, NameStr,
+                 isVolatile, Align, Order, SSID, InsertBefore) {}
+  LoadInst(Value *Ptr, const Twine &NameStr, bool isVolatile, unsigned Align,
+           AtomicOrdering Order, SyncScope::ID SSID, BasicBlock *InsertAtEnd)
+      : LoadInst(Ptr->getType()->getPointerElementType(), Ptr, NameStr,
+                 isVolatile, Align, Order, SSID, InsertAtEnd) {}
+
   /// Return true if this is a load from a volatile memory location.
-  bool isVolatile() const { return getSubclassData<VolatileField>(); }
+  bool isVolatile() const { return getSubclassDataFromInstruction() & 1; }
 
   /// Specify whether this is a volatile load or not.
-  void setVolatile(bool V) { setSubclassData<VolatileField>(V); }
-
-  /// Return the alignment of the access that is being performed.
-  /// FIXME: Remove this function once transition to Align is over.
-  /// Use getAlign() instead.
-  unsigned getAlignment() const { return getAlign().value(); }
-
-  /// Return the alignment of the access that is being performed.
-  Align getAlign() const {
-    return Align(1ULL << (getSubclassData<AlignmentField>()));
+  void setVolatile(bool V) {
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~1) |
+                               (V ? 1 : 0));
   }
 
-  void setAlignment(Align Align) {
-    setSubclassData<AlignmentField>(Log2(Align));
+  /// Return the alignment of the access that is being performed.
+  unsigned getAlignment() const {
+    return (1 << ((getSubclassDataFromInstruction() >> 1) & 31)) >> 1;
   }
+
+  void setAlignment(unsigned Align);
 
   /// Returns the ordering constraint of this load instruction.
   AtomicOrdering getOrdering() const {
-    return getSubclassData<OrderingField>();
+    return AtomicOrdering((getSubclassDataFromInstruction() >> 7) & 7);
   }
+
   /// Sets the ordering constraint of this load instruction.  May not be Release
   /// or AcquireRelease.
   void setOrdering(AtomicOrdering Ordering) {
-    setSubclassData<OrderingField>(Ordering);
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~(7 << 7)) |
+                               ((unsigned)Ordering << 7));
   }
 
   /// Returns the synchronization scope ID of this load instruction.
@@ -285,9 +302,8 @@ public:
 private:
   // Shadow Instruction::setInstructionSubclassData with a private forwarding
   // method so that subclasses cannot accidentally use it.
-  template <typename Bitfield>
-  void setSubclassData(typename Bitfield::Type Value) {
-    Instruction::setSubclassData<Bitfield>(Value);
+  void setInstructionSubclassData(unsigned short D) {
+    Instruction::setInstructionSubclassData(D);
   }
 
   /// The synchronization scope ID of this load instruction.  Not quite enough
@@ -302,13 +318,6 @@ private:
 
 /// An instruction for storing to memory.
 class StoreInst : public Instruction {
-  using VolatileField = BoolBitfieldElementT<0>;
-  using AlignmentField = AlignmentBitfieldElementT<VolatileField::NextBit>;
-  using OrderingField = AtomicOrderingBitfieldElementT<AlignmentField::NextBit>;
-  static_assert(
-      Bitfield::areContiguous<VolatileField, AlignmentField, OrderingField>(),
-      "Bitfields must be contiguous");
-
   void AssertOK();
 
 protected:
@@ -320,53 +329,55 @@ protected:
 public:
   StoreInst(Value *Val, Value *Ptr, Instruction *InsertBefore);
   StoreInst(Value *Val, Value *Ptr, BasicBlock *InsertAtEnd);
-  StoreInst(Value *Val, Value *Ptr, bool isVolatile, Instruction *InsertBefore);
+  StoreInst(Value *Val, Value *Ptr, bool isVolatile = false,
+            Instruction *InsertBefore = nullptr);
   StoreInst(Value *Val, Value *Ptr, bool isVolatile, BasicBlock *InsertAtEnd);
-  StoreInst(Value *Val, Value *Ptr, bool isVolatile, Align Align,
+  StoreInst(Value *Val, Value *Ptr, bool isVolatile,
+            unsigned Align, Instruction *InsertBefore = nullptr);
+  StoreInst(Value *Val, Value *Ptr, bool isVolatile,
+            unsigned Align, BasicBlock *InsertAtEnd);
+  StoreInst(Value *Val, Value *Ptr, bool isVolatile,
+            unsigned Align, AtomicOrdering Order,
+            SyncScope::ID SSID = SyncScope::System,
             Instruction *InsertBefore = nullptr);
-  StoreInst(Value *Val, Value *Ptr, bool isVolatile, Align Align,
+  StoreInst(Value *Val, Value *Ptr, bool isVolatile,
+            unsigned Align, AtomicOrdering Order, SyncScope::ID SSID,
             BasicBlock *InsertAtEnd);
-  StoreInst(Value *Val, Value *Ptr, bool isVolatile, Align Align,
-            AtomicOrdering Order, SyncScope::ID SSID = SyncScope::System,
-            Instruction *InsertBefore = nullptr);
-  StoreInst(Value *Val, Value *Ptr, bool isVolatile, Align Align,
-            AtomicOrdering Order, SyncScope::ID SSID, BasicBlock *InsertAtEnd);
 
   // allocate space for exactly two operands
-  void *operator new(size_t S) { return User::operator new(S, 2); }
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
+  void *operator new(size_t s) {
+    return User::operator new(s, 2);
+  }
 
   /// Return true if this is a store to a volatile memory location.
-  bool isVolatile() const { return getSubclassData<VolatileField>(); }
+  bool isVolatile() const { return getSubclassDataFromInstruction() & 1; }
 
   /// Specify whether this is a volatile store or not.
-  void setVolatile(bool V) { setSubclassData<VolatileField>(V); }
+  void setVolatile(bool V) {
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~1) |
+                               (V ? 1 : 0));
+  }
 
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 
   /// Return the alignment of the access that is being performed
-  /// FIXME: Remove this function once transition to Align is over.
-  /// Use getAlign() instead.
-  unsigned getAlignment() const { return getAlign().value(); }
-
-  Align getAlign() const {
-    return Align(1ULL << (getSubclassData<AlignmentField>()));
+  unsigned getAlignment() const {
+    return (1 << ((getSubclassDataFromInstruction() >> 1) & 31)) >> 1;
   }
 
-  void setAlignment(Align Align) {
-    setSubclassData<AlignmentField>(Log2(Align));
-  }
+  void setAlignment(unsigned Align);
 
   /// Returns the ordering constraint of this store instruction.
   AtomicOrdering getOrdering() const {
-    return getSubclassData<OrderingField>();
+    return AtomicOrdering((getSubclassDataFromInstruction() >> 7) & 7);
   }
 
   /// Sets the ordering constraint of this store instruction.  May not be
   /// Acquire or AcquireRelease.
   void setOrdering(AtomicOrdering Ordering) {
-    setSubclassData<OrderingField>(Ordering);
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~(7 << 7)) |
+                               ((unsigned)Ordering << 7));
   }
 
   /// Returns the synchronization scope ID of this store instruction.
@@ -419,9 +430,8 @@ public:
 private:
   // Shadow Instruction::setInstructionSubclassData with a private forwarding
   // method so that subclasses cannot accidentally use it.
-  template <typename Bitfield>
-  void setSubclassData(typename Bitfield::Type Value) {
-    Instruction::setSubclassData<Bitfield>(Value);
+  void setInstructionSubclassData(unsigned short D) {
+    Instruction::setInstructionSubclassData(D);
   }
 
   /// The synchronization scope ID of this store instruction.  Not quite enough
@@ -442,8 +452,6 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(StoreInst, Value)
 
 /// An instruction for ordering other memory operations.
 class FenceInst : public Instruction {
-  using OrderingField = AtomicOrderingBitfieldElementT<0>;
-
   void Init(AtomicOrdering Ordering, SyncScope::ID SSID);
 
 protected:
@@ -462,18 +470,20 @@ public:
             BasicBlock *InsertAtEnd);
 
   // allocate space for exactly zero operands
-  void *operator new(size_t S) { return User::operator new(S, 0); }
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
+  void *operator new(size_t s) {
+    return User::operator new(s, 0);
+  }
 
   /// Returns the ordering constraint of this fence instruction.
   AtomicOrdering getOrdering() const {
-    return getSubclassData<OrderingField>();
+    return AtomicOrdering(getSubclassDataFromInstruction() >> 1);
   }
 
   /// Sets the ordering constraint of this fence instruction.  May only be
   /// Acquire, Release, AcquireRelease, or SequentiallyConsistent.
   void setOrdering(AtomicOrdering Ordering) {
-    setSubclassData<OrderingField>(Ordering);
+    setInstructionSubclassData((getSubclassDataFromInstruction() & 1) |
+                               ((unsigned)Ordering << 1));
   }
 
   /// Returns the synchronization scope ID of this fence instruction.
@@ -497,9 +507,8 @@ public:
 private:
   // Shadow Instruction::setInstructionSubclassData with a private forwarding
   // method so that subclasses cannot accidentally use it.
-  template <typename Bitfield>
-  void setSubclassData(typename Bitfield::Type Value) {
-    Instruction::setSubclassData<Bitfield>(Value);
+  void setInstructionSubclassData(unsigned short D) {
+    Instruction::setInstructionSubclassData(D);
   }
 
   /// The synchronization scope ID of this fence instruction.  Not quite enough
@@ -519,14 +528,9 @@ private:
 /// failure (false) as second element.
 ///
 class AtomicCmpXchgInst : public Instruction {
-  void Init(Value *Ptr, Value *Cmp, Value *NewVal, Align Align,
+  void Init(Value *Ptr, Value *Cmp, Value *NewVal,
             AtomicOrdering SuccessOrdering, AtomicOrdering FailureOrdering,
             SyncScope::ID SSID);
-
-  template <unsigned Offset>
-  using AtomicOrderingBitfieldElement =
-      typename Bitfield::Element<AtomicOrdering, Offset, 3,
-                                 AtomicOrdering::LAST>;
 
 protected:
   // Note: Instruction needs to be a friend here to call cloneImpl.
@@ -535,107 +539,71 @@ protected:
   AtomicCmpXchgInst *cloneImpl() const;
 
 public:
-  AtomicCmpXchgInst(Value *Ptr, Value *Cmp, Value *NewVal, Align Alignment,
+  AtomicCmpXchgInst(Value *Ptr, Value *Cmp, Value *NewVal,
                     AtomicOrdering SuccessOrdering,
-                    AtomicOrdering FailureOrdering, SyncScope::ID SSID,
-                    Instruction *InsertBefore = nullptr);
-  AtomicCmpXchgInst(Value *Ptr, Value *Cmp, Value *NewVal, Align Alignment,
+                    AtomicOrdering FailureOrdering,
+                    SyncScope::ID SSID, Instruction *InsertBefore = nullptr);
+  AtomicCmpXchgInst(Value *Ptr, Value *Cmp, Value *NewVal,
                     AtomicOrdering SuccessOrdering,
-                    AtomicOrdering FailureOrdering, SyncScope::ID SSID,
-                    BasicBlock *InsertAtEnd);
+                    AtomicOrdering FailureOrdering,
+                    SyncScope::ID SSID, BasicBlock *InsertAtEnd);
 
   // allocate space for exactly three operands
-  void *operator new(size_t S) { return User::operator new(S, 3); }
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
-
-  using VolatileField = BoolBitfieldElementT<0>;
-  using WeakField = BoolBitfieldElementT<VolatileField::NextBit>;
-  using SuccessOrderingField =
-      AtomicOrderingBitfieldElementT<WeakField::NextBit>;
-  using FailureOrderingField =
-      AtomicOrderingBitfieldElementT<SuccessOrderingField::NextBit>;
-  using AlignmentField =
-      AlignmentBitfieldElementT<FailureOrderingField::NextBit>;
-  static_assert(
-      Bitfield::areContiguous<VolatileField, WeakField, SuccessOrderingField,
-                              FailureOrderingField, AlignmentField>(),
-      "Bitfields must be contiguous");
-
-  /// Return the alignment of the memory that is being allocated by the
-  /// instruction.
-  Align getAlign() const {
-    return Align(1ULL << getSubclassData<AlignmentField>());
-  }
-
-  void setAlignment(Align Align) {
-    setSubclassData<AlignmentField>(Log2(Align));
+  void *operator new(size_t s) {
+    return User::operator new(s, 3);
   }
 
   /// Return true if this is a cmpxchg from a volatile memory
   /// location.
   ///
-  bool isVolatile() const { return getSubclassData<VolatileField>(); }
+  bool isVolatile() const {
+    return getSubclassDataFromInstruction() & 1;
+  }
 
   /// Specify whether this is a volatile cmpxchg.
   ///
-  void setVolatile(bool V) { setSubclassData<VolatileField>(V); }
+  void setVolatile(bool V) {
+     setInstructionSubclassData((getSubclassDataFromInstruction() & ~1) |
+                                (unsigned)V);
+  }
 
   /// Return true if this cmpxchg may spuriously fail.
-  bool isWeak() const { return getSubclassData<WeakField>(); }
+  bool isWeak() const {
+    return getSubclassDataFromInstruction() & 0x100;
+  }
 
-  void setWeak(bool IsWeak) { setSubclassData<WeakField>(IsWeak); }
+  void setWeak(bool IsWeak) {
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~0x100) |
+                               (IsWeak << 8));
+  }
 
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 
-  static bool isValidSuccessOrdering(AtomicOrdering Ordering) {
-    return Ordering != AtomicOrdering::NotAtomic &&
-           Ordering != AtomicOrdering::Unordered;
-  }
-
-  static bool isValidFailureOrdering(AtomicOrdering Ordering) {
-    return Ordering != AtomicOrdering::NotAtomic &&
-           Ordering != AtomicOrdering::Unordered &&
-           Ordering != AtomicOrdering::AcquireRelease &&
-           Ordering != AtomicOrdering::Release;
-  }
-
   /// Returns the success ordering constraint of this cmpxchg instruction.
   AtomicOrdering getSuccessOrdering() const {
-    return getSubclassData<SuccessOrderingField>();
+    return AtomicOrdering((getSubclassDataFromInstruction() >> 2) & 7);
   }
 
   /// Sets the success ordering constraint of this cmpxchg instruction.
   void setSuccessOrdering(AtomicOrdering Ordering) {
-    assert(isValidSuccessOrdering(Ordering) &&
-           "invalid CmpXchg success ordering");
-    setSubclassData<SuccessOrderingField>(Ordering);
+    assert(Ordering != AtomicOrdering::NotAtomic &&
+           "CmpXchg instructions can only be atomic.");
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~0x1c) |
+                               ((unsigned)Ordering << 2));
   }
 
   /// Returns the failure ordering constraint of this cmpxchg instruction.
   AtomicOrdering getFailureOrdering() const {
-    return getSubclassData<FailureOrderingField>();
+    return AtomicOrdering((getSubclassDataFromInstruction() >> 5) & 7);
   }
 
   /// Sets the failure ordering constraint of this cmpxchg instruction.
   void setFailureOrdering(AtomicOrdering Ordering) {
-    assert(isValidFailureOrdering(Ordering) &&
-           "invalid CmpXchg failure ordering");
-    setSubclassData<FailureOrderingField>(Ordering);
-  }
-
-  /// Returns a single ordering which is at least as strong as both the
-  /// success and failure orderings for this cmpxchg.
-  AtomicOrdering getMergedOrdering() const {
-    if (getFailureOrdering() == AtomicOrdering::SequentiallyConsistent)
-      return AtomicOrdering::SequentiallyConsistent;
-    if (getFailureOrdering() == AtomicOrdering::Acquire) {
-      if (getSuccessOrdering() == AtomicOrdering::Monotonic)
-        return AtomicOrdering::Acquire;
-      if (getSuccessOrdering() == AtomicOrdering::Release)
-        return AtomicOrdering::AcquireRelease;
-    }
-    return getSuccessOrdering();
+    assert(Ordering != AtomicOrdering::NotAtomic &&
+           "CmpXchg instructions can only be atomic.");
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~0xe0) |
+                               ((unsigned)Ordering << 5));
   }
 
   /// Returns the synchronization scope ID of this cmpxchg instruction.
@@ -697,9 +665,8 @@ public:
 private:
   // Shadow Instruction::setInstructionSubclassData with a private forwarding
   // method so that subclasses cannot accidentally use it.
-  template <typename Bitfield>
-  void setSubclassData(typename Bitfield::Type Value) {
-    Instruction::setSubclassData<Bitfield>(Value);
+  void setInstructionSubclassData(unsigned short D) {
+    Instruction::setInstructionSubclassData(D);
   }
 
   /// The synchronization scope ID of this cmpxchg instruction.  Not quite
@@ -735,7 +702,7 @@ public:
   /// the descriptions, 'p' is the pointer to the instruction's memory location,
   /// 'old' is the initial value of *p, and 'v' is the other value passed to the
   /// instruction.  These instructions always return 'old'.
-  enum BinOp : unsigned {
+  enum BinOp {
     /// *p = v
     Xchg,
     /// *p = old + v
@@ -770,38 +737,21 @@ public:
     BAD_BINOP
   };
 
-private:
-  template <unsigned Offset>
-  using AtomicOrderingBitfieldElement =
-      typename Bitfield::Element<AtomicOrdering, Offset, 3,
-                                 AtomicOrdering::LAST>;
-
-  template <unsigned Offset>
-  using BinOpBitfieldElement =
-      typename Bitfield::Element<BinOp, Offset, 4, BinOp::LAST_BINOP>;
-
-public:
-  AtomicRMWInst(BinOp Operation, Value *Ptr, Value *Val, Align Alignment,
+  AtomicRMWInst(BinOp Operation, Value *Ptr, Value *Val,
                 AtomicOrdering Ordering, SyncScope::ID SSID,
                 Instruction *InsertBefore = nullptr);
-  AtomicRMWInst(BinOp Operation, Value *Ptr, Value *Val, Align Alignment,
+  AtomicRMWInst(BinOp Operation, Value *Ptr, Value *Val,
                 AtomicOrdering Ordering, SyncScope::ID SSID,
                 BasicBlock *InsertAtEnd);
 
   // allocate space for exactly two operands
-  void *operator new(size_t S) { return User::operator new(S, 2); }
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
+  void *operator new(size_t s) {
+    return User::operator new(s, 2);
+  }
 
-  using VolatileField = BoolBitfieldElementT<0>;
-  using AtomicOrderingField =
-      AtomicOrderingBitfieldElementT<VolatileField::NextBit>;
-  using OperationField = BinOpBitfieldElement<AtomicOrderingField::NextBit>;
-  using AlignmentField = AlignmentBitfieldElementT<OperationField::NextBit>;
-  static_assert(Bitfield::areContiguous<VolatileField, AtomicOrderingField,
-                                        OperationField, AlignmentField>(),
-                "Bitfields must be contiguous");
-
-  BinOp getOperation() const { return getSubclassData<OperationField>(); }
+  BinOp getOperation() const {
+    return static_cast<BinOp>(getSubclassDataFromInstruction() >> 5);
+  }
 
   static StringRef getOperationName(BinOp Op);
 
@@ -816,40 +766,38 @@ public:
   }
 
   void setOperation(BinOp Operation) {
-    setSubclassData<OperationField>(Operation);
-  }
-
-  /// Return the alignment of the memory that is being allocated by the
-  /// instruction.
-  Align getAlign() const {
-    return Align(1ULL << getSubclassData<AlignmentField>());
-  }
-
-  void setAlignment(Align Align) {
-    setSubclassData<AlignmentField>(Log2(Align));
+    unsigned short SubclassData = getSubclassDataFromInstruction();
+    setInstructionSubclassData((SubclassData & 31) |
+                               (Operation << 5));
   }
 
   /// Return true if this is a RMW on a volatile memory location.
   ///
-  bool isVolatile() const { return getSubclassData<VolatileField>(); }
+  bool isVolatile() const {
+    return getSubclassDataFromInstruction() & 1;
+  }
 
   /// Specify whether this is a volatile RMW or not.
   ///
-  void setVolatile(bool V) { setSubclassData<VolatileField>(V); }
+  void setVolatile(bool V) {
+     setInstructionSubclassData((getSubclassDataFromInstruction() & ~1) |
+                                (unsigned)V);
+  }
 
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 
   /// Returns the ordering constraint of this rmw instruction.
   AtomicOrdering getOrdering() const {
-    return getSubclassData<AtomicOrderingField>();
+    return AtomicOrdering((getSubclassDataFromInstruction() >> 2) & 7);
   }
 
   /// Sets the ordering constraint of this rmw instruction.
   void setOrdering(AtomicOrdering Ordering) {
     assert(Ordering != AtomicOrdering::NotAtomic &&
            "atomicrmw instructions can only be atomic.");
-    setSubclassData<AtomicOrderingField>(Ordering);
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~(7 << 2)) |
+                               ((unsigned)Ordering << 2));
   }
 
   /// Returns the synchronization scope ID of this rmw instruction.
@@ -887,14 +835,13 @@ public:
   }
 
 private:
-  void Init(BinOp Operation, Value *Ptr, Value *Val, Align Align,
+  void Init(BinOp Operation, Value *Ptr, Value *Val,
             AtomicOrdering Ordering, SyncScope::ID SSID);
 
   // Shadow Instruction::setInstructionSubclassData with a private forwarding
   // method so that subclasses cannot accidentally use it.
-  template <typename Bitfield>
-  void setSubclassData(typename Bitfield::Type Value) {
-    Instruction::setSubclassData<Bitfield>(Value);
+  void setInstructionSubclassData(unsigned short D) {
+    Instruction::setInstructionSubclassData(D);
   }
 
   /// The synchronization scope ID of this rmw instruction.  Not quite enough
@@ -956,9 +903,13 @@ public:
                                    const Twine &NameStr = "",
                                    Instruction *InsertBefore = nullptr) {
     unsigned Values = 1 + unsigned(IdxList.size());
-    assert(PointeeType && "Must specify element type");
-    assert(cast<PointerType>(Ptr->getType()->getScalarType())
-               ->isOpaqueOrPointeeTypeMatches(PointeeType));
+    if (!PointeeType)
+      PointeeType =
+          cast<PointerType>(Ptr->getType()->getScalarType())->getElementType();
+    else
+      assert(
+          PointeeType ==
+          cast<PointerType>(Ptr->getType()->getScalarType())->getElementType());
     return new (Values) GetElementPtrInst(PointeeType, Ptr, IdxList, Values,
                                           NameStr, InsertBefore);
   }
@@ -968,24 +919,26 @@ public:
                                    const Twine &NameStr,
                                    BasicBlock *InsertAtEnd) {
     unsigned Values = 1 + unsigned(IdxList.size());
-    assert(PointeeType && "Must specify element type");
-    assert(cast<PointerType>(Ptr->getType()->getScalarType())
-               ->isOpaqueOrPointeeTypeMatches(PointeeType));
+    if (!PointeeType)
+      PointeeType =
+          cast<PointerType>(Ptr->getType()->getScalarType())->getElementType();
+    else
+      assert(
+          PointeeType ==
+          cast<PointerType>(Ptr->getType()->getScalarType())->getElementType());
     return new (Values) GetElementPtrInst(PointeeType, Ptr, IdxList, Values,
                                           NameStr, InsertAtEnd);
   }
 
-  LLVM_ATTRIBUTE_DEPRECATED(static GetElementPtrInst *CreateInBounds(
-        Value *Ptr, ArrayRef<Value *> IdxList, const Twine &NameStr = "",
-        Instruction *InsertBefore = nullptr),
-      "Use the version with explicit element type instead") {
-    return CreateInBounds(
-        Ptr->getType()->getScalarType()->getPointerElementType(), Ptr, IdxList,
-        NameStr, InsertBefore);
-  }
-
   /// Create an "inbounds" getelementptr. See the documentation for the
   /// "inbounds" flag in LangRef.html for details.
+  static GetElementPtrInst *CreateInBounds(Value *Ptr,
+                                           ArrayRef<Value *> IdxList,
+                                           const Twine &NameStr = "",
+                                           Instruction *InsertBefore = nullptr){
+    return CreateInBounds(nullptr, Ptr, IdxList, NameStr, InsertBefore);
+  }
+
   static GetElementPtrInst *
   CreateInBounds(Type *PointeeType, Value *Ptr, ArrayRef<Value *> IdxList,
                  const Twine &NameStr = "",
@@ -996,13 +949,11 @@ public:
     return GEP;
   }
 
-  LLVM_ATTRIBUTE_DEPRECATED(static GetElementPtrInst *CreateInBounds(
-        Value *Ptr, ArrayRef<Value *> IdxList, const Twine &NameStr,
-        BasicBlock *InsertAtEnd),
-      "Use the version with explicit element type instead") {
-    return CreateInBounds(
-        Ptr->getType()->getScalarType()->getPointerElementType(), Ptr, IdxList,
-        NameStr, InsertAtEnd);
+  static GetElementPtrInst *CreateInBounds(Value *Ptr,
+                                           ArrayRef<Value *> IdxList,
+                                           const Twine &NameStr,
+                                           BasicBlock *InsertAtEnd) {
+    return CreateInBounds(nullptr, Ptr, IdxList, NameStr, InsertAtEnd);
   }
 
   static GetElementPtrInst *CreateInBounds(Type *PointeeType, Value *Ptr,
@@ -1024,8 +975,8 @@ public:
   void setResultElementType(Type *Ty) { ResultElementType = Ty; }
 
   Type *getResultElementType() const {
-    assert(cast<PointerType>(getType()->getScalarType())
-               ->isOpaqueOrPointeeTypeMatches(ResultElementType));
+    assert(ResultElementType ==
+           cast<PointerType>(getType()->getScalarType())->getElementType());
     return ResultElementType;
   }
 
@@ -1036,22 +987,15 @@ public:
     return getPointerAddressSpace();
   }
 
-  /// Returns the result type of a getelementptr with the given source
-  /// element type and indexes.
+  /// Returns the type of the element that would be loaded with
+  /// a load instruction with the specified parameters.
   ///
   /// Null is returned if the indices are invalid for the specified
-  /// source element type.
+  /// pointer type.
+  ///
   static Type *getIndexedType(Type *Ty, ArrayRef<Value *> IdxList);
   static Type *getIndexedType(Type *Ty, ArrayRef<Constant *> IdxList);
   static Type *getIndexedType(Type *Ty, ArrayRef<uint64_t> IdxList);
-
-  /// Return the type of the element at the given index of an indexable
-  /// type.  This is equivalent to "getIndexedType(Agg, {Zero, Idx})".
-  ///
-  /// Returns null if the type can't be indexed, or the given index is not
-  /// legal for the given type.
-  static Type *getTypeAtIndex(Type *Ty, Value *Idx);
-  static Type *getTypeAtIndex(Type *Ty, uint64_t Idx);
 
   inline op_iterator       idx_begin()       { return op_begin()+1; }
   inline const_op_iterator idx_begin() const { return op_begin()+1; }
@@ -1089,23 +1033,24 @@ public:
 
   /// Returns the pointer type returned by the GEP
   /// instruction, which may be a vector of pointers.
+  static Type *getGEPReturnType(Value *Ptr, ArrayRef<Value *> IdxList) {
+    return getGEPReturnType(
+      cast<PointerType>(Ptr->getType()->getScalarType())->getElementType(),
+      Ptr, IdxList);
+  }
   static Type *getGEPReturnType(Type *ElTy, Value *Ptr,
                                 ArrayRef<Value *> IdxList) {
-    PointerType *OrigPtrTy = cast<PointerType>(Ptr->getType()->getScalarType());
-    unsigned AddrSpace = OrigPtrTy->getAddressSpace();
-    Type *ResultElemTy = checkGEPType(getIndexedType(ElTy, IdxList));
-    Type *PtrTy = OrigPtrTy->isOpaque()
-      ? PointerType::get(OrigPtrTy->getContext(), AddrSpace)
-      : PointerType::get(ResultElemTy, AddrSpace);
+    Type *PtrTy = PointerType::get(checkGEPType(getIndexedType(ElTy, IdxList)),
+                                   Ptr->getType()->getPointerAddressSpace());
     // Vector GEP
-    if (auto *PtrVTy = dyn_cast<VectorType>(Ptr->getType())) {
-      ElementCount EltCount = PtrVTy->getElementCount();
-      return VectorType::get(PtrTy, EltCount);
+    if (Ptr->getType()->isVectorTy()) {
+      unsigned NumElem = Ptr->getType()->getVectorNumElements();
+      return VectorType::get(PtrTy, NumElem);
     }
     for (Value *Index : IdxList)
-      if (auto *IndexVTy = dyn_cast<VectorType>(Index->getType())) {
-        ElementCount EltCount = IndexVTy->getElementCount();
-        return VectorType::get(PtrTy, EltCount);
+      if (Index->getType()->isVectorTy()) {
+        unsigned NumElem = Index->getType()->getVectorNumElements();
+        return VectorType::get(PtrTy, NumElem);
       }
     // Scalar GEP
     return PtrTy;
@@ -1145,9 +1090,7 @@ public:
   /// must be at least as wide as the IntPtr type for the address space of
   /// the base GEP pointer.
   bool accumulateConstantOffset(const DataLayout &DL, APInt &Offset) const;
-  bool collectOffset(const DataLayout &DL, unsigned BitWidth,
-                     MapVector<Value *, APInt> &VariableOffsets,
-                     APInt &ConstantOffset) const;
+
   // Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Instruction *I) {
     return (I->getOpcode() == Instruction::GetElementPtr);
@@ -1171,8 +1114,8 @@ GetElementPtrInst::GetElementPtrInst(Type *PointeeType, Value *Ptr,
                   Values, InsertBefore),
       SourceElementType(PointeeType),
       ResultElementType(getIndexedType(PointeeType, IdxList)) {
-  assert(cast<PointerType>(getType()->getScalarType())
-             ->isOpaqueOrPointeeTypeMatches(ResultElementType));
+  assert(ResultElementType ==
+         cast<PointerType>(getType()->getScalarType())->getElementType());
   init(Ptr, IdxList, NameStr);
 }
 
@@ -1185,8 +1128,8 @@ GetElementPtrInst::GetElementPtrInst(Type *PointeeType, Value *Ptr,
                   Values, InsertAtEnd),
       SourceElementType(PointeeType),
       ResultElementType(getIndexedType(PointeeType, IdxList)) {
-  assert(cast<PointerType>(getType()->getScalarType())
-             ->isOpaqueOrPointeeTypeMatches(ResultElementType));
+  assert(ResultElementType ==
+         cast<PointerType>(getType()->getScalarType())->getElementType());
   init(Ptr, IdxList, NameStr);
 }
 
@@ -1313,30 +1256,6 @@ public:
   ///
   static bool isRelational(Predicate P) {
     return !isEquality(P);
-  }
-
-  /// Return true if the predicate is SGT or UGT.
-  ///
-  static bool isGT(Predicate P) {
-    return P == ICMP_SGT || P == ICMP_UGT;
-  }
-
-  /// Return true if the predicate is SLT or ULT.
-  ///
-  static bool isLT(Predicate P) {
-    return P == ICMP_SLT || P == ICMP_ULT;
-  }
-
-  /// Return true if the predicate is SGE or UGE.
-  ///
-  static bool isGE(Predicate P) {
-    return P == ICMP_SGE || P == ICMP_UGE;
-  }
-
-  /// Return true if the predicate is SLE or ULE.
-  ///
-  static bool isLE(Predicate P) {
-    return P == ICMP_SLE || P == ICMP_ULE;
   }
 
   /// Exchange the two operands to this instruction in such a way that it does
@@ -1601,6 +1520,58 @@ public:
                   NameStr, InsertAtEnd);
   }
 
+  // Deprecated [opaque pointer types]
+  static CallInst *Create(Value *Func, const Twine &NameStr = "",
+                          Instruction *InsertBefore = nullptr) {
+    return Create(cast<FunctionType>(
+                      cast<PointerType>(Func->getType())->getElementType()),
+                  Func, NameStr, InsertBefore);
+  }
+
+  // Deprecated [opaque pointer types]
+  static CallInst *Create(Value *Func, ArrayRef<Value *> Args,
+                          const Twine &NameStr,
+                          Instruction *InsertBefore = nullptr) {
+    return Create(cast<FunctionType>(
+                      cast<PointerType>(Func->getType())->getElementType()),
+                  Func, Args, NameStr, InsertBefore);
+  }
+
+  // Deprecated [opaque pointer types]
+  static CallInst *Create(Value *Func, ArrayRef<Value *> Args,
+                          ArrayRef<OperandBundleDef> Bundles = None,
+                          const Twine &NameStr = "",
+                          Instruction *InsertBefore = nullptr) {
+    return Create(cast<FunctionType>(
+                      cast<PointerType>(Func->getType())->getElementType()),
+                  Func, Args, Bundles, NameStr, InsertBefore);
+  }
+
+  // Deprecated [opaque pointer types]
+  static CallInst *Create(Value *Func, const Twine &NameStr,
+                          BasicBlock *InsertAtEnd) {
+    return Create(cast<FunctionType>(
+                      cast<PointerType>(Func->getType())->getElementType()),
+                  Func, NameStr, InsertAtEnd);
+  }
+
+  // Deprecated [opaque pointer types]
+  static CallInst *Create(Value *Func, ArrayRef<Value *> Args,
+                          const Twine &NameStr, BasicBlock *InsertAtEnd) {
+    return Create(cast<FunctionType>(
+                      cast<PointerType>(Func->getType())->getElementType()),
+                  Func, Args, NameStr, InsertAtEnd);
+  }
+
+  // Deprecated [opaque pointer types]
+  static CallInst *Create(Value *Func, ArrayRef<Value *> Args,
+                          ArrayRef<OperandBundleDef> Bundles,
+                          const Twine &NameStr, BasicBlock *InsertAtEnd) {
+    return Create(cast<FunctionType>(
+                      cast<PointerType>(Func->getType())->getElementType()),
+                  Func, Args, Bundles, NameStr, InsertAtEnd);
+  }
+
   /// Create a clone of \p CI with a different set of operand bundles and
   /// insert it before \p InsertPt.
   ///
@@ -1649,38 +1620,37 @@ public:
                                  BasicBlock *InsertAtEnd);
 
   // Note that 'musttail' implies 'tail'.
-  enum TailCallKind : unsigned {
+  enum TailCallKind {
     TCK_None = 0,
     TCK_Tail = 1,
     TCK_MustTail = 2,
-    TCK_NoTail = 3,
-    TCK_LAST = TCK_NoTail
+    TCK_NoTail = 3
   };
-
-  using TailCallKindField = Bitfield::Element<TailCallKind, 0, 2, TCK_LAST>;
-  static_assert(
-      Bitfield::areContiguous<TailCallKindField, CallBase::CallingConvField>(),
-      "Bitfields must be contiguous");
-
   TailCallKind getTailCallKind() const {
-    return getSubclassData<TailCallKindField>();
+    return TailCallKind(getSubclassDataFromInstruction() & 3);
   }
 
   bool isTailCall() const {
-    TailCallKind Kind = getTailCallKind();
+    unsigned Kind = getSubclassDataFromInstruction() & 3;
     return Kind == TCK_Tail || Kind == TCK_MustTail;
   }
 
-  bool isMustTailCall() const { return getTailCallKind() == TCK_MustTail; }
-
-  bool isNoTailCall() const { return getTailCallKind() == TCK_NoTail; }
-
-  void setTailCallKind(TailCallKind TCK) {
-    setSubclassData<TailCallKindField>(TCK);
+  bool isMustTailCall() const {
+    return (getSubclassDataFromInstruction() & 3) == TCK_MustTail;
   }
 
-  void setTailCall(bool IsTc = true) {
-    setTailCallKind(IsTc ? TCK_Tail : TCK_None);
+  bool isNoTailCall() const {
+    return (getSubclassDataFromInstruction() & 3) == TCK_NoTail;
+  }
+
+  void setTailCall(bool isTC = true) {
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~3) |
+                               unsigned(isTC ? TCK_Tail : TCK_None));
+  }
+
+  void setTailCallKind(TailCallKind TCK) {
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~3) |
+                               unsigned(TCK));
   }
 
   /// Return true if the call can return twice
@@ -1703,9 +1673,8 @@ public:
 private:
   // Shadow Instruction::setInstructionSubclassData with a private forwarding
   // method so that subclasses cannot accidentally use it.
-  template <typename Bitfield>
-  void setSubclassData(typename Bitfield::Type Value) {
-    Instruction::setSubclassData<Bitfield>(Value);
+  void setInstructionSubclassData(unsigned short D) {
+    Instruction::setInstructionSubclassData(D);
   }
 };
 
@@ -1794,10 +1763,6 @@ public:
   void setCondition(Value *V) { Op<0>() = V; }
   void setTrueValue(Value *V) { Op<1>() = V; }
   void setFalseValue(Value *V) { Op<2>() = V; }
-
-  /// Swap the true and false values of the select instruction.
-  /// This doesn't swap prof metadata.
-  void swapValues() { Op<1>().swap(Op<2>()); }
 
   /// Return a string if the specified operands are invalid
   /// for a select operation, otherwise return null.
@@ -1996,22 +1961,10 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(InsertElementInst, Value)
 //                           ShuffleVectorInst Class
 //===----------------------------------------------------------------------===//
 
-constexpr int UndefMaskElem = -1;
-
 /// This instruction constructs a fixed permutation of two
 /// input vectors.
 ///
-/// For each element of the result vector, the shuffle mask selects an element
-/// from one of the input vectors to copy to the result. Non-negative elements
-/// in the mask represent an index into the concatenated pair of input vectors.
-/// UndefMaskElem (-1) specifies that the result element is undefined.
-///
-/// For scalable vectors, all the elements of the mask must be 0 or -1. This
-/// requirement may be relaxed in the future.
 class ShuffleVectorInst : public Instruction {
-  SmallVector<int, 4> ShuffleMask;
-  Constant *ShuffleMaskForBitcode;
-
 protected:
   // Note: Instruction needs to be a friend here to call cloneImpl.
   friend class Instruction;
@@ -2024,16 +1977,13 @@ public:
                     Instruction *InsertBefor = nullptr);
   ShuffleVectorInst(Value *V1, Value *V2, Value *Mask,
                     const Twine &NameStr, BasicBlock *InsertAtEnd);
-  ShuffleVectorInst(Value *V1, Value *V2, ArrayRef<int> Mask,
-                    const Twine &NameStr = "",
-                    Instruction *InsertBefor = nullptr);
-  ShuffleVectorInst(Value *V1, Value *V2, ArrayRef<int> Mask,
-                    const Twine &NameStr, BasicBlock *InsertAtEnd);
 
-  void *operator new(size_t S) { return User::operator new(S, 2); }
-  void operator delete(void *Ptr) { return User::operator delete(Ptr); }
+  // allocate space for exactly three operands
+  void *operator new(size_t s) {
+    return User::operator new(s, 3);
+  }
 
-  /// Swap the operands and adjust the mask to preserve the semantics
+  /// Swap the first 2 operands and adjust the mask to preserve the semantics
   /// of the instruction.
   void commute();
 
@@ -2041,8 +1991,6 @@ public:
   /// formed with the specified operands.
   static bool isValidOperands(const Value *V1, const Value *V2,
                               const Value *Mask);
-  static bool isValidOperands(const Value *V1, const Value *V2,
-                              ArrayRef<int> Mask);
 
   /// Overload to return most specific vector type.
   ///
@@ -2053,43 +2001,44 @@ public:
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 
+  Constant *getMask() const {
+    return cast<Constant>(getOperand(2));
+  }
+
+  /// Return the shuffle mask value for the specified element of the mask.
+  /// Return -1 if the element is undef.
+  static int getMaskValue(const Constant *Mask, unsigned Elt);
+
   /// Return the shuffle mask value of this instruction for the given element
-  /// index. Return UndefMaskElem if the element is undef.
-  int getMaskValue(unsigned Elt) const { return ShuffleMask[Elt]; }
+  /// index. Return -1 if the element is undef.
+  int getMaskValue(unsigned Elt) const {
+    return getMaskValue(getMask(), Elt);
+  }
 
   /// Convert the input shuffle mask operand to a vector of integers. Undefined
-  /// elements of the mask are returned as UndefMaskElem.
+  /// elements of the mask are returned as -1.
   static void getShuffleMask(const Constant *Mask,
                              SmallVectorImpl<int> &Result);
 
   /// Return the mask for this instruction as a vector of integers. Undefined
-  /// elements of the mask are returned as UndefMaskElem.
+  /// elements of the mask are returned as -1.
   void getShuffleMask(SmallVectorImpl<int> &Result) const {
-    Result.assign(ShuffleMask.begin(), ShuffleMask.end());
+    return getShuffleMask(getMask(), Result);
   }
 
-  /// Return the mask for this instruction, for use in bitcode.
-  ///
-  /// TODO: This is temporary until we decide a new bitcode encoding for
-  /// shufflevector.
-  Constant *getShuffleMaskForBitcode() const { return ShuffleMaskForBitcode; }
-
-  static Constant *convertShuffleMaskForBitcode(ArrayRef<int> Mask,
-                                                Type *ResultTy);
-
-  void setShuffleMask(ArrayRef<int> Mask);
-
-  ArrayRef<int> getShuffleMask() const { return ShuffleMask; }
+  SmallVector<int, 16> getShuffleMask() const {
+    SmallVector<int, 16> Mask;
+    getShuffleMask(Mask);
+    return Mask;
+  }
 
   /// Return true if this shuffle returns a vector with a different number of
   /// elements than its source vectors.
   /// Examples: shufflevector <4 x n> A, <4 x n> B, <1,2,3>
   ///           shufflevector <4 x n> A, <4 x n> B, <1,2,3,4,5>
   bool changesLength() const {
-    unsigned NumSourceElts = cast<VectorType>(Op<0>()->getType())
-                                 ->getElementCount()
-                                 .getKnownMinValue();
-    unsigned NumMaskElts = ShuffleMask.size();
+    unsigned NumSourceElts = Op<0>()->getType()->getVectorNumElements();
+    unsigned NumMaskElts = getMask()->getType()->getVectorNumElements();
     return NumSourceElts != NumMaskElts;
   }
 
@@ -2097,10 +2046,8 @@ public:
   /// elements than its source vectors.
   /// Example: shufflevector <2 x n> A, <2 x n> B, <1,2,3>
   bool increasesLength() const {
-    unsigned NumSourceElts = cast<VectorType>(Op<0>()->getType())
-                                 ->getElementCount()
-                                 .getKnownMinValue();
-    unsigned NumMaskElts = ShuffleMask.size();
+    unsigned NumSourceElts = Op<0>()->getType()->getVectorNumElements();
+    unsigned NumMaskElts = getMask()->getType()->getVectorNumElements();
     return NumSourceElts < NumMaskElts;
   }
 
@@ -2121,7 +2068,7 @@ public:
   /// Example: shufflevector <4 x n> A, <4 x n> B, <3,0,undef,3>
   /// TODO: Optionally allow length-changing shuffles.
   bool isSingleSource() const {
-    return !changesLength() && isSingleSourceMask(ShuffleMask);
+    return !changesLength() && isSingleSourceMask(getMask());
   }
 
   /// Return true if this shuffle mask chooses elements from exactly one source
@@ -2142,7 +2089,7 @@ public:
   /// from its input vectors.
   /// Example: shufflevector <4 x n> A, <4 x n> B, <4,undef,6,undef>
   bool isIdentity() const {
-    return !changesLength() && isIdentityMask(ShuffleMask);
+    return !changesLength() && isIdentityMask(getShuffleMask());
   }
 
   /// Return true if this shuffle lengthens exactly one source vector with
@@ -2183,7 +2130,7 @@ public:
   /// In that case, the shuffle is better classified as an identity shuffle.
   /// TODO: Optionally allow length-changing shuffles.
   bool isSelect() const {
-    return !changesLength() && isSelectMask(ShuffleMask);
+    return !changesLength() && isSelectMask(getMask());
   }
 
   /// Return true if this shuffle mask swaps the order of elements from exactly
@@ -2203,7 +2150,7 @@ public:
   /// Example: shufflevector <4 x n> A, <4 x n> B, <3,undef,1,undef>
   /// TODO: Optionally allow length-changing shuffles.
   bool isReverse() const {
-    return !changesLength() && isReverseMask(ShuffleMask);
+    return !changesLength() && isReverseMask(getMask());
   }
 
   /// Return true if this shuffle mask chooses all elements with the same value
@@ -2225,7 +2172,7 @@ public:
   /// TODO: Optionally allow length-changing shuffles.
   /// TODO: Optionally allow splats from other elements.
   bool isZeroEltSplat() const {
-    return !changesLength() && isZeroEltSplatMask(ShuffleMask);
+    return !changesLength() && isZeroEltSplatMask(getMask());
   }
 
   /// Return true if this shuffle mask is a transpose mask.
@@ -2274,7 +2221,7 @@ public:
   /// exact specification.
   /// Example: shufflevector <4 x n> A, <4 x n> B, <0,4,2,6>
   bool isTranspose() const {
-    return !changesLength() && isTransposeMask(ShuffleMask);
+    return !changesLength() && isTransposeMask(getMask());
   }
 
   /// Return true if this shuffle mask is an extract subvector mask.
@@ -2285,10 +2232,6 @@ public:
   static bool isExtractSubvectorMask(const Constant *Mask, int NumSrcElts,
                                      int &Index) {
     assert(Mask->getType()->isVectorTy() && "Shuffle needs vector constant.");
-    // Not possible to express a shuffle mask for a scalable vector for this
-    // case.
-    if (isa<ScalableVectorType>(Mask->getType()))
-      return false;
     SmallVector<int, 16> MaskAsInts;
     getShuffleMask(Mask, MaskAsInts);
     return isExtractSubvectorMask(MaskAsInts, NumSrcElts, Index);
@@ -2296,14 +2239,8 @@ public:
 
   /// Return true if this shuffle mask is an extract subvector mask.
   bool isExtractSubvectorMask(int &Index) const {
-    // Not possible to express a shuffle mask for a scalable vector for this
-    // case.
-    if (isa<ScalableVectorType>(getType()))
-      return false;
-
-    int NumSrcElts =
-        cast<FixedVectorType>(Op<0>()->getType())->getNumElements();
-    return isExtractSubvectorMask(ShuffleMask, NumSrcElts, Index);
+    int NumSrcElts = Op<0>()->getType()->getVectorNumElements();
+    return isExtractSubvectorMask(getMask(), NumSrcElts, Index);
   }
 
   /// Change values in a shuffle permute mask assuming the two vector operands
@@ -2329,8 +2266,9 @@ public:
 };
 
 template <>
-struct OperandTraits<ShuffleVectorInst>
-    : public FixedNumOperandTraits<ShuffleVectorInst, 2> {};
+struct OperandTraits<ShuffleVectorInst> :
+  public FixedNumOperandTraits<ShuffleVectorInst, 3> {
+};
 
 DEFINE_TRANSPARENT_OPERAND_ACCESSORS(ShuffleVectorInst, Value)
 
@@ -2488,8 +2426,9 @@ protected:
 
 public:
   // allocate space for exactly two operands
-  void *operator new(size_t S) { return User::operator new(S, 2); }
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
+  void *operator new(size_t s) {
+    return User::operator new(s, 2);
+  }
 
   static InsertValueInst *Create(Value *Agg, Value *Val,
                                  ArrayRef<unsigned> Idxs,
@@ -2606,7 +2545,6 @@ class PHINode : public Instruction {
                    Instruction *InsertBefore = nullptr)
     : Instruction(Ty, Instruction::PHI, nullptr, 0, InsertBefore),
       ReservedSpace(NumReservedValues) {
-    assert(!Ty->isTokenTy() && "PHI nodes cannot have token type!");
     setName(NameStr);
     allocHungoffUses(ReservedSpace);
   }
@@ -2615,7 +2553,6 @@ class PHINode : public Instruction {
           BasicBlock *InsertAtEnd)
     : Instruction(Ty, Instruction::PHI, nullptr, 0, InsertAtEnd),
       ReservedSpace(NumReservedValues) {
-    assert(!Ty->isTokenTy() && "PHI nodes cannot have token type!");
     setName(NameStr);
     allocHungoffUses(ReservedSpace);
   }
@@ -2657,11 +2594,15 @@ public:
   using const_block_iterator = BasicBlock * const *;
 
   block_iterator block_begin() {
-    return reinterpret_cast<block_iterator>(op_begin() + ReservedSpace);
+    Use::UserRef *ref =
+      reinterpret_cast<Use::UserRef*>(op_begin() + ReservedSpace);
+    return reinterpret_cast<block_iterator>(ref + 1);
   }
 
   const_block_iterator block_begin() const {
-    return reinterpret_cast<const_block_iterator>(op_begin() + ReservedSpace);
+    const Use::UserRef *ref =
+      reinterpret_cast<const Use::UserRef*>(op_begin() + ReservedSpace);
+    return reinterpret_cast<const_block_iterator>(ref + 1);
   }
 
   block_iterator block_end() {
@@ -2807,15 +2748,6 @@ public:
   /// non-undef value.
   bool hasConstantOrUndefValue() const;
 
-  /// If the PHI node is complete which means all of its parent's predecessors
-  /// have incoming value in this PHI, return true, otherwise return false.
-  bool isComplete() const {
-    return llvm::all_of(predecessors(getParent()),
-                        [this](const BasicBlock *Pred) {
-                          return getBasicBlockIndex(Pred) >= 0;
-                        });
-  }
-
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Instruction *I) {
     return I->getOpcode() == Instruction::PHI;
@@ -2847,8 +2779,6 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(PHINode, Value)
 /// cleanup.
 ///
 class LandingPadInst : public Instruction {
-  using CleanupField = BoolBitfieldElementT<0>;
-
   /// The number of operands actually allocated.  NumOperands is
   /// the number actually in use.
   unsigned ReservedSpace;
@@ -2865,7 +2795,9 @@ private:
                           const Twine &NameStr, BasicBlock *InsertAtEnd);
 
   // Allocate space for exactly zero operands.
-  void *operator new(size_t S) { return User::operator new(S); }
+  void *operator new(size_t s) {
+    return User::operator new(s);
+  }
 
   void growOperands(unsigned Size);
   void init(unsigned NumReservedValues, const Twine &NameStr);
@@ -2877,8 +2809,6 @@ protected:
   LandingPadInst *cloneImpl() const;
 
 public:
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
-
   /// Constructors - NumReservedClauses is a hint for the number of incoming
   /// clauses that this landingpad will have (use 0 if you really have no idea).
   static LandingPadInst *Create(Type *RetTy, unsigned NumReservedClauses,
@@ -2893,10 +2823,13 @@ public:
   /// Return 'true' if this landingpad instruction is a
   /// cleanup. I.e., it should be run when unwinding even if its landing pad
   /// doesn't catch the exception.
-  bool isCleanup() const { return getSubclassData<CleanupField>(); }
+  bool isCleanup() const { return getSubclassDataFromInstruction() & 1; }
 
   /// Indicate that this landingpad instruction is a cleanup.
-  void setCleanup(bool V) { setSubclassData<CleanupField>(V); }
+  void setCleanup(bool V) {
+    setInstructionSubclassData((getSubclassDataFromInstruction() & ~1) |
+                               (V ? 1 : 0));
+  }
 
   /// Add a catch or filter clause to the landing pad.
   void addClause(Constant *ClauseVal);
@@ -3197,7 +3130,9 @@ class SwitchInst : public Instruction {
              BasicBlock *InsertAtEnd);
 
   // allocate space for exactly zero operands
-  void *operator new(size_t S) { return User::operator new(S); }
+  void *operator new(size_t s) {
+    return User::operator new(s);
+  }
 
   void init(Value *Value, BasicBlock *Default, unsigned NumReserved);
   void growOperands();
@@ -3209,8 +3144,6 @@ protected:
   SwitchInst *cloneImpl() const;
 
 public:
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
-
   // -2
   static const unsigned DefaultPseudoIndex = static_cast<unsigned>(~0L-1);
 
@@ -3522,7 +3455,16 @@ public:
 class SwitchInstProfUpdateWrapper {
   SwitchInst &SI;
   Optional<SmallVector<uint32_t, 8> > Weights = None;
-  bool Changed = false;
+
+  // Sticky invalid state is needed to safely ignore operations with prof data
+  // in cases where SwitchInstProfUpdateWrapper is created from SwitchInst
+  // with inconsistent prof data. TODO: once we fix all prof data
+  // inconsistencies we can turn invalid state to assertions.
+  enum {
+    Invalid,
+    Initialized,
+    Changed
+  } State = Invalid;
 
 protected:
   static MDNode *getProfBranchWeightsMD(const SwitchInst &SI);
@@ -3540,7 +3482,7 @@ public:
   SwitchInstProfUpdateWrapper(SwitchInst &SI) : SI(SI) { init(); }
 
   ~SwitchInstProfUpdateWrapper() {
-    if (Changed)
+    if (State == Changed)
       SI.setMetadata(LLVMContext::MD_prof, buildProfBranchWeightsMD());
   }
 
@@ -3595,7 +3537,9 @@ class IndirectBrInst : public Instruction {
   IndirectBrInst(Value *Address, unsigned NumDests, BasicBlock *InsertAtEnd);
 
   // allocate space for exactly zero operands
-  void *operator new(size_t S) { return User::operator new(S); }
+  void *operator new(size_t s) {
+    return User::operator new(s);
+  }
 
   void init(Value *Address, unsigned NumDests);
   void growOperands();
@@ -3607,8 +3551,6 @@ protected:
   IndirectBrInst *cloneImpl() const;
 
 public:
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
-
   /// Iterator type that casts an operand to a basic block.
   ///
   /// This only makes sense because the successors are stored as adjacent
@@ -3832,6 +3774,49 @@ public:
                   IfException, Args, Bundles, NameStr, InsertAtEnd);
   }
 
+  // Deprecated [opaque pointer types]
+  static InvokeInst *Create(Value *Func, BasicBlock *IfNormal,
+                            BasicBlock *IfException, ArrayRef<Value *> Args,
+                            const Twine &NameStr,
+                            Instruction *InsertBefore = nullptr) {
+    return Create(cast<FunctionType>(
+                      cast<PointerType>(Func->getType())->getElementType()),
+                  Func, IfNormal, IfException, Args, None, NameStr,
+                  InsertBefore);
+  }
+
+  // Deprecated [opaque pointer types]
+  static InvokeInst *Create(Value *Func, BasicBlock *IfNormal,
+                            BasicBlock *IfException, ArrayRef<Value *> Args,
+                            ArrayRef<OperandBundleDef> Bundles = None,
+                            const Twine &NameStr = "",
+                            Instruction *InsertBefore = nullptr) {
+    return Create(cast<FunctionType>(
+                      cast<PointerType>(Func->getType())->getElementType()),
+                  Func, IfNormal, IfException, Args, Bundles, NameStr,
+                  InsertBefore);
+  }
+
+  // Deprecated [opaque pointer types]
+  static InvokeInst *Create(Value *Func, BasicBlock *IfNormal,
+                            BasicBlock *IfException, ArrayRef<Value *> Args,
+                            const Twine &NameStr, BasicBlock *InsertAtEnd) {
+    return Create(cast<FunctionType>(
+                      cast<PointerType>(Func->getType())->getElementType()),
+                  Func, IfNormal, IfException, Args, NameStr, InsertAtEnd);
+  }
+
+  // Deprecated [opaque pointer types]
+  static InvokeInst *Create(Value *Func, BasicBlock *IfNormal,
+                            BasicBlock *IfException, ArrayRef<Value *> Args,
+                            ArrayRef<OperandBundleDef> Bundles,
+                            const Twine &NameStr, BasicBlock *InsertAtEnd) {
+    return Create(cast<FunctionType>(
+                      cast<PointerType>(Func->getType())->getElementType()),
+                  Func, IfNormal, IfException, Args, Bundles, NameStr,
+                  InsertAtEnd);
+  }
+
   /// Create a clone of \p II with a different set of operand bundles and
   /// insert it before \p InsertPt.
   ///
@@ -3840,6 +3825,15 @@ public:
   /// bundles in \p Bundles.
   static InvokeInst *Create(InvokeInst *II, ArrayRef<OperandBundleDef> Bundles,
                             Instruction *InsertPt = nullptr);
+
+  /// Determine if the call should not perform indirect branch tracking.
+  bool doesNoCfCheck() const { return hasFnAttr(Attribute::NoCfCheck); }
+
+  /// Determine if the call cannot unwind.
+  bool doesNotThrow() const { return hasFnAttr(Attribute::NoUnwind); }
+  void setDoesNotThrow() {
+    addAttribute(AttributeList::FunctionIndex, Attribute::NoUnwind);
+  }
 
   // get*Dest - Return the destination basic blocks...
   BasicBlock *getNormalDest() const {
@@ -3883,11 +3877,11 @@ public:
   }
 
 private:
+
   // Shadow Instruction::setInstructionSubclassData with a private forwarding
   // method so that subclasses cannot accidentally use it.
-  template <typename Bitfield>
-  void setSubclassData(typename Bitfield::Type Value) {
-    Instruction::setSubclassData<Bitfield>(Value);
+  void setInstructionSubclassData(unsigned short D) {
+    Instruction::setInstructionSubclassData(D);
   }
 };
 
@@ -4123,11 +4117,11 @@ public:
   }
 
 private:
+
   // Shadow Instruction::setInstructionSubclassData with a private forwarding
   // method so that subclasses cannot accidentally use it.
-  template <typename Bitfield>
-  void setSubclassData(typename Bitfield::Type Value) {
-    Instruction::setSubclassData<Bitfield>(Value);
+  void setInstructionSubclassData(unsigned short D) {
+    Instruction::setInstructionSubclassData(D);
   }
 };
 
@@ -4147,9 +4141,13 @@ CallBrInst::CallBrInst(FunctionType *Ty, Value *Func, BasicBlock *DefaultDest,
                        ArrayRef<Value *> Args,
                        ArrayRef<OperandBundleDef> Bundles, int NumOperands,
                        const Twine &NameStr, BasicBlock *InsertAtEnd)
-    : CallBase(Ty->getReturnType(), Instruction::CallBr,
-               OperandTraits<CallBase>::op_end(this) - NumOperands, NumOperands,
-               InsertAtEnd) {
+    : CallBase(
+          cast<FunctionType>(
+              cast<PointerType>(Func->getType())->getElementType())
+              ->getReturnType(),
+          Instruction::CallBr,
+          OperandTraits<CallBase>::op_end(this) - NumOperands, NumOperands,
+          InsertAtEnd) {
   init(Ty, Func, DefaultDest, IndirectDests, Args, Bundles, NameStr);
 }
 
@@ -4218,8 +4216,6 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(ResumeInst, Value)
 //                         CatchSwitchInst Class
 //===----------------------------------------------------------------------===//
 class CatchSwitchInst : public Instruction {
-  using UnwindDestField = BoolBitfieldElementT<0>;
-
   /// The number of operands actually allocated.  NumOperands is
   /// the number actually in use.
   unsigned ReservedSpace;
@@ -4246,7 +4242,7 @@ class CatchSwitchInst : public Instruction {
                   BasicBlock *InsertAtEnd);
 
   // allocate space for exactly zero operands
-  void *operator new(size_t S) { return User::operator new(S); }
+  void *operator new(size_t s) { return User::operator new(s); }
 
   void init(Value *ParentPad, BasicBlock *UnwindDest, unsigned NumReserved);
   void growOperands(unsigned Size);
@@ -4258,8 +4254,6 @@ protected:
   CatchSwitchInst *cloneImpl() const;
 
 public:
-  void operator delete(void *Ptr) { return User::operator delete(Ptr); }
-
   static CatchSwitchInst *Create(Value *ParentPad, BasicBlock *UnwindDest,
                                  unsigned NumHandlers,
                                  const Twine &NameStr = "",
@@ -4283,7 +4277,7 @@ public:
   void setParentPad(Value *ParentPad) { setOperand(0, ParentPad); }
 
   // Accessor Methods for CatchSwitch stmt
-  bool hasUnwindDest() const { return getSubclassData<UnwindDestField>(); }
+  bool hasUnwindDest() const { return getSubclassDataFromInstruction() & 1; }
   bool unwindsToCaller() const { return !hasUnwindDest(); }
   BasicBlock *getUnwindDest() const {
     if (hasUnwindDest())
@@ -4569,8 +4563,6 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(CatchReturnInst, Value)
 //===----------------------------------------------------------------------===//
 
 class CleanupReturnInst : public Instruction {
-  using UnwindDestField = BoolBitfieldElementT<0>;
-
 private:
   CleanupReturnInst(const CleanupReturnInst &RI);
   CleanupReturnInst(Value *CleanupPad, BasicBlock *UnwindBB, unsigned Values,
@@ -4611,7 +4603,7 @@ public:
   /// Provide fast operand accessors
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 
-  bool hasUnwindDest() const { return getSubclassData<UnwindDestField>(); }
+  bool hasUnwindDest() const { return getSubclassDataFromInstruction() & 1; }
   bool unwindsToCaller() const { return !hasUnwindDest(); }
 
   /// Convenience accessor.
@@ -4655,9 +4647,8 @@ private:
 
   // Shadow Instruction::setInstructionSubclassData with a private forwarding
   // method so that subclasses cannot accidentally use it.
-  template <typename Bitfield>
-  void setSubclassData(typename Bitfield::Type Value) {
-    Instruction::setSubclassData<Bitfield>(Value);
+  void setInstructionSubclassData(unsigned short D) {
+    Instruction::setInstructionSubclassData(D);
   }
 };
 
@@ -4688,8 +4679,9 @@ public:
   explicit UnreachableInst(LLVMContext &C, BasicBlock *InsertAtEnd);
 
   // allocate space for exactly zero operands
-  void *operator new(size_t S) { return User::operator new(S, 0); }
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
+  void *operator new(size_t s) {
+    return User::operator new(s, 0);
+  }
 
   unsigned getNumSuccessors() const { return 0; }
 
@@ -5262,38 +5254,31 @@ public:
 
 /// A helper function that returns the pointer operand of a load or store
 /// instruction. Returns nullptr if not load or store.
-inline const Value *getLoadStorePointerOperand(const Value *V) {
+inline Value *getLoadStorePointerOperand(Value *V) {
   if (auto *Load = dyn_cast<LoadInst>(V))
     return Load->getPointerOperand();
   if (auto *Store = dyn_cast<StoreInst>(V))
     return Store->getPointerOperand();
   return nullptr;
 }
-inline Value *getLoadStorePointerOperand(Value *V) {
-  return const_cast<Value *>(
-      getLoadStorePointerOperand(static_cast<const Value *>(V)));
-}
 
 /// A helper function that returns the pointer operand of a load, store
 /// or GEP instruction. Returns nullptr if not load, store, or GEP.
-inline const Value *getPointerOperand(const Value *V) {
+inline Value *getPointerOperand(Value *V) {
   if (auto *Ptr = getLoadStorePointerOperand(V))
     return Ptr;
   if (auto *Gep = dyn_cast<GetElementPtrInst>(V))
     return Gep->getPointerOperand();
   return nullptr;
 }
-inline Value *getPointerOperand(Value *V) {
-  return const_cast<Value *>(getPointerOperand(static_cast<const Value *>(V)));
-}
 
 /// A helper function that returns the alignment of load or store instruction.
-inline Align getLoadStoreAlignment(Value *I) {
+inline unsigned getLoadStoreAlignment(Value *I) {
   assert((isa<LoadInst>(I) || isa<StoreInst>(I)) &&
          "Expected Load or Store instruction");
   if (auto *LI = dyn_cast<LoadInst>(I))
-    return LI->getAlign();
-  return cast<StoreInst>(I)->getAlign();
+    return LI->getAlignment();
+  return cast<StoreInst>(I)->getAlignment();
 }
 
 /// A helper function that returns the address space of the pointer operand of
@@ -5305,44 +5290,6 @@ inline unsigned getLoadStoreAddressSpace(Value *I) {
     return LI->getPointerAddressSpace();
   return cast<StoreInst>(I)->getPointerAddressSpace();
 }
-
-/// A helper function that returns the type of a load or store instruction.
-inline Type *getLoadStoreType(Value *I) {
-  assert((isa<LoadInst>(I) || isa<StoreInst>(I)) &&
-         "Expected Load or Store instruction");
-  if (auto *LI = dyn_cast<LoadInst>(I))
-    return LI->getType();
-  return cast<StoreInst>(I)->getValueOperand()->getType();
-}
-
-//===----------------------------------------------------------------------===//
-//                              FreezeInst Class
-//===----------------------------------------------------------------------===//
-
-/// This class represents a freeze function that returns random concrete
-/// value if an operand is either a poison value or an undef value
-class FreezeInst : public UnaryInstruction {
-protected:
-  // Note: Instruction needs to be a friend here to call cloneImpl.
-  friend class Instruction;
-
-  /// Clone an identical FreezeInst
-  FreezeInst *cloneImpl() const;
-
-public:
-  explicit FreezeInst(Value *S,
-                      const Twine &NameStr = "",
-                      Instruction *InsertBefore = nullptr);
-  FreezeInst(Value *S, const Twine &NameStr, BasicBlock *InsertAtEnd);
-
-  // Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const Instruction *I) {
-    return I->getOpcode() == Freeze;
-  }
-  static inline bool classof(const Value *V) {
-    return isa<Instruction>(V) && classof(cast<Instruction>(V));
-  }
-};
 
 } // end namespace llvm
 

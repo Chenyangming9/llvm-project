@@ -26,10 +26,6 @@ class Module;
 
 namespace legacy {
 
-// Whether or not -debug-pass has been specified. For use to check if it's
-// specified alongside the new PM.
-bool debugPassSpecified();
-
 class PassManagerImpl;
 class FunctionPassManagerImpl;
 
@@ -67,7 +63,7 @@ private:
   PassManagerImpl *PM;
 };
 
-/// FunctionPassManager manages FunctionPasses.
+/// FunctionPassManager manages FunctionPasses and BasicBlockPassManagers.
 class FunctionPassManager : public PassManagerBase {
 public:
   /// FunctionPassManager ctor - This initializes the pass manager.  It needs,

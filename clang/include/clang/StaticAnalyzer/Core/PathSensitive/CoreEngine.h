@@ -41,7 +41,7 @@ class LabelDecl;
 namespace ento {
 
 class FunctionSummariesTy;
-class ExprEngine;
+class SubEngine;
 
 //===----------------------------------------------------------------------===//
 /// CoreEngine - Implements the core logic of the graph-reachability
@@ -69,7 +69,7 @@ public:
       std::vector<std::pair<const CFGBlock *, const ExplodedNode *>>;
 
 private:
-  ExprEngine &ExprEng;
+  SubEngine &SubEng;
 
   /// G - The simulation graph.  Each node is a (location,state) pair.
   mutable ExplodedGraph G;
@@ -96,10 +96,9 @@ private:
   /// (This data is owned by AnalysisConsumer.)
   FunctionSummariesTy *FunctionSummaries;
 
-  /// Add path tags with some useful data along the path when we see that
-  /// something interesting is happening. This field is the allocator for such
-  /// tags.
-  DataTag::Factory DataTags;
+  /// Add path note tags along the path when we see that something interesting
+  /// is happening. This field is the allocator for such tags.
+  NoteTag::Factory NoteTags;
 
   void generateNode(const ProgramPoint &Loc,
                     ProgramStateRef State,
@@ -130,7 +129,7 @@ private:
 
 public:
   /// Construct a CoreEngine object to analyze the provided CFG.
-  CoreEngine(ExprEngine &exprengine,
+  CoreEngine(SubEngine &subengine,
              FunctionSummariesTy *FS,
              AnalyzerOptions &Opts);
 
@@ -201,7 +200,7 @@ public:
   /// Enqueue a single node created as a result of statement processing.
   void enqueueStmtNode(ExplodedNode *N, const CFGBlock *Block, unsigned Idx);
 
-  DataTag::Factory &getDataTags() { return DataTags; }
+  NoteTag::Factory &getNoteTags() { return NoteTags; }
 };
 
 // TODO: Turn into a class.

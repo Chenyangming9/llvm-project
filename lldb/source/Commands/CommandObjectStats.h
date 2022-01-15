@@ -6,9 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_COMMANDS_COMMANDOBJECTSTATS_H
-#define LLDB_SOURCE_COMMANDS_COMMANDOBJECTSTATS_H
+#ifndef liblldb_CommandObjectStats_h_
+#define liblldb_CommandObjectStats_h_
 
+#include "lldb/Interpreter/CommandObject.h"
 #include "lldb/Interpreter/CommandObjectMultiword.h"
 
 namespace lldb_private {
@@ -20,4 +21,4 @@ public:
 };
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_COMMANDS_COMMANDOBJECTSTATS_H
+#endif // liblldb_CommandObjectLanguage_h_

@@ -10,7 +10,6 @@
 #include "X86InstrInfo.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
@@ -28,9 +27,14 @@ using ::testing::Property;
 namespace llvm {
 namespace exegesis {
 
-static std::string Dump(const MCInst &McInst) {
+bool operator==(const BenchmarkMeasure &A, const BenchmarkMeasure &B) {
+  return std::tie(A.Key, A.PerInstructionValue, A.PerSnippetValue) ==
+         std::tie(B.Key, B.PerInstructionValue, B.PerSnippetValue);
+}
+
+static std::string Dump(const llvm::MCInst &McInst) {
   std::string Buffer;
-  raw_string_ostream OS(Buffer);
+  llvm::raw_string_ostream OS(Buffer);
   McInst.print(OS);
   return Buffer;
 }
@@ -55,19 +59,19 @@ TEST(BenchmarkResultTest, WriteToAndReadFromDisk) {
   // Read benchmarks.
   const LLVMState State("x86_64-unknown-linux", "haswell");
 
-  ExitOnError ExitOnErr;
+  llvm::ExitOnError ExitOnErr;
 
   InstructionBenchmark ToDisk;
 
-  ToDisk.Key.Instructions.push_back(MCInstBuilder(X86::XOR32rr)
-                                        .addReg(X86::AL)
-                                        .addReg(X86::AH)
+  ToDisk.Key.Instructions.push_back(llvm::MCInstBuilder(llvm::X86::XOR32rr)
+                                        .addReg(llvm::X86::AL)
+                                        .addReg(llvm::X86::AH)
                                         .addImm(123)
-                                        .addDFPImm(bit_cast<uint64_t>(0.5)));
+                                        .addFPImm(0.5));
   ToDisk.Key.Config = "config";
   ToDisk.Key.RegisterInitialValues = {
-      RegisterValue{X86::AL, APInt(8, "-1", 10)},
-      RegisterValue{X86::AH, APInt(8, "123", 10)}};
+      RegisterValue{llvm::X86::AL, llvm::APInt(8, "-1", 10)},
+      RegisterValue{llvm::X86::AH, llvm::APInt(8, "123", 10)}};
   ToDisk.Mode = InstructionBenchmark::Latency;
   ToDisk.CpuName = "cpu_name";
   ToDisk.LLVMTriple = "llvm_triple";
@@ -77,12 +81,12 @@ TEST(BenchmarkResultTest, WriteToAndReadFromDisk) {
   ToDisk.Error = "error";
   ToDisk.Info = "info";
 
-  SmallString<64> Filename;
+  llvm::SmallString<64> Filename;
   std::error_code EC;
-  EC = sys::fs::createUniqueDirectory("BenchmarkResultTestDir", Filename);
+  EC = llvm::sys::fs::createUniqueDirectory("BenchmarkResultTestDir", Filename);
   ASSERT_FALSE(EC);
-  sys::path::append(Filename, "data.yaml");
-  errs() << Filename << "-------\n";
+  llvm::sys::path::append(Filename, "data.yaml");
+  llvm::errs() << Filename << "-------\n";
   ExitOnErr(ToDisk.writeYaml(State, Filename));
 
   {

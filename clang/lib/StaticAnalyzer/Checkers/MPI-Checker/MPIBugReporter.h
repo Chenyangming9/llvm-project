@@ -89,9 +89,9 @@ private:
       ID.AddPointer(RequestRegion);
     }
 
-    PathDiagnosticPieceRef VisitNode(const ExplodedNode *N,
-                                     BugReporterContext &BRC,
-                                     PathSensitiveBugReport &BR) override;
+    std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *N,
+                                                   BugReporterContext &BRC,
+                                                   BugReport &BR) override;
 
   private:
     const MemRegion *const RequestRegion;

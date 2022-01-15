@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_STREAMBUFFER_H
-#define LLDB_CORE_STREAMBUFFER_H
+#ifndef liblldb_StreamBuffer_h_
+#define liblldb_StreamBuffer_h_
 
 #include "lldb/Utility/Stream.h"
 #include "llvm/ADT/SmallVector.h"
-#include <cstdio>
+#include <stdio.h>
 #include <string>
 
 namespace lldb_private {
@@ -23,7 +23,7 @@ public:
   StreamBuffer(uint32_t flags, uint32_t addr_size, lldb::ByteOrder byte_order)
       : Stream(flags, addr_size, byte_order), m_packet() {}
 
-  ~StreamBuffer() override = default;
+  ~StreamBuffer() override {}
 
   void Flush() override {
     // Nothing to do when flushing a buffer based stream...
@@ -51,4 +51,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_STREAMBUFFER_H
+#endif // #ifndef liblldb_StreamBuffer_h_

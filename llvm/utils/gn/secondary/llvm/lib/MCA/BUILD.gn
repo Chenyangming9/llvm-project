@@ -7,9 +7,7 @@ static_library("MCA") {
   ]
   include_dirs = [ "../include" ]
   sources = [
-    "CodeEmitter.cpp",
     "Context.cpp",
-    "CustomBehaviour.cpp",
     "HWEventListener.cpp",
     "HardwareUnits/HardwareUnit.cpp",
     "HardwareUnits/LSUnit.cpp",
@@ -23,7 +21,6 @@ static_library("MCA") {
     "Stages/DispatchStage.cpp",
     "Stages/EntryStage.cpp",
     "Stages/ExecuteStage.cpp",
-    "Stages/InOrderIssueStage.cpp",
     "Stages/InstructionTables.cpp",
     "Stages/MicroOpQueueStage.cpp",
     "Stages/RetireStage.cpp",

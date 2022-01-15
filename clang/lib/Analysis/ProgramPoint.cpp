@@ -12,7 +12,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Analysis/ProgramPoint.h"
-#include "clang/AST/ASTContext.h"
 #include "clang/Basic/JsonSupport.h"
 
 using namespace clang;
@@ -189,11 +188,7 @@ void ProgramPoint::printJson(llvm::raw_ostream &Out, const char *NL) const {
 
     Out << "Statement\", \"stmt_kind\": \"" << S->getStmtClassName()
         << "\", \"stmt_id\": " << S->getID(Context)
-        << ", \"pointer\": \"" << (const void *)S << "\", ";
-    if (const auto *CS = dyn_cast<CastExpr>(S))
-      Out << "\"cast_kind\": \"" << CS->getCastKindName() << "\", ";
-
-    Out << "\"pretty\": ";
+        << ", \"pointer\": \"" << (const void *)S << "\", \"pretty\": ";
 
     S->printJson(Out, nullptr, PP, AddQuotes);
 

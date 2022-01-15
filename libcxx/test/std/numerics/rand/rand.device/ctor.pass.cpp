@@ -8,17 +8,17 @@
 
 // See bugs.llvm.org/PR20183
 //
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11}}
-
-// UNSUPPORTED: libcpp-has-no-random-device
+// XFAIL: with_system_cxx_lib=macosx10.11
+// XFAIL: with_system_cxx_lib=macosx10.10
+// XFAIL: with_system_cxx_lib=macosx10.9
+// XFAIL: with_system_cxx_lib=macosx10.8
+// XFAIL: with_system_cxx_lib=macosx10.7
 
 // <random>
 
 // class random_device;
 
-// explicit random_device(const string& token = implementation-defined); // before C++20
-// random_device() : random_device(implementation-defined) {}            // C++20
-// explicit random_device(const string& token);                          // C++20
+// explicit random_device(const string& token = implementation-defined);
 
 // For the following ctors, the standard states: "The semantics and default
 // value of the token parameter are implementation-defined". Implementations
@@ -34,9 +34,7 @@
 #endif
 
 #include "test_macros.h"
-#if TEST_STD_VER >= 11
-#include "test_convertible.h"
-#endif
+
 
 bool is_valid_random_device(const std::string &token) {
 #if defined(_LIBCPP_USING_DEV_RANDOM)
@@ -62,6 +60,7 @@ void check_random_device_invalid(const std::string &token) {
   ((void)token);
 #endif
 }
+
 
 int main(int, char**) {
   {
@@ -100,10 +99,6 @@ int main(int, char**) {
     std::random_device r;
   }
 #endif // !defined(_WIN32)
-
-#if TEST_STD_VER >= 11
-  static_assert(test_convertible<std::random_device>(), "");
-#endif
 
   return 0;
 }

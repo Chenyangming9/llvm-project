@@ -84,20 +84,6 @@ struct EffectiveContext {
     : Inner(DC),
       Dependent(DC->isDependentContext()) {
 
-    // An implicit deduction guide is semantically in the context enclosing the
-    // class template, but for access purposes behaves like the constructor
-    // from which it was produced.
-    if (auto *DGD = dyn_cast<CXXDeductionGuideDecl>(DC)) {
-      if (DGD->isImplicit()) {
-        DC = DGD->getCorrespondingConstructor();
-        if (!DC) {
-          // The copy deduction candidate doesn't have a corresponding
-          // constructor.
-          DC = cast<DeclContext>(DGD->getDeducedTemplate()->getTemplatedDecl());
-        }
-      }
-    }
-
     // C++11 [class.access.nest]p1:
     //   A nested class is a member and as such has the same access
     //   rights as any other member.
@@ -1308,18 +1294,17 @@ static bool IsMicrosoftUsingDeclarationAccessBug(Sema& S,
                                                  SourceLocation AccessLoc,
                                                  AccessTarget &Entity) {
   if (UsingShadowDecl *Shadow =
-          dyn_cast<UsingShadowDecl>(Entity.getTargetDecl()))
-    if (UsingDecl *UD = dyn_cast<UsingDecl>(Shadow->getIntroducer())) {
-      const NamedDecl *OrigDecl = Entity.getTargetDecl()->getUnderlyingDecl();
-      if (Entity.getTargetDecl()->getAccess() == AS_private &&
-          (OrigDecl->getAccess() == AS_public ||
-           OrigDecl->getAccess() == AS_protected)) {
-        S.Diag(AccessLoc, diag::ext_ms_using_declaration_inaccessible)
-            << UD->getQualifiedNameAsString()
-            << OrigDecl->getQualifiedNameAsString();
-        return true;
-      }
+                         dyn_cast<UsingShadowDecl>(Entity.getTargetDecl())) {
+    const NamedDecl *OrigDecl = Entity.getTargetDecl()->getUnderlyingDecl();
+    if (Entity.getTargetDecl()->getAccess() == AS_private &&
+        (OrigDecl->getAccess() == AS_public ||
+         OrigDecl->getAccess() == AS_protected)) {
+      S.Diag(AccessLoc, diag::ext_ms_using_declaration_inaccessible)
+        << Shadow->getUsingDecl()->getQualifiedNameAsString()
+        << OrigDecl->getQualifiedNameAsString();
+      return true;
     }
+  }
   return false;
 }
 
@@ -1491,8 +1476,7 @@ void Sema::HandleDelayedAccessCheck(DelayedDiagnostic &DD, Decl *D) {
   } else if (FunctionDecl *FN = dyn_cast<FunctionDecl>(D)) {
     DC = FN;
   } else if (TemplateDecl *TD = dyn_cast<TemplateDecl>(D)) {
-    if (isa<DeclContext>(TD->getTemplatedDecl()))
-      DC = cast<DeclContext>(TD->getTemplatedDecl());
+    DC = cast<DeclContext>(TD->getTemplatedDecl());
   }
 
   EffectiveContext EC(DC);
@@ -1567,7 +1551,7 @@ Sema::AccessResult Sema::CheckUnresolvedMemberAccess(UnresolvedMemberExpr *E,
 
   QualType BaseType = E->getBaseType();
   if (E->isArrow())
-    BaseType = BaseType->castAs<PointerType>()->getPointeeType();
+    BaseType = BaseType->getAs<PointerType>()->getPointeeType();
 
   AccessTarget Entity(Context, AccessTarget::Member, E->getNamingClass(),
                       Found, BaseType);
@@ -1576,24 +1560,21 @@ Sema::AccessResult Sema::CheckUnresolvedMemberAccess(UnresolvedMemberExpr *E,
   return CheckAccess(*this, E->getMemberLoc(), Entity);
 }
 
-/// Is the given member accessible for the purposes of deciding whether to
-/// define a special member function as deleted?
-bool Sema::isMemberAccessibleForDeletion(CXXRecordDecl *NamingClass,
-                                         DeclAccessPair Found,
-                                         QualType ObjectType,
-                                         SourceLocation Loc,
-                                         const PartialDiagnostic &Diag) {
+/// Is the given special member function accessible for the purposes of
+/// deciding whether to define a special member function as deleted?
+bool Sema::isSpecialMemberAccessibleForDeletion(CXXMethodDecl *decl,
+                                                AccessSpecifier access,
+                                                QualType objectType) {
   // Fast path.
-  if (Found.getAccess() == AS_public || !getLangOpts().AccessControl)
-    return true;
+  if (access == AS_public || !getLangOpts().AccessControl) return true;
 
-  AccessTarget Entity(Context, AccessTarget::Member, NamingClass, Found,
-                      ObjectType);
+  AccessTarget entity(Context, AccessTarget::Member, decl->getParent(),
+                      DeclAccessPair::make(decl, access), objectType);
 
   // Suppress diagnostics.
-  Entity.setDiag(Diag);
+  entity.setDiag(PDiag());
 
-  switch (CheckAccess(*this, Loc, Entity)) {
+  switch (CheckAccess(*this, SourceLocation(), entity)) {
   case AR_accessible: return true;
   case AR_inaccessible: return false;
   case AR_dependent: llvm_unreachable("dependent for =delete computation");
@@ -1853,8 +1834,8 @@ Sema::AccessResult Sema::CheckBaseClassAccess(SourceLocation AccessLoc,
     return AR_accessible;
 
   CXXRecordDecl *BaseD, *DerivedD;
-  BaseD = cast<CXXRecordDecl>(Base->castAs<RecordType>()->getDecl());
-  DerivedD = cast<CXXRecordDecl>(Derived->castAs<RecordType>()->getDecl());
+  BaseD = cast<CXXRecordDecl>(Base->getAs<RecordType>()->getDecl());
+  DerivedD = cast<CXXRecordDecl>(Derived->getAs<RecordType>()->getDecl());
 
   AccessTarget Entity(Context, AccessTarget::Base, BaseD, DerivedD,
                       Path.Access);

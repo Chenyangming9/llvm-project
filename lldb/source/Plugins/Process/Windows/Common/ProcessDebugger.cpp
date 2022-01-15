@@ -1,4 +1,4 @@
-//===-- ProcessDebugger.cpp -----------------------------------------------===//
+//===-- ProcessDebugger.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -63,8 +63,6 @@ static bool IsPageExecutable(uint32_t protect) {
 
 namespace lldb_private {
 
-ProcessDebugger::~ProcessDebugger() {}
-
 lldb::pid_t ProcessDebugger::GetDebuggedProcessId() const {
   if (m_session_data)
     return m_session_data->m_debugger->GetProcess().GetProcessId();
@@ -127,7 +125,7 @@ Status ProcessDebugger::LaunchProcess(ProcessLaunchInfo &launch_info,
     stream.Printf("ProcessDebugger unable to launch '%s'.  ProcessDebugger can "
                   "only be used for debug launches.",
                   launch_info.GetExecutableFile().GetPath().c_str());
-    std::string message = stream.GetString().str();
+    std::string message = stream.GetString();
     result.SetErrorString(message.c_str());
 
     LLDB_LOG(log, "error: {0}", message);
@@ -227,20 +225,22 @@ Status ProcessDebugger::DestroyProcess(const lldb::StateType state) {
     debugger_thread = m_session_data->m_debugger;
   }
 
-  if (state == eStateExited || state == eStateDetached) {
-    LLDB_LOG(log, "warning: cannot destroy process {0} while state = {1}.",
-             GetDebuggedProcessId(), state);
-    return Status();
+  Status error;
+  if (state != eStateExited && state != eStateDetached) {
+    LLDB_LOG(
+        log, "Shutting down process {0}.",
+        debugger_thread->GetProcess().GetNativeProcess().GetSystemHandle());
+    error = debugger_thread->StopDebugging(true);
+
+    // By the time StopDebugging returns, there is no more debugger thread, so
+    // we can be assured that no other thread will race for the session data.
+    m_session_data.reset();
+  } else {
+    error.SetErrorStringWithFormat("cannot destroy process %" PRIx64
+                                   " while state = %d",
+                                   GetDebuggedProcessId(), state);
+    LLDB_LOG(log, "error: {0}", error);
   }
-
-  LLDB_LOG(log, "Shutting down process {0}.",
-           debugger_thread->GetProcess().GetNativeProcess().GetSystemHandle());
-  auto error = debugger_thread->StopDebugging(true);
-
-  // By the time StopDebugging returns, there is no more debugger thread, so
-  // we can be assured that no other thread will race for the session data.
-  m_session_data.reset();
-
   return error;
 }
 
@@ -405,8 +405,7 @@ Status ProcessDebugger::GetMemoryRegionInfo(lldb::addr_t vm_addr,
   MEMORY_BASIC_INFORMATION mem_info = {};
   SIZE_T result = ::VirtualQueryEx(handle, addr, &mem_info, sizeof(mem_info));
   if (result == 0) {
-    DWORD last_error = ::GetLastError();
-    if (last_error == ERROR_INVALID_PARAMETER) {
+    if (::GetLastError() == ERROR_INVALID_PARAMETER) {
       // ERROR_INVALID_PARAMETER is returned if VirtualQueryEx is called with
       // an address past the highest accessible address. We should return a
       // range from the vm_addr to LLDB_INVALID_ADDRESS
@@ -418,7 +417,7 @@ Status ProcessDebugger::GetMemoryRegionInfo(lldb::addr_t vm_addr,
       info.SetMapped(MemoryRegionInfo::eNo);
       return error;
     } else {
-      error.SetError(last_error, eErrorTypeWin32);
+      error.SetError(::GetLastError(), eErrorTypeWin32);
       LLDB_LOG(log,
                "VirtualQueryEx returned error {0} while getting memory "
                "region info for address {1:x}",
@@ -461,6 +460,7 @@ Status ProcessDebugger::GetMemoryRegionInfo(lldb::addr_t vm_addr,
     info.SetMapped(MemoryRegionInfo::eNo);
   }
 
+  error.SetError(::GetLastError(), eErrorTypeWin32);
   LLDB_LOGV(log,
             "Memory region info for address {0}: readable={1}, "
             "executable={2}, writable={3}",

@@ -286,6 +286,9 @@ public:
   }
 
   bool VisitObjCPropertyRefExpr(ObjCPropertyRefExpr *E) {
+    if (E->isClassReceiver())
+      IndexCtx.handleReference(E->getClassReceiver(), E->getReceiverLocation(),
+                               Parent, ParentDC);
     if (E->isExplicitProperty()) {
       SmallVector<SymbolRelation, 2> Relations;
       SymbolRoleSet Roles = getRolesForRef(E, Relations);
@@ -388,13 +391,11 @@ public:
     if (C->capturesThis() || C->capturesVLAType())
       return true;
 
-    if (!base::TraverseStmt(Init))
-      return false;
-
     if (C->capturesVariable() && IndexCtx.shouldIndexFunctionLocalSymbols())
       return IndexCtx.handleReference(C->getCapturedVar(), C->getLocation(),
                                       Parent, ParentDC, SymbolRoleSet());
 
+    // FIXME: Lambda init-captures.
     return true;
   }
 
@@ -413,7 +414,7 @@ public:
 
     auto visitSyntacticDesignatedInitExpr = [&](DesignatedInitExpr *E) -> bool {
       for (DesignatedInitExpr::Designator &D : llvm::reverse(E->designators())) {
-        if (D.isFieldDesignator() && D.getField())
+        if (D.isFieldDesignator())
           return IndexCtx.handleReference(D.getField(), D.getFieldLoc(),
                                           Parent, ParentDC, SymbolRoleSet(),
                                           {}, E);
@@ -461,15 +462,6 @@ public:
       if (DC && isLambdaCallOperator(DC))
         IndexCtx.handleDecl(D);
     }
-    return true;
-  }
-
-  bool VisitUnresolvedLookupExpr(UnresolvedLookupExpr *E) {
-    SmallVector<SymbolRelation, 4> Relations;
-    SymbolRoleSet Roles = getRolesForRef(E, Relations);
-    for (auto *D : E->decls())
-      IndexCtx.handleReference(D, E->getNameLoc(), Parent, ParentDC, Roles,
-                               Relations, E);
     return true;
   }
 };

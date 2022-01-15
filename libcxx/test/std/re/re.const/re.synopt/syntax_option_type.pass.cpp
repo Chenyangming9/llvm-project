@@ -23,8 +23,7 @@
 //     extended   = unspecified,
 //     awk        = unspecified,
 //     grep       = unspecified,
-//     egrep      = unspecified,
-//     multiline  = unspecified
+//     egrep      = unspecified
 // };
 //
 // }
@@ -39,7 +38,7 @@ int main(int, char**)
     assert(std::regex_constants::nosubs != 0);
     assert(std::regex_constants::optimize != 0);
     assert(std::regex_constants::collate != 0);
-#ifdef _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO  // https://llvm.org/PR35967
+#ifdef _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO  // https://bugs.llvm.org/show_bug.cgi?id=35967
     assert(std::regex_constants::ECMAScript != 0);
 #else
     assert(std::regex_constants::ECMAScript == 0);
@@ -49,7 +48,6 @@ int main(int, char**)
     assert(std::regex_constants::awk != 0);
     assert(std::regex_constants::grep != 0);
     assert(std::regex_constants::egrep != 0);
-    assert(std::regex_constants::multiline != 0);
 
     assert((std::regex_constants::icase & std::regex_constants::nosubs) == 0);
     assert((std::regex_constants::icase & std::regex_constants::optimize) == 0);
@@ -60,7 +58,6 @@ int main(int, char**)
     assert((std::regex_constants::icase & std::regex_constants::awk) == 0);
     assert((std::regex_constants::icase & std::regex_constants::grep) == 0);
     assert((std::regex_constants::icase & std::regex_constants::egrep) == 0);
-    assert((std::regex_constants::icase & std::regex_constants::multiline) == 0);
 
     assert((std::regex_constants::nosubs & std::regex_constants::optimize) == 0);
     assert((std::regex_constants::nosubs & std::regex_constants::collate) == 0);
@@ -70,7 +67,6 @@ int main(int, char**)
     assert((std::regex_constants::nosubs & std::regex_constants::awk) == 0);
     assert((std::regex_constants::nosubs & std::regex_constants::grep) == 0);
     assert((std::regex_constants::nosubs & std::regex_constants::egrep) == 0);
-    assert((std::regex_constants::nosubs & std::regex_constants::multiline) == 0);
 
     assert((std::regex_constants::optimize & std::regex_constants::collate) == 0);
     assert((std::regex_constants::optimize & std::regex_constants::ECMAScript) == 0);
@@ -79,7 +75,6 @@ int main(int, char**)
     assert((std::regex_constants::optimize & std::regex_constants::awk) == 0);
     assert((std::regex_constants::optimize & std::regex_constants::grep) == 0);
     assert((std::regex_constants::optimize & std::regex_constants::egrep) == 0);
-    assert((std::regex_constants::optimize & std::regex_constants::multiline) == 0);
 
     assert((std::regex_constants::collate & std::regex_constants::ECMAScript) == 0);
     assert((std::regex_constants::collate & std::regex_constants::basic) == 0);
@@ -87,34 +82,26 @@ int main(int, char**)
     assert((std::regex_constants::collate & std::regex_constants::awk) == 0);
     assert((std::regex_constants::collate & std::regex_constants::grep) == 0);
     assert((std::regex_constants::collate & std::regex_constants::egrep) == 0);
-    assert((std::regex_constants::collate & std::regex_constants::multiline) == 0);
 
     assert((std::regex_constants::ECMAScript & std::regex_constants::basic) == 0);
     assert((std::regex_constants::ECMAScript & std::regex_constants::extended) == 0);
     assert((std::regex_constants::ECMAScript & std::regex_constants::awk) == 0);
     assert((std::regex_constants::ECMAScript & std::regex_constants::grep) == 0);
     assert((std::regex_constants::ECMAScript & std::regex_constants::egrep) == 0);
-    assert((std::regex_constants::ECMAScript & std::regex_constants::multiline) == 0);
 
     assert((std::regex_constants::basic & std::regex_constants::extended) == 0);
     assert((std::regex_constants::basic & std::regex_constants::awk) == 0);
     assert((std::regex_constants::basic & std::regex_constants::grep) == 0);
     assert((std::regex_constants::basic & std::regex_constants::egrep) == 0);
-    assert((std::regex_constants::basic & std::regex_constants::multiline) == 0);
 
     assert((std::regex_constants::extended & std::regex_constants::awk) == 0);
     assert((std::regex_constants::extended & std::regex_constants::grep) == 0);
     assert((std::regex_constants::extended & std::regex_constants::egrep) == 0);
-    assert((std::regex_constants::extended & std::regex_constants::multiline) == 0);
 
     assert((std::regex_constants::awk & std::regex_constants::grep) == 0);
     assert((std::regex_constants::awk & std::regex_constants::egrep) == 0);
-    assert((std::regex_constants::awk & std::regex_constants::multiline) == 0);
 
     assert((std::regex_constants::grep & std::regex_constants::egrep) == 0);
-    assert((std::regex_constants::grep & std::regex_constants::multiline) == 0);
-
-    assert((std::regex_constants::egrep & std::regex_constants::multiline) == 0);
 
     assert((std::regex_constants::icase | std::regex_constants::nosubs) != 0);
     assert((std::regex_constants::icase ^ std::regex_constants::nosubs) != 0);

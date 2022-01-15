@@ -46,15 +46,20 @@ struct DepCollectorPPCallbacks : public PPCallbacks {
     // Dependency generation really does want to go all the way to the
     // file entry for a source location to find out what is depended on.
     // We do not want #line markers to affect dependency generation!
-    if (Optional<StringRef> Filename = SM.getNonBuiltinFilenameForID(
-            SM.getFileID(SM.getExpansionLoc(Loc))))
-      DepCollector.maybeAddDependency(
-          llvm::sys::path::remove_leading_dotslash(*Filename),
-          /*FromModule*/ false, isSystem(FileType), /*IsModuleFile*/ false,
-          /*IsMissing*/ false);
+    const FileEntry *FE =
+        SM.getFileEntryForID(SM.getFileID(SM.getExpansionLoc(Loc)));
+    if (!FE)
+      return;
+
+    StringRef Filename =
+        llvm::sys::path::remove_leading_dotslash(FE->getName());
+
+    DepCollector.maybeAddDependency(Filename, /*FromModule*/false,
+                                    isSystem(FileType),
+                                    /*IsModuleFile*/false, /*IsMissing*/false);
   }
 
-  void FileSkipped(const FileEntryRef &SkippedFile, const Token &FilenameTok,
+  void FileSkipped(const FileEntry &SkippedFile, const Token &FilenameTok,
                    SrcMgr::CharacteristicKind FileType) override {
     StringRef Filename =
         llvm::sys::path::remove_leading_dotslash(SkippedFile.getName());
@@ -78,7 +83,7 @@ struct DepCollectorPPCallbacks : public PPCallbacks {
   }
 
   void HasInclude(SourceLocation Loc, StringRef SpelledFilename, bool IsAngled,
-                  Optional<FileEntryRef> File,
+                  const FileEntry *File,
                   SrcMgr::CharacteristicKind FileType) override {
     if (!File)
       return;
@@ -132,28 +137,16 @@ struct DepCollectorASTListener : public ASTReaderListener {
 };
 } // end anonymous namespace
 
-void DependencyCollector::maybeAddDependency(StringRef Filename,
-                                             bool FromModule, bool IsSystem,
-                                             bool IsModuleFile,
-                                             bool IsMissing) {
+void DependencyCollector::maybeAddDependency(StringRef Filename, bool FromModule,
+                                            bool IsSystem, bool IsModuleFile,
+                                            bool IsMissing) {
   if (sawDependency(Filename, FromModule, IsSystem, IsModuleFile, IsMissing))
     addDependency(Filename);
 }
 
 bool DependencyCollector::addDependency(StringRef Filename) {
-  StringRef SearchPath;
-#ifdef _WIN32
-  // Make the search insensitive to case and separators.
-  llvm::SmallString<256> TmpPath = Filename;
-  llvm::sys::path::native(TmpPath);
-  std::transform(TmpPath.begin(), TmpPath.end(), TmpPath.begin(), ::tolower);
-  SearchPath = TmpPath.str();
-#else
-  SearchPath = Filename;
-#endif
-
-  if (Seen.insert(SearchPath).second) {
-    Dependencies.push_back(std::string(Filename));
+  if (Seen.insert(Filename).second) {
+    Dependencies.push_back(Filename);
     return true;
   }
   return false;
@@ -167,21 +160,21 @@ static bool isSpecialFilename(StringRef Filename) {
 }
 
 bool DependencyCollector::sawDependency(StringRef Filename, bool FromModule,
-                                        bool IsSystem, bool IsModuleFile,
-                                        bool IsMissing) {
+                                       bool IsSystem, bool IsModuleFile,
+                                       bool IsMissing) {
   return !isSpecialFilename(Filename) &&
          (needSystemDependencies() || !IsSystem);
 }
 
 DependencyCollector::~DependencyCollector() { }
 void DependencyCollector::attachToPreprocessor(Preprocessor &PP) {
-  PP.addPPCallbacks(std::make_unique<DepCollectorPPCallbacks>(
+  PP.addPPCallbacks(llvm::make_unique<DepCollectorPPCallbacks>(
       *this, PP.getSourceManager(), PP.getDiagnostics()));
   PP.getHeaderSearchInfo().getModuleMap().addModuleMapCallbacks(
-      std::make_unique<DepCollectorMMCallbacks>(*this));
+      llvm::make_unique<DepCollectorMMCallbacks>(*this));
 }
 void DependencyCollector::attachToASTReader(ASTReader &R) {
-  R.addListener(std::make_unique<DepCollectorASTListener>(*this));
+  R.addListener(llvm::make_unique<DepCollectorASTListener>(*this));
 }
 
 DependencyFileGenerator::DependencyFileGenerator(
@@ -193,12 +186,17 @@ DependencyFileGenerator::DependencyFileGenerator(
       IncludeModuleFiles(Opts.IncludeModuleFiles),
       OutputFormat(Opts.OutputFormat), InputFileIndex(0) {
   for (const auto &ExtraDep : Opts.ExtraDeps) {
-    if (addDependency(ExtraDep.first))
+    if (addDependency(ExtraDep))
       ++InputFileIndex;
   }
 }
 
 void DependencyFileGenerator::attachToPreprocessor(Preprocessor &PP) {
+  if (Targets.empty()) {
+    PP.getDiagnostics().Report(diag::err_fe_dependency_file_requires_MT);
+    return;
+  }
+
   // Disable the "file not found" diagnostic if the -MG option was given.
   if (AddMissingHeaderDeps)
     PP.SetSuppressIncludeNotFoundError(true);
@@ -318,7 +316,7 @@ void DependencyFileGenerator::outputDependencyFile(DiagnosticsEngine &Diags) {
   }
 
   std::error_code EC;
-  llvm::raw_fd_ostream OS(OutputFile, EC, llvm::sys::fs::OF_TextWithCRLF);
+  llvm::raw_fd_ostream OS(OutputFile, EC, llvm::sys::fs::F_Text);
   if (EC) {
     Diags.Report(diag::err_fe_error_opening) << OutputFile << EC.message();
     return;

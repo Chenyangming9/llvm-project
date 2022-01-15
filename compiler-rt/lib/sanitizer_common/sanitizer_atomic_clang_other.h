@@ -17,12 +17,12 @@
 namespace __sanitizer {
 
 
-inline void proc_yield(int cnt) {
+INLINE void proc_yield(int cnt) {
   __asm__ __volatile__("" ::: "memory");
 }
 
 template<typename T>
-inline typename T::Type atomic_load(
+INLINE typename T::Type atomic_load(
     const volatile T *a, memory_order mo) {
   DCHECK(mo & (memory_order_relaxed | memory_order_consume
       | memory_order_acquire | memory_order_seq_cst));
@@ -50,14 +50,17 @@ inline typename T::Type atomic_load(
       __sync_synchronize();
     }
   } else {
-    __atomic_load(const_cast<typename T::Type volatile *>(&a->val_dont_use), &v,
-                  __ATOMIC_SEQ_CST);
+    // 64-bit load on 32-bit platform.
+    // Gross, but simple and reliable.
+    // Assume that it is not in read-only memory.
+    v = __sync_fetch_and_add(
+        const_cast<typename T::Type volatile *>(&a->val_dont_use), 0);
   }
   return v;
 }
 
 template<typename T>
-inline void atomic_store(volatile T *a, typename T::Type v, memory_order mo) {
+INLINE void atomic_store(volatile T *a, typename T::Type v, memory_order mo) {
   DCHECK(mo & (memory_order_relaxed | memory_order_release
       | memory_order_seq_cst));
   DCHECK(!((uptr)a % sizeof(*a)));
@@ -76,7 +79,16 @@ inline void atomic_store(volatile T *a, typename T::Type v, memory_order mo) {
       __sync_synchronize();
     }
   } else {
-    __atomic_store(&a->val_dont_use, &v, __ATOMIC_SEQ_CST);
+    // 64-bit store on 32-bit platform.
+    // Gross, but simple and reliable.
+    typename T::Type cmp = a->val_dont_use;
+    typename T::Type cur;
+    for (;;) {
+      cur = __sync_val_compare_and_swap(&a->val_dont_use, cmp, v);
+      if (cur == cmp || cur == v)
+        break;
+      cmp = cur;
+    }
   }
 }
 

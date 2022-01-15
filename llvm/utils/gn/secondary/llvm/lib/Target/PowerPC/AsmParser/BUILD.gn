@@ -17,5 +17,7 @@ static_library("AsmParser") {
     "//llvm/lib/Target/PowerPC/TargetInfo",
   ]
   include_dirs = [ ".." ]
-  sources = [ "PPCAsmParser.cpp" ]
+  sources = [
+    "PPCAsmParser.cpp",
+  ]
 }

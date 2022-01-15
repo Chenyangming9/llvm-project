@@ -12,18 +12,12 @@
   define void @i16tof64() {entry: ret void}
   define void @i8tof64() {entry: ret void}
   define void @u64tof32() {entry: ret void}
-  define void @u32tof32() {entry: ret void}
-  define void @u16tof32() {entry: ret void}
-  define void @u8tof32() {entry: ret void}
   define void @u64tof64() {entry: ret void}
-  define void @u32tof64() {entry: ret void}
-  define void @u16tof64() {entry: ret void}
-  define void @u8tof64() {entry: ret void}
 
 ...
 ---
 name:            i64tof32
-alignment:       4
+alignment:       2
 tracksRegLiveness: true
 body:             |
   bb.1.entry:
@@ -63,7 +57,7 @@ body:             |
 ...
 ---
 name:            i32tof32
-alignment:       4
+alignment:       2
 tracksRegLiveness: true
 body:             |
   bb.1.entry:
@@ -89,7 +83,7 @@ body:             |
 ...
 ---
 name:            i16tof32
-alignment:       4
+alignment:       2
 tracksRegLiveness: true
 body:             |
   bb.1.entry:
@@ -98,8 +92,8 @@ body:             |
     ; FP32-LABEL: name: i16tof32
     ; FP32: liveins: $a0
     ; FP32: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP32: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 16
+    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP32: [[SHL:%[0-9]+]]:_(s32) = G_SHL [[COPY1]], [[C]](s32)
     ; FP32: [[ASHR:%[0-9]+]]:_(s32) = G_ASHR [[SHL]], [[C]](s32)
     ; FP32: [[SITOFP:%[0-9]+]]:_(s32) = G_SITOFP [[ASHR]](s32)
@@ -108,8 +102,8 @@ body:             |
     ; FP64-LABEL: name: i16tof32
     ; FP64: liveins: $a0
     ; FP64: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP64: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 16
+    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP64: [[SHL:%[0-9]+]]:_(s32) = G_SHL [[COPY1]], [[C]](s32)
     ; FP64: [[ASHR:%[0-9]+]]:_(s32) = G_ASHR [[SHL]], [[C]](s32)
     ; FP64: [[SITOFP:%[0-9]+]]:_(s32) = G_SITOFP [[ASHR]](s32)
@@ -124,7 +118,7 @@ body:             |
 ...
 ---
 name:            i8tof32
-alignment:       4
+alignment:       2
 tracksRegLiveness: true
 body:             |
   bb.1.entry:
@@ -133,8 +127,8 @@ body:             |
     ; FP32-LABEL: name: i8tof32
     ; FP32: liveins: $a0
     ; FP32: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP32: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 24
+    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP32: [[SHL:%[0-9]+]]:_(s32) = G_SHL [[COPY1]], [[C]](s32)
     ; FP32: [[ASHR:%[0-9]+]]:_(s32) = G_ASHR [[SHL]], [[C]](s32)
     ; FP32: [[SITOFP:%[0-9]+]]:_(s32) = G_SITOFP [[ASHR]](s32)
@@ -143,8 +137,8 @@ body:             |
     ; FP64-LABEL: name: i8tof32
     ; FP64: liveins: $a0
     ; FP64: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP64: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 24
+    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP64: [[SHL:%[0-9]+]]:_(s32) = G_SHL [[COPY1]], [[C]](s32)
     ; FP64: [[ASHR:%[0-9]+]]:_(s32) = G_ASHR [[SHL]], [[C]](s32)
     ; FP64: [[SITOFP:%[0-9]+]]:_(s32) = G_SITOFP [[ASHR]](s32)
@@ -159,7 +153,7 @@ body:             |
 ...
 ---
 name:            i64tof64
-alignment:       4
+alignment:       2
 tracksRegLiveness: true
 body:             |
   bb.1.entry:
@@ -199,7 +193,7 @@ body:             |
 ...
 ---
 name:            i32tof64
-alignment:       4
+alignment:       2
 tracksRegLiveness: true
 body:             |
   bb.1.entry:
@@ -225,7 +219,7 @@ body:             |
 ...
 ---
 name:            i16tof64
-alignment:       4
+alignment:       2
 tracksRegLiveness: true
 body:             |
   bb.1.entry:
@@ -234,8 +228,8 @@ body:             |
     ; FP32-LABEL: name: i16tof64
     ; FP32: liveins: $a0
     ; FP32: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP32: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 16
+    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP32: [[SHL:%[0-9]+]]:_(s32) = G_SHL [[COPY1]], [[C]](s32)
     ; FP32: [[ASHR:%[0-9]+]]:_(s32) = G_ASHR [[SHL]], [[C]](s32)
     ; FP32: [[SITOFP:%[0-9]+]]:_(s64) = G_SITOFP [[ASHR]](s32)
@@ -244,8 +238,8 @@ body:             |
     ; FP64-LABEL: name: i16tof64
     ; FP64: liveins: $a0
     ; FP64: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP64: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 16
+    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP64: [[SHL:%[0-9]+]]:_(s32) = G_SHL [[COPY1]], [[C]](s32)
     ; FP64: [[ASHR:%[0-9]+]]:_(s32) = G_ASHR [[SHL]], [[C]](s32)
     ; FP64: [[SITOFP:%[0-9]+]]:_(s64) = G_SITOFP [[ASHR]](s32)
@@ -260,7 +254,7 @@ body:             |
 ...
 ---
 name:            i8tof64
-alignment:       4
+alignment:       2
 tracksRegLiveness: true
 body:             |
   bb.1.entry:
@@ -269,8 +263,8 @@ body:             |
     ; FP32-LABEL: name: i8tof64
     ; FP32: liveins: $a0
     ; FP32: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP32: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 24
+    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP32: [[SHL:%[0-9]+]]:_(s32) = G_SHL [[COPY1]], [[C]](s32)
     ; FP32: [[ASHR:%[0-9]+]]:_(s32) = G_ASHR [[SHL]], [[C]](s32)
     ; FP32: [[SITOFP:%[0-9]+]]:_(s64) = G_SITOFP [[ASHR]](s32)
@@ -279,8 +273,8 @@ body:             |
     ; FP64-LABEL: name: i8tof64
     ; FP64: liveins: $a0
     ; FP64: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP64: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 24
+    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
     ; FP64: [[SHL:%[0-9]+]]:_(s32) = G_SHL [[COPY1]], [[C]](s32)
     ; FP64: [[ASHR:%[0-9]+]]:_(s32) = G_ASHR [[SHL]], [[C]](s32)
     ; FP64: [[SITOFP:%[0-9]+]]:_(s64) = G_SITOFP [[ASHR]](s32)
@@ -295,7 +289,7 @@ body:             |
 ...
 ---
 name:            u64tof32
-alignment:       4
+alignment:       2
 tracksRegLiveness: true
 body:             |
   bb.1.entry:
@@ -334,124 +328,8 @@ body:             |
 
 ...
 ---
-name:            u32tof32
-alignment:       4
-tracksRegLiveness: true
-body:             |
-  bb.1.entry:
-    liveins: $a0
-
-    ; FP32-LABEL: name: u32tof32
-    ; FP32: liveins: $a0
-    ; FP32: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP32: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP32: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[COPY]](s32), [[C]](s32)
-    ; FP32: [[C1:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP32: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C1]]
-    ; FP32: [[FPTRUNC:%[0-9]+]]:_(s32) = G_FPTRUNC [[FSUB]](s64)
-    ; FP32: $f0 = COPY [[FPTRUNC]](s32)
-    ; FP32: RetRA implicit $f0
-    ; FP64-LABEL: name: u32tof32
-    ; FP64: liveins: $a0
-    ; FP64: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP64: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP64: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[COPY]](s32), [[C]](s32)
-    ; FP64: [[C1:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP64: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C1]]
-    ; FP64: [[FPTRUNC:%[0-9]+]]:_(s32) = G_FPTRUNC [[FSUB]](s64)
-    ; FP64: $f0 = COPY [[FPTRUNC]](s32)
-    ; FP64: RetRA implicit $f0
-    %0:_(s32) = COPY $a0
-    %1:_(s32) = G_UITOFP %0(s32)
-    $f0 = COPY %1(s32)
-    RetRA implicit $f0
-
-...
----
-name:            u16tof32
-alignment:       4
-tracksRegLiveness: true
-body:             |
-  bb.1.entry:
-    liveins: $a0
-
-    ; FP32-LABEL: name: u16tof32
-    ; FP32: liveins: $a0
-    ; FP32: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP32: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 65535
-    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
-    ; FP32: [[AND:%[0-9]+]]:_(s32) = G_AND [[COPY1]], [[C]]
-    ; FP32: [[C1:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP32: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[AND]](s32), [[C1]](s32)
-    ; FP32: [[C2:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP32: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C2]]
-    ; FP32: [[FPTRUNC:%[0-9]+]]:_(s32) = G_FPTRUNC [[FSUB]](s64)
-    ; FP32: $f0 = COPY [[FPTRUNC]](s32)
-    ; FP32: RetRA implicit $f0
-    ; FP64-LABEL: name: u16tof32
-    ; FP64: liveins: $a0
-    ; FP64: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP64: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 65535
-    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
-    ; FP64: [[AND:%[0-9]+]]:_(s32) = G_AND [[COPY1]], [[C]]
-    ; FP64: [[C1:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP64: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[AND]](s32), [[C1]](s32)
-    ; FP64: [[C2:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP64: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C2]]
-    ; FP64: [[FPTRUNC:%[0-9]+]]:_(s32) = G_FPTRUNC [[FSUB]](s64)
-    ; FP64: $f0 = COPY [[FPTRUNC]](s32)
-    ; FP64: RetRA implicit $f0
-    %1:_(s32) = COPY $a0
-    %0:_(s16) = G_TRUNC %1(s32)
-    %2:_(s32) = G_UITOFP %0(s16)
-    $f0 = COPY %2(s32)
-    RetRA implicit $f0
-
-...
----
-name:            u8tof32
-alignment:       4
-tracksRegLiveness: true
-body:             |
-  bb.1.entry:
-    liveins: $a0
-
-    ; FP32-LABEL: name: u8tof32
-    ; FP32: liveins: $a0
-    ; FP32: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP32: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 255
-    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
-    ; FP32: [[AND:%[0-9]+]]:_(s32) = G_AND [[COPY1]], [[C]]
-    ; FP32: [[C1:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP32: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[AND]](s32), [[C1]](s32)
-    ; FP32: [[C2:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP32: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C2]]
-    ; FP32: [[FPTRUNC:%[0-9]+]]:_(s32) = G_FPTRUNC [[FSUB]](s64)
-    ; FP32: $f0 = COPY [[FPTRUNC]](s32)
-    ; FP32: RetRA implicit $f0
-    ; FP64-LABEL: name: u8tof32
-    ; FP64: liveins: $a0
-    ; FP64: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP64: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 255
-    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
-    ; FP64: [[AND:%[0-9]+]]:_(s32) = G_AND [[COPY1]], [[C]]
-    ; FP64: [[C1:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP64: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[AND]](s32), [[C1]](s32)
-    ; FP64: [[C2:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP64: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C2]]
-    ; FP64: [[FPTRUNC:%[0-9]+]]:_(s32) = G_FPTRUNC [[FSUB]](s64)
-    ; FP64: $f0 = COPY [[FPTRUNC]](s32)
-    ; FP64: RetRA implicit $f0
-    %1:_(s32) = COPY $a0
-    %0:_(s8) = G_TRUNC %1(s32)
-    %2:_(s32) = G_UITOFP %0(s8)
-    $f0 = COPY %2(s32)
-    RetRA implicit $f0
-
-...
----
 name:            u64tof64
-alignment:       4
+alignment:       2
 tracksRegLiveness: true
 body:             |
   bb.1.entry:
@@ -486,116 +364,6 @@ body:             |
     %0:_(s64) = G_MERGE_VALUES %1(s32), %2(s32)
     %3:_(s64) = G_UITOFP %0(s64)
     $d0 = COPY %3(s64)
-    RetRA implicit $d0
-
-...
----
-name:            u32tof64
-alignment:       4
-tracksRegLiveness: true
-body:             |
-  bb.1.entry:
-    liveins: $a0
-
-    ; FP32-LABEL: name: u32tof64
-    ; FP32: liveins: $a0
-    ; FP32: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP32: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP32: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[COPY]](s32), [[C]](s32)
-    ; FP32: [[C1:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP32: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C1]]
-    ; FP32: $d0 = COPY [[FSUB]](s64)
-    ; FP32: RetRA implicit $d0
-    ; FP64-LABEL: name: u32tof64
-    ; FP64: liveins: $a0
-    ; FP64: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP64: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP64: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[COPY]](s32), [[C]](s32)
-    ; FP64: [[C1:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP64: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C1]]
-    ; FP64: $d0 = COPY [[FSUB]](s64)
-    ; FP64: RetRA implicit $d0
-    %0:_(s32) = COPY $a0
-    %1:_(s64) = G_UITOFP %0(s32)
-    $d0 = COPY %1(s64)
-    RetRA implicit $d0
-
-...
----
-name:            u16tof64
-alignment:       4
-tracksRegLiveness: true
-body:             |
-  bb.1.entry:
-    liveins: $a0
-
-    ; FP32-LABEL: name: u16tof64
-    ; FP32: liveins: $a0
-    ; FP32: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP32: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 65535
-    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
-    ; FP32: [[AND:%[0-9]+]]:_(s32) = G_AND [[COPY1]], [[C]]
-    ; FP32: [[C1:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP32: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[AND]](s32), [[C1]](s32)
-    ; FP32: [[C2:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP32: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C2]]
-    ; FP32: $d0 = COPY [[FSUB]](s64)
-    ; FP32: RetRA implicit $d0
-    ; FP64-LABEL: name: u16tof64
-    ; FP64: liveins: $a0
-    ; FP64: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP64: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 65535
-    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
-    ; FP64: [[AND:%[0-9]+]]:_(s32) = G_AND [[COPY1]], [[C]]
-    ; FP64: [[C1:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP64: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[AND]](s32), [[C1]](s32)
-    ; FP64: [[C2:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP64: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C2]]
-    ; FP64: $d0 = COPY [[FSUB]](s64)
-    ; FP64: RetRA implicit $d0
-    %1:_(s32) = COPY $a0
-    %0:_(s16) = G_TRUNC %1(s32)
-    %2:_(s64) = G_UITOFP %0(s16)
-    $d0 = COPY %2(s64)
-    RetRA implicit $d0
-
-...
----
-name:            u8tof64
-alignment:       4
-tracksRegLiveness: true
-body:             |
-  bb.1.entry:
-    liveins: $a0
-
-    ; FP32-LABEL: name: u8tof64
-    ; FP32: liveins: $a0
-    ; FP32: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP32: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 255
-    ; FP32: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
-    ; FP32: [[AND:%[0-9]+]]:_(s32) = G_AND [[COPY1]], [[C]]
-    ; FP32: [[C1:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP32: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[AND]](s32), [[C1]](s32)
-    ; FP32: [[C2:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP32: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C2]]
-    ; FP32: $d0 = COPY [[FSUB]](s64)
-    ; FP32: RetRA implicit $d0
-    ; FP64-LABEL: name: u8tof64
-    ; FP64: liveins: $a0
-    ; FP64: [[COPY:%[0-9]+]]:_(s32) = COPY $a0
-    ; FP64: [[C:%[0-9]+]]:_(s32) = G_CONSTANT i32 255
-    ; FP64: [[COPY1:%[0-9]+]]:_(s32) = COPY [[COPY]](s32)
-    ; FP64: [[AND:%[0-9]+]]:_(s32) = G_AND [[COPY1]], [[C]]
-    ; FP64: [[C1:%[0-9]+]]:_(s32) = G_CONSTANT i32 1127219200
-    ; FP64: [[MV:%[0-9]+]]:_(s64) = G_MERGE_VALUES [[AND]](s32), [[C1]](s32)
-    ; FP64: [[C2:%[0-9]+]]:_(s64) = G_FCONSTANT double 0x4330000000000000
-    ; FP64: [[FSUB:%[0-9]+]]:_(s64) = G_FSUB [[MV]], [[C2]]
-    ; FP64: $d0 = COPY [[FSUB]](s64)
-    ; FP64: RetRA implicit $d0
-    %1:_(s32) = COPY $a0
-    %0:_(s8) = G_TRUNC %1(s32)
-    %2:_(s64) = G_UITOFP %0(s8)
-    $d0 = COPY %2(s64)
     RetRA implicit $d0
 
 ...

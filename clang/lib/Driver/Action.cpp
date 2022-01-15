@@ -31,7 +31,6 @@ const char *Action::getClassName(ActionClass AC) {
   case CompileJobClass: return "compiler";
   case BackendJobClass: return "backend";
   case AssembleJobClass: return "assembler";
-  case IfsMergeJobClass: return "interface-stub-merger";
   case LinkJobClass: return "linker";
   case LipoJobClass: return "lipo";
   case DsymutilJobClass: return "dsymutil";
@@ -41,10 +40,6 @@ const char *Action::getClassName(ActionClass AC) {
     return "clang-offload-bundler";
   case OffloadUnbundlingJobClass:
     return "clang-offload-unbundler";
-  case OffloadWrapperJobClass:
-    return "clang-offload-wrapper";
-  case StaticLibJobClass:
-    return "static-lib-linker";
   }
 
   llvm_unreachable("invalid class");
@@ -165,8 +160,8 @@ StringRef Action::GetOffloadKindName(OffloadKind Kind) {
 
 void InputAction::anchor() {}
 
-InputAction::InputAction(const Arg &_Input, types::ID _Type, StringRef _Id)
-    : Action(InputClass, _Type), Input(_Input), Id(_Id.str()) {}
+InputAction::InputAction(const Arg &_Input, types::ID _Type)
+    : Action(InputClass, _Type), Input(_Input) {}
 
 void BindArchAction::anchor() {}
 
@@ -362,11 +357,6 @@ void AssembleJobAction::anchor() {}
 AssembleJobAction::AssembleJobAction(Action *Input, types::ID OutputType)
     : JobAction(AssembleJobClass, Input, OutputType) {}
 
-void IfsMergeJobAction::anchor() {}
-
-IfsMergeJobAction::IfsMergeJobAction(ActionList &Inputs, types::ID Type)
-    : JobAction(IfsMergeJobClass, Inputs, Type) {}
-
 void LinkJobAction::anchor() {}
 
 LinkJobAction::LinkJobAction(ActionList &Inputs, types::ID Type)
@@ -411,14 +401,3 @@ void OffloadUnbundlingJobAction::anchor() {}
 
 OffloadUnbundlingJobAction::OffloadUnbundlingJobAction(Action *Input)
     : JobAction(OffloadUnbundlingJobClass, Input, Input->getType()) {}
-
-void OffloadWrapperJobAction::anchor() {}
-
-OffloadWrapperJobAction::OffloadWrapperJobAction(ActionList &Inputs,
-                                                 types::ID Type)
-  : JobAction(OffloadWrapperJobClass, Inputs, Type) {}
-
-void StaticLibJobAction::anchor() {}
-
-StaticLibJobAction::StaticLibJobAction(ActionList &Inputs, types::ID Type)
-    : JobAction(StaticLibJobClass, Inputs, Type) {}

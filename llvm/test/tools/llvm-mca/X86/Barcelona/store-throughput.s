@@ -76,7 +76,6 @@ movaps %xmm3, (%rbx)
 # CHECK-NEXT: LQ      - Load queue full:                           0
 # CHECK-NEXT: SQ      - Store queue full:                          0
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
@@ -136,10 +135,9 @@ movaps %xmm3, (%rbx)
 
 # CHECK:            [0]    [1]    [2]    [3]
 # CHECK-NEXT: 0.     1     1.0    1.0    0.0       movb	%spl, (%rax)
-# CHECK-NEXT: 1.     1     2.0    1.0    0.0       movb	%bpl, (%rcx)
-# CHECK-NEXT: 2.     1     3.0    1.0    0.0       movb	%sil, (%rdx)
-# CHECK-NEXT: 3.     1     4.0    1.0    0.0       movb	%dil, (%rbx)
-# CHECK-NEXT:        1     2.5    1.0    0.0       <total>
+# CHECK-NEXT: 1.     1     2.0    0.0    0.0       movb	%bpl, (%rcx)
+# CHECK-NEXT: 2.     1     3.0    0.0    0.0       movb	%sil, (%rdx)
+# CHECK-NEXT: 3.     1     4.0    0.0    0.0       movb	%dil, (%rbx)
 
 # CHECK:      [1] Code Region
 
@@ -174,7 +172,6 @@ movaps %xmm3, (%rbx)
 # CHECK-NEXT: LQ      - Load queue full:                           0
 # CHECK-NEXT: SQ      - Store queue full:                          0
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
@@ -234,10 +231,9 @@ movaps %xmm3, (%rbx)
 
 # CHECK:            [0]    [1]    [2]    [3]
 # CHECK-NEXT: 0.     1     1.0    1.0    0.0       movw	%sp, (%rax)
-# CHECK-NEXT: 1.     1     2.0    1.0    0.0       movw	%bp, (%rcx)
-# CHECK-NEXT: 2.     1     3.0    1.0    0.0       movw	%si, (%rdx)
-# CHECK-NEXT: 3.     1     4.0    1.0    0.0       movw	%di, (%rbx)
-# CHECK-NEXT:        1     2.5    1.0    0.0       <total>
+# CHECK-NEXT: 1.     1     2.0    0.0    0.0       movw	%bp, (%rcx)
+# CHECK-NEXT: 2.     1     3.0    0.0    0.0       movw	%si, (%rdx)
+# CHECK-NEXT: 3.     1     4.0    0.0    0.0       movw	%di, (%rbx)
 
 # CHECK:      [2] Code Region
 
@@ -272,7 +268,6 @@ movaps %xmm3, (%rbx)
 # CHECK-NEXT: LQ      - Load queue full:                           0
 # CHECK-NEXT: SQ      - Store queue full:                          0
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
@@ -332,10 +327,9 @@ movaps %xmm3, (%rbx)
 
 # CHECK:            [0]    [1]    [2]    [3]
 # CHECK-NEXT: 0.     1     1.0    1.0    0.0       movl	%esp, (%rax)
-# CHECK-NEXT: 1.     1     2.0    1.0    0.0       movl	%ebp, (%rcx)
-# CHECK-NEXT: 2.     1     3.0    1.0    0.0       movl	%esi, (%rdx)
-# CHECK-NEXT: 3.     1     4.0    1.0    0.0       movl	%edi, (%rbx)
-# CHECK-NEXT:        1     2.5    1.0    0.0       <total>
+# CHECK-NEXT: 1.     1     2.0    0.0    0.0       movl	%ebp, (%rcx)
+# CHECK-NEXT: 2.     1     3.0    0.0    0.0       movl	%esi, (%rdx)
+# CHECK-NEXT: 3.     1     4.0    0.0    0.0       movl	%edi, (%rbx)
 
 # CHECK:      [3] Code Region
 
@@ -370,7 +364,6 @@ movaps %xmm3, (%rbx)
 # CHECK-NEXT: LQ      - Load queue full:                           0
 # CHECK-NEXT: SQ      - Store queue full:                          0
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
@@ -430,10 +423,9 @@ movaps %xmm3, (%rbx)
 
 # CHECK:            [0]    [1]    [2]    [3]
 # CHECK-NEXT: 0.     1     1.0    1.0    0.0       movq	%rsp, (%rax)
-# CHECK-NEXT: 1.     1     2.0    1.0    0.0       movq	%rbp, (%rcx)
-# CHECK-NEXT: 2.     1     3.0    1.0    0.0       movq	%rsi, (%rdx)
-# CHECK-NEXT: 3.     1     4.0    1.0    0.0       movq	%rdi, (%rbx)
-# CHECK-NEXT:        1     2.5    1.0    0.0       <total>
+# CHECK-NEXT: 1.     1     2.0    0.0    0.0       movq	%rbp, (%rcx)
+# CHECK-NEXT: 2.     1     3.0    0.0    0.0       movq	%rsi, (%rdx)
+# CHECK-NEXT: 3.     1     4.0    0.0    0.0       movq	%rdi, (%rbx)
 
 # CHECK:      [4] Code Region
 
@@ -468,7 +460,6 @@ movaps %xmm3, (%rbx)
 # CHECK-NEXT: LQ      - Load queue full:                           0
 # CHECK-NEXT: SQ      - Store queue full:                          0
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
@@ -531,7 +522,6 @@ movaps %xmm3, (%rbx)
 # CHECK-NEXT: 1.     1     2.0    0.0    0.0       movd	%mm1, (%rcx)
 # CHECK-NEXT: 2.     1     3.0    0.0    0.0       movd	%mm2, (%rdx)
 # CHECK-NEXT: 3.     1     4.0    0.0    0.0       movd	%mm3, (%rbx)
-# CHECK-NEXT:        1     2.5    0.3    0.0       <total>
 
 # CHECK:      [5] Code Region
 
@@ -566,7 +556,6 @@ movaps %xmm3, (%rbx)
 # CHECK-NEXT: LQ      - Load queue full:                           0
 # CHECK-NEXT: SQ      - Store queue full:                          0
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
@@ -626,7 +615,6 @@ movaps %xmm3, (%rbx)
 
 # CHECK:            [0]    [1]    [2]    [3]
 # CHECK-NEXT: 0.     1     1.0    1.0    0.0       movaps	%xmm0, (%rax)
-# CHECK-NEXT: 1.     1     2.0    1.0    0.0       movaps	%xmm1, (%rcx)
-# CHECK-NEXT: 2.     1     3.0    1.0    0.0       movaps	%xmm2, (%rdx)
-# CHECK-NEXT: 3.     1     4.0    1.0    0.0       movaps	%xmm3, (%rbx)
-# CHECK-NEXT:        1     2.5    1.0    0.0       <total>
+# CHECK-NEXT: 1.     1     2.0    0.0    0.0       movaps	%xmm1, (%rcx)
+# CHECK-NEXT: 2.     1     3.0    0.0    0.0       movaps	%xmm2, (%rdx)
+# CHECK-NEXT: 3.     1     4.0    0.0    0.0       movaps	%xmm3, (%rbx)

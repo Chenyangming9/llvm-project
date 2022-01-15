@@ -1,4 +1,4 @@
-//===-- SBValue.cpp -------------------------------------------------------===//
+//===-- SBValue.cpp ---------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -17,7 +17,6 @@
 #include "lldb/API/SBTypeSynthetic.h"
 
 #include "lldb/Breakpoint/Watchpoint.h"
-#include "lldb/Core/Declaration.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/Section.h"
 #include "lldb/Core/StreamFile.h"
@@ -26,6 +25,7 @@
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/DataFormatters/DataVisualization.h"
 #include "lldb/Symbol/Block.h"
+#include "lldb/Symbol/Declaration.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/Type.h"
 #include "lldb/Symbol/Variable.h"
@@ -53,7 +53,7 @@ using namespace lldb_private;
 
 class ValueImpl {
 public:
-  ValueImpl() = default;
+  ValueImpl() {}
 
   ValueImpl(lldb::ValueObjectSP in_valobj_sp,
             lldb::DynamicValueType use_dynamic, bool use_synthetic,
@@ -137,7 +137,7 @@ public:
     }
 
     if (m_use_synthetic) {
-      ValueObjectSP synthetic_sp = value_sp->GetSyntheticValue();
+      ValueObjectSP synthetic_sp = value_sp->GetSyntheticValue(m_use_synthetic);
       if (synthetic_sp)
         value_sp = synthetic_sp;
     }
@@ -201,7 +201,7 @@ private:
 
 class ValueLocker {
 public:
-  ValueLocker() = default;
+  ValueLocker() {}
 
   ValueObjectSP GetLockedSP(ValueImpl &in_value) {
     return in_value.GetSP(m_stop_locker, m_lock, m_lock_error);
@@ -239,7 +239,7 @@ SBValue &SBValue::operator=(const SBValue &rhs) {
   return LLDB_RECORD_RESULT(*this);
 }
 
-SBValue::~SBValue() = default;
+SBValue::~SBValue() {}
 
 bool SBValue::IsValid() {
   LLDB_RECORD_METHOD_NO_ARGS(bool, SBValue, IsValid);
@@ -333,7 +333,7 @@ size_t SBValue::GetByteSize() {
   ValueLocker locker;
   lldb::ValueObjectSP value_sp(GetSP(locker));
   if (value_sp) {
-    result = value_sp->GetByteSize().getValueOr(0);
+    result = value_sp->GetByteSize();
   }
 
   return result;
@@ -386,6 +386,25 @@ const char *SBValue::GetObjectDescription() {
   lldb::ValueObjectSP value_sp(GetSP(locker));
   if (value_sp) {
     cstr = value_sp->GetObjectDescription();
+  }
+
+  return cstr;
+}
+
+const char *SBValue::GetTypeValidatorResult() {
+  LLDB_RECORD_METHOD_NO_ARGS(const char *, SBValue, GetTypeValidatorResult);
+
+  const char *cstr = nullptr;
+  ValueLocker locker;
+  lldb::ValueObjectSP value_sp(GetSP(locker));
+  if (value_sp) {
+    const auto &validation(value_sp->GetValidationStatus());
+    if (TypeValidatorResult::Failure == validation.first) {
+      if (validation.second.empty())
+        cstr = "unknown error";
+      else
+        cstr = validation.second.c_str();
+    }
   }
 
   return cstr;
@@ -1154,7 +1173,7 @@ bool SBValue::GetExpressionPath(SBStream &description) {
   ValueLocker locker;
   lldb::ValueObjectSP value_sp(GetSP(locker));
   if (value_sp) {
-    value_sp->GetExpressionPath(description.ref());
+    value_sp->GetExpressionPath(description.ref(), false);
     return true;
   }
   return false;
@@ -1168,7 +1187,7 @@ bool SBValue::GetExpressionPath(SBStream &description,
   ValueLocker locker;
   lldb::ValueObjectSP value_sp(GetSP(locker));
   if (value_sp) {
-    value_sp->GetExpressionPath(description.ref());
+    value_sp->GetExpressionPath(description.ref(), qualify_cxx_base_classes);
     return true;
   }
   return false;
@@ -1356,7 +1375,7 @@ lldb::SBAddress SBValue::GetAddress() {
     }
   }
 
-  return LLDB_RECORD_RESULT(SBAddress(addr));
+  return LLDB_RECORD_RESULT(SBAddress(new Address(addr)));
 }
 
 lldb::SBData SBValue::GetPointeeData(uint32_t item_idx, uint32_t item_count) {
@@ -1493,7 +1512,7 @@ lldb::SBWatchpoint SBValue::Watch(bool resolve_location, bool read, bool write,
           StreamString ss;
           // True to show fullpath for declaration file.
           decl.DumpStopContext(&ss, true);
-          watchpoint_sp->SetDeclInfo(std::string(ss.GetString()));
+          watchpoint_sp->SetDeclInfo(ss.GetString());
         }
       }
     }
@@ -1566,6 +1585,7 @@ void RegisterMethods<SBValue>(Registry &R) {
   LLDB_REGISTER_METHOD(const char *, SBValue, GetValue, ());
   LLDB_REGISTER_METHOD(lldb::ValueType, SBValue, GetValueType, ());
   LLDB_REGISTER_METHOD(const char *, SBValue, GetObjectDescription, ());
+  LLDB_REGISTER_METHOD(const char *, SBValue, GetTypeValidatorResult, ());
   LLDB_REGISTER_METHOD(lldb::SBType, SBValue, GetType, ());
   LLDB_REGISTER_METHOD(bool, SBValue, GetValueDidChange, ());
   LLDB_REGISTER_METHOD(const char *, SBValue, GetSummary, ());

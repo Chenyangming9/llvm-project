@@ -1,4 +1,4 @@
-//===-- CFCMutableSet.cpp -------------------------------------------------===//
+//===-- CFCMutableSet.cpp ---------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -25,7 +25,7 @@ const CFCMutableSet &CFCMutableSet::operator=(const CFCMutableSet &rhs) {
 }
 
 // Destructor
-CFCMutableSet::~CFCMutableSet() = default;
+CFCMutableSet::~CFCMutableSet() {}
 
 CFIndex CFCMutableSet::GetCount() const {
   CFMutableSetRef set = get();

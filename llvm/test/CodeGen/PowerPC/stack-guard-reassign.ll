@@ -6,12 +6,12 @@
 ; CHECK:      mflr 0
 ; CHECK-NEXT: stw 0, 4(1)
 ; CHECK-NEXT: lis 0, -2
-; CHECK-NEXT: ori 0, 0, 65504
+; CHECK-NEXT: ori 0, 0, 65488
 ; CHECK-NEXT: stwux 1, 1, 0
-; CHECK-NEXT: sub 0, 1, 0
-; CHECK-NEXT: lis 4, __stack_chk_guard@ha
-; CHECK-NEXT: stw 4, 16(1)
-; CHECK-NEXT: lwz 4, __stack_chk_guard@l(4)
-; CHECK-NEXT: lis 5, 1
-; CHECK-NEXT: ori 5, 5, 28
-; CHECK-NEXT: stwx 4, 1, 5
+; CHECK-NEXT: subf 0, 0, 1
+; CHECK-NEXT: lis 4, 1
+; CHECK-NEXT: ori 4, 4, 44
+; CHECK-NEXT: add 4, 1, 4
+; CHECK-NEXT: lis 5, __stack_chk_guard@ha
+; CHECK-NEXT: lwz 6, __stack_chk_guard@l(5)
+; CHECK-NEXT: stw 6, 0(4)

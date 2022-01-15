@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_PROPERTY_H
-#define LLDB_INTERPRETER_PROPERTY_H
+#ifndef liblldb_Property_h_
+#define liblldb_Property_h_
 
 #include "lldb/Interpreter/OptionValue.h"
 #include "lldb/Utility/ConstString.h"
@@ -64,7 +64,8 @@ public:
                        uint32_t output_width,
                        bool display_qualified_name) const;
 
-  void SetValueChangedCallback(std::function<void()> callback);
+  void SetValueChangedCallback(OptionValueChangedCallback callback,
+                               void *baton);
 
 protected:
   ConstString m_name;
@@ -75,4 +76,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_PROPERTY_H
+#endif // liblldb_Property_h_

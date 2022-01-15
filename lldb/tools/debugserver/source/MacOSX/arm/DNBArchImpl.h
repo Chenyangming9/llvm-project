@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TOOLS_DEBUGSERVER_SOURCE_MACOSX_ARM_DNBARCHIMPL_H
-#define LLDB_TOOLS_DEBUGSERVER_SOURCE_MACOSX_ARM_DNBARCHIMPL_H
+#ifndef __DebugNubArchMachARM_h__
+#define __DebugNubArchMachARM_h__
 
 #if defined(__arm__) || defined(__arm64__) || defined(__aarch64__)
 
@@ -44,48 +44,47 @@ public:
   static void Initialize();
   static const DNBRegisterSetInfo *GetRegisterSetInfo(nub_size_t *num_reg_sets);
 
-  bool GetRegisterValue(uint32_t set, uint32_t reg,
-                        DNBRegisterValue *value) override;
-  bool SetRegisterValue(uint32_t set, uint32_t reg,
-                        const DNBRegisterValue *value) override;
-  nub_size_t GetRegisterContext(void *buf, nub_size_t buf_len) override;
-  nub_size_t SetRegisterContext(const void *buf, nub_size_t buf_len) override;
-  uint32_t SaveRegisterState() override;
-  bool RestoreRegisterState(uint32_t save_id) override;
+  virtual bool GetRegisterValue(uint32_t set, uint32_t reg,
+                                DNBRegisterValue *value);
+  virtual bool SetRegisterValue(uint32_t set, uint32_t reg,
+                                const DNBRegisterValue *value);
+  virtual nub_size_t GetRegisterContext(void *buf, nub_size_t buf_len);
+  virtual nub_size_t SetRegisterContext(const void *buf, nub_size_t buf_len);
+  virtual uint32_t SaveRegisterState();
+  virtual bool RestoreRegisterState(uint32_t save_id);
 
-  kern_return_t GetRegisterState(int set, bool force) override;
-  kern_return_t SetRegisterState(int set) override;
-  bool RegisterSetStateIsValid(int set) const override;
+  virtual kern_return_t GetRegisterState(int set, bool force);
+  virtual kern_return_t SetRegisterState(int set);
+  virtual bool RegisterSetStateIsValid(int set) const;
 
-  uint64_t GetPC(uint64_t failValue) override; // Get program counter
-  kern_return_t SetPC(uint64_t value) override;
-  uint64_t GetSP(uint64_t failValue) override; // Get stack pointer
-  void ThreadWillResume() override;
-  bool ThreadDidStop() override;
-  bool NotifyException(MachException::Data &exc) override;
+  virtual uint64_t GetPC(uint64_t failValue); // Get program counter
+  virtual kern_return_t SetPC(uint64_t value);
+  virtual uint64_t GetSP(uint64_t failValue); // Get stack pointer
+  virtual void ThreadWillResume();
+  virtual bool ThreadDidStop();
+  virtual bool NotifyException(MachException::Data &exc);
 
   static DNBArchProtocol *Create(MachThread *thread);
   static const uint8_t *SoftwareBreakpointOpcode(nub_size_t byte_size);
   static uint32_t GetCPUType();
 
-  uint32_t NumSupportedHardwareBreakpoints() override;
-  uint32_t NumSupportedHardwareWatchpoints() override;
-  uint32_t EnableHardwareBreakpoint(nub_addr_t addr, nub_size_t size,
-                                    bool also_set_on_task) override;
-  bool DisableHardwareBreakpoint(uint32_t hw_break_index,
-                                 bool also_set_on_task) override;
+  virtual uint32_t NumSupportedHardwareBreakpoints();
+  virtual uint32_t NumSupportedHardwareWatchpoints();
+  virtual uint32_t EnableHardwareBreakpoint(nub_addr_t addr, nub_size_t size);
+  virtual bool DisableHardwareBreakpoint(uint32_t hw_break_index);
 
-  uint32_t EnableHardwareWatchpoint(nub_addr_t addr, nub_size_t size, bool read,
-                                    bool write, bool also_set_on_task) override;
-  bool DisableHardwareWatchpoint(uint32_t hw_break_index,
-                                 bool also_set_on_task) override;
+  virtual uint32_t EnableHardwareWatchpoint(nub_addr_t addr, nub_size_t size,
+                                            bool read, bool write,
+                                            bool also_set_on_task);
+  virtual bool DisableHardwareWatchpoint(uint32_t hw_break_index,
+                                         bool also_set_on_task);
   virtual bool DisableHardwareWatchpoint_helper(uint32_t hw_break_index,
                                                 bool also_set_on_task);
   virtual bool ReenableHardwareWatchpoint(uint32_t hw_break_index);
   virtual bool ReenableHardwareWatchpoint_helper(uint32_t hw_break_index);
 
-  virtual bool StepNotComplete() override;
-  uint32_t GetHardwareWatchpointHit(nub_addr_t &addr) override;
+  virtual bool StepNotComplete();
+  virtual uint32_t GetHardwareWatchpointHit(nub_addr_t &addr);
 
 #if defined(ARM_DEBUG_STATE32) && (defined(__arm64__) || defined(__aarch64__))
   typedef arm_debug_state32_t DBG;
@@ -272,4 +271,4 @@ protected:
 };
 
 #endif // #if defined (__arm__)
-#endif // LLDB_TOOLS_DEBUGSERVER_SOURCE_MACOSX_ARM_DNBARCHIMPL_H
+#endif // #ifndef __DebugNubArchMachARM_h__

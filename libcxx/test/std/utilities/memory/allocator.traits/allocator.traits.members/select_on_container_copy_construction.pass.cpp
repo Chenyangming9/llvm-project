@@ -11,7 +11,7 @@
 // template <class Alloc>
 // struct allocator_traits
 // {
-//     static constexpr allocator_type
+//     static allocator_type
 //         select_on_container_copy_construction(const allocator_type& a);
 //     ...
 // };
@@ -29,7 +29,7 @@ struct A
 {
     typedef T value_type;
     int id;
-    TEST_CONSTEXPR_CXX20 explicit A(int i = 0) : id(i) {}
+    explicit A(int i = 0) : id(i) {}
 
 };
 
@@ -39,15 +39,15 @@ struct B
     typedef T value_type;
 
     int id;
-    TEST_CONSTEXPR_CXX20 explicit B(int i = 0) : id(i) {}
+    explicit B(int i = 0) : id(i) {}
 
-    TEST_CONSTEXPR_CXX20 B select_on_container_copy_construction() const
+    B select_on_container_copy_construction() const
     {
         return B(100);
     }
 };
 
-TEST_CONSTEXPR_CXX20 bool test()
+int main(int, char**)
 {
     {
         A<int> a;
@@ -74,14 +74,5 @@ TEST_CONSTEXPR_CXX20 bool test()
     }
 #endif
 
-    return true;
-}
-
-int main(int, char**)
-{
-    test();
-#if TEST_STD_VER > 17
-    static_assert(test());
-#endif
-    return 0;
+  return 0;
 }

@@ -40,7 +40,6 @@ public:
   void createHeader(size_t bodySize);
   virtual bool isNeeded() const { return true; }
   virtual size_t getSize() const = 0;
-  virtual size_t getOffset() { return offset; }
   virtual void writeTo(uint8_t *buf) = 0;
   virtual void finalizeContents() = 0;
   virtual uint32_t getNumRelocations() const { return 0; }
@@ -61,10 +60,6 @@ public:
   explicit CodeSection(ArrayRef<InputFunction *> functions)
       : OutputSection(llvm::wasm::WASM_SEC_CODE), functions(functions) {}
 
-  static bool classof(const OutputSection *sec) {
-    return sec->type == llvm::wasm::WASM_SEC_CODE;
-  }
-
   size_t getSize() const override { return header.size() + bodySize; }
   void writeTo(uint8_t *buf) override;
   uint32_t getNumRelocations() const override;
@@ -72,9 +67,8 @@ public:
   bool isNeeded() const override { return functions.size() > 0; }
   void finalizeContents() override;
 
-  ArrayRef<InputFunction *> functions;
-
 protected:
+  ArrayRef<InputFunction *> functions;
   std::string codeSectionHeader;
   size_t bodySize = 0;
 };
@@ -84,20 +78,15 @@ public:
   explicit DataSection(ArrayRef<OutputSegment *> segments)
       : OutputSection(llvm::wasm::WASM_SEC_DATA), segments(segments) {}
 
-  static bool classof(const OutputSection *sec) {
-    return sec->type == llvm::wasm::WASM_SEC_DATA;
-  }
-
   size_t getSize() const override { return header.size() + bodySize; }
   void writeTo(uint8_t *buf) override;
   uint32_t getNumRelocations() const override;
   void writeRelocations(raw_ostream &os) const override;
-  bool isNeeded() const override;
+  bool isNeeded() const override { return segments.size() > 0; }
   void finalizeContents() override;
 
-  ArrayRef<OutputSegment *> segments;
-
 protected:
+  ArrayRef<OutputSegment *> segments;
   std::string dataSectionHeader;
   size_t bodySize = 0;
 };
@@ -111,14 +100,9 @@ protected:
 // separately and are instead synthesized by the linker.
 class CustomSection : public OutputSection {
 public:
-  CustomSection(std::string name, ArrayRef<InputChunk *> inputSections)
+  CustomSection(std::string name, ArrayRef<InputSection *> inputSections)
       : OutputSection(llvm::wasm::WASM_SEC_CUSTOM, name),
         inputSections(inputSections) {}
-
-  static bool classof(const OutputSection *sec) {
-    return sec->type == llvm::wasm::WASM_SEC_CUSTOM;
-  }
-
   size_t getSize() const override {
     return header.size() + nameData.size() + payloadSize;
   }
@@ -128,9 +112,8 @@ public:
   void finalizeContents() override;
 
 protected:
-  void finalizeInputSections();
   size_t payloadSize = 0;
-  std::vector<InputChunk *> inputSections;
+  ArrayRef<InputSection *> inputSections;
   std::string nameData;
 };
 

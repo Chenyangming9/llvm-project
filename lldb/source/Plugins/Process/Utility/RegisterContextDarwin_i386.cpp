@@ -1,4 +1,4 @@
-//===-- RegisterContextDarwin_i386.cpp ------------------------------------===//
+//===-- RegisterContextDarwin_i386.cpp --------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -15,9 +15,15 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Compiler.h"
 
-#include <cstddef>
+#include <stddef.h>
 
 #include <memory>
+
+// Support building against older versions of LLVM, this macro was added
+// recently.
+#ifndef LLVM_EXTENSION
+#define LLVM_EXTENSION
+#endif
 
 #include "RegisterContextDarwin_i386.h"
 
@@ -405,7 +411,7 @@ RegisterContextDarwin_i386::RegisterContextDarwin_i386(
   }
 }
 
-RegisterContextDarwin_i386::~RegisterContextDarwin_i386() = default;
+RegisterContextDarwin_i386::~RegisterContextDarwin_i386() {}
 
 void RegisterContextDarwin_i386::InvalidateAllRegisters() {
   InvalidateAllRegisterStates();
@@ -490,11 +496,11 @@ int RegisterContextDarwin_i386::GetSetForNativeRegNum(int reg_num) {
 void RegisterContextDarwin_i386::LogGPR(Log *log, const char *title) {
   if (log) {
     if (title)
-      LLDB_LOGF(log, "%s", title);
+      log->Printf("%s", title);
     for (uint32_t i = 0; i < k_num_gpr_registers; i++) {
       uint32_t reg = gpr_eax + i;
-      LLDB_LOGF(log, "%12s = 0x%8.8x", g_register_infos[reg].name,
-                (&gpr.eax)[reg]);
+      log->Printf("%12s = 0x%8.8x", g_register_infos[reg].name,
+                  (&gpr.eax)[reg]);
     }
   }
 }

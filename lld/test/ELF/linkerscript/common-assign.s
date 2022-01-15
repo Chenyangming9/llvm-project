@@ -6,7 +6,7 @@
 
 # CHECK:       Symbol {
 # CHECK:         Name: bar
-# CHECK-NEXT:     Value: [[BAR:.*]]
+# CHECK-NEXT:     Value: 0x134
 # CHECK-NEXT:     Size: 4
 # CHECK-NEXT:     Binding: Global
 # CHECK-NEXT:     Type: Object
@@ -15,7 +15,7 @@
 # CHECK-NEXT:   }
 # CHECK-NEXT:   Symbol {
 # CHECK-NEXT:     Name: foo
-# CHECK-NEXT:     Value: [[FOO:.*]]
+# CHECK-NEXT:     Value: 0x138
 # CHECK-NEXT:     Size: 4
 # CHECK-NEXT:     Binding: Global
 # CHECK-NEXT:     Type: Object
@@ -24,25 +24,25 @@
 # CHECK-NEXT:   }
 # CHECK-NEXT:   Symbol {
 # CHECK-NEXT:     Name: pfoo
-# CHECK-NEXT:     Value: [[FOO]]
+# CHECK-NEXT:     Value: 0x138
 # CHECK-NEXT:     Size: 0
 # CHECK-NEXT:     Binding: Global
-# CHECK-NEXT:     Type: Object
+# CHECK-NEXT:     Type: None
 # CHECK-NEXT:     Other: 0
 # CHECK-NEXT:     Section: .bss
 # CHECK-NEXT:   }
 # CHECK-NEXT:   Symbol {
 # CHECK-NEXT:     Name: pbar
-# CHECK-NEXT:     Value: [[BAR]]
+# CHECK-NEXT:     Value: 0x134
 # CHECK-NEXT:     Size: 0
 # CHECK-NEXT:     Binding: Global
-# CHECK-NEXT:     Type: Object
+# CHECK-NEXT:     Type: None
 # CHECK-NEXT:     Other: 0
 # CHECK-NEXT:     Section: .bss
 # CHECK-NEXT:   }
 # CHECK-NEXT: ]
 
-.comm	bar,4,4
 .comm	foo,4,4
+.comm	bar,4,4
 movl	$1, foo(%rip)
 movl	$2, bar(%rip)

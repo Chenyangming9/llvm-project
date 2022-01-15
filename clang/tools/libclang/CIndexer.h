@@ -17,6 +17,7 @@
 #include "clang-c/Index.h"
 #include "clang/Frontend/PCHContainerOperations.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Mutex.h"
 #include <utility>
 
 namespace llvm {
@@ -78,7 +79,7 @@ public:
   StringRef getClangToolchainPath();
 
   void setInvocationEmissionPath(StringRef Str) {
-    InvocationEmissionPath = std::string(Str);
+    InvocationEmissionPath = Str;
   }
 
   StringRef getInvocationEmissionPath() const { return InvocationEmissionPath; }

@@ -6,23 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: no-exceptions
-
-// 1b00fc5d8133 made it in the dylib in macOS 10.11
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10}}
+// UNSUPPORTED: libcxxabi-no-exceptions
 
 #include <cassert>
-#include <cstdio>
 #include <cstdlib>
+#include <iostream>
 
 // Roll our own assertion macro to get better error messages out of the tests.
 // In particular on systems that don't use __PRETTY_FUNCTION__ in assertions.
 #define my_assert(pred, msg) do_assert(pred, msg, __LINE__, __PRETTY_FUNCTION__)
 
 void do_assert(bool assert_passed, const char* msg, int line, const char* func) {
-  if (assert_passed)
-    return;
-  std::printf("%s:%d %s: Assertion Failed '%s'\n\n", __FILE__, line, func, msg);
+  if (assert_passed) return;
+  std::cerr << __FILE__ << ":" << line << " " << func
+            << ": Assertion Failed `" << msg << "'\n\n";
   std::abort();
 }
 
@@ -133,7 +130,7 @@ struct generate_tests_imp<Throw, Catch, 0, first> {
 template <class Throw, class Catch, int level>
 struct generate_tests : generate_tests_imp<Throw, Catch, level, true> {};
 
-int main(int, char**)
+int main()
 {
   generate_tests<int, int, 3>()();
   generate_tests<Base, Derived, 2>()();
@@ -144,6 +141,4 @@ int main(int, char**)
   generate_tests<int A::*, int A::*, 3>()();
   generate_tests<int A::*, void, 2>()();
   generate_tests<void, int A::*, 2>()();
-
-  return 0;
 }

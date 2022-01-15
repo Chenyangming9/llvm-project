@@ -18,7 +18,7 @@
 
 #include "test_macros.h"
 #include "min_allocator.h"
-#include "private_constructor.h"
+#include "private_constructor.hpp"
 
 int main(int, char**)
 {

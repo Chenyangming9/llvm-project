@@ -1,12 +1,22 @@
 // RUN: %clang_builtins %s %librt -lm -o %t && %run %t
-// REQUIRES: librt_has_divsc3
-// REQUIRES: c99-complex
+//===-- divsc3_test.c - Test __divsc3 -------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file tests __divsc3 for the compiler_rt library.
+//
+//===----------------------------------------------------------------------===//
 
 #include "int_lib.h"
 #include <math.h>
 #include <complex.h>
 #include <stdio.h>
 
+// REQUIRES: c99-complex
 
 // Returns: the quotient of (a + ib) / (c + id)
 

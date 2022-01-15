@@ -6,13 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_UTILITY_BATON_H
-#define LLDB_UTILITY_BATON_H
+#ifndef lldb_Baton_h_
+#define lldb_Baton_h_
 
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-public.h"
-
-#include "llvm/Support/raw_ostream.h"
 
 #include <memory>
 
@@ -34,14 +32,13 @@ namespace lldb_private {
 /// needed resources in their destructors.
 class Baton {
 public:
-  Baton() = default;
-  virtual ~Baton() = default;
+  Baton() {}
+  virtual ~Baton() {}
 
   virtual void *data() = 0;
 
-  virtual void GetDescription(llvm::raw_ostream &s,
-                              lldb::DescriptionLevel level,
-                              unsigned indentation) const = 0;
+  virtual void GetDescription(Stream *s,
+                              lldb::DescriptionLevel level) const = 0;
 };
 
 class UntypedBaton : public Baton {
@@ -53,8 +50,7 @@ public:
   }
 
   void *data() override { return m_data; }
-  void GetDescription(llvm::raw_ostream &s, lldb::DescriptionLevel level,
-                      unsigned indentation) const override;
+  void GetDescription(Stream *s, lldb::DescriptionLevel level) const override;
 
   void *m_data; // Leave baton public for easy access
 };
@@ -67,8 +63,7 @@ public:
   const T *getItem() const { return Item.get(); }
 
   void *data() override { return Item.get(); }
-  void GetDescription(llvm::raw_ostream &s, lldb::DescriptionLevel level,
-                      unsigned indentation) const override {}
+  void GetDescription(Stream *s, lldb::DescriptionLevel level) const override {}
 
 protected:
   std::unique_ptr<T> Item;
@@ -76,4 +71,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_UTILITY_BATON_H
+#endif // lldb_Baton_h_

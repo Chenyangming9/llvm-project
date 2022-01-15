@@ -21,7 +21,7 @@ struct DwarfStringPoolEntry {
   static constexpr unsigned NotIndexed = -1;
 
   MCSymbol *Symbol;
-  uint64_t Offset;
+  unsigned Offset;
   unsigned Index;
 
   bool isIndexed() const { return Index != NotIndexed; }
@@ -47,7 +47,7 @@ public:
     assert(getMapEntry()->second.Symbol && "No symbol available!");
     return getMapEntry()->second.Symbol;
   }
-  uint64_t getOffset() const { return getMapEntry()->second.Offset; }
+  unsigned getOffset() const { return getMapEntry()->second.Offset; }
   bool isIndexed() const { return MapEntryAndIndexed.getInt(); }
   unsigned getIndex() const {
     assert(isIndexed());

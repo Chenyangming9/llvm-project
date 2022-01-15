@@ -37,17 +37,15 @@ StringRef yaml::ScalarTraits<yaml::BinaryRef>::input(StringRef Scalar, void *,
   return {};
 }
 
-void yaml::BinaryRef::writeAsBinary(raw_ostream &OS, uint64_t N) const {
+void yaml::BinaryRef::writeAsBinary(raw_ostream &OS) const {
   if (!DataIsHexString) {
-    OS.write((const char *)Data.data(), std::min<uint64_t>(N, Data.size()));
+    OS.write((const char *)Data.data(), Data.size());
     return;
   }
-
-  for (uint64_t I = 0, E = std::min<uint64_t>(N, Data.size() / 2); I != E;
-       ++I) {
-    uint8_t Byte = llvm::hexDigitValue(Data[I * 2]);
+  for (unsigned I = 0, N = Data.size(); I != N; I += 2) {
+    uint8_t Byte = llvm::hexDigitValue(Data[I]);
     Byte <<= 4;
-    Byte |= llvm::hexDigitValue(Data[I * 2 + 1]);
+    Byte |= llvm::hexDigitValue(Data[I + 1]);
     OS.write(Byte);
   }
 }

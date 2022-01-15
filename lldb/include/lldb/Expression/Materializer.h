@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_EXPRESSION_MATERIALIZER_H
-#define LLDB_EXPRESSION_MATERIALIZER_H
+#ifndef liblldb_Materializer_h
+#define liblldb_Materializer_h
 
 #include <memory>
 #include <vector>
@@ -22,12 +22,14 @@ namespace lldb_private {
 
 class Materializer {
 public:
-  Materializer() = default;
+  Materializer();
   ~Materializer();
 
   class Dematerializer {
   public:
-    Dematerializer() = default;
+    Dematerializer()
+        : m_materializer(nullptr), m_map(nullptr),
+          m_process_address(LLDB_INVALID_ADDRESS) {}
 
     ~Dematerializer() { Wipe(); }
 
@@ -54,11 +56,11 @@ public:
       }
     }
 
-    Materializer *m_materializer = nullptr;
+    Materializer *m_materializer;
     lldb::ThreadWP m_thread_wp;
     StackID m_stack_id;
-    IRMemoryMap *m_map = nullptr;
-    lldb::addr_t m_process_address = LLDB_INVALID_ADDRESS;
+    IRMemoryMap *m_map;
+    lldb::addr_t m_process_address;
   };
 
   typedef std::shared_ptr<Dematerializer> DematerializerSP;
@@ -90,7 +92,7 @@ public:
 
   class Entity {
   public:
-    Entity() = default;
+    Entity() : m_alignment(1), m_size(0), m_offset(0) {}
 
     virtual ~Entity() = default;
 
@@ -113,9 +115,11 @@ public:
     void SetOffset(uint32_t offset) { m_offset = offset; }
 
   protected:
-    uint32_t m_alignment = 1;
-    uint32_t m_size = 0;
-    uint32_t m_offset = 0;
+    void SetSizeAndAlignmentFromType(CompilerType &type);
+
+    uint32_t m_alignment;
+    uint32_t m_size;
+    uint32_t m_offset;
   };
 
 private:
@@ -126,10 +130,10 @@ private:
 
   DematerializerWP m_dematerializer_wp;
   EntityVector m_entities;
-  uint32_t m_current_offset = 0;
-  uint32_t m_struct_alignment = 8;
+  uint32_t m_current_offset;
+  uint32_t m_struct_alignment;
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_EXPRESSION_MATERIALIZER_H
+#endif // liblldb_Materializer_h

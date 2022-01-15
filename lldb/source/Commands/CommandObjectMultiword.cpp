@@ -1,4 +1,4 @@
-//===-- CommandObjectMultiword.cpp ----------------------------------------===//
+//===-- CommandObjectMultiword.cpp ------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/CommandObjectMultiword.h"
+#include "lldb/Core/Debugger.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Interpreter/CommandReturnObject.h"
 #include "lldb/Interpreter/Options.h"
@@ -32,7 +33,7 @@ CommandObjectSP CommandObjectMultiword::GetSubcommandSP(llvm::StringRef sub_cmd,
   CommandObject::CommandMap::iterator pos;
 
   if (!m_subcommand_dict.empty()) {
-    pos = m_subcommand_dict.find(std::string(sub_cmd));
+    pos = m_subcommand_dict.find(sub_cmd);
     if (pos != m_subcommand_dict.end()) {
       // An exact match; append the sub_cmd to the 'matches' string list.
       if (matches)
@@ -50,7 +51,7 @@ CommandObjectSP CommandObjectMultiword::GetSubcommandSP(llvm::StringRef sub_cmd,
         // function, since I now know I have an exact match...
 
         sub_cmd = matches->GetStringAtIndex(0);
-        pos = m_subcommand_dict.find(std::string(sub_cmd));
+        pos = m_subcommand_dict.find(sub_cmd);
         if (pos != m_subcommand_dict.end())
           return_cmd_sp = pos->second;
       }
@@ -74,9 +75,9 @@ bool CommandObjectMultiword::LoadSubCommand(llvm::StringRef name,
   CommandMap::iterator pos;
   bool success = true;
 
-  pos = m_subcommand_dict.find(std::string(name));
+  pos = m_subcommand_dict.find(name);
   if (pos == m_subcommand_dict.end()) {
-    m_subcommand_dict[std::string(name)] = cmd_obj;
+    m_subcommand_dict[name] = cmd_obj;
   } else
     success = false;
 
@@ -92,13 +93,11 @@ bool CommandObjectMultiword::Execute(const char *args_string,
     return result.Succeeded();
   }
 
-  auto sub_command = args[0].ref();
-  if (sub_command.empty()) {
-    result.AppendError("Need to specify a non-empty subcommand.");
+  auto sub_command = args[0].ref;
+  if (sub_command.empty())
     return result.Succeeded();
-  }
 
-  if (sub_command.equals_insensitive("help")) {
+  if (sub_command.equals_lower("help")) {
     this->CommandObject::GenerateHelpText(result);
     return result.Succeeded();
   }
@@ -106,6 +105,7 @@ bool CommandObjectMultiword::Execute(const char *args_string,
   if (m_subcommand_dict.empty()) {
     result.AppendErrorWithFormat("'%s' does not have any subcommands.\n",
                                  GetCommandName().str().c_str());
+    result.SetStatus(eReturnStatusFailed);
     return false;
   }
 
@@ -129,20 +129,21 @@ bool CommandObjectMultiword::Execute(const char *args_string,
     error_msg.assign("invalid command ");
 
   error_msg.append("'");
-  error_msg.append(std::string(GetCommandName()));
+  error_msg.append(GetCommandName());
   error_msg.append(" ");
-  error_msg.append(std::string(sub_command));
+  error_msg.append(sub_command);
   error_msg.append("'.");
 
   if (num_subcmd_matches > 0) {
     error_msg.append(" Possible completions:");
-    for (const std::string &match : matches) {
+    for (size_t i = 0; i < matches.GetSize(); i++) {
       error_msg.append("\n\t");
-      error_msg.append(match);
+      error_msg.append(matches.GetStringAtIndex(i));
     }
   }
   error_msg.append("\n");
   result.AppendRawError(error_msg.c_str());
+  result.SetStatus(eReturnStatusFailed);
   return false;
 }
 
@@ -163,22 +164,27 @@ void CommandObjectMultiword::GenerateHelpText(Stream &output_stream) {
     std::string indented_command("    ");
     indented_command.append(pos->first);
     if (pos->second->WantsRawCommandString()) {
-      std::string help_text(std::string(pos->second->GetHelp()));
+      std::string help_text(pos->second->GetHelp());
       help_text.append("  Expects 'raw' input (see 'help raw-input'.)");
-      m_interpreter.OutputFormattedHelpText(output_stream, indented_command,
-                                            "--", help_text, max_len);
+      m_interpreter.OutputFormattedHelpText(output_stream,
+                                            indented_command.c_str(), "--",
+                                            help_text.c_str(), max_len);
     } else
-      m_interpreter.OutputFormattedHelpText(output_stream, indented_command,
-                                            "--", pos->second->GetHelp(),
-                                            max_len);
+      m_interpreter.OutputFormattedHelpText(output_stream,
+                                            indented_command.c_str(), "--",
+                                            pos->second->GetHelp(), max_len);
   }
 
   output_stream.PutCString("\nFor more help on any particular subcommand, type "
                            "'help <command> <subcommand>'.\n");
 }
 
-void CommandObjectMultiword::HandleCompletion(CompletionRequest &request) {
-  auto arg0 = request.GetParsedLine()[0].ref();
+int CommandObjectMultiword::HandleCompletion(CompletionRequest &request) {
+  // Any of the command matches will provide a complete word, otherwise the
+  // individual completers will override this.
+  request.SetWordComplete(true);
+
+  auto arg0 = request.GetParsedLine()[0].ref;
   if (request.GetCursorIndex() == 0) {
     StringList new_matches, descriptions;
     AddNamesMatchingPartialString(m_subcommand_dict, arg0, new_matches,
@@ -191,28 +197,32 @@ void CommandObjectMultiword::HandleCompletion(CompletionRequest &request) {
       StringList temp_matches;
       CommandObject *cmd_obj = GetSubcommandObject(arg0, &temp_matches);
       if (cmd_obj != nullptr) {
-        if (request.GetParsedLine().GetArgumentCount() != 1) {
+        if (request.GetParsedLine().GetArgumentCount() == 1) {
+          request.SetWordComplete(true);
+        } else {
           request.GetParsedLine().Shift();
-          request.AppendEmptyArgument();
-          cmd_obj->HandleCompletion(request);
+          request.SetCursorCharPosition(0);
+          request.GetParsedLine().AppendArgument(llvm::StringRef());
+          return cmd_obj->HandleCompletion(request);
         }
       }
     }
-    return;
+    return new_matches.GetSize();
+  } else {
+    StringList new_matches;
+    CommandObject *sub_command_object = GetSubcommandObject(arg0, &new_matches);
+    if (sub_command_object == nullptr) {
+      request.AddCompletions(new_matches);
+      return request.GetNumberOfMatches();
+    } else {
+      // Remove the one match that we got from calling GetSubcommandObject.
+      new_matches.DeleteStringAtIndex(0);
+      request.AddCompletions(new_matches);
+      request.GetParsedLine().Shift();
+      request.SetCursorIndex(request.GetCursorIndex() - 1);
+      return sub_command_object->HandleCompletion(request);
+    }
   }
-
-  StringList new_matches;
-  CommandObject *sub_command_object = GetSubcommandObject(arg0, &new_matches);
-  if (sub_command_object == nullptr) {
-    request.AddCompletions(new_matches);
-    return;
-  }
-
-  // Remove the one match that we got from calling GetSubcommandObject.
-  new_matches.DeleteStringAtIndex(0);
-  request.AddCompletions(new_matches);
-  request.ShiftArguments();
-  sub_command_object->HandleCompletion(request);
 }
 
 const char *CommandObjectMultiword::GetRepeatCommand(Args &current_command_args,
@@ -221,7 +231,7 @@ const char *CommandObjectMultiword::GetRepeatCommand(Args &current_command_args,
   if (current_command_args.GetArgumentCount() <= index)
     return nullptr;
   CommandObject *sub_command_object =
-      GetSubcommandObject(current_command_args[index].ref());
+      GetSubcommandObject(current_command_args[index].ref);
   if (sub_command_object == nullptr)
     return nullptr;
   return sub_command_object->GetRepeatCommand(current_command_args, index);
@@ -259,32 +269,11 @@ CommandObjectProxy::CommandObjectProxy(CommandInterpreter &interpreter,
 
 CommandObjectProxy::~CommandObjectProxy() = default;
 
-Options *CommandObjectProxy::GetOptions() {
-  CommandObject *proxy_command = GetProxyCommandObject();
-  if (proxy_command)
-    return proxy_command->GetOptions();
-  return CommandObject::GetOptions();
-}
-
-llvm::StringRef CommandObjectProxy::GetHelp() {
-  CommandObject *proxy_command = GetProxyCommandObject();
-  if (proxy_command)
-    return proxy_command->GetHelp();
-  return CommandObject::GetHelp();
-}
-
-llvm::StringRef CommandObjectProxy::GetSyntax() {
-  CommandObject *proxy_command = GetProxyCommandObject();
-  if (proxy_command)
-    return proxy_command->GetSyntax();
-  return CommandObject::GetSyntax();
-}
-
 llvm::StringRef CommandObjectProxy::GetHelpLong() {
   CommandObject *proxy_command = GetProxyCommandObject();
   if (proxy_command)
     return proxy_command->GetHelpLong();
-  return CommandObject::GetHelpLong();
+  return llvm::StringRef();
 }
 
 bool CommandObjectProxy::IsRemovable() const {
@@ -312,9 +301,7 @@ CommandObjectMultiword *CommandObjectProxy::GetAsMultiwordCommand() {
 void CommandObjectProxy::GenerateHelpText(Stream &result) {
   CommandObject *proxy_command = GetProxyCommandObject();
   if (proxy_command)
-    proxy_command->GenerateHelpText(result);
-  else
-    CommandObject::GenerateHelpText(result);
+    return proxy_command->GenerateHelpText(result);
 }
 
 lldb::CommandObjectSP
@@ -366,17 +353,26 @@ bool CommandObjectProxy::WantsCompletion() {
   return false;
 }
 
-void CommandObjectProxy::HandleCompletion(CompletionRequest &request) {
+Options *CommandObjectProxy::GetOptions() {
   CommandObject *proxy_command = GetProxyCommandObject();
   if (proxy_command)
-    proxy_command->HandleCompletion(request);
+    return proxy_command->GetOptions();
+  return nullptr;
 }
 
-void CommandObjectProxy::HandleArgumentCompletion(
+int CommandObjectProxy::HandleCompletion(CompletionRequest &request) {
+  CommandObject *proxy_command = GetProxyCommandObject();
+  if (proxy_command)
+    return proxy_command->HandleCompletion(request);
+  return 0;
+}
+
+int CommandObjectProxy::HandleArgumentCompletion(
     CompletionRequest &request, OptionElementVector &opt_element_vector) {
   CommandObject *proxy_command = GetProxyCommandObject();
   if (proxy_command)
-    proxy_command->HandleArgumentCompletion(request, opt_element_vector);
+    return proxy_command->HandleArgumentCompletion(request, opt_element_vector);
+  return 0;
 }
 
 const char *CommandObjectProxy::GetRepeatCommand(Args &current_command_args,
@@ -387,15 +383,12 @@ const char *CommandObjectProxy::GetRepeatCommand(Args &current_command_args,
   return nullptr;
 }
 
-llvm::StringRef CommandObjectProxy::GetUnsupportedError() {
-  return "command is not implemented";
-}
-
 bool CommandObjectProxy::Execute(const char *args_string,
                                  CommandReturnObject &result) {
   CommandObject *proxy_command = GetProxyCommandObject();
   if (proxy_command)
     return proxy_command->Execute(args_string, result);
-  result.AppendError(GetUnsupportedError());
+  result.AppendError("command is not implemented");
+  result.SetStatus(eReturnStatusFailed);
   return false;
 }

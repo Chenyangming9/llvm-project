@@ -22,7 +22,6 @@
 
 namespace llvm {
 
-class AllocaInst;
 class BasicBlock;
 class BlockFrequency;
 class BlockFrequencyInfo;
@@ -36,38 +35,6 @@ class Loop;
 class Module;
 class Type;
 class Value;
-
-/// A cache for the CodeExtractor analysis. The operation \ref
-/// CodeExtractor::extractCodeRegion is guaranteed not to invalidate this
-/// object. This object should conservatively be considered invalid if any
-/// other mutating operations on the IR occur.
-///
-/// Constructing this object is O(n) in the size of the function.
-class CodeExtractorAnalysisCache {
-  /// The allocas in the function.
-  SmallVector<AllocaInst *, 16> Allocas;
-
-  /// Base memory addresses of load/store instructions, grouped by block.
-  DenseMap<BasicBlock *, DenseSet<Value *>> BaseMemAddrs;
-
-  /// Blocks which contain instructions which may have unknown side-effects
-  /// on memory.
-  DenseSet<BasicBlock *> SideEffectingBlocks;
-
-  void findSideEffectInfoForBlock(BasicBlock &BB);
-
-public:
-  CodeExtractorAnalysisCache(Function &F);
-
-  /// Get the allocas in the function at the time the analysis was created.
-  /// Note that some of these allocas may no longer be present in the function,
-  /// due to \ref CodeExtractor::extractCodeRegion.
-  ArrayRef<AllocaInst *> getAllocas() const { return Allocas; }
-
-  /// Check whether \p BB contains an instruction thought to load from, store
-  /// to, or otherwise clobber the alloca \p Addr.
-  bool doesBlockContainClobberOfAddr(BasicBlock &BB, AllocaInst *Addr) const;
-};
 
   /// Utility class for extracting code into a new function.
   ///
@@ -137,23 +104,13 @@ public:
     ///
     /// Returns zero when called on a CodeExtractor instance where isEligible
     /// returns false.
-    Function *extractCodeRegion(const CodeExtractorAnalysisCache &CEAC);
-
-    /// Verify that assumption cache isn't stale after a region is extracted.
-    /// Returns true when verifier finds errors. AssumptionCache is passed as
-    /// parameter to make this function stateless.
-    static bool verifyAssumptionCache(const Function &OldFunc,
-                                      const Function &NewFunc,
-                                      AssumptionCache *AC);
+    Function *extractCodeRegion();
 
     /// Test whether this code extractor is eligible.
     ///
     /// Based on the blocks used when constructing the code extractor,
     /// determine whether it is eligible for extraction.
-    /// 
-    /// Checks that varargs handling (with vastart and vaend) is only done in
-    /// the outlined blocks.
-    bool isEligible() const;
+    bool isEligible() const { return !Blocks.empty(); }
 
     /// Compute the set of input values and output values for the code.
     ///
@@ -170,9 +127,7 @@ public:
     /// region.
     ///
     /// Returns true if it is safe to do the code motion.
-    bool
-    isLegalToShrinkwrapLifetimeMarkers(const CodeExtractorAnalysisCache &CEAC,
-                                       Instruction *AllocaAddr) const;
+    bool isLegalToShrinkwrapLifetimeMarkers(Instruction *AllocaAddr) const;
 
     /// Find the set of allocas whose life ranges are contained within the
     /// outlined region.
@@ -182,8 +137,7 @@ public:
     /// are used by the lifetime markers are also candidates for shrink-
     /// wrapping. The instructions that need to be sunk are collected in
     /// 'Allocas'.
-    void findAllocas(const CodeExtractorAnalysisCache &CEAC,
-                     ValueSet &SinkCands, ValueSet &HoistCands,
+    void findAllocas(ValueSet &SinkCands, ValueSet &HoistCands,
                      BasicBlock *&ExitBlock) const;
 
     /// Find or create a block within the outline region for placing hoisted
@@ -204,9 +158,8 @@ public:
       Instruction *LifeEnd = nullptr;
     };
 
-    LifetimeMarkerInfo
-    getLifetimeMarkers(const CodeExtractorAnalysisCache &CEAC,
-                       Instruction *Addr, BasicBlock *ExitBlock) const;
+    LifetimeMarkerInfo getLifetimeMarkers(Instruction *Addr,
+                                          BasicBlock *ExitBlock) const;
 
     void severSplitPHINodesOfEntry(BasicBlock *&Header);
     void severSplitPHINodesOfExits(const SmallPtrSetImpl<BasicBlock *> &Exits);

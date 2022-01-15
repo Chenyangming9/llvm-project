@@ -85,8 +85,7 @@ public:
 
   /// Write the contents (regardless of whether it is binary or a
   /// hex string) as binary to the given raw_ostream.
-  /// N can be used to specify the maximum number of bytes.
-  void writeAsBinary(raw_ostream &OS, uint64_t N = UINT64_MAX) const;
+  void writeAsBinary(raw_ostream &OS) const;
 
   /// Write the contents (regardless of whether it is binary or a
   /// hex string) as hex to the given raw_ostream.

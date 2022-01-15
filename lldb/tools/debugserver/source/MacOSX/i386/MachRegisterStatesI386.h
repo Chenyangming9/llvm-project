@@ -10,10 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TOOLS_DEBUGSERVER_SOURCE_MACOSX_I386_MACHREGISTERSTATESI386_H
-#define LLDB_TOOLS_DEBUGSERVER_SOURCE_MACOSX_I386_MACHREGISTERSTATESI386_H
+#ifndef __MachRegisterStatesI386_h__
+#define __MachRegisterStatesI386_h__
 
-#include <cinttypes>
+#include <inttypes.h>
 
 #define __i386_THREAD_STATE 1
 #define __i386_FLOAT_STATE 2

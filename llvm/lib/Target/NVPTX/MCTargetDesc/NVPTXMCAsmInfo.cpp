@@ -17,8 +17,7 @@ using namespace llvm;
 
 void NVPTXMCAsmInfo::anchor() {}
 
-NVPTXMCAsmInfo::NVPTXMCAsmInfo(const Triple &TheTriple,
-                               const MCTargetOptions &Options) {
+NVPTXMCAsmInfo::NVPTXMCAsmInfo(const Triple &TheTriple) {
   if (TheTriple.getArch() == Triple::nvptx64) {
     CodePointerSize = CalleeSaveStackSlotSize = 8;
   }
@@ -47,11 +46,8 @@ NVPTXMCAsmInfo::NVPTXMCAsmInfo(const Triple &TheTriple,
   AscizDirective = nullptr; // not supported
   SupportsQuotedNames = false;
   SupportsExtendedDwarfLocDirective = false;
-  SupportsSignedData = false;
 
   // @TODO: Can we just disable this?
   WeakDirective = "\t// .weak\t";
   GlobalDirective = "\t// .globl\t";
-
-  UseIntegratedAssembler = false;
 }

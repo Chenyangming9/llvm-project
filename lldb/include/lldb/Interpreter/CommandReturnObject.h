@@ -6,9 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_COMMANDRETURNOBJECT_H
-#define LLDB_INTERPRETER_COMMANDRETURNOBJECT_H
+#ifndef liblldb_CommandReturnObject_h_
+#define liblldb_CommandReturnObject_h_
 
+#include "lldb/Core/STLUtils.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/StreamTee.h"
@@ -16,7 +17,6 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FormatVariadic.h"
-#include "llvm/Support/WithColor.h"
 
 #include <memory>
 
@@ -24,21 +24,21 @@ namespace lldb_private {
 
 class CommandReturnObject {
 public:
-  CommandReturnObject(bool colors);
+  CommandReturnObject();
 
-  ~CommandReturnObject() = default;
+  ~CommandReturnObject();
 
   llvm::StringRef GetOutputData() {
     lldb::StreamSP stream_sp(m_out_stream.GetStreamAtIndex(eStreamStringIndex));
     if (stream_sp)
-      return std::static_pointer_cast<StreamString>(stream_sp)->GetString();
+      return static_pointer_cast<StreamString>(stream_sp)->GetString();
     return llvm::StringRef();
   }
 
   llvm::StringRef GetErrorData() {
     lldb::StreamSP stream_sp(m_err_stream.GetStreamAtIndex(eStreamStringIndex));
     if (stream_sp)
-      return std::static_pointer_cast<StreamString>(stream_sp)->GetString();
+      return static_pointer_cast<StreamString>(stream_sp)->GetString();
     return llvm::StringRef();
   }
 
@@ -46,7 +46,7 @@ public:
     // Make sure we at least have our normal string stream output stream
     lldb::StreamSP stream_sp(m_out_stream.GetStreamAtIndex(eStreamStringIndex));
     if (!stream_sp) {
-      stream_sp = std::make_shared<StreamString>();
+      stream_sp.reset(new StreamString());
       m_out_stream.SetStreamAtIndex(eStreamStringIndex, stream_sp);
     }
     return m_out_stream;
@@ -56,35 +56,27 @@ public:
     // Make sure we at least have our normal string stream output stream
     lldb::StreamSP stream_sp(m_err_stream.GetStreamAtIndex(eStreamStringIndex));
     if (!stream_sp) {
-      stream_sp = std::make_shared<StreamString>();
+      stream_sp.reset(new StreamString());
       m_err_stream.SetStreamAtIndex(eStreamStringIndex, stream_sp);
     }
     return m_err_stream;
   }
 
-  void SetImmediateOutputFile(lldb::FileSP file_sp) {
-    if (m_suppress_immediate_output)
-      return;
-    lldb::StreamSP stream_sp(new StreamFile(file_sp));
+  void SetImmediateOutputFile(FILE *fh, bool transfer_fh_ownership = false) {
+    lldb::StreamSP stream_sp(new StreamFile(fh, transfer_fh_ownership));
     m_out_stream.SetStreamAtIndex(eImmediateStreamIndex, stream_sp);
   }
 
-  void SetImmediateErrorFile(lldb::FileSP file_sp) {
-    if (m_suppress_immediate_output)
-      return;
-    lldb::StreamSP stream_sp(new StreamFile(file_sp));
+  void SetImmediateErrorFile(FILE *fh, bool transfer_fh_ownership = false) {
+    lldb::StreamSP stream_sp(new StreamFile(fh, transfer_fh_ownership));
     m_err_stream.SetStreamAtIndex(eImmediateStreamIndex, stream_sp);
   }
 
   void SetImmediateOutputStream(const lldb::StreamSP &stream_sp) {
-    if (m_suppress_immediate_output)
-      return;
     m_out_stream.SetStreamAtIndex(eImmediateStreamIndex, stream_sp);
   }
 
   void SetImmediateErrorStream(const lldb::StreamSP &stream_sp) {
-    if (m_suppress_immediate_output)
-      return;
     m_err_stream.SetStreamAtIndex(eImmediateStreamIndex, stream_sp);
   }
 
@@ -102,6 +94,8 @@ public:
 
   void AppendMessageWithFormat(const char *format, ...)
       __attribute__((format(printf, 2, 3)));
+
+  void AppendRawWarning(llvm::StringRef in_string);
 
   void AppendWarning(llvm::StringRef in_string);
 
@@ -132,6 +126,8 @@ public:
 
   void SetError(const Status &error, const char *fallback_error_cstr = nullptr);
 
+  void SetError(llvm::StringRef error_cstr);
+
   lldb::ReturnStatus GetStatus();
 
   void SetStatus(lldb::ReturnStatus status);
@@ -148,9 +144,13 @@ public:
 
   void SetInteractive(bool b);
 
-  bool GetSuppressImmediateOutput() const;
+  bool GetAbnormalStopWasExpected() const {
+    return m_abnormal_stop_was_expected;
+  }
 
-  void SetSuppressImmediateOutput(bool b);
+  void SetAbnormalStopWasExpected(bool signal_was_expected) {
+    m_abnormal_stop_was_expected = signal_was_expected;
+  }
 
 private:
   enum { eStreamStringIndex = 0, eImmediateStreamIndex = 1 };
@@ -158,15 +158,20 @@ private:
   StreamTee m_out_stream;
   StreamTee m_err_stream;
 
-  lldb::ReturnStatus m_status = lldb::eReturnStatusStarted;
-
-  bool m_did_change_process_state = false;
-  bool m_suppress_immediate_output = false;
-
-  /// If true, then the input handle from the debugger will be hooked up.
-  bool m_interactive = true;
+  lldb::ReturnStatus m_status;
+  bool m_did_change_process_state;
+  bool m_interactive; // If true, then the input handle from the debugger will
+                      // be hooked up
+  bool m_abnormal_stop_was_expected; // This is to support
+                                     // eHandleCommandFlagStopOnCrash vrs.
+                                     // attach.
+  // The attach command often ends up with the process stopped due to a signal.
+  // Normally that would mean stop on crash should halt batch execution, but we
+  // obviously don't want that for attach.  Using this flag, the attach command
+  // (and anything else for which this is relevant) can say that the signal is
+  // expected, and batch command execution can continue.
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_COMMANDRETURNOBJECT_H
+#endif // liblldb_CommandReturnObject_h_

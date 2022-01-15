@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 // Inline function definitions. This file should be included into kmp_itt.h file
-// for production build (to let compiler inline functions) or into kmp_itt.c
+// for production build (to let compliler inline functions) or into kmp_itt.c
 // file for debug build (to reduce the number of files to recompile and save
 // build time).
 
@@ -64,14 +64,14 @@ static kmp_bootstrap_lock_t metadata_lock =
     KMP_BOOTSTRAP_LOCK_INITIALIZER(metadata_lock);
 
 /* Parallel region reporting.
- * __kmp_itt_region_forking should be called by primary thread of a team.
+ * __kmp_itt_region_forking should be called by master thread of a team.
    Exact moment of call does not matter, but it should be completed before any
    thread of this team calls __kmp_itt_region_starting.
  * __kmp_itt_region_starting should be called by each thread of a team just
    before entering parallel region body.
  * __kmp_itt_region_finished should be called by each thread of a team right
    after returning from parallel region body.
- * __kmp_itt_region_joined should be called by primary thread of a team, after
+ * __kmp_itt_region_joined should be called by master thread of a team, after
    all threads called __kmp_itt_region_finished.
 
  Note: Thread waiting at join barrier (after __kmp_itt_region_finished) can
@@ -115,8 +115,7 @@ LINKAGE void __kmp_itt_region_forking(int gtid, int team_size, int barriers) {
         // that the tools more or less standardized on:
         //   "<func>$omp$parallel@[file:]<line>[:<col>]"
         char *buff = NULL;
-        kmp_str_loc_t str_loc =
-            __kmp_str_loc_init(loc->psource, /* init_fname */ false);
+        kmp_str_loc_t str_loc = __kmp_str_loc_init(loc->psource, 1);
         buff = __kmp_str_format("%s$omp$parallel:%d@%s:%d:%d", str_loc.func,
                                 team_size, str_loc.file, str_loc.line,
                                 str_loc.col);
@@ -156,8 +155,7 @@ LINKAGE void __kmp_itt_region_forking(int gtid, int team_size, int barriers) {
       if ((frm < KMP_MAX_FRAME_DOMAINS) &&
           (__kmp_itt_region_team_size[frm] != team_size)) {
         char *buff = NULL;
-        kmp_str_loc_t str_loc = 
-            __kmp_str_loc_init(loc->psource, /* init_fname */ false);
+        kmp_str_loc_t str_loc = __kmp_str_loc_init(loc->psource, 1);
         buff = __kmp_str_format("%s$omp$parallel:%d@%s:%d:%d", str_loc.func,
                                 team_size, str_loc.file, str_loc.line,
                                 str_loc.col);
@@ -214,8 +212,7 @@ LINKAGE void __kmp_itt_frame_submit(int gtid, __itt_timestamp begin,
         // that the tools more or less standardized on:
         //   "<func>$omp$parallel:team_size@[file:]<line>[:<col>]"
         char *buff = NULL;
-        kmp_str_loc_t str_loc = 
-            __kmp_str_loc_init(loc->psource, /* init_fname */ false);
+        kmp_str_loc_t str_loc = __kmp_str_loc_init(loc->psource, 1);
         buff = __kmp_str_format("%s$omp$parallel:%d@%s:%d:%d", str_loc.func,
                                 team_size, str_loc.file, str_loc.line,
                                 str_loc.col);
@@ -233,12 +230,10 @@ LINKAGE void __kmp_itt_frame_submit(int gtid, __itt_timestamp begin,
       // Check if team size was changed. Then create new region domain for this
       // location
       unsigned int frm = (loc->reserved_2 & 0x0000FFFF) - 1;
-      if (frm >= KMP_MAX_FRAME_DOMAINS)
-        return; // something's gone wrong, returning
-      if (__kmp_itt_region_team_size[frm] != team_size) {
+      if ((frm < KMP_MAX_FRAME_DOMAINS) &&
+          (__kmp_itt_region_team_size[frm] != team_size)) {
         char *buff = NULL;
-        kmp_str_loc_t str_loc = 
-            __kmp_str_loc_init(loc->psource, /* init_fname */ false);
+        kmp_str_loc_t str_loc = __kmp_str_loc_init(loc->psource, 1);
         buff = __kmp_str_format("%s$omp$parallel:%d@%s:%d:%d", str_loc.func,
                                 team_size, str_loc.file, str_loc.line,
                                 str_loc.col);
@@ -277,8 +272,7 @@ LINKAGE void __kmp_itt_frame_submit(int gtid, __itt_timestamp begin,
           // Transform compiler-generated region location into the format
           // that the tools more or less standardized on:
           //   "<func>$omp$frame@[file:]<line>[:<col>]"
-          kmp_str_loc_t str_loc = 
-              __kmp_str_loc_init(loc->psource, /* init_fname */ false);
+          kmp_str_loc_t str_loc = __kmp_str_loc_init(loc->psource, 1);
           if (imbalance) {
             char *buff_imb = NULL;
             buff_imb = __kmp_str_format("%s$omp$barrier-imbalance:%d@%s:%d",
@@ -370,12 +364,25 @@ LINKAGE void __kmp_itt_metadata_loop(ident_t *loc, kmp_uint64 sched_type,
   }
 
   // Parse line and column from psource string: ";file;func;line;col;;"
+  char *s_line;
+  char *s_col;
   KMP_DEBUG_ASSERT(loc->psource);
+#ifdef __cplusplus
+  s_line = strchr(CCAST(char *, loc->psource), ';');
+#else
+  s_line = strchr(loc->psource, ';');
+#endif
+  KMP_DEBUG_ASSERT(s_line);
+  s_line = strchr(s_line + 1, ';'); // 2-nd semicolon
+  KMP_DEBUG_ASSERT(s_line);
+  s_line = strchr(s_line + 1, ';'); // 3-rd semicolon
+  KMP_DEBUG_ASSERT(s_line);
+  s_col = strchr(s_line + 1, ';'); // 4-th semicolon
+  KMP_DEBUG_ASSERT(s_col);
+
   kmp_uint64 loop_data[5];
-  int line, col;
-  __kmp_str_loc_numbers(loc->psource, &line, &col);
-  loop_data[0] = line;
-  loop_data[1] = col;
+  loop_data[0] = atoi(s_line + 1); // read line
+  loop_data[1] = atoi(s_col + 1); // read column
   loop_data[2] = sched_type;
   loop_data[3] = iterations;
   loop_data[4] = chunk;
@@ -401,11 +408,12 @@ LINKAGE void __kmp_itt_metadata_single(ident_t *loc) {
     __kmp_release_bootstrap_lock(&metadata_lock);
   }
 
-  int line, col;
-  __kmp_str_loc_numbers(loc->psource, &line, &col);
+  kmp_str_loc_t str_loc = __kmp_str_loc_init(loc->psource, 1);
   kmp_uint64 single_data[2];
-  single_data[0] = line;
-  single_data[1] = col;
+  single_data[0] = str_loc.line;
+  single_data[1] = str_loc.col;
+
+  __kmp_str_loc_free(&str_loc);
 
   __itt_metadata_add(metadata_domain, __itt_null, string_handle_sngl,
                      __itt_metadata_u64, 2, single_data);
@@ -448,10 +456,10 @@ LINKAGE void __kmp_itt_region_joined(int gtid) {
 /* Barriers reporting.
 
    A barrier consists of two phases:
-   1. Gather -- primary thread waits for all worker threads to arrive; each
+   1. Gather -- master waits for arriving of all the worker threads; each
       worker thread registers arrival and goes further.
-   2. Release -- each worker thread waits until primary thread lets it go;
-      primary thread lets worker threads go.
+   2. Release -- each worker threads waits until master lets it go; master lets
+      worker threads go.
 
    Function should be called by each thread:
    * __kmp_itt_barrier_starting() -- before arriving to the gather phase.
@@ -466,7 +474,7 @@ LINKAGE void __kmp_itt_region_joined(int gtid) {
    ITT need an address (void *) to be specified as a sync object. OpenMP RTL
    does not have barrier object or barrier data structure. Barrier is just a
    counter in team and thread structures. We could use an address of team
-   structure as a barrier sync object, but ITT wants different objects for
+   structure as an barrier sync object, but ITT wants different objects for
    different barriers (even whithin the same team). So let us use team address
    as barrier sync object for the first barrier, then increase it by one for the
    next barrier, and so on (but wrap it not to use addresses outside of team
@@ -487,21 +495,20 @@ void *__kmp_itt_barrier_object(int gtid, int bt, int set_name,
   // solution, and reporting fork/join barriers to ITT should be revisited.
 
   if (team != NULL) {
-    // Primary thread increases b_arrived by KMP_BARRIER_STATE_BUMP each time.
+    // Master thread increases b_arrived by KMP_BARRIER_STATE_BUMP each time.
     // Divide b_arrived by KMP_BARRIER_STATE_BUMP to get plain barrier counter.
     kmp_uint64 counter =
         team->t.t_bar[bt].b_arrived / KMP_BARRIER_STATE_BUMP + delta;
     // Now form the barrier id. Encode barrier type (bt) in barrier id too, so
     // barriers of different types do not have the same ids.
     KMP_BUILD_ASSERT(sizeof(kmp_team_t) >= bs_last_barrier);
-    // This condition is a must (we would have zero divide otherwise).
+    // This conditon is a must (we would have zero divide otherwise).
     KMP_BUILD_ASSERT(sizeof(kmp_team_t) >= 2 * bs_last_barrier);
     // More strong condition: make sure we have room at least for for two
-    // different ids (for each barrier type).
+    // differtent ids (for each barrier type).
     object = reinterpret_cast<void *>(
-        (kmp_uintptr_t)(team) +
-        (kmp_uintptr_t)counter % (sizeof(kmp_team_t) / bs_last_barrier) *
-            bs_last_barrier +
+        kmp_uintptr_t(team) +
+        counter % (sizeof(kmp_team_t) / bs_last_barrier) * bs_last_barrier +
         bt);
     KMP_ITT_DEBUG_LOCK();
     KMP_ITT_DEBUG_PRINT("[bar obj] type=%d, counter=%lld, object=%p\n", bt,
@@ -550,13 +557,12 @@ void *__kmp_itt_barrier_object(int gtid, int bt, int set_name,
       case bs_forkjoin_barrier: {
         // In case of fork/join barrier we can read thr->th.th_ident, because it
         // contains location of last passed construct (while join barrier is not
-        // such one). Use th_ident of primary thread instead --
-        // __kmp_join_call() called by the primary thread saves location.
+        // such one). Use th_ident of master thread instead -- __kmp_join_call()
+        // called by the master thread saves location.
         //
-        // AC: cannot read from primary thread because __kmp_join_call may not
-        //    be called yet, so we read the location from team. This is the
-        //    same location. Team is valid on entry to join barrier where this
-        //    happens.
+        // AC: cannot read from master because __kmp_join_call may be not called
+        //    yet, so we read the location from team. This is the same location.
+        //    And team is valid at the enter to join barrier where this happens.
         loc = team->t.t_ident;
         if (loc != NULL) {
           src = loc->psource;
@@ -623,7 +629,7 @@ void __kmp_itt_barrier_finished(int gtid, void *object) {
 void *__kmp_itt_taskwait_object(int gtid) {
   void *object = NULL;
 #if USE_ITT_NOTIFY
-  if (UNLIKELY(__itt_sync_create_ptr)) {
+  if (__itt_sync_create_ptr) {
     kmp_info_t *thread = __kmp_thread_from_gtid(gtid);
     kmp_taskdata_t *taskdata = thread->th.th_current_task;
     object = reinterpret_cast<void *>(kmp_uintptr_t(taskdata) +
@@ -670,7 +676,7 @@ void __kmp_itt_task_starting(
     void *object // ITT sync object: barrier or taskwait.
     ) {
 #if USE_ITT_NOTIFY
-  if (UNLIKELY(object != NULL)) {
+  if (object != NULL) {
     KMP_ITT_DEBUG_LOCK();
     __itt_sync_cancel(object);
     KMP_ITT_DEBUG_PRINT("[tsk sta] scan( %p )\n", object);
@@ -959,7 +965,7 @@ void __kmp_itt_thread_name(int gtid) {
     kmp_str_buf_t name;
     __kmp_str_buf_init(&name);
     if (KMP_MASTER_GTID(gtid)) {
-      __kmp_str_buf_print(&name, "OMP Primary Thread #%d", gtid);
+      __kmp_str_buf_print(&name, "OMP Master Thread #%d", gtid);
     } else {
       __kmp_str_buf_print(&name, "OMP Worker Thread #%d", gtid);
     }
@@ -987,9 +993,9 @@ void __kmp_itt_system_object_created(void *object, char const *name) {
 } // __kmp_itt_system_object_created
 
 /* Stack stitching api.
-   Primary thread calls "create" and put the stitching id into team structure.
+   Master calls "create" and put the stitching id into team structure.
    Workers read the stitching id and call "enter" / "leave" api.
-   Primary thread calls "destroy" at the end of the parallel region. */
+   Master calls "destroy" at the end of the parallel region. */
 
 __itt_caller __kmp_itt_stack_caller_create() {
 #if USE_ITT_NOTIFY

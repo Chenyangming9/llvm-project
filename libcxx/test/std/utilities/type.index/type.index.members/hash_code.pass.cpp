@@ -12,8 +12,6 @@
 
 // size_t hash_code() const;
 
-// UNSUPPORTED: no-rtti
-
 #include <typeindex>
 #include <cassert>
 

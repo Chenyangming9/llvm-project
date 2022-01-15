@@ -50,7 +50,9 @@ class IntervalPartition : public FunctionPass {
 public:
   static char ID; // Pass identification, replacement for typeid
 
-  IntervalPartition();
+  IntervalPartition() : FunctionPass(ID) {
+    initializeIntervalPartitionPass(*PassRegistry::getPassRegistry());
+  }
 
   // run - Calculate the interval partition for this function
   bool runOnFunction(Function &F) override;

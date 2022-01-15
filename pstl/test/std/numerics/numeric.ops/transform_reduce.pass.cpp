@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 #include "support/pstl_test_config.h"
 
@@ -17,6 +17,14 @@
 #include "support/utils.h"
 
 using namespace TestUtils;
+
+// Equal for all types
+template <typename T>
+static bool
+Equal(T x, T y)
+{
+    return x == y;
+}
 
 // Functor for xor-operation for modeling binary operations in inner_product
 class XOR
@@ -37,7 +45,7 @@ class MyClass
     int32_t my_field;
     MyClass() { my_field = 0; }
     MyClass(int32_t in) { my_field = in; }
-    MyClass(const MyClass& in) = default;
+    MyClass(const MyClass& in) { my_field = in.my_field; }
 
     friend MyClass
     operator+(const MyClass& x, const MyClass& y)
@@ -49,13 +57,11 @@ class MyClass
     {
         return MyClass(-x.my_field);
     }
-    friend MyClass operator*(const MyClass& x, const MyClass& y)
+    friend MyClass operator*(const MyClass& x, const MyClass& y) { return MyClass(x.my_field * y.my_field); }
+    bool
+    operator==(const MyClass& in)
     {
-        return MyClass(x.my_field * y.my_field);
-    }
-    friend bool operator==(const MyClass& x, const MyClass& y)
-    {
-        return x.my_field == y.my_field;
+        return my_field == in.my_field;
     }
 };
 
@@ -63,7 +69,7 @@ template <typename T>
 void
 CheckResults(const T& expected, const T& in)
 {
-    EXPECT_TRUE(expected == in, "wrong result of transform_reduce");
+    EXPECT_TRUE(Equal(expected, in), "wrong result of transform_reduce");
 }
 
 // We need to check correctness only for "int" (for example) except cases
@@ -110,7 +116,7 @@ test_by_type(T init, BinaryOperation1 opB1, BinaryOperation2 opB2, UnaryOp opU, 
     }
 }
 
-int
+int32_t
 main()
 {
     test_by_type<int32_t>(42, std::plus<int32_t>(), std::multiplies<int32_t>(), std::negate<int32_t>(),
@@ -118,9 +124,10 @@ main()
     test_by_type<int64_t>(0, [](const int64_t& a, const int64_t& b) -> int64_t { return a | b; }, XOR(),
                           [](const int64_t& x) -> int64_t { return x * 2; },
                           [](std::size_t) -> int64_t { return int64_t(rand() % 1000); });
-    test_by_type<float32_t>(
-        1.0f, std::multiplies<float32_t>(), [](const float32_t& a, const float32_t& b) -> float32_t { return a + b; },
-        [](const float32_t& x) -> float32_t { return x + 2; }, [](std::size_t) -> float32_t { return rand() % 1000; });
+    test_by_type<float32_t>(1.0f, std::multiplies<float32_t>(),
+                            [](const float32_t& a, const float32_t& b) -> float32_t { return a + b; },
+                            [](const float32_t& x) -> float32_t { return x + 2; },
+                            [](std::size_t) -> float32_t { return rand() % 1000; });
     test_by_type<MyClass>(MyClass(), std::plus<MyClass>(), std::multiplies<MyClass>(), std::negate<MyClass>(),
                           [](std::size_t) -> MyClass { return MyClass(rand() % 1000); });
 

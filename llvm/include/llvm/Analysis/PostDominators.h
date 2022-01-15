@@ -34,13 +34,6 @@ public:
   /// Handle invalidation explicitly.
   bool invalidate(Function &F, const PreservedAnalyses &PA,
                   FunctionAnalysisManager::Invalidator &);
-
-  // Ensure base-class overloads are visible.
-  using Base::dominates;
-
-  /// Return true if \p I1 dominates \p I2. This checks if \p I2 comes before
-  /// \p I1 if they belongs to the same basic block.
-  bool dominates(const Instruction *I1, const Instruction *I2) const;
 };
 
 /// Analysis pass which computes a \c PostDominatorTree.
@@ -75,7 +68,9 @@ struct PostDominatorTreeWrapperPass : public FunctionPass {
 
   PostDominatorTree DT;
 
-  PostDominatorTreeWrapperPass();
+  PostDominatorTreeWrapperPass() : FunctionPass(ID) {
+    initializePostDominatorTreeWrapperPassPass(*PassRegistry::getPassRegistry());
+  }
 
   PostDominatorTree &getPostDomTree() { return DT; }
   const PostDominatorTree &getPostDomTree() const { return DT; }
@@ -88,7 +83,9 @@ struct PostDominatorTreeWrapperPass : public FunctionPass {
     AU.setPreservesAll();
   }
 
-  void releaseMemory() override { DT.reset(); }
+  void releaseMemory() override {
+    DT.releaseMemory();
+  }
 
   void print(raw_ostream &OS, const Module*) const override;
 };

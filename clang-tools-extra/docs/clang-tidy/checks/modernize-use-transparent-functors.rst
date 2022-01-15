@@ -32,8 +32,8 @@ Options
 
 .. option:: SafeMode
 
-  If the option is set to `true`, the check will not diagnose cases where
+  If the option is set to non-zero, the check will not diagnose cases where
   using a transparent functor cannot be guaranteed to produce identical results
-  as the original code. The default value for this option is `false`.
+  as the original code. The default value for this option is `0`.
 
 This check requires using C++14 or higher to run.

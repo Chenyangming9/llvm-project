@@ -10,7 +10,7 @@ import unittest
 
 class TestCursorKind(unittest.TestCase):
     def test_name(self):
-        self.assertEqual(CursorKind.UNEXPOSED_DECL.name, 'UNEXPOSED_DECL')
+        self.assertTrue(CursorKind.UNEXPOSED_DECL.name is 'UNEXPOSED_DECL')
 
     def test_get_all_kinds(self):
         kinds = CursorKind.get_all_kinds()

@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 // Tests for is_heap, is_heap_until
 #include "support/pstl_test_config.h"
@@ -35,8 +35,8 @@ struct WithCmpOp
 
 struct test_is_heap
 {
-#if defined(_PSTL_ICC_17_VC141_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN) ||                                                             \
-    defined(_PSTL_ICC_16_VC14_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN) //dummy specialization by policy type, in case of broken configuration
+#if _PSTL_ICC_17_VC141_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN ||                                                            \
+    _PSTL_ICC_16_VC14_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN //dummy specialization by policy type, in case of broken configuration
     template <typename Iterator, typename Predicate>
     typename std::enable_if<is_same_iterator_category<Iterator, std::random_access_iterator_tag>::value, void>::type
     operator()(pstl::execution::unsequenced_policy, Iterator first, Iterator last, Predicate pred)
@@ -132,7 +132,7 @@ struct test_non_const
     }
 };
 
-int
+int32_t
 main()
 {
     test_is_heap_by_type<float32_t>(std::greater<float32_t>());

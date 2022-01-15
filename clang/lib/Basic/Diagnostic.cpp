@@ -40,8 +40,8 @@
 
 using namespace clang;
 
-const StreamingDiagnostic &clang::operator<<(const StreamingDiagnostic &DB,
-                                             DiagNullabilityKind nullability) {
+const DiagnosticBuilder &clang::operator<<(const DiagnosticBuilder &DB,
+                                           DiagNullabilityKind nullability) {
   StringRef string;
   switch (nullability.first) {
   case NullabilityKind::NonNull:
@@ -55,21 +55,9 @@ const StreamingDiagnostic &clang::operator<<(const StreamingDiagnostic &DB,
   case NullabilityKind::Unspecified:
     string = nullability.second ? "'null_unspecified'" : "'_Null_unspecified'";
     break;
-
-  case NullabilityKind::NullableResult:
-    assert(!nullability.second &&
-           "_Nullable_result isn't supported as context-sensitive keyword");
-    string = "_Nullable_result";
-    break;
   }
 
   DB.AddString(string);
-  return DB;
-}
-
-const StreamingDiagnostic &clang::operator<<(const StreamingDiagnostic &DB,
-                                             llvm::Error &&E) {
-  DB.AddString(toString(std::move(E)));
   return DB;
 }
 
@@ -157,20 +145,19 @@ void DiagnosticsEngine::Reset() {
 }
 
 void DiagnosticsEngine::SetDelayedDiagnostic(unsigned DiagID, StringRef Arg1,
-                                             StringRef Arg2, StringRef Arg3) {
+                                             StringRef Arg2) {
   if (DelayedDiagID)
     return;
 
   DelayedDiagID = DiagID;
   DelayedDiagArg1 = Arg1.str();
   DelayedDiagArg2 = Arg2.str();
-  DelayedDiagArg3 = Arg3.str();
 }
 
 void DiagnosticsEngine::ReportDelayed() {
   unsigned ID = DelayedDiagID;
   DelayedDiagID = 0;
-  Report(ID) << DelayedDiagArg1 << DelayedDiagArg2 << DelayedDiagArg3;
+  Report(ID) << DelayedDiagArg1 << DelayedDiagArg2;
 }
 
 void DiagnosticsEngine::DiagStateMap::appendFirst(DiagState *State) {
@@ -271,8 +258,7 @@ void DiagnosticsEngine::DiagStateMap::dump(SourceManager &SrcMgr,
       PrintedOuterHeading = true;
 
       llvm::errs() << "File " << &File << " <FileID " << ID.getHashValue()
-                   << ">: " << SrcMgr.getBufferOrFake(ID).getBufferIdentifier();
-
+                   << ">: " << SrcMgr.getBuffer(ID)->getBufferIdentifier();
       if (F.second.Parent) {
         std::pair<FileID, unsigned> Decomp =
             SrcMgr.getDecomposedIncludedLoc(ID);
@@ -488,15 +474,13 @@ void DiagnosticsEngine::Report(const StoredDiagnostic &storedDiag) {
 
   CurDiagLoc = storedDiag.getLocation();
   CurDiagID = storedDiag.getID();
-  DiagStorage.NumDiagArgs = 0;
+  NumDiagArgs = 0;
 
-  DiagStorage.DiagRanges.clear();
-  DiagStorage.DiagRanges.append(storedDiag.range_begin(),
-                                storedDiag.range_end());
+  DiagRanges.clear();
+  DiagRanges.append(storedDiag.range_begin(), storedDiag.range_end());
 
-  DiagStorage.FixItHints.clear();
-  DiagStorage.FixItHints.append(storedDiag.fixit_begin(),
-                                storedDiag.fixit_end());
+  DiagFixItHints.clear();
+  DiagFixItHints.append(storedDiag.fixit_begin(), storedDiag.fixit_end());
 
   assert(Client && "DiagnosticConsumer not set!");
   Level DiagLevel = storedDiag.getLevel();
@@ -814,7 +798,7 @@ FormatDiagnostic(const char *DiagStr, const char *DiagEnd,
   /// QualTypeVals - Pass a vector of arrays so that QualType names can be
   /// compared to see if more information is needed to be printed.
   SmallVector<intptr_t, 2> QualTypeVals;
-  SmallString<64> Tree;
+  SmallVector<char, 64> Tree;
 
   for (unsigned i = 0, e = getNumArgs(); i < e; ++i)
     if (getArgKind(i) == DiagnosticsEngine::ak_qualtype)
@@ -997,7 +981,6 @@ FormatDiagnostic(const char *DiagStr, const char *DiagEnd,
       llvm::raw_svector_ostream(OutStr) << '\'' << II->getName() << '\'';
       break;
     }
-    case DiagnosticsEngine::ak_addrspace:
     case DiagnosticsEngine::ak_qual:
     case DiagnosticsEngine::ak_qualtype:
     case DiagnosticsEngine::ak_declarationname:
@@ -1149,13 +1132,13 @@ bool ForwardingDiagnosticConsumer::IncludeInDiagnosticCounts() const {
   return Target.IncludeInDiagnosticCounts();
 }
 
-PartialDiagnostic::DiagStorageAllocator::DiagStorageAllocator() {
+PartialDiagnostic::StorageAllocator::StorageAllocator() {
   for (unsigned I = 0; I != NumCached; ++I)
     FreeList[I] = Cached + I;
   NumFreeListEntries = NumCached;
 }
 
-PartialDiagnostic::DiagStorageAllocator::~DiagStorageAllocator() {
+PartialDiagnostic::StorageAllocator::~StorageAllocator() {
   // Don't assert if we are in a CrashRecovery context, as this invariant may
   // be invalidated during a crash.
   assert((NumFreeListEntries == NumCached ||

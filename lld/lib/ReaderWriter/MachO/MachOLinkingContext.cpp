@@ -540,12 +540,6 @@ MachOLinkingContext::searchDirForLibrary(StringRef path,
     return llvm::None;
   }
 
-  // Search for stub library
-  fullPath.assign(path);
-  llvm::sys::path::append(fullPath, Twine("lib") + libName + ".tbd");
-  if (fileExists(fullPath))
-    return fullPath.str().copy(_allocator);
-
   // Search for dynamic library
   fullPath.assign(path);
   llvm::sys::path::append(fullPath, Twine("lib") + libName + ".dylib");
@@ -610,7 +604,7 @@ bool MachOLinkingContext::validateImpl() {
   }
 
   // If -exported_symbols_list used, all exported symbols must be defined.
-  if (_exportMode == ExportMode::exported) {
+  if (_exportMode == ExportMode::whiteList) {
     for (const auto &symbol : _exportedSymbols)
       addInitialUndefinedSymbol(symbol.getKey());
   }
@@ -624,7 +618,7 @@ bool MachOLinkingContext::validateImpl() {
     if (needsStubsPass())
       addDeadStripRoot(binderSymbolName());
     // If using -exported_symbols_list, make all exported symbols live.
-    if (_exportMode == ExportMode::exported) {
+    if (_exportMode == ExportMode::whiteList) {
       setGlobalsAreDeadStripRoots(false);
       for (const auto &symbol : _exportedSymbols)
         addDeadStripRoot(symbol.getKey());
@@ -808,9 +802,9 @@ void MachOLinkingContext::addSectCreateSection(
                                         std::unique_ptr<MemoryBuffer> content) {
 
   if (!_sectCreateFile) {
-    auto sectCreateFile = std::make_unique<mach_o::SectCreateFile>();
+    auto sectCreateFile = llvm::make_unique<mach_o::SectCreateFile>();
     _sectCreateFile = sectCreateFile.get();
-    getNodes().push_back(std::make_unique<FileNode>(std::move(sectCreateFile)));
+    getNodes().push_back(llvm::make_unique<FileNode>(std::move(sectCreateFile)));
   }
 
   assert(_sectCreateFile && "sectcreate file does not exist.");
@@ -836,7 +830,7 @@ void MachOLinkingContext::addExportSymbol(StringRef sym) {
   }
   // Only i386 MacOSX uses old ABI, so don't change those.
   if ((_os != OS::macOSX) || (_arch != arch_x86)) {
-    // ObjC has two different ABIs.  Be nice and allow one export list work for
+    // ObjC has two differnent ABIs.  Be nice and allow one export list work for
     // both ABIs by renaming symbols.
     if (sym.startswith(".objc_class_name_")) {
       std::string abi2className("_OBJC_CLASS_$_");
@@ -858,9 +852,9 @@ bool MachOLinkingContext::exportSymbolNamed(StringRef sym) const {
   case ExportMode::globals:
     llvm_unreachable("exportSymbolNamed() should not be called in this mode");
     break;
-  case ExportMode::exported:
+  case ExportMode::whiteList:
     return _exportedSymbols.count(sym);
-  case ExportMode::unexported:
+  case ExportMode::blackList:
     return !_exportedSymbols.count(sym);
   }
   llvm_unreachable("_exportMode unknown enum value");
@@ -869,11 +863,11 @@ bool MachOLinkingContext::exportSymbolNamed(StringRef sym) const {
 std::string MachOLinkingContext::demangle(StringRef symbolName) const {
   // Only try to demangle symbols if -demangle on command line
   if (!demangleSymbols())
-    return std::string(symbolName);
+    return symbolName;
 
   // Only try to demangle symbols that look like C++ symbols
   if (!symbolName.startswith("__Z"))
-    return std::string(symbolName);
+    return symbolName;
 
   SmallString<256> symBuff;
   StringRef nullTermSym = Twine(symbolName).toNullTerminatedStringRef(symBuff);
@@ -888,7 +882,7 @@ std::string MachOLinkingContext::demangle(StringRef symbolName) const {
     return result;
   }
 
-  return std::string(symbolName);
+  return symbolName;
 }
 
 static void addDependencyInfoHelper(llvm::raw_fd_ostream *DepInfo,
@@ -903,8 +897,8 @@ static void addDependencyInfoHelper(llvm::raw_fd_ostream *DepInfo,
 
 std::error_code MachOLinkingContext::createDependencyFile(StringRef path) {
   std::error_code ec;
-  _dependencyInfo = std::unique_ptr<llvm::raw_fd_ostream>(
-      new llvm::raw_fd_ostream(path, ec, llvm::sys::fs::OF_None));
+  _dependencyInfo = std::unique_ptr<llvm::raw_fd_ostream>(new
+                         llvm::raw_fd_ostream(path, ec, llvm::sys::fs::F_None));
   if (ec) {
     _dependencyInfo.reset();
     return ec;
@@ -1025,7 +1019,7 @@ void MachOLinkingContext::finalizeInputFiles() {
     return !isLibrary(a) && isLibrary(b);
   });
   size_t numLibs = std::count_if(elements.begin(), elements.end(), isLibrary);
-  elements.push_back(std::make_unique<GroupEnd>(numLibs));
+  elements.push_back(llvm::make_unique<GroupEnd>(numLibs));
 }
 
 llvm::Error MachOLinkingContext::handleLoadedFile(File &file) {

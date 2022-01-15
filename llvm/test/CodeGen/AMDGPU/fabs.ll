@@ -1,5 +1,5 @@
 ; RUN: llc -march=amdgcn -verify-machineinstrs < %s | FileCheck -check-prefix=GCN -check-prefix=SI -check-prefix=FUNC %s
-; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global,-xnack -verify-machineinstrs < %s | FileCheck -check-prefix=GCN -check-prefix=VI -check-prefix=FUNC %s
+; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global -verify-machineinstrs < %s | FileCheck -check-prefix=GCN -check-prefix=VI -check-prefix=FUNC %s
 ; RUN: llc -march=r600 -mcpu=redwood < %s | FileCheck -check-prefix=R600 -check-prefix=FUNC %s
 
 
@@ -48,8 +48,8 @@ define amdgpu_kernel void @s_fabs_f32(float addrspace(1)* %out, float %in) {
 ; R600: |{{(PV|T[0-9])\.[XYZW]}}|
 ; R600: |{{(PV|T[0-9])\.[XYZW]}}|
 
-; GCN: s_and_b32
-; GCN: s_and_b32
+; GCN: v_and_b32
+; GCN: v_and_b32
 define amdgpu_kernel void @fabs_v2f32(<2 x float> addrspace(1)* %out, <2 x float> %in) {
   %fabs = call <2 x float> @llvm.fabs.v2f32(<2 x float> %in)
   store <2 x float> %fabs, <2 x float> addrspace(1)* %out
@@ -62,10 +62,10 @@ define amdgpu_kernel void @fabs_v2f32(<2 x float> addrspace(1)* %out, <2 x float
 ; R600: |{{(PV|T[0-9])\.[XYZW]}}|
 ; R600: |{{(PV|T[0-9])\.[XYZW]}}|
 
-; GCN: s_and_b32
-; GCN: s_and_b32
-; GCN: s_and_b32
-; GCN: s_and_b32
+; GCN: v_and_b32
+; GCN: v_and_b32
+; GCN: v_and_b32
+; GCN: v_and_b32
 define amdgpu_kernel void @fabs_v4f32(<4 x float> addrspace(1)* %out, <4 x float> %in) {
   %fabs = call <4 x float> @llvm.fabs.v4f32(<4 x float> %in)
   store <4 x float> %fabs, <4 x float> addrspace(1)* %out

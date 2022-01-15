@@ -61,7 +61,7 @@ public:
 
 void clang::AttachDependencyGraphGen(Preprocessor &PP, StringRef OutputFile,
                                      StringRef SysRoot) {
-  PP.addPPCallbacks(std::make_unique<DependencyGraphCallback>(&PP, OutputFile,
+  PP.addPPCallbacks(llvm::make_unique<DependencyGraphCallback>(&PP, OutputFile,
                                                                SysRoot));
 }
 
@@ -100,7 +100,7 @@ DependencyGraphCallback::writeNodeReference(raw_ostream &OS,
 
 void DependencyGraphCallback::OutputGraphFile() {
   std::error_code EC;
-  llvm::raw_fd_ostream OS(OutputFile, EC, llvm::sys::fs::OF_TextWithCRLF);
+  llvm::raw_fd_ostream OS(OutputFile, EC, llvm::sys::fs::F_Text);
   if (EC) {
     PP->getDiagnostics().Report(diag::err_fe_error_opening) << OutputFile
                                                             << EC.message();
@@ -119,7 +119,8 @@ void DependencyGraphCallback::OutputGraphFile() {
     if (FileName.startswith(SysRoot))
       FileName = FileName.substr(SysRoot.size());
 
-    OS << DOT::EscapeString(std::string(FileName)) << "\"];\n";
+    OS << DOT::EscapeString(FileName)
+    << "\"];\n";
   }
 
   // Write the edges

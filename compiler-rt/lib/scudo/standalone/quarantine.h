@@ -59,12 +59,16 @@ struct QuarantineBatch {
   void shuffle(u32 State) { ::scudo::shuffle(Batch, Count, &State); }
 };
 
-static_assert(sizeof(QuarantineBatch) <= (1U << 13), ""); // 8Kb.
+COMPILER_CHECK(sizeof(QuarantineBatch) <= (1U << 13)); // 8Kb.
 
 // Per-thread cache of memory blocks.
 template <typename Callback> class QuarantineCache {
 public:
-  void init() { DCHECK_EQ(atomic_load_relaxed(&Size), 0U); }
+  void initLinkerInitialized() {}
+  void init() {
+    memset(this, 0, sizeof(*this));
+    initLinkerInitialized();
+  }
 
   // Total memory used, including internal accounting.
   uptr getSize() const { return atomic_load_relaxed(&Size); }
@@ -126,7 +130,7 @@ public:
     subFromSize(ExtractedSize);
   }
 
-  void getStats(ScopedString *Str) const {
+  void printStats() const {
     uptr BatchCount = 0;
     uptr TotalOverheadBytes = 0;
     uptr TotalBytes = 0;
@@ -148,16 +152,16 @@ public:
         (TotalQuarantinedBytes == 0)
             ? 0
             : TotalOverheadBytes * 100 / TotalQuarantinedBytes;
-    Str->append(
-        "Stats: Quarantine: batches: %zu; bytes: %zu (user: %zu); chunks: %zu "
-        "(capacity: %zu); %zu%% chunks used; %zu%% memory overhead\n",
-        BatchCount, TotalBytes, TotalQuarantinedBytes, TotalQuarantineChunks,
-        QuarantineChunksCapacity, ChunksUsagePercent, MemoryOverheadPercent);
+    Printf("Global quarantine stats: batches: %zd; bytes: %zd (user: %zd); "
+           "chunks: %zd (capacity: %zd); %zd%% chunks used; %zd%% memory "
+           "overhead\n",
+           BatchCount, TotalBytes, TotalQuarantinedBytes, TotalQuarantineChunks,
+           QuarantineChunksCapacity, ChunksUsagePercent, MemoryOverheadPercent);
   }
 
 private:
-  SinglyLinkedList<QuarantineBatch> List;
-  atomic_uptr Size = {};
+  IntrusiveList<QuarantineBatch> List;
+  atomic_uptr Size;
 
   void addToSize(uptr add) { atomic_store_relaxed(&Size, getSize() + add); }
   void subFromSize(uptr sub) { atomic_store_relaxed(&Size, getSize() - sub); }
@@ -170,13 +174,8 @@ private:
 template <typename Callback, typename Node> class GlobalQuarantine {
 public:
   typedef QuarantineCache<Callback> CacheT;
-  using ThisT = GlobalQuarantine<Callback, Node>;
 
-  void init(uptr Size, uptr CacheSize) {
-    DCHECK(isAligned(reinterpret_cast<uptr>(this), alignof(ThisT)));
-    DCHECK_EQ(atomic_load_relaxed(&MaxSize), 0U);
-    DCHECK_EQ(atomic_load_relaxed(&MinSize), 0U);
-    DCHECK_EQ(atomic_load_relaxed(&MaxCacheSize), 0U);
+  void initLinkerInitialized(uptr Size, uptr CacheSize) {
     // Thread local quarantine size can be zero only when global quarantine size
     // is zero (it allows us to perform just one atomic read per put() call).
     CHECK((Size == 0 && CacheSize == 0) || CacheSize != 0);
@@ -185,7 +184,11 @@ public:
     atomic_store_relaxed(&MinSize, Size / 10 * 9); // 90% of max size.
     atomic_store_relaxed(&MaxCacheSize, CacheSize);
 
-    Cache.init();
+    Cache.initLinkerInitialized();
+  }
+  void init(uptr Size, uptr CacheSize) {
+    memset(this, 0, sizeof(*this));
+    initLinkerInitialized(Size, CacheSize);
   }
 
   uptr getMaxSize() const { return atomic_load_relaxed(&MaxSize); }
@@ -202,7 +205,7 @@ public:
       ScopedLock L(CacheMutex);
       Cache.transfer(C);
     }
-    if (Cache.getSize() > getMaxSize() && RecycleMutex.tryLock())
+    if (Cache.getSize() > getMaxSize() && RecyleMutex.tryLock())
       recycle(atomic_load_relaxed(&MinSize), Cb);
   }
 
@@ -211,36 +214,25 @@ public:
       ScopedLock L(CacheMutex);
       Cache.transfer(C);
     }
-    RecycleMutex.lock();
+    RecyleMutex.lock();
     recycle(0, Cb);
   }
 
-  void getStats(ScopedString *Str) const {
+  void printStats() const {
     // It assumes that the world is stopped, just as the allocator's printStats.
-    Cache.getStats(Str);
-    Str->append("Quarantine limits: global: %zuK; thread local: %zuK\n",
-                getMaxSize() >> 10, getCacheSize() >> 10);
-  }
-
-  void disable() {
-    // RecycleMutex must be locked 1st since we grab CacheMutex within recycle.
-    RecycleMutex.lock();
-    CacheMutex.lock();
-  }
-
-  void enable() {
-    CacheMutex.unlock();
-    RecycleMutex.unlock();
+    Printf("Quarantine limits: global: %zdM; thread local: %zdK\n",
+           getMaxSize() >> 20, getCacheSize() >> 10);
+    Cache.printStats();
   }
 
 private:
   // Read-only data.
   alignas(SCUDO_CACHE_LINE_SIZE) HybridMutex CacheMutex;
   CacheT Cache;
-  alignas(SCUDO_CACHE_LINE_SIZE) HybridMutex RecycleMutex;
-  atomic_uptr MinSize = {};
-  atomic_uptr MaxSize = {};
-  alignas(SCUDO_CACHE_LINE_SIZE) atomic_uptr MaxCacheSize = {};
+  alignas(SCUDO_CACHE_LINE_SIZE) HybridMutex RecyleMutex;
+  atomic_uptr MinSize;
+  atomic_uptr MaxSize;
+  alignas(SCUDO_CACHE_LINE_SIZE) atomic_uptr MaxCacheSize;
 
   void NOINLINE recycle(uptr MinSize, Callback Cb) {
     CacheT Tmp;
@@ -269,7 +261,7 @@ private:
       while (Cache.getSize() > MinSize)
         Tmp.enqueueBatch(Cache.dequeueBatch());
     }
-    RecycleMutex.unlock();
+    RecyleMutex.unlock();
     doRecycle(&Tmp, Cb);
   }
 

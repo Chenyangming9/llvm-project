@@ -21,9 +21,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/Statistic.h"
-
-#include "DebugOptions.h"
-
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
@@ -41,21 +38,17 @@ using namespace llvm;
 /// -stats - Command line option to cause transformations to emit stats about
 /// what they did.
 ///
-static bool EnableStats;
-static bool StatsAsJSON;
+static cl::opt<bool> Stats(
+    "stats",
+    cl::desc("Enable statistics output from program (available with Asserts)"),
+    cl::Hidden);
+
+static cl::opt<bool> StatsAsJSON("stats-json",
+                                 cl::desc("Display statistics as json data"),
+                                 cl::Hidden);
+
 static bool Enabled;
 static bool PrintOnExit;
-
-void llvm::initStatisticOptions() {
-  static cl::opt<bool, true> registerEnableStats{
-      "stats",
-      cl::desc(
-          "Enable statistics output from program (available with Asserts)"),
-      cl::location(EnableStats), cl::Hidden};
-  static cl::opt<bool, true> registerStatsAsJson{
-      "stats-json", cl::desc("Display statistics as json data"),
-      cl::location(StatsAsJSON), cl::Hidden};
-}
 
 namespace {
 /// This class is used in a ManagedStatic so that it is created on demand (when
@@ -64,7 +57,7 @@ namespace {
 /// This class is also used to look up statistic values from applications that
 /// use LLVM.
 class StatisticInfo {
-  std::vector<TrackingStatistic *> Stats;
+  std::vector<Statistic*> Stats;
 
   friend void llvm::PrintStatistics();
   friend void llvm::PrintStatistics(raw_ostream &OS);
@@ -73,12 +66,14 @@ class StatisticInfo {
   /// Sort statistics by debugtype,name,description.
   void sort();
 public:
-  using const_iterator = std::vector<TrackingStatistic *>::const_iterator;
+  using const_iterator = std::vector<Statistic *>::const_iterator;
 
   StatisticInfo();
   ~StatisticInfo();
 
-  void addStatistic(TrackingStatistic *S) { Stats.push_back(S); }
+  void addStatistic(Statistic *S) {
+    Stats.push_back(S);
+  }
 
   const_iterator begin() const { return Stats.begin(); }
   const_iterator end() const { return Stats.end(); }
@@ -95,7 +90,7 @@ static ManagedStatic<sys::SmartMutex<true> > StatLock;
 
 /// RegisterStatistic - The first time a statistic is bumped, this method is
 /// called.
-void TrackingStatistic::RegisterStatistic() {
+void Statistic::RegisterStatistic() {
   // If stats are enabled, inform StatInfo that this statistic should be
   // printed.
   // llvm_shutdown calls destructors while holding the ManagedStatic mutex.
@@ -111,7 +106,7 @@ void TrackingStatistic::RegisterStatistic() {
     // Check Initialized again after acquiring the lock.
     if (Initialized.load(std::memory_order_relaxed))
       return;
-    if (EnableStats || Enabled)
+    if (Stats || Enabled)
       SI.addStatistic(this);
 
     // Remember we have been registered.
@@ -126,28 +121,29 @@ StatisticInfo::StatisticInfo() {
 
 // Print information when destroyed, iff command line option is specified.
 StatisticInfo::~StatisticInfo() {
-  if (EnableStats || PrintOnExit)
+  if (::Stats || PrintOnExit)
     llvm::PrintStatistics();
 }
 
-void llvm::EnableStatistics(bool DoPrintOnExit) {
+void llvm::EnableStatistics(bool PrintOnExit) {
   Enabled = true;
-  PrintOnExit = DoPrintOnExit;
+  ::PrintOnExit = PrintOnExit;
 }
 
-bool llvm::AreStatisticsEnabled() { return Enabled || EnableStats; }
+bool llvm::AreStatisticsEnabled() {
+  return Enabled || Stats;
+}
 
 void StatisticInfo::sort() {
-  llvm::stable_sort(
-      Stats, [](const TrackingStatistic *LHS, const TrackingStatistic *RHS) {
-        if (int Cmp = std::strcmp(LHS->getDebugType(), RHS->getDebugType()))
-          return Cmp < 0;
+  llvm::stable_sort(Stats, [](const Statistic *LHS, const Statistic *RHS) {
+    if (int Cmp = std::strcmp(LHS->getDebugType(), RHS->getDebugType()))
+      return Cmp < 0;
 
-        if (int Cmp = std::strcmp(LHS->getName(), RHS->getName()))
-          return Cmp < 0;
+    if (int Cmp = std::strcmp(LHS->getName(), RHS->getName()))
+      return Cmp < 0;
 
-        return std::strcmp(LHS->getDesc(), RHS->getDesc()) < 0;
-      });
+    return std::strcmp(LHS->getDesc(), RHS->getDesc()) < 0;
+  });
 }
 
 void StatisticInfo::reset() {
@@ -211,7 +207,7 @@ void llvm::PrintStatisticsJSON(raw_ostream &OS) {
   // Print all of the statistics.
   OS << "{\n";
   const char *delim = "";
-  for (const TrackingStatistic *Stat : Stats.Stats) {
+  for (const Statistic *Stat : Stats.Stats) {
     OS << delim;
     assert(yaml::needsQuotes(Stat->getDebugType()) == yaml::QuotingType::None &&
            "Statistic group/type name is simple.");
@@ -247,11 +243,11 @@ void llvm::PrintStatistics() {
   // Check if the -stats option is set instead of checking
   // !Stats.Stats.empty().  In release builds, Statistics operators
   // do nothing, so stats are never Registered.
-  if (EnableStats) {
+  if (Stats) {
     // Get the stream to write to.
     std::unique_ptr<raw_ostream> OutStream = CreateInfoOutputFile();
     (*OutStream) << "Statistics are disabled.  "
-                 << "Build with asserts or with -DLLVM_FORCE_ENABLE_STATS\n";
+                 << "Build with asserts or with -DLLVM_ENABLE_STATS\n";
   }
 #endif
 }

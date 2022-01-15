@@ -1,6 +1,5 @@
 set(LLVM_LINK_COMPONENTS
-  FrontendOpenMP
-  Support
+  support
   )
 
 get_filename_component(CHANGE_NAMESPACE_SOURCE_DIR
@@ -16,19 +15,16 @@ add_extra_unittest(ClangChangeNamespaceTests
   ChangeNamespaceTests.cpp
   )
 
-clang_target_link_libraries(ClangChangeNamespaceTests
+target_link_libraries(ClangChangeNamespaceTests
   PRIVATE
   clangAST
   clangASTMatchers
   clangBasic
+  clangChangeNamespace
   clangFormat
   clangFrontend
   clangRewrite
   clangSerialization
   clangTooling
   clangToolingCore
-  )
-target_link_libraries(ClangChangeNamespaceTests
-  PRIVATE
-  clangChangeNamespace
   )

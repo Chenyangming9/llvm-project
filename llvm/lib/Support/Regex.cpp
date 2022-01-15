@@ -14,7 +14,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include <cassert>
 #include <string>
 
 // Important this comes last because it defines "_REGEX_H_". At least on
@@ -26,7 +25,7 @@ using namespace llvm;
 
 Regex::Regex() : preg(nullptr), error(REG_BADPAT) {}
 
-Regex::Regex(StringRef regex, RegexFlags Flags) {
+Regex::Regex(StringRef regex, unsigned Flags) {
   unsigned flags = 0;
   preg = new llvm_regex();
   preg->re_endp = regex.end();
@@ -38,9 +37,6 @@ Regex::Regex(StringRef regex, RegexFlags Flags) {
     flags |= REG_EXTENDED;
   error = llvm_regcomp(preg, regex.data(), flags|REG_PEND);
 }
-
-Regex::Regex(StringRef regex, unsigned Flags)
-    : Regex(regex, static_cast<RegexFlags>(Flags)) {}
 
 Regex::Regex(Regex &&regex) {
   preg = regex.preg;
@@ -56,24 +52,14 @@ Regex::~Regex() {
   }
 }
 
-namespace {
-
-/// Utility to convert a regex error code into a human-readable string.
-void RegexErrorToString(int error, struct llvm_regex *preg,
-                        std::string &Error) {
-  size_t len = llvm_regerror(error, preg, nullptr, 0);
-
-  Error.resize(len - 1);
-  llvm_regerror(error, preg, &Error[0], len);
-}
-
-} // namespace
-
 bool Regex::isValid(std::string &Error) const {
   if (!error)
     return true;
 
-  RegexErrorToString(error, preg, Error);
+  size_t len = llvm_regerror(error, preg, nullptr, 0);
+
+  Error.resize(len - 1);
+  llvm_regerror(error, preg, &Error[0], len);
   return false;
 }
 
@@ -83,14 +69,8 @@ unsigned Regex::getNumMatches() const {
   return preg->re_nsub;
 }
 
-bool Regex::match(StringRef String, SmallVectorImpl<StringRef> *Matches,
-                  std::string *Error) const {
-  // Reset error, if given.
-  if (Error && !Error->empty())
-    *Error = "";
-
-  // Check if the regex itself didn't successfully compile.
-  if (Error ? !isValid(*Error) : !isValid())
+bool Regex::match(StringRef String, SmallVectorImpl<StringRef> *Matches){
+  if (error)
     return false;
 
   unsigned nmatch = Matches ? preg->re_nsub+1 : 0;
@@ -103,13 +83,11 @@ bool Regex::match(StringRef String, SmallVectorImpl<StringRef> *Matches,
 
   int rc = llvm_regexec(preg, String.data(), nmatch, pm.data(), REG_STARTEND);
 
-  // Failure to match is not an error, it's just a normal return value.
-  // Any other error code is considered abnormal, and is logged in the Error.
   if (rc == REG_NOMATCH)
     return false;
   if (rc != 0) {
-    if (Error)
-      RegexErrorToString(error, preg, *Error);
+    // regexec can fail due to invalid pattern or running out of memory.
+    error = rc;
     return false;
   }
 
@@ -134,12 +112,15 @@ bool Regex::match(StringRef String, SmallVectorImpl<StringRef> *Matches,
 }
 
 std::string Regex::sub(StringRef Repl, StringRef String,
-                       std::string *Error) const {
+                       std::string *Error) {
   SmallVector<StringRef, 8> Matches;
 
+  // Reset error, if given.
+  if (Error && !Error->empty()) *Error = "";
+
   // Return the input if there was no match.
-  if (!match(String, &Matches, Error))
-    return std::string(String);
+  if (!match(String, &Matches))
+    return String;
 
   // Otherwise splice in the replacement string, starting with the prefix before
   // the match.

@@ -19,7 +19,7 @@
 
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/BinaryFormat/WasmTraits.h"
+#include "llvm/Object/WasmTraits.h"
 
 #define DEBUG_TYPE "lld"
 
@@ -51,8 +51,6 @@ public:
   size_t getSize() const override { return header.size() + body.size(); }
 
   virtual void writeBody() {}
-
-  virtual void assignIndexes() {}
 
   void finalizeContents() override {
     writeBody();
@@ -96,70 +94,6 @@ protected:
   llvm::DenseMap<WasmSignature, int32_t> typeIndices;
 };
 
-/**
- * A key for some kind of imported entity of type `T`.
- *
- * Used when de-duplicating imports.
- */
-template <typename T> struct ImportKey {
-public:
-  enum class State { Plain, Empty, Tombstone };
-
-public:
-  T type;
-  llvm::Optional<StringRef> importModule;
-  llvm::Optional<StringRef> importName;
-  State state;
-
-public:
-  ImportKey(T type) : type(type), state(State::Plain) {}
-  ImportKey(T type, State state) : type(type), state(state) {}
-  ImportKey(T type, llvm::Optional<StringRef> importModule,
-            llvm::Optional<StringRef> importName)
-      : type(type), importModule(importModule), importName(importName),
-        state(State::Plain) {}
-};
-
-template <typename T>
-inline bool operator==(const ImportKey<T> &lhs, const ImportKey<T> &rhs) {
-  return lhs.state == rhs.state && lhs.importModule == rhs.importModule &&
-         lhs.importName == rhs.importName && lhs.type == rhs.type;
-}
-
-} // namespace wasm
-} // namespace lld
-
-// `ImportKey<T>` can be used as a key in a `DenseMap` if `T` can be used as a
-// key in a `DenseMap`.
-namespace llvm {
-template <typename T> struct DenseMapInfo<lld::wasm::ImportKey<T>> {
-  static lld::wasm::ImportKey<T> getEmptyKey() {
-    typename lld::wasm::ImportKey<T> key(llvm::DenseMapInfo<T>::getEmptyKey());
-    key.state = lld::wasm::ImportKey<T>::State::Empty;
-    return key;
-  }
-  static lld::wasm::ImportKey<T> getTombstoneKey() {
-    typename lld::wasm::ImportKey<T> key(llvm::DenseMapInfo<T>::getEmptyKey());
-    key.state = lld::wasm::ImportKey<T>::State::Tombstone;
-    return key;
-  }
-  static unsigned getHashValue(const lld::wasm::ImportKey<T> &key) {
-    uintptr_t hash = hash_value(key.importModule);
-    hash = hash_combine(hash, key.importName);
-    hash = hash_combine(hash, llvm::DenseMapInfo<T>::getHashValue(key.type));
-    hash = hash_combine(hash, key.state);
-    return hash;
-  }
-  static bool isEqual(const lld::wasm::ImportKey<T> &lhs,
-                      const lld::wasm::ImportKey<T> &rhs) {
-    return lhs == rhs;
-  }
-};
-} // end namespace llvm
-
-namespace lld {
-namespace wasm {
-
 class ImportSection : public SyntheticSection {
 public:
   ImportSection() : SyntheticSection(llvm::wasm::WASM_SEC_IMPORT) {}
@@ -177,27 +111,19 @@ public:
     assert(isSealed);
     return numImportedFunctions;
   }
-  uint32_t getNumImportedTags() const {
+  uint32_t getNumImportedEvents() const {
     assert(isSealed);
-    return numImportedTags;
-  }
-  uint32_t getNumImportedTables() const {
-    assert(isSealed);
-    return numImportedTables;
+    return numImportedEvents;
   }
 
   std::vector<const Symbol *> importedSymbols;
-  std::vector<const Symbol *> gotSymbols;
 
 protected:
   bool isSealed = false;
   unsigned numImportedGlobals = 0;
   unsigned numImportedFunctions = 0;
-  unsigned numImportedTags = 0;
-  unsigned numImportedTables = 0;
-  llvm::DenseMap<ImportKey<WasmGlobalType>, uint32_t> importedGlobals;
-  llvm::DenseMap<ImportKey<WasmSignature>, uint32_t> importedFunctions;
-  llvm::DenseMap<ImportKey<WasmTableType>, uint32_t> importedTables;
+  unsigned numImportedEvents = 0;
+  std::vector<const Symbol *> gotSymbols;
 };
 
 class FunctionSection : public SyntheticSection {
@@ -213,18 +139,6 @@ public:
 protected:
 };
 
-class TableSection : public SyntheticSection {
-public:
-  TableSection() : SyntheticSection(llvm::wasm::WASM_SEC_TABLE) {}
-
-  bool isNeeded() const override { return inputTables.size() > 0; };
-  void assignIndexes() override;
-  void writeBody() override;
-  void addTable(InputTable *table);
-
-  std::vector<InputTable *> inputTables;
-};
-
 class MemorySection : public SyntheticSection {
 public:
   MemorySection() : SyntheticSection(llvm::wasm::WASM_SEC_MEMORY) {}
@@ -232,69 +146,61 @@ public:
   bool isNeeded() const override { return !config->importMemory; }
   void writeBody() override;
 
-  uint64_t numMemoryPages = 0;
-  uint64_t maxMemoryPages = 0;
+  uint32_t numMemoryPages = 0;
+  uint32_t maxMemoryPages = 0;
 };
 
-// The tag section contains a list of declared wasm tags associated with the
-// module. Currently the only supported tag kind is exceptions. All C++
-// exceptions are represented by a single tag. A tag entry in this section
-// contains information on what kind of tag it is (e.g. exception) and the type
-// of values associated with the tag. (In Wasm, a tag can contain multiple
-// values of primitive types. But for C++ exceptions, we just throw a pointer
-// which is an i32 value (for wasm32 architecture), so the signature of C++
-// exception is (i32)->(void), because all exception tag types are assumed to
-// have void return type to share WasmSignature with functions.)
-class TagSection : public SyntheticSection {
+class TableSection : public SyntheticSection {
 public:
-  TagSection() : SyntheticSection(llvm::wasm::WASM_SEC_TAG) {}
-  void writeBody() override;
-  bool isNeeded() const override { return inputTags.size() > 0; }
-  void addTag(InputTag *tag);
+  TableSection() : SyntheticSection(llvm::wasm::WASM_SEC_TABLE) {}
 
-  std::vector<InputTag *> inputTags;
+  bool isNeeded() const override {
+    // Always output a table section (or table import), even if there are no
+    // indirect calls.  There are two reasons for this:
+    //  1. For executables it is useful to have an empty table slot at 0
+    //     which can be filled with a null function call handler.
+    //  2. If we don't do this, any program that contains a call_indirect but
+    //     no address-taken function will fail at validation time since it is
+    //     a validation error to include a call_indirect instruction if there
+    //     is not table.
+    return !config->importTable;
+  }
+
+  void writeBody() override;
 };
 
 class GlobalSection : public SyntheticSection {
 public:
   GlobalSection() : SyntheticSection(llvm::wasm::WASM_SEC_GLOBAL) {}
-
-  static bool classof(const OutputSection *sec) {
-    return sec->type == llvm::wasm::WASM_SEC_GLOBAL;
-  }
-
   uint32_t numGlobals() const {
-    assert(isSealed);
-    return inputGlobals.size() + dataAddressGlobals.size() +
-           internalGotSymbols.size();
+    return inputGlobals.size() + definedFakeGlobals.size();
   }
   bool isNeeded() const override { return numGlobals() > 0; }
-  void assignIndexes() override;
   void writeBody() override;
   void addGlobal(InputGlobal *global);
 
-  // Add an internal GOT entry global that corresponds to the given symbol.
-  // Normally GOT entries are imported and assigned by the external dynamic
-  // linker.  However, when linking PIC code statically or when linking with
-  // -Bsymbolic we can internalize GOT entries by declaring globals the hold
-  // symbol addresses.
-  //
-  // For the static linking case these internal globals can be completely
-  // eliminated by a post-link optimizer such as wasm-opt.
-  //
-  // TODO(sbc): Another approach to optimizing these away could be to use
-  // specific relocation types combined with linker relaxation which could
-  // transform a `global.get` to an `i32.const`.
-  void addInternalGOTEntry(Symbol *sym);
-  bool needsRelocations() { return internalGotSymbols.size(); }
-  void generateRelocationCode(raw_ostream &os) const;
-
-  std::vector<const DefinedData *> dataAddressGlobals;
+  std::vector<const DefinedData *> definedFakeGlobals;
   std::vector<InputGlobal *> inputGlobals;
-  std::vector<Symbol *> internalGotSymbols;
+};
 
-protected:
-  bool isSealed = false;
+// The event section contains a list of declared wasm events associated with the
+// module. Currently the only supported event kind is exceptions. A single event
+// entry represents a single event with an event tag. All C++ exceptions are
+// represented by a single event. An event entry in this section contains
+// information on what kind of event it is (e.g. exception) and the type of
+// values contained in a single event object. (In wasm, an event can contain
+// multiple values of primitive types. But for C++ exceptions, we just throw a
+// pointer which is an i32 value (for wasm32 architecture), so the signature of
+// C++ exception is (i32)->(void), because all event types are assumed to have
+// void return type to share WasmSignature with functions.)
+class EventSection : public SyntheticSection {
+public:
+  EventSection() : SyntheticSection(llvm::wasm::WASM_SEC_EVENT) {}
+  void writeBody() override;
+  bool isNeeded() const override { return inputEvents.size() > 0; }
+  void addEvent(InputEvent *event);
+
+  std::vector<InputEvent *> inputEvents;
 };
 
 class ExportSection : public SyntheticSection {
@@ -304,24 +210,17 @@ public:
   void writeBody() override;
 
   std::vector<llvm::wasm::WasmExport> exports;
-  std::vector<const Symbol *> exportedSymbols;
-};
-
-class StartSection : public SyntheticSection {
-public:
-  StartSection() : SyntheticSection(llvm::wasm::WASM_SEC_START) {}
-  bool isNeeded() const override;
-  void writeBody() override;
 };
 
 class ElemSection : public SyntheticSection {
 public:
-  ElemSection()
-      : SyntheticSection(llvm::wasm::WASM_SEC_ELEM) {}
+  ElemSection(uint32_t offset)
+      : SyntheticSection(llvm::wasm::WASM_SEC_ELEM), elemOffset(offset) {}
   bool isNeeded() const override { return indirectFunctions.size() > 0; };
   void writeBody() override;
   void addEntry(FunctionSymbol *sym);
   uint32_t numEntries() const { return indirectFunctions.size(); }
+  uint32_t elemOffset;
 
 protected:
   std::vector<const FunctionSymbol *> indirectFunctions;
@@ -329,7 +228,9 @@ protected:
 
 class DataCountSection : public SyntheticSection {
 public:
-  DataCountSection(ArrayRef<OutputSegment *> segments);
+  DataCountSection(uint32_t numSegments)
+      : SyntheticSection(llvm::wasm::WASM_SEC_DATACOUNT),
+        numSegments(numSegments) {}
   bool isNeeded() const override;
   void writeBody() override;
 
@@ -361,18 +262,12 @@ protected:
 // Create the custom "name" section containing debug symbol names.
 class NameSection : public SyntheticSection {
 public:
-  NameSection(ArrayRef<OutputSegment *> segments)
-      : SyntheticSection(llvm::wasm::WASM_SEC_CUSTOM, "name"),
-        segments(segments) {}
-  bool isNeeded() const override { return !config->stripAll && numNames() > 0; }
+  NameSection() : SyntheticSection(llvm::wasm::WASM_SEC_CUSTOM, "name") {}
+  bool isNeeded() const override {
+    return !config->stripDebug && !config->stripAll && numNames() > 0;
+  }
   void writeBody() override;
-  unsigned numNames() const { return numNamedGlobals() + numNamedFunctions(); }
-  unsigned numNamedGlobals() const;
-  unsigned numNamedFunctions() const;
-  unsigned numNamedDataSegments() const;
-
-protected:
-  ArrayRef<OutputSegment *> segments;
+  unsigned numNames() const;
 };
 
 class ProducersSection : public SyntheticSection {
@@ -409,8 +304,7 @@ public:
 class RelocSection : public SyntheticSection {
 public:
   RelocSection(StringRef name, OutputSection *sec)
-      : SyntheticSection(llvm::wasm::WASM_SEC_CUSTOM, std::string(name)),
-        sec(sec) {}
+      : SyntheticSection(llvm::wasm::WASM_SEC_CUSTOM, name), sec(sec) {}
   void writeBody() override;
   bool isNeeded() const override { return sec->getNumRelocations() > 0; };
 
@@ -427,9 +321,8 @@ struct OutStruct {
   TableSection *tableSec;
   MemorySection *memorySec;
   GlobalSection *globalSec;
-  TagSection *tagSec;
+  EventSection *eventSec;
   ExportSection *exportSec;
-  StartSection *startSec;
   ElemSection *elemSec;
   DataCountSection *dataCountSec;
   LinkingSection *linkingSec;

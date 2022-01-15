@@ -2,8 +2,10 @@
 
 ; Test that we don't pollute the start of the file with debug sections
 
-; CHECK-NOT: macinfo
-; CHECK-NOT: macro
+; CHECK:      .section .debug_macinfo,"",@progbits
+; CHECK-NEXT: .byte 0 # End Of Macro List Mark
+; CHECK-NEXT: .section
+; CHECK-NOT:  .debug_macinfo
 
 define void @f() !dbg !4 {
   ret void, !dbg !9

@@ -20,8 +20,8 @@
 #include "CloexecInotifyInitCheck.h"
 #include "CloexecMemfdCreateCheck.h"
 #include "CloexecOpenCheck.h"
-#include "CloexecPipe2Check.h"
 #include "CloexecPipeCheck.h"
+#include "CloexecPipe2Check.h"
 #include "CloexecSocketCheck.h"
 #include "ComparisonInTempFailureRetryCheck.h"
 

@@ -39,6 +39,7 @@ entry:
 
   %wptr = bitcast i64* %ptr to i16*
   %wptr1 = getelementptr inbounds i16, i16* %wptr, i64 1
+  %wptr2 = getelementptr inbounds i16, i16* %wptr, i64 2
   %wptr3 = getelementptr inbounds i16, i16* %wptr, i64 3
 
   ;; We should be able to merge these two stores with the i64 one above
@@ -189,16 +190,16 @@ define void @PR34074(i32* %x, i64* %y) {
 
 define void @PR36129(i32* %P, i32* %Q) {
 ; CHECK-LABEL: @PR36129(
-; CHECK-NEXT:    store i32 1, i32* [[P:%.*]], align 4
+; CHECK-NEXT:    store i32 1, i32* [[P:%.*]]
 ; CHECK-NEXT:    [[P2:%.*]] = bitcast i32* [[P]] to i8*
-; CHECK-NEXT:    store i32 2, i32* [[Q:%.*]], align 4
-; CHECK-NEXT:    store i8 3, i8* [[P2]], align 1
+; CHECK-NEXT:    store i32 2, i32* [[Q:%.*]]
+; CHECK-NEXT:    store i8 3, i8* [[P2]]
 ; CHECK-NEXT:    ret void
 ;
-  store i32 1, i32* %P, align 4
+  store i32 1, i32* %P
   %P2 = bitcast i32* %P to i8*
-  store i32 2, i32* %Q, align 4
-  store i8 3, i8* %P2, align 1
+  store i32 2, i32* %Q
+  store i8 3, i8* %P2
   ret void
 }
 

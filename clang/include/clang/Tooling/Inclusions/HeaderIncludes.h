@@ -32,7 +32,6 @@ public:
   /// 0. Otherwise, returns the priority of the matching category or INT_MAX.
   /// NOTE: this API is not thread-safe!
   int getIncludePriority(StringRef IncludeName, bool CheckMainHeader) const;
-  int getSortIncludePriority(StringRef IncludeName, bool CheckMainHeader) const;
 
 private:
   bool isMainHeader(StringRef IncludeName) const;
@@ -40,7 +39,10 @@ private:
   const IncludeStyle Style;
   bool IsMainFile;
   std::string FileName;
-  SmallVector<llvm::Regex, 4> CategoryRegexs;
+  // This refers to a substring in FileName.
+  StringRef FileStem;
+  // Regex is not thread-safe.
+  mutable SmallVector<llvm::Regex, 4> CategoryRegexs;
 };
 
 /// Generates replacements for inserting or deleting #include directives in a

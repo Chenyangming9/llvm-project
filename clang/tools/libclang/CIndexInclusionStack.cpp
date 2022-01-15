@@ -18,9 +18,10 @@
 #include "clang/Frontend/ASTUnit.h"
 using namespace clang;
 
-namespace {
-void getInclusions(bool IsLocal, unsigned n, CXTranslationUnit TU,
-                   CXInclusionVisitor CB, CXClientData clientData) {
+static void getInclusions(const SrcMgr::SLocEntry &(SourceManager::*Getter)(unsigned, bool*) const, unsigned n,
+                          CXTranslationUnit TU, CXInclusionVisitor CB,
+                          CXClientData clientData)
+{
   ASTUnit *CXXUnit = cxtu::getASTUnit(TU);
   SourceManager &SM = CXXUnit->getSourceManager();
   ASTContext &Ctx = CXXUnit->getASTContext();
@@ -29,13 +30,13 @@ void getInclusions(bool IsLocal, unsigned n, CXTranslationUnit TU,
 
   for (unsigned i = 0 ; i < n ; ++i) {
     bool Invalid = false;
-    const SrcMgr::SLocEntry &SL =
-        IsLocal ? SM.getLocalSLocEntry(i) : SM.getLoadedSLocEntry(i, &Invalid);
+    const SrcMgr::SLocEntry &SL = (SM.*Getter)(i, &Invalid);
+
     if (!SL.isFile() || Invalid)
       continue;
 
     const SrcMgr::FileInfo &FI = SL.getFile();
-    if (!FI.getContentCache().OrigEntry)
+    if (!FI.getContentCache()->OrigEntry)
       continue;
 
     // If this is the main file, and there is a preamble, skip this SLoc. The
@@ -60,11 +61,11 @@ void getInclusions(bool IsLocal, unsigned n, CXTranslationUnit TU,
     // Callback to the client.
     // FIXME: We should have a function to construct CXFiles.
     CB(static_cast<CXFile>(
-           const_cast<FileEntry *>(FI.getContentCache().OrigEntry)),
+         const_cast<FileEntry *>(FI.getContentCache()->OrigEntry)),
        InclusionStack.data(), InclusionStack.size(), clientData);
   }
 }
-} // namespace
+
 
 void clang_getInclusions(CXTranslationUnit TU, CXInclusionVisitor CB,
                          CXClientData clientData) {
@@ -82,13 +83,14 @@ void clang_getInclusions(CXTranslationUnit TU, CXInclusionVisitor CB,
   // a AST/PCH file, but this file has a pre-compiled preamble, we also need
   // to look in that file.
   if (n == 1 || SM.getPreambleFileID().isValid()) {
-    getInclusions(/*IsLocal=*/false, SM.loaded_sloc_entry_size(), TU, CB,
-                  clientData);
+    getInclusions(&SourceManager::getLoadedSLocEntry,
+                  SM.loaded_sloc_entry_size(), TU, CB, clientData);
   }
 
   // Not a PCH/AST file. Note, if there is a preamble, it could still be that
   // there are #includes in this file (e.g. for any include after the first
   // declaration).
   if (n != 1)
-    getInclusions(/*IsLocal=*/true, n, TU, CB, clientData);
+    getInclusions(&SourceManager::getLocalSLocEntry, n, TU, CB, clientData);
+
 }

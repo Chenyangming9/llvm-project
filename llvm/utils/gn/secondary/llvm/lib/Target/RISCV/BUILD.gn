@@ -20,21 +20,9 @@ tablegen("RISCVGenDAGISel") {
   td_file = "RISCV.td"
 }
 
-tablegen("RISCVGenGlobalISel") {
-  visibility = [ ":LLVMRISCVCodeGen" ]
-  args = [ "-gen-global-isel" ]
-  td_file = "RISCV.td"
-}
-
 tablegen("RISCVGenMCPseudoLowering") {
   visibility = [ ":LLVMRISCVCodeGen" ]
   args = [ "-gen-pseudo-lowering" ]
-  td_file = "RISCV.td"
-}
-
-tablegen("RISCVGenRegisterBank") {
-  visibility = [ ":LLVMRISCVCodeGen" ]
-  args = [ "-gen-register-bank" ]
   td_file = "RISCV.td"
 }
 
@@ -42,14 +30,10 @@ static_library("LLVMRISCVCodeGen") {
   deps = [
     ":RISCVGenCompressInstEmitter",
     ":RISCVGenDAGISel",
-    ":RISCVGenGlobalISel",
     ":RISCVGenMCPseudoLowering",
-    ":RISCVGenRegisterBank",
-
-    # See https://reviews.llvm.org/D69130
-    "AsmParser:RISCVGenAsmMatcher",
     "MCTargetDesc",
     "TargetInfo",
+    "Utils",
     "//llvm/include/llvm/Config:llvm-config",
     "//llvm/lib/CodeGen",
     "//llvm/lib/CodeGen/AsmPrinter",
@@ -62,19 +46,13 @@ static_library("LLVMRISCVCodeGen") {
   include_dirs = [ "." ]
   sources = [
     "RISCVAsmPrinter.cpp",
-    "RISCVCallLowering.cpp",
-    "RISCVExpandAtomicPseudoInsts.cpp",
     "RISCVExpandPseudoInsts.cpp",
     "RISCVFrameLowering.cpp",
     "RISCVISelDAGToDAG.cpp",
     "RISCVISelLowering.cpp",
-    "RISCVInsertVSETVLI.cpp",
     "RISCVInstrInfo.cpp",
-    "RISCVInstructionSelector.cpp",
-    "RISCVLegalizerInfo.cpp",
     "RISCVMCInstLower.cpp",
     "RISCVMergeBaseOffset.cpp",
-    "RISCVRegisterBankInfo.cpp",
     "RISCVRegisterInfo.cpp",
     "RISCVSubtarget.cpp",
     "RISCVTargetMachine.cpp",
@@ -96,5 +74,6 @@ group("RISCV") {
     "Disassembler",
     "MCTargetDesc",
     "TargetInfo",
+    "Utils",
   ]
 }

@@ -33,7 +33,6 @@ void NORETURN ReportInvalidPosixMemalignAlignment(uptr alignment,
 void NORETURN ReportAllocationSizeTooBig(uptr user_size, uptr max_size,
                                          const StackTrace *stack);
 void NORETURN ReportOutOfMemory(uptr requested_size, const StackTrace *stack);
-void NORETURN ReportRssLimitExceeded(const StackTrace *stack);
 
 }  // namespace __sanitizer
 

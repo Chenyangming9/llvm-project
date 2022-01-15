@@ -1,4 +1,4 @@
-//===-- Baton.cpp ---------------------------------------------------------===//
+//===-- Baton.cpp -----------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,6 +8,5 @@
 
 #include "lldb/Utility/Baton.h"
 
-void lldb_private::UntypedBaton::GetDescription(llvm::raw_ostream &s,
-                                                lldb::DescriptionLevel level,
-                                                unsigned indentation) const {}
+void lldb_private::UntypedBaton::GetDescription(
+    Stream *s, lldb::DescriptionLevel level) const {}

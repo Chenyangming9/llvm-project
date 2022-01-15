@@ -1,6 +1,6 @@
-====================================================
-Extra Clang Tools 13.0.0 Release Notes
-====================================================
+=====================================
+Extra Clang Tools 9.0.0 Release Notes
+=====================================
 
 .. contents::
    :local:
@@ -12,7 +12,7 @@ Introduction
 ============
 
 This document contains the release notes for the Extra Clang Tools, part of the
-Clang release 13.0.0. Here we describe the status of the Extra Clang Tools in
+Clang release 9.0.0. Here we describe the status of the Extra Clang Tools in
 some detail, including major improvements from the previous release and new
 feature work. All LLVM releases may be downloaded from the `LLVM releases web
 site <https://llvm.org/releases/>`_.
@@ -21,260 +21,300 @@ For more information about Clang or LLVM, including information about
 the latest release, please see the `Clang Web Site <https://clang.llvm.org>`_ or
 the `LLVM Web Site <https://llvm.org>`_.
 
-Note that if you are reading this file from a Git checkout or the
-main Clang web page, this document applies to the *next* release, not
-the current one. To see the release notes for a specific release, please
-see the `releases page <https://llvm.org/releases/>`_.
 
-What's New in Extra Clang Tools 13.0.0?
-=======================================
+What's New in Extra Clang Tools 9.0.0?
+======================================
 
 Some of the major new features and improvements to Extra Clang Tools are listed
 here. Generic improvements to Extra Clang Tools as a whole or to its underlying
 infrastructure are described first, followed by tool-specific sections.
 
-Major New Features
-------------------
-
-...
 
 Improvements to clangd
 ----------------------
 
-Code Completion
-^^^^^^^^^^^^^^^
+- Background indexing is on by default
 
-- ML based model is used by default for ranking completion candidates.
+  When using clangd, it will build an index of your code base (all files listed
+  in your compile database). This index enables go-to-definition,
+  find-references, and even code completion to find symbols across your project.
 
-- Support for completion of attributes.
+  This feature can consume a lot of CPU. It can be disabled using the
+  ``--background-index=false`` flag, and respects ``-j`` to use fewer threads.
+  The index is written to ``.clangd/index`` in the project root.
 
-- Improved handling of Objective-C(++) constructs.
+- Contextual code actions
 
+  Extract variable, expand ``auto``, expand macro, convert string to raw string.
+  More to come in the future!
 
-Hover
-^^^^^
+- Clang-tidy warnings are available
 
-- Shows documentation for Attributes.
+  These will be produced for projects that have a ``.clang-tidy`` file in their
+  source tree, as described in the :doc:`clang-tidy documentation <clang-tidy>`.
 
-- Displays resolved paths for includes.
+- Improved diagnostics
 
-- Shows padding for fields.
+  Errors from headers are now shown (on the #including line).
+  The message now indicates if fixes are available.
+  Navigation between errors and associated notes is improved (for editors that
+  support ``Diagnostic.relatedInformation``).
 
-Document Outline
-^^^^^^^^^^^^^^^^
+- Suggested includes
 
-- Contains information in detail field about extra type information
+  When a class or other name is not found, clangd may suggest to fix this by
+  adding the corresponding ``#include`` directive.
 
-- Macro expansions now show up in the tree
+- Semantic highlighting
 
-- Improved handling of Objective-C(++) constructs.
+  clangd can push syntax information to the editor, allowing it to highlight
+  e.g. member variables differently from locals. (requires editor support)
 
-Code Navigation
-^^^^^^^^^^^^^^^^
+  This implements the proposed protocol from
+  https://github.com/microsoft/vscode-languageserver-node/pull/367
 
-- Cross references surfaces occurrences for calls to overridden methods and
-  declarations.
+- Type hierachy
 
-Semantic Highlighting
-^^^^^^^^^^^^^^^^^^^^^
+  Navigation to base/derived types is possible in editors that support the
+  proposed protocol from
+  https://github.com/microsoft/vscode-languageserver-node/pull/426
 
-- Support for legacy semantic tokens extension is dropped.
+- Improvements to include insertion
 
-- Better support for Objective-C(++) constructs and dependent code.
+  Only headers with ``#include``-guards will be inserted, and the feature can
+  be disabled with the ``--header-insertion=never`` flag.
 
+  Standard library headers should now be inserted more accurately, particularly
+  for C++ other than libstdc++, and for the C standard library.
 
-Diagnostics
-^^^^^^^^^^^
+- Code completion
 
-- Diagnostics for unused/deprecated code are tagged according to LSP.
+  Overloads are bundled into a single completion item by default. (for editors
+  that support signature-help).
 
-- Clang-tidy checks that operate at translation-unit level are now available.
+  Redundant const/non-const overloads are no longer shown.
 
-System Integration
-^^^^^^^^^^^^^^^^^^
+  Before clangd is warmed up (during preamble build), limited identifier- and
+  index-based code completion is available.
 
-- Compile flag parsing has been improved to be more resilient against multiple
-  jobs.
+- Format-on-type
 
-- Better error reporting when compile flags are unusable.
+  A new implementation of format-on-type is triggered by hitting enter: it
+  attempts to reformat the previous line and reindent the new line.
+  (Requires editor support).
 
+- Toolchain header detection
 
-Miscellaneous
-^^^^^^^^^^^^^
+  Projects that use an embedded gcc toolchain may only work when used with the
+  corresponding standard library. clangd can now query the toolchain to find
+  these headers.
+  The compilation database must correctly specify this toolchain, and the
+  ``--query-driver=/path/to/toolchain/bin/*`` flag must be passed to clangd.
 
-- Better support for TUs with circular includes (e.g. templated header vs
-  implementation file).
+- Miscellaneous improvements
 
-- Compile flags for headers are inferred from files known to be including them
-  when possible.
+  Hover now produces richer Markdown-formatted text (for supported editors).
 
-- Version info contains information about compile-time setup of clangd
+  Rename is safer and more helpful, though is still within one file only.
 
-- FeatureModule mechanism has been introduced to make contribution of vertical
-  features to clangd easier, by making it possible to write features that can
-  interact with clangd-core without touching it.
+  Files without extensions (e.g. C++ standard library) are handled better.
 
-- There's an extension for inlay-hints for deduced types and parameter names,
-  hidden behind -inlay-hints flag.
+  clangd can understand offsets in UTF-8 or UTF-32 through command-line flags or
+  protocol extensions. (Useful with editors/platforms that don't speak UTF-16).
 
-- Rename is more robust:
+  Editors that support edits near the cursor in code-completion can set the
+  ``textDocument.completion.editsNearCursor`` capability to ``true``, and clangd
+  will provide completions that correct ``.`` to ``->``, and vice-versa.
 
-  - Won't trigger on non-identifiers.
-  - Makes use of dirty buffers for open files.
-
-- Improvements to dex query latency.
-
-- There's a remote-index service for LLVM at http://clangd-index.llvm.org/.
-
-- There's a remote-index service for Chromium at
-  https://linux.clangd-index.chromium.org/.
-
-Improvements to clang-doc
--------------------------
-
-The improvements are...
-
-Improvements to clang-query
----------------------------
-
-The improvements are...
-
-Improvements to clang-rename
-----------------------------
-
-The improvements are...
 
 Improvements to clang-tidy
 --------------------------
 
-- The `run-clang-tidy.py` helper script is now installed in `bin/` as
-  `run-clang-tidy`. It was previously installed in `share/clang/`.
+- New OpenMP module.
 
-- Added command line option `--fix-notes` to apply fixes found in notes
-  attached to warnings. These are typically cases where we are less confident
-  the fix will have the desired effect.
+  For checks specific to `OpenMP <https://www.openmp.org/>`_ API.
 
-- libToolingCore and Clang-Tidy was refactored and now checks can produce
-  highlights (`^~~~~` under fragments of the source code) in diagnostics.
-  Existing and new checks in the future can be expected to start implementing
-  this functionality.
-  This change only affects the visual rendering of diagnostics, and does not
-  alter the behavior of generated fixes.
+- New :doc:`abseil-duration-addition
+  <clang-tidy/checks/abseil-duration-addition>` check.
 
-New checks
-^^^^^^^^^^
+  Checks for cases where addition should be performed in the ``absl::Time``
+  domain.
 
+- New :doc:`abseil-duration-conversion-cast
+  <clang-tidy/checks/abseil-duration-conversion-cast>` check.
 
-- New :doc:`altera-id-dependent-backward-branch
-  <clang-tidy/checks/altera-id-dependent-backward-branch>` check.
+  Checks for casts of ``absl::Duration`` conversion functions, and recommends
+  the right conversion function instead.
 
-  Finds ID-dependent variables and fields that are used within loops. This
-  causes branches to occur inside the loops, and thus leads to performance
-  degradation.
+- New :doc:`abseil-duration-unnecessary-conversion
+  <clang-tidy/checks/abseil-duration-unnecessary-conversion>` check.
 
-- New :doc:`altera-unroll-loops
-  <clang-tidy/checks/altera-unroll-loops>` check.
+  Finds and fixes cases where ``absl::Duration`` values are being converted to
+  numeric types and back again.
 
-  Finds inner loops that have not been unrolled, as well as fully unrolled
-  loops with unknown loops bounds or a large number of iterations.
+- New :doc:`abseil-time-comparison
+  <clang-tidy/checks/abseil-time-comparison>` check.
 
-- New :doc:`bugprone-easily-swappable-parameters
-  <clang-tidy/checks/bugprone-easily-swappable-parameters>` check.
+  Prefer comparisons in the ``absl::Time`` domain instead of the integer
+  domain.
 
-  Finds function definitions where parameters of convertible types follow each
-  other directly, making call sites prone to calling the function with
-  swapped (or badly ordered) arguments.
+- New :doc:`abseil-time-subtraction
+  <clang-tidy/checks/abseil-time-subtraction>` check.
 
-- New :doc:`bugprone-implicit-widening-of-multiplication-result
-  <clang-tidy/checks/bugprone-implicit-widening-of-multiplication-result>` check.
+  Finds and fixes ``absl::Time`` subtraction expressions to do subtraction
+  in the Time domain instead of the numeric domain.
 
-  Diagnoses instances of an implicit widening of multiplication result.
+- New :doc:`android-cloexec-pipe
+  <clang-tidy/checks/android-cloexec-pipe>` check.
 
-- New :doc:`bugprone-unhandled-exception-at-new
-  <clang-tidy/checks/bugprone-unhandled-exception-at-new>` check.
+  This check detects usage of ``pipe()``.
 
-  Finds calls to ``new`` with missing exception handler for ``std::bad_alloc``.
+- New :doc:`android-cloexec-pipe2
+  <clang-tidy/checks/android-cloexec-pipe2>` check.
 
-- New :doc:`concurrency-thread-canceltype-asynchronous
-  <clang-tidy/checks/concurrency-thread-canceltype-asynchronous>` check.
+  This checks ensures that ``pipe2()`` is called with the ``O_CLOEXEC`` flag.
 
-  Finds ``pthread_setcanceltype`` function calls where a thread's cancellation
-  type is set to asynchronous.
+- New :doc:`bugprone-branch-clone
+  <clang-tidy/checks/bugprone-branch-clone>` check.
 
-- New :doc:`cppcoreguidelines-prefer-member-initializer
-  <clang-tidy/checks/cppcoreguidelines-prefer-member-initializer>` check.
+  Checks for repeated branches in ``if/else if/else`` chains, consecutive
+  repeated branches in ``switch`` statements and indentical true and false
+  branches in conditional operators.
 
-  Finds member initializations in the constructor body which can be placed into
-  the initialization list instead.
+- New :doc:`bugprone-posix-return
+  <clang-tidy/checks/bugprone-posix-return>` check.
 
-- New :doc:`readability-suspicious-call-argument
-  <clang-tidy/checks/readability-suspicious-call-argument>` check.
+  Checks if any calls to POSIX functions (except ``posix_openpt``) expect negative
+  return values.
 
-  Finds function calls where the arguments passed are provided out of order,
-  based on the difference between the argument name and the parameter names
-  of the function.
+- New :doc:`bugprone-unhandled-self-assignment
+  <clang-tidy/checks/bugprone-unhandled-self-assignment>` check.
 
-New check aliases
-^^^^^^^^^^^^^^^^^
+  Finds user-defined copy assignment operators which do not protect the code
+  against self-assignment either by checking self-assignment explicitly or
+  using the copy-and-swap or the copy-and-move method.
 
-- New alias :doc:`cert-pos47-c
-  <clang-tidy/checks/cert-pos47-c>` to
-  :doc:`concurrency-thread-canceltype-asynchronous
-  <clang-tidy/checks/concurrency-thread-canceltype-asynchronous>` was added.
+- New :doc:`fuchsia-default-arguments-calls
+  <clang-tidy/checks/fuchsia-default-arguments-calls>` check.
 
+  Warns if a function or method is called with default arguments.
+  This was previously done by `fuchsia-default-arguments check`, which has been
+  removed.
 
-Changes in existing checks
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+- New :doc:`fuchsia-default-arguments-declarations
+  <clang-tidy/checks/fuchsia-default-arguments-declarations>` check.
 
-- Improved :doc:`bugprone-signal-handler
-  <clang-tidy/checks/bugprone-signal-handler>` check.
+  Warns if a function or method is declared with default parameters.
+  This was previously done by `fuchsia-default-arguments check` check, which has
+  been removed.
 
-  Added an option to choose the set of allowed functions.
+- New :doc:`google-objc-avoid-nsobject-new
+  <clang-tidy/checks/google-objc-avoid-nsobject-new>` check.
 
-- Improved :doc:`cppcoreguidelines-init-variables
-  <clang-tidy/checks/cppcoreguidelines-init-variables>` check.
+  Checks for calls to ``+new`` or overrides of it, which are prohibited by the
+  Google Objective-C style guide.
 
-  Removed generating fixes for enums because the code generated was broken,
-  trying to initialize the enum from an integer.
+- New :doc:`google-readability-avoid-underscore-in-googletest-name
+  <clang-tidy/checks/google-readability-avoid-underscore-in-googletest-name>`
+  check.
 
-  The check now also warns for uninitialized scoped enums.
+  Checks whether there are underscores in googletest test and test case names in
+  test macros, which is prohibited by the Googletest FAQ.
 
-- Improved :doc:`readability-uniqueptr-delete-release
-  <clang-tidy/checks/readability-uniqueptr-delete-release>` check.
+- New :doc:`llvm-prefer-isa-or-dyn-cast-in-conditionals
+  <clang-tidy/checks/llvm-prefer-isa-or-dyn-cast-in-conditionals>` check.
 
-  Added an option to choose whether to refactor by calling the ``reset`` member
-  function or assignment to ``nullptr``.
-  Added support for pointers to ``std::unique_ptr``.
+  Looks at conditionals and finds and replaces cases of ``cast<>``,
+  which will assert rather than return a null pointer, and
+  ``dyn_cast<>`` where the return value is not captured. Additionally,
+  finds and replaces cases that match the pattern ``var &&
+  isa<X>(var)``, where ``var`` is evaluated twice.
 
+- New :doc:`modernize-use-trailing-return-type
+  <clang-tidy/checks/modernize-use-trailing-return-type>` check.
 
-Removed checks
-^^^^^^^^^^^^^^
+  Rewrites function signatures to use a trailing return type.
 
-- The readability-deleted-default check has been removed.
+- New :doc:`objc-super-self <clang-tidy/checks/objc-super-self>` check.
 
-  The clang warning `Wdefaulted-function-deleted
-  <https://clang.llvm.org/docs/DiagnosticsReference.html#wdefaulted-function-deleted>`_
-  will diagnose the same issues and is enabled by default.
+  Finds invocations of ``-self`` on super instances in initializers of
+  subclasses of ``NSObject`` and recommends calling a superclass initializer
+  instead.
 
-Improvements to include-fixer
------------------------------
+- New :doc:`openmp-exception-escape
+  <clang-tidy/checks/openmp-exception-escape>` check.
 
-The improvements are...
+  Analyzes OpenMP Structured Blocks and checks that no exception escapes
+  out of the Structured Block it was thrown in.
 
-Improvements to clang-include-fixer
------------------------------------
+- New :doc:`openmp-use-default-none
+  <clang-tidy/checks/openmp-use-default-none>` check.
 
-The improvements are...
+  Finds OpenMP directives that are allowed to contain a ``default`` clause,
+  but either don't specify it or the clause is specified but with the kind
+  other than ``none``, and suggests to use the ``default(none)`` clause.
 
-Improvements to modularize
---------------------------
+- New :doc:`readability-convert-member-functions-to-static
+  <clang-tidy/checks/readability-convert-member-functions-to-static>` check.
 
-The improvements are...
+  Finds non-static member functions that can be made ``static``.
+
+- New alias :doc:`cert-oop54-cpp
+  <clang-tidy/checks/cert-oop54-cpp>` to
+  :doc:`bugprone-unhandled-self-assignment
+  <clang-tidy/checks/bugprone-unhandled-self-assignment>` was added.
+
+- New alias :doc:`cppcoreguidelines-explicit-virtual-functions
+  <clang-tidy/checks/cppcoreguidelines-explicit-virtual-functions>` to
+  :doc:`modernize-use-override
+  <clang-tidy/checks/modernize-use-override>` was added.
+
+- The :doc:`bugprone-argument-comment
+  <clang-tidy/checks/bugprone-argument-comment>` now supports
+  `CommentBoolLiterals`, `CommentIntegerLiterals`, `CommentFloatLiterals`,
+  `CommentUserDefiniedLiterals`, `CommentStringLiterals`,
+  `CommentCharacterLiterals` & `CommentNullPtrs` options.
+
+- The :doc:`bugprone-too-small-loop-variable
+  <clang-tidy/checks/bugprone-too-small-loop-variable>` now supports
+  `MagnitudeBitsUpperLimit` option. The default value was set to 16,
+  which greatly reduces warnings related to loops which are unlikely to
+  cause an actual functional bug.
+
+- Added `UseAssignment` option to :doc:`cppcoreguidelines-pro-type-member-init
+  <clang-tidy/checks/cppcoreguidelines-pro-type-member-init>`
+
+  If set to true, the check will provide fix-its with literal initializers
+  (``int i = 0;``) instead of curly braces (``int i{};``).
+
+- The `fuchsia-default-arguments` check has been removed.
+
+  Warnings of function or method calls and declarations with default arguments
+  were moved to :doc:`fuchsia-default-arguments-calls
+  <clang-tidy/checks/fuchsia-default-arguments-calls>` and
+  :doc:`fuchsia-default-arguments-declarations
+  <clang-tidy/checks/fuchsia-default-arguments-declarations>` checks
+  respectively.
+
+- The :doc:`google-runtime-int <clang-tidy/checks/google-runtime-int>`
+  check has been disabled in Objective-C++.
+
+- The :doc:`modernize-use-override
+  <clang-tidy/checks/modernize-use-override>` now supports `OverrideSpelling`
+  and `FinalSpelling` options.
+
+- The :doc:`misc-throw-by-value-catch-by-reference
+  <clang-tidy/checks/misc-throw-by-value-catch-by-reference>` now supports
+  `WarnOnLargeObject` and `MaxSize` options to warn on any large trivial
+  object caught by value.
+
+- The `Acronyms` and `IncludeDefaultAcronyms` options for the
+  :doc:`objc-property-declaration <clang-tidy/checks/objc-property-declaration>`
+  check have been removed.
+
 
 Improvements to pp-trace
 ------------------------
 
-The improvements are...
-
-Clang-tidy visual studio plugin
--------------------------------
+- Added a new option `-callbacks` to filter preprocessor callbacks. It replaces
+  the `-ignore` option.

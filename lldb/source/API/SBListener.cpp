@@ -1,4 +1,4 @@
-//===-- SBListener.cpp ----------------------------------------------------===//
+//===-- SBListener.cpp ------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -20,7 +20,7 @@
 using namespace lldb;
 using namespace lldb_private;
 
-SBListener::SBListener() : m_opaque_sp() {
+SBListener::SBListener() : m_opaque_sp(), m_unused_ptr(nullptr) {
   LLDB_RECORD_CONSTRUCTOR_NO_ARGS(SBListener);
 }
 
@@ -48,7 +48,7 @@ const lldb::SBListener &SBListener::operator=(const lldb::SBListener &rhs) {
 SBListener::SBListener(const lldb::ListenerSP &listener_sp)
     : m_opaque_sp(listener_sp), m_unused_ptr(nullptr) {}
 
-SBListener::~SBListener() = default;
+SBListener::~SBListener() {}
 
 bool SBListener::IsValid() const {
   LLDB_RECORD_METHOD_CONST_NO_ARGS(bool, SBListener, IsValid);

@@ -29,7 +29,7 @@ struct ALIGNED(SANITIZER_CACHE_LINE_SIZE) ScudoTSD {
   void init();
   void commitBack();
 
-  inline bool tryLock() TRY_ACQUIRE(true, Mutex) {
+  INLINE bool tryLock() {
     if (Mutex.TryLock()) {
       atomic_store_relaxed(&Precedence, 0);
       return true;
@@ -40,14 +40,14 @@ struct ALIGNED(SANITIZER_CACHE_LINE_SIZE) ScudoTSD {
     return false;
   }
 
-  inline void lock() ACQUIRE(Mutex) {
+  INLINE void lock() {
     atomic_store_relaxed(&Precedence, 0);
     Mutex.Lock();
   }
 
-  inline void unlock() RELEASE(Mutex) { Mutex.Unlock(); }
+  INLINE void unlock() { Mutex.Unlock(); }
 
-  inline uptr getPrecedence() { return atomic_load_relaxed(&Precedence); }
+  INLINE uptr getPrecedence() { return atomic_load_relaxed(&Precedence); }
 
  private:
   StaticSpinMutex Mutex;

@@ -11,7 +11,7 @@
 #include <memory>
 #include <string>
 
-#include "CartesianBenchmarks.h"
+#include "CartesianBenchmarks.hpp"
 #include "benchmark/benchmark.h"
 #include "test_macros.h"
 

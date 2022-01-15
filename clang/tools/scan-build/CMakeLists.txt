@@ -5,26 +5,21 @@ include(GNUInstallDirs)
 if (WIN32 AND NOT CYGWIN)
   set(BinFiles
         scan-build
-        scan-build.bat
-	)
+        scan-build.bat)
   set(LibexecFiles
         ccc-analyzer
         c++-analyzer
         ccc-analyzer.bat
-        c++-analyzer.bat
-	)
+        c++-analyzer.bat)
 else()
   set(BinFiles
-        scan-build
-	)
+        scan-build)
   set(LibexecFiles
         ccc-analyzer
-        c++-analyzer
-	)
+        c++-analyzer)
   if (APPLE)
     list(APPEND BinFiles
-           set-xcode-analyzer
-	   )
+           set-xcode-analyzer)
   endif()
 endif()
 
@@ -46,9 +41,7 @@ if(CLANG_INSTALL_SCANBUILD)
                          ${CMAKE_BINARY_DIR}/bin/
                        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/bin/${BinFile})
     list(APPEND Depends ${CMAKE_BINARY_DIR}/bin/${BinFile})
-    install(PROGRAMS bin/${BinFile}
-            DESTINATION bin
-            COMPONENT scan-build)
+    install(PROGRAMS bin/${BinFile} DESTINATION bin)
   endforeach()
 
   foreach(LibexecFile ${LibexecFiles})
@@ -60,9 +53,7 @@ if(CLANG_INSTALL_SCANBUILD)
                          ${CMAKE_BINARY_DIR}/libexec/
                        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/libexec/${LibexecFile})
     list(APPEND Depends ${CMAKE_BINARY_DIR}/libexec/${LibexecFile})
-    install(PROGRAMS libexec/${LibexecFile}
-            DESTINATION libexec
-            COMPONENT scan-build)
+    install(PROGRAMS libexec/${LibexecFile} DESTINATION libexec)
   endforeach()
 
   foreach(ManPage ${ManPages})
@@ -74,9 +65,7 @@ if(CLANG_INSTALL_SCANBUILD)
                          ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_MANDIR}/man1/
                        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/man/${ManPage})
     list(APPEND Depends ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_MANDIR}/man1/${ManPage})
-    install(PROGRAMS man/${ManPage}
-            DESTINATION ${CMAKE_INSTALL_MANDIR}/man1
-            COMPONENT scan-build)
+    install(PROGRAMS man/${ManPage} DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
   endforeach()
 
   foreach(ShareFile ${ShareFiles})
@@ -88,17 +77,9 @@ if(CLANG_INSTALL_SCANBUILD)
                          ${CMAKE_BINARY_DIR}/share/scan-build/
                        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/share/scan-build/${ShareFile})
     list(APPEND Depends ${CMAKE_BINARY_DIR}/share/scan-build/${ShareFile})
-    install(FILES share/scan-build/${ShareFile}
-            DESTINATION share/scan-build
-            COMPONENT scan-build)
+    install(FILES share/scan-build/${ShareFile} DESTINATION share/scan-build)
   endforeach()
 
   add_custom_target(scan-build ALL DEPENDS ${Depends})
   set_target_properties(scan-build PROPERTIES FOLDER "Misc")
-
-  if(NOT LLVM_ENABLE_IDE)
-    add_llvm_install_targets("install-scan-build"
-                             DEPENDS scan-build
-                             COMPONENT scan-build)
-  endif()
 endif()

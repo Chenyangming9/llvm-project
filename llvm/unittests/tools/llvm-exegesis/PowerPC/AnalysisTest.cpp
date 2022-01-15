@@ -1,4 +1,4 @@
-//===-- PPCAnalysisTest.cpp ---------------------------------------*- C++ -*-===//
+//===-- AnalysisTest.cpp ---------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -23,14 +23,15 @@ namespace {
 using testing::Pair;
 using testing::UnorderedElementsAre;
 
-class PPCAnalysisTest : public ::testing::Test {
+class AnalysisTest : public ::testing::Test {
 protected:
-  PPCAnalysisTest() {
+  AnalysisTest() {
     const std::string TT = "powerpc64le-unknown-linux";
     std::string error;
-    const Target *const TheTarget = TargetRegistry::lookupTarget(TT, error);
+    const llvm::Target *const TheTarget =
+        llvm::TargetRegistry::lookupTarget(TT, error);
     if (!TheTarget) {
-      errs() << error << "\n";
+      llvm::errs() << error << "\n";
       return;
     }
     STI.reset(TheTarget->createMCSubtargetInfo(TT, "pwr9", ""));
@@ -62,26 +63,26 @@ protected:
   }
 
 protected:
-  std::unique_ptr<const MCSubtargetInfo> STI;
+  std::unique_ptr<const llvm::MCSubtargetInfo> STI;
   uint16_t ALUIdx = 0;
   uint16_t ALUEIdx = 0;
   uint16_t ALUOIdx = 0;
   uint16_t IPAGENIdx = 0;
 };
 
-TEST_F(PPCAnalysisTest, ComputeIdealizedProcResPressure_2ALU) {
+TEST_F(AnalysisTest, ComputeIdealizedProcResPressure_2ALU) {
   const auto Pressure =
       computeIdealizedProcResPressure(STI->getSchedModel(), {{ALUIdx, 2}});
   EXPECT_THAT(Pressure, UnorderedElementsAre(Pair(ALUIdx, 2.0)));
 }
 
-TEST_F(PPCAnalysisTest, ComputeIdealizedProcResPressure_1ALUE) {
+TEST_F(AnalysisTest, ComputeIdealizedProcResPressure_1ALUE) {
   const auto Pressure =
       computeIdealizedProcResPressure(STI->getSchedModel(), {{ALUEIdx, 2}});
   EXPECT_THAT(Pressure, UnorderedElementsAre(Pair(ALUEIdx, 2.0)));
 }
 
-TEST_F(PPCAnalysisTest, ComputeIdealizedProcResPressure_1ALU1IPAGEN) {
+TEST_F(AnalysisTest, ComputeIdealizedProcResPressure_1ALU1IPAGEN) {
   const auto Pressure =
       computeIdealizedProcResPressure(STI->getSchedModel(), {{ALUIdx, 1}, {IPAGENIdx, 1}});
   EXPECT_THAT(Pressure, UnorderedElementsAre(Pair(ALUIdx, 1.0),Pair(IPAGENIdx, 1)));

@@ -13,13 +13,6 @@
 #include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/DenseSet.h"
 
-namespace llvm {
-namespace vfs {
-class OverlayFileSystem;
-class InMemoryFileSystem;
-} // namespace vfs
-} // namespace llvm
-
 namespace clang {
 class CompilerInstance;
 
@@ -29,7 +22,7 @@ class ModuleFile;
 
 namespace tooling {
 
-/// Handles PPCallbacks and re-runs preprocessing of the whole
+/// \brief Handles PPCallbacks and re-runs preprocessing of the whole
 /// translation unit with modules disabled.
 ///
 /// This way it's possible to get PPCallbacks for the whole translation unit
@@ -47,7 +40,7 @@ public:
       IntrusiveRefCntPtr<llvm::vfs::OverlayFileSystem> OverlayFS);
   ~ExpandModularHeadersPPCallbacks();
 
-  /// Returns the preprocessor that provides callbacks for the whole
+  /// \brief Returns the preprocessor that provides callbacks for the whole
   /// translation unit, including the main file, textual headers, and modular
   /// headers.
   ///
@@ -90,7 +83,7 @@ private:
   void PragmaDiagnosticPop(SourceLocation Loc, StringRef) override;
   void PragmaDiagnostic(SourceLocation Loc, StringRef, diag::Severity,
                         StringRef) override;
-  void HasInclude(SourceLocation Loc, StringRef, bool, Optional<FileEntryRef> ,
+  void HasInclude(SourceLocation Loc, StringRef, bool, const FileEntry *,
                   SrcMgr::CharacteristicKind) override;
   void PragmaOpenCLExtension(SourceLocation NameLoc, const IdentifierInfo *,
                              SourceLocation StateLoc, unsigned) override;

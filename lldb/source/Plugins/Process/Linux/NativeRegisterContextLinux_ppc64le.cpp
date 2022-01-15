@@ -1,4 +1,4 @@
-//===-- NativeRegisterContextLinux_ppc64le.cpp ----------------------------===//
+//===-- NativeRegisterContextLinux_ppc64le.cpp ------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -115,10 +115,10 @@ static const RegisterSet g_reg_sets_ppc64le[k_num_register_sets] = {
 
 std::unique_ptr<NativeRegisterContextLinux>
 NativeRegisterContextLinux::CreateHostNativeRegisterContextLinux(
-    const ArchSpec &target_arch, NativeThreadLinux &native_thread) {
+    const ArchSpec &target_arch, NativeThreadProtocol &native_thread) {
   switch (target_arch.GetMachine()) {
   case llvm::Triple::ppc64le:
-    return std::make_unique<NativeRegisterContextLinux_ppc64le>(target_arch,
+    return llvm::make_unique<NativeRegisterContextLinux_ppc64le>(target_arch,
                                                                  native_thread);
   default:
     llvm_unreachable("have no register context for architecture");
@@ -127,9 +127,8 @@ NativeRegisterContextLinux::CreateHostNativeRegisterContextLinux(
 
 NativeRegisterContextLinux_ppc64le::NativeRegisterContextLinux_ppc64le(
     const ArchSpec &target_arch, NativeThreadProtocol &native_thread)
-    : NativeRegisterContextRegisterInfo(
-          native_thread, new RegisterInfoPOSIX_ppc64le(target_arch)),
-      NativeRegisterContextLinux(native_thread) {
+    : NativeRegisterContextLinux(native_thread,
+                                 new RegisterInfoPOSIX_ppc64le(target_arch)) {
   if (target_arch.GetMachine() != llvm::Triple::ppc64le) {
     llvm_unreachable("Unhandled target architecture.");
   }
@@ -446,6 +445,34 @@ bool NativeRegisterContextLinux_ppc64le::IsFPR(unsigned reg) const {
   return (k_first_fpr_ppc64le <= reg && reg <= k_last_fpr_ppc64le);
 }
 
+Status NativeRegisterContextLinux_ppc64le::DoReadGPR(
+    void *buf, size_t buf_size) {
+  int regset = NT_PRSTATUS;
+  return NativeProcessLinux::PtraceWrapper(PTRACE_GETREGS, m_thread.GetID(),
+                                           &regset, buf, buf_size);
+}
+
+Status NativeRegisterContextLinux_ppc64le::DoWriteGPR(
+    void *buf, size_t buf_size) {
+  int regset = NT_PRSTATUS;
+  return NativeProcessLinux::PtraceWrapper(PTRACE_SETREGS, m_thread.GetID(),
+                                           &regset, buf, buf_size);
+}
+
+Status NativeRegisterContextLinux_ppc64le::DoReadFPR(void *buf,
+                                                     size_t buf_size) {
+  int regset = NT_FPREGSET;
+  return NativeProcessLinux::PtraceWrapper(PTRACE_GETFPREGS, m_thread.GetID(),
+                                           &regset, buf, buf_size);
+}
+
+Status NativeRegisterContextLinux_ppc64le::DoWriteFPR(void *buf,
+                                                      size_t buf_size) {
+  int regset = NT_FPREGSET;
+  return NativeProcessLinux::PtraceWrapper(PTRACE_SETFPREGS, m_thread.GetID(),
+                                           &regset, buf, buf_size);
+}
+
 uint32_t NativeRegisterContextLinux_ppc64le::CalculateFprOffset(
     const RegisterInfo *reg_info) const {
   return reg_info->byte_offset -
@@ -553,7 +580,7 @@ uint32_t NativeRegisterContextLinux_ppc64le::SetHardwareWatchpoint(
 
   // Check 8-byte alignment for hardware watchpoint target address. Below is a
   // hack to recalculate address and size in order to make sure we can watch
-  // non 8-byte aligned addresses as well.
+  // non 8-byte alligned addresses as well.
   if (addr & 0x07) {
 
     addr_t begin = llvm::alignDown(addr, 8);

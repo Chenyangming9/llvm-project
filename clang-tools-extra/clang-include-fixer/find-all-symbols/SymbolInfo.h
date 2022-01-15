@@ -19,14 +19,14 @@
 
 namespace clang {
 namespace find_all_symbols {
-/// Describes a named symbol from a header.
+/// \brief Describes a named symbol from a header.
 /// Symbols with the same qualified name and type (e.g. function overloads)
 /// that appear in the same header are represented by a single SymbolInfo.
 ///
 /// TODO: keep track of instances, e.g. overload locations and signatures.
 class SymbolInfo {
 public:
-  /// The SymbolInfo Type.
+  /// \brief The SymbolInfo Type.
   enum class SymbolKind {
     Function,
     Class,
@@ -38,17 +38,17 @@ public:
     Unknown,
   };
 
-  /// The Context Type.
+  /// \brief The Context Type.
   enum class ContextType {
     Namespace, // Symbols declared in a namespace.
     Record,    // Symbols declared in a class.
     EnumDecl,  // Enum constants declared in a enum declaration.
   };
 
-  /// A pair of <ContextType, ContextName>.
+  /// \brief A pair of <ContextType, ContextName>.
   typedef std::pair<ContextType, std::string> Context;
 
-  // Signals are signals gathered by observing how a symbol is used.
+  // \brief Signals are signals gathered by observing how a symbol is used.
   // These are used to rank results.
   struct Signals {
     Signals() {}
@@ -74,21 +74,21 @@ public:
   SymbolInfo(llvm::StringRef Name, SymbolKind Type, llvm::StringRef FilePath,
              const std::vector<Context> &Contexts);
 
-  void SetFilePath(llvm::StringRef Path) { FilePath = std::string(Path); }
+  void SetFilePath(llvm::StringRef Path) { FilePath = Path; }
 
-  /// Get symbol name.
+  /// \brief Get symbol name.
   llvm::StringRef getName() const { return Name; }
 
-  /// Get the fully-qualified symbol name.
+  /// \brief Get the fully-qualified symbol name.
   std::string getQualifiedName() const;
 
-  /// Get symbol type.
+  /// \brief Get symbol type.
   SymbolKind getSymbolKind() const { return Type; }
 
-  /// Get a relative file path where symbol comes from.
+  /// \brief Get a relative file path where symbol comes from.
   llvm::StringRef getFilePath() const { return FilePath; }
 
-  /// Get symbol contexts.
+  /// \brief Get symbol contexts.
   const std::vector<SymbolInfo::Context> &getContexts() const {
     return Contexts;
   }
@@ -100,17 +100,17 @@ public:
 private:
   friend struct llvm::yaml::MappingTraits<struct SymbolAndSignals>;
 
-  /// Identifier name.
+  /// \brief Identifier name.
   std::string Name;
 
-  /// Symbol type.
+  /// \brief Symbol type.
   SymbolKind Type;
 
-  /// The file path where the symbol comes from. It's a relative file
+  /// \brief The file path where the symbol comes from. It's a relative file
   /// path based on the build directory.
   std::string FilePath;
 
-  /// Contains information about symbol contexts. Context information is
+  /// \brief Contains information about symbol contexts. Context information is
   /// stored from the inner-most level to outer-most level.
   ///
   /// For example, if a symbol 'x' is declared as:
@@ -129,11 +129,11 @@ struct SymbolAndSignals {
   bool operator==(const SymbolAndSignals& RHS) const;
 };
 
-/// Write SymbolInfos to a stream (YAML format).
+/// \brief Write SymbolInfos to a stream (YAML format).
 bool WriteSymbolInfosToStream(llvm::raw_ostream &OS,
                               const SymbolInfo::SignalMap &Symbols);
 
-/// Read SymbolInfos from a YAML document.
+/// \brief Read SymbolInfos from a YAML document.
 std::vector<SymbolAndSignals> ReadSymbolInfosFromYAML(llvm::StringRef Yaml);
 
 } // namespace find_all_symbols

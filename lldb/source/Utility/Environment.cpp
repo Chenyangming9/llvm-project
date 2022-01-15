@@ -1,4 +1,4 @@
-//===-- Environment.cpp ---------------------------------------------------===//
+//===-- Environment.cpp -----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,7 +13,7 @@ using namespace lldb_private;
 char *Environment::Envp::make_entry(llvm::StringRef Key,
                                     llvm::StringRef Value) {
   const size_t size = Key.size() + 1 /*=*/ + Value.size() + 1 /*\0*/;
-  char *Result = static_cast<char *>(
+  char *Result = reinterpret_cast<char *>(
       Allocator.Allocate(sizeof(char) * size, alignof(char)));
   char *Next = Result;
 
@@ -26,7 +26,7 @@ char *Environment::Envp::make_entry(llvm::StringRef Key,
 }
 
 Environment::Envp::Envp(const Environment &Env) {
-  Data = static_cast<char **>(
+  Data = reinterpret_cast<char **>(
       Allocator.Allocate(sizeof(char *) * (Env.size() + 1), alignof(char *)));
   char **Next = Data;
   for (const auto &KV : Env)

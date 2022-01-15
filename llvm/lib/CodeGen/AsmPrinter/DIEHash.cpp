@@ -12,14 +12,15 @@
 
 #include "DIEHash.h"
 #include "ByteStreamer.h"
-#include "DwarfCompileUnit.h"
 #include "DwarfDebug.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/CodeGen/AsmPrinter.h"
+#include "llvm/CodeGen/DIE.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Support/MD5.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -215,15 +216,7 @@ void DIEHash::hashDIEEntry(dwarf::Attribute Attribute, dwarf::Tag Tag,
 // all of the data is going to be added as integers.
 void DIEHash::hashBlockData(const DIE::const_value_range &Values) {
   for (const auto &V : Values)
-    if (V.getType() == DIEValue::isBaseTypeRef) {
-      const DIE &C =
-          *CU->ExprRefedBaseTypes[V.getDIEBaseTypeRef().getIndex()].Die;
-      StringRef Name = getDIEStringAttr(C, dwarf::DW_AT_name);
-      assert(!Name.empty() &&
-             "Base types referenced from DW_OP_convert should have a name");
-      hashNestedType(C, Name);
-    } else
-      Hash.update((uint64_t)V.getDIEInteger().getValue());
+    Hash.update((uint64_t)V.getDIEInteger().getValue());
 }
 
 // Hash the contents of a loclistptr class.
@@ -231,9 +224,8 @@ void DIEHash::hashLocList(const DIELocList &LocList) {
   HashingByteStreamer Streamer(*this);
   DwarfDebug &DD = *AP->getDwarfDebug();
   const DebugLocStream &Locs = DD.getDebugLocs();
-  const DebugLocStream::List &List = Locs.getList(LocList.getValue());
-  for (const DebugLocStream::Entry &Entry : Locs.getEntries(List))
-    DD.emitDebugLocEntry(Streamer, Entry, List.CU);
+  for (const auto &Entry : Locs.getEntries(Locs.getList(LocList.getValue())))
+    DD.emitDebugLocEntry(Streamer, Entry, nullptr);
 }
 
 // Hash an individual attribute \param Attr based on the type of attribute and
@@ -319,7 +311,6 @@ void DIEHash::hashAttribute(const DIEValue &Value, dwarf::Tag Tag) {
   case DIEValue::isLabel:
   case DIEValue::isBaseTypeRef:
   case DIEValue::isDelta:
-  case DIEValue::isAddrOffset:
     llvm_unreachable("Add support for additional value types.");
   }
 }
@@ -370,7 +361,7 @@ void DIEHash::computeHash(const DIE &Die) {
   for (auto &C : Die.children()) {
     // 7.27 Step 7
     // If C is a nested type entry or a member function entry, ...
-    if (isType(C.getTag()) || (C.getTag() == dwarf::DW_TAG_subprogram && isType(C.getParent()->getTag()))) {
+    if (isType(C.getTag()) || C.getTag() == dwarf::DW_TAG_subprogram) {
       StringRef Name = getDIEStringAttr(C, dwarf::DW_AT_name);
       // ... and has a DW_AT_name attribute
       if (!Name.empty()) {

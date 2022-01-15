@@ -11,14 +11,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "index/Index.h"
-#include "index/Relation.h"
+#include "SourceCode.h"
 #include "index/Serialization.h"
 #include "index/dex/Dex.h"
-#include "index/remote/Client.h"
-#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/LineEditor/LineEditor.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Signals.h"
@@ -27,27 +25,15 @@ namespace clang {
 namespace clangd {
 namespace {
 
-llvm::cl::opt<std::string> IndexLocation(
-    llvm::cl::desc("<path to index file | remote:server.address>"),
-    llvm::cl::Positional);
+llvm::cl::opt<std::string> IndexPath("index-path",
+                                     llvm::cl::desc("Path to the index"),
+                                     llvm::cl::Positional, llvm::cl::Required);
 
-llvm::cl::opt<std::string>
-    ExecCommand("c", llvm::cl::desc("Command to execute and then exit."));
-
-llvm::cl::opt<std::string> ProjectRoot(
-    "project-root",
-    llvm::cl::desc(
-        "Path to the project. Required when connecting using remote index."));
-
-static constexpr char Overview[] = R"(
+static const std::string Overview = R"(
 This is an **experimental** interactive tool to process user-provided search
 queries over given symbol collection obtained via clangd-indexer. The
 tool can be used to evaluate search quality of existing index implementations
 and manually construct non-trivial test cases.
-
-You can connect to remote index by passing remote:address to dexp. Example:
-
-$ dexp remote:0.0.0.0:9000
 
 Type use "help" request to get information about the details.
 )";
@@ -69,13 +55,13 @@ std::vector<SymbolID> getSymbolIDsFromIndex(llvm::StringRef QualifiedName,
   bool IsGlobalScope = QualifiedName.consume_front("::");
   auto Names = splitQualifiedName(QualifiedName);
   if (IsGlobalScope || !Names.first.empty())
-    Request.Scopes = {std::string(Names.first)};
+    Request.Scopes = {Names.first};
   else
     // QualifiedName refers to a symbol in global scope (e.g. "GlobalSymbol"),
     // add the global scope to the request.
     Request.Scopes = {""};
 
-  Request.Query = std::string(Names.second);
+  Request.Query = Names.second;
   std::vector<SymbolID> SymIDs;
   Index->fuzzyFind(Request, [&](const Symbol &Sym) {
     std::string SymQualifiedName = (Sym.Scope + Sym.Name).str();
@@ -91,8 +77,7 @@ class Command {
   // By resetting the parser options, we lost the standard -help flag.
   llvm::cl::opt<bool, false, llvm::cl::parser<bool>> Help{
       "help", llvm::cl::desc("Display available options"),
-      llvm::cl::ValueDisallowed, llvm::cl::cat(llvm::cl::getGeneralCategory())};
-  // FIXME: Allow commands to signal failure.
+      llvm::cl::ValueDisallowed, llvm::cl::cat(llvm::cl::GeneralCategory)};
   virtual void run() = 0;
 
 protected:
@@ -100,27 +85,25 @@ protected:
 
 public:
   virtual ~Command() = default;
-  bool parseAndRun(llvm::ArrayRef<const char *> Argv, const char *Overview,
-                   const SymbolIndex &Index) {
+  virtual void parseAndRun(llvm::ArrayRef<const char *> Argv,
+                           const char *Overview, const SymbolIndex &Index) {
     std::string ParseErrs;
     llvm::raw_string_ostream OS(ParseErrs);
     bool Ok = llvm::cl::ParseCommandLineOptions(Argv.size(), Argv.data(),
                                                 Overview, &OS);
-    // must do this before opts are destroyed
-    auto Cleanup = llvm::make_scope_exit(llvm::cl::ResetCommandLineParser);
     if (Help.getNumOccurrences() > 0) {
       // Avoid printing parse errors in this case.
       // (Well, in theory. A bunch get printed to llvm::errs() regardless!)
       llvm::cl::PrintHelpMessage();
-      return true;
+    } else {
+      llvm::outs() << OS.str();
+      if (Ok) {
+        this->Index = &Index;
+        reportTime(Argv[0], [&] { run(); });
+      }
     }
-
-    llvm::outs() << OS.str();
-    if (Ok) {
-      this->Index = &Index;
-      reportTime(Argv[0], [&] { run(); });
-    }
-    return Ok;
+    llvm::cl::ResetCommandLineParser(); // must do this before opts are
+                                        // destroyed.
   }
 };
 
@@ -155,13 +138,13 @@ class FuzzyFind : public Command {
     Request.Limit = Limit;
     Request.Query = Query;
     if (Scopes.getNumOccurrences() > 0) {
-      llvm::SmallVector<llvm::StringRef> Scopes;
+      llvm::SmallVector<llvm::StringRef, 8> Scopes;
       llvm::StringRef(this->Scopes).split(Scopes, ',');
       Request.Scopes = {Scopes.begin(), Scopes.end()};
     }
     Request.AnyScope = Request.Scopes.empty();
     // FIXME(kbobyrev): Print symbol final scores to see the distribution.
-    static const auto *OutputFormat = "{0,-4} | {1,-40} | {2,-25}\n";
+    static const auto OutputFormat = "{0,-4} | {1,-40} | {2,-25}\n";
     llvm::outs() << llvm::formatv(OutputFormat, "Rank", "Symbol ID",
                                   "Symbol Name");
     size_t Rank = 0;
@@ -185,7 +168,7 @@ class Lookup : public Command {
 
   void run() override {
     if (ID.getNumOccurrences() == 0 && Name.getNumOccurrences() == 0) {
-      llvm::errs()
+      llvm::outs()
           << "Missing required argument: please provide id or -name.\n";
       return;
     }
@@ -193,7 +176,7 @@ class Lookup : public Command {
     if (ID.getNumOccurrences()) {
       auto SID = SymbolID::fromStr(ID);
       if (!SID) {
-        llvm::errs() << llvm::toString(SID.takeError()) << "\n";
+        llvm::outs() << llvm::toString(SID.takeError()) << "\n";
         return;
       }
       IDs.push_back(*SID);
@@ -209,7 +192,7 @@ class Lookup : public Command {
       llvm::outs() << toYAML(Sym);
     });
     if (!FoundSymbol)
-      llvm::errs() << "not found\n";
+      llvm::outs() << "not found\n";
   }
 };
 
@@ -232,7 +215,7 @@ class Refs : public Command {
 
   void run() override {
     if (ID.getNumOccurrences() == 0 && Name.getNumOccurrences() == 0) {
-      llvm::errs()
+      llvm::outs()
           << "Missing required argument: please provide id or -name.\n";
       return;
     }
@@ -240,14 +223,14 @@ class Refs : public Command {
     if (ID.getNumOccurrences()) {
       auto SID = SymbolID::fromStr(ID);
       if (!SID) {
-        llvm::errs() << llvm::toString(SID.takeError()) << "\n";
+        llvm::outs() << llvm::toString(SID.takeError()) << "\n";
         return;
       }
       IDs.push_back(*SID);
     } else {
       IDs = getSymbolIDsFromIndex(Name, Index);
       if (IDs.size() > 1) {
-        llvm::errs() << llvm::formatv(
+        llvm::outs() << llvm::formatv(
             "The name {0} is ambiguous, found {1} different "
             "symbols. Please use id flag to disambiguate.\n",
             Name, IDs.size());
@@ -260,7 +243,7 @@ class Refs : public Command {
     Index->refs(RefRequest, [&RegexFilter](const Ref &R) {
       auto U = URI::parse(R.Location.FileURI);
       if (!U) {
-        llvm::errs() << U.takeError();
+        llvm::outs() << U.takeError();
         return;
       }
       if (RegexFilter.match(U->body()))
@@ -269,140 +252,20 @@ class Refs : public Command {
   }
 };
 
-class Relations : public Command {
-  llvm::cl::opt<std::string> ID{
-      "id",
-      llvm::cl::Positional,
-      llvm::cl::desc("Symbol ID of the symbol being queried (hex)."),
-  };
-  llvm::cl::opt<RelationKind> Relation{
-      "relation",
-      llvm::cl::desc("Relation kind for the predicate."),
-      values(clEnumValN(RelationKind::BaseOf, "base_of",
-                        "Find subclasses of a class."),
-             clEnumValN(RelationKind::OverriddenBy, "overridden_by",
-                        "Find methods that overrides a virtual method.")),
-  };
-
-  void run() override {
-    if (ID.getNumOccurrences() == 0 || Relation.getNumOccurrences() == 0) {
-      llvm::errs()
-          << "Missing required argument: please provide id and -relation.\n";
-      return;
-    }
-    RelationsRequest Req;
-    if (ID.getNumOccurrences()) {
-      auto SID = SymbolID::fromStr(ID);
-      if (!SID) {
-        llvm::errs() << llvm::toString(SID.takeError()) << "\n";
-        return;
-      }
-      Req.Subjects.insert(*SID);
-    }
-    Req.Predicate = Relation.getValue();
-    Index->relations(Req, [](const SymbolID &SID, const Symbol &S) {
-      llvm::outs() << toYAML(S);
-    });
-  }
-};
-
-class Export : public Command {
-  llvm::cl::opt<IndexFileFormat> Format{
-      "format",
-      llvm::cl::desc("Format of index export"),
-      llvm::cl::values(
-          clEnumValN(IndexFileFormat::YAML, "yaml",
-                     "human-readable YAML format"),
-          clEnumValN(IndexFileFormat::RIFF, "binary", "binary RIFF format")),
-      llvm::cl::init(IndexFileFormat::YAML),
-  };
-  llvm::cl::opt<std::string> OutputFile{
-      "output-file",
-      llvm::cl::Positional,
-      llvm::cl::Required,
-      llvm::cl::desc("Output file for export"),
-  };
-
-public:
-  void run() override {
-    using namespace clang::clangd;
-    // Read input file (as specified in global option)
-    auto Buffer = llvm::MemoryBuffer::getFile(IndexLocation);
-    if (!Buffer) {
-      llvm::errs() << llvm::formatv("Can't open {0}", IndexLocation) << "\n";
-      return;
-    }
-
-    // Auto-detects input format when parsing
-    auto IndexIn = clang::clangd::readIndexFile(Buffer->get()->getBuffer());
-    if (!IndexIn) {
-      llvm::errs() << llvm::toString(IndexIn.takeError()) << "\n";
-      return;
-    }
-
-    // Prepare output file
-    std::error_code EC;
-    llvm::raw_fd_ostream OutputStream(OutputFile, EC);
-    if (EC) {
-      llvm::errs() << llvm::formatv("Can't open {0} for writing", OutputFile)
-                   << "\n";
-      return;
-    }
-
-    // Export
-    clang::clangd::IndexFileOut IndexOut(IndexIn.get());
-    IndexOut.Format = Format;
-    OutputStream << IndexOut;
-  }
-};
-
 struct {
   const char *Name;
   const char *Description;
   std::function<std::unique_ptr<Command>()> Implementation;
 } CommandInfo[] = {
-    {"find", "Search for symbols with fuzzyFind", std::make_unique<FuzzyFind>},
+    {"find", "Search for symbols with fuzzyFind", llvm::make_unique<FuzzyFind>},
     {"lookup", "Dump symbol details by ID or qualified name",
-     std::make_unique<Lookup>},
-    {"refs", "Find references by ID or qualified name", std::make_unique<Refs>},
-    {"relations", "Find relations by ID and relation kind",
-     std::make_unique<Relations>},
-    {"export", "Export index", std::make_unique<Export>},
+     llvm::make_unique<Lookup>},
+    {"refs", "Find references by ID or qualified name",
+     llvm::make_unique<Refs>},
 };
 
 std::unique_ptr<SymbolIndex> openIndex(llvm::StringRef Index) {
-  return Index.startswith("remote:")
-             ? remote::getClient(Index.drop_front(strlen("remote:")),
-                                 ProjectRoot)
-             : loadIndex(Index, /*UseDex=*/true);
-}
-
-bool runCommand(std::string Request, const SymbolIndex &Index) {
-  // Split on spaces and add required null-termination.
-  std::replace(Request.begin(), Request.end(), ' ', '\0');
-  llvm::SmallVector<llvm::StringRef> Args;
-  llvm::StringRef(Request).split(Args, '\0', /*MaxSplit=*/-1,
-                                 /*KeepEmpty=*/false);
-  if (Args.empty())
-    return false;
-  if (Args.front() == "help") {
-    llvm::outs() << "dexp - Index explorer\nCommands:\n";
-    for (const auto &C : CommandInfo)
-      llvm::outs() << llvm::formatv("{0,16} - {1}\n", C.Name, C.Description);
-    llvm::outs() << "Get detailed command help with e.g. `find -help`.\n";
-    return true;
-  }
-  llvm::SmallVector<const char *> FakeArgv;
-  for (llvm::StringRef S : Args)
-    FakeArgv.push_back(S.data()); // Terminated by separator or end of string.
-
-  for (const auto &Cmd : CommandInfo) {
-    if (Cmd.Name == Args.front())
-      return Cmd.Implementation()->parseAndRun(FakeArgv, Cmd.Description,
-                                               Index);
-  }
-  llvm::errs() << "Unknown command. Try 'help'.\n";
-  return false;
+  return loadIndex(Index, /*UseDex=*/true);
 }
 
 } // namespace
@@ -416,25 +279,48 @@ int main(int argc, const char *argv[]) {
   llvm::cl::ResetCommandLineParser(); // We reuse it for REPL commands.
   llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
 
-  bool RemoteMode = llvm::StringRef(IndexLocation).startswith("remote:");
-  if (RemoteMode && ProjectRoot.empty()) {
-    llvm::errs() << "--project-root is required in remote mode\n";
-    return -1;
-  }
-
   std::unique_ptr<SymbolIndex> Index;
-  reportTime(RemoteMode ? "Remote index client creation" : "Dex build",
-             [&]() { Index = openIndex(IndexLocation); });
+  reportTime("Dex build", [&]() {
+    Index = openIndex(IndexPath);
+  });
 
   if (!Index) {
-    llvm::errs() << "Failed to open the index.\n";
+    llvm::outs() << "Failed to open the index.\n";
     return -1;
   }
 
-  if (!ExecCommand.empty())
-    return runCommand(ExecCommand, *Index) ? 0 : 1;
-
   llvm::LineEditor LE("dexp");
-  while (llvm::Optional<std::string> Request = LE.readLine())
-    runCommand(std::move(*Request), *Index);
+
+  while (llvm::Optional<std::string> Request = LE.readLine()) {
+    // Split on spaces and add required null-termination.
+    std::replace(Request->begin(), Request->end(), ' ', '\0');
+    llvm::SmallVector<llvm::StringRef, 8> Args;
+    llvm::StringRef(*Request).split(Args, '\0', /*MaxSplit=*/-1,
+                                    /*KeepEmpty=*/false);
+    if (Args.empty())
+      continue;
+    if (Args.front() == "help") {
+      llvm::outs() << "dexp - Index explorer\nCommands:\n";
+      for (const auto &C : CommandInfo)
+        llvm::outs() << llvm::formatv("{0,16} - {1}\n", C.Name, C.Description);
+      llvm::outs() << "Get detailed command help with e.g. `find -help`.\n";
+      continue;
+    }
+    llvm::SmallVector<const char *, 8> FakeArgv;
+    for (llvm::StringRef S : Args)
+      FakeArgv.push_back(S.data()); // Terminated by separator or end of string.
+
+    bool Recognized = false;
+    for (const auto &Cmd : CommandInfo) {
+      if (Cmd.Name == Args.front()) {
+        Recognized = true;
+        Cmd.Implementation()->parseAndRun(FakeArgv, Cmd.Description, *Index);
+        break;
+      }
+    }
+    if (!Recognized)
+      llvm::outs() << "Unknown command. Try 'help'.\n";
+  }
+
+  return 0;
 }

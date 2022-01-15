@@ -2,6 +2,7 @@
 
 ; Test that basic 32-bit floating-point operations assemble as expected.
 
+target datalayout = "e-m:e-p:32:32-i64:64-n32:64-S128"
 target triple = "wasm32-unknown-unknown"
 
 declare float @llvm.fabs.f32(float)
@@ -176,7 +177,7 @@ define float @fmaxnum32_intrinsic(float %x, float %y) {
 }
 
 ; CHECK-LABEL: fma32:
-; CHECK: {{^}} call $push[[LR:[0-9]+]]=, fmaf, $pop{{[0-9]+}}, $pop{{[0-9]+}}, $pop{{[0-9]+}}{{$}}
+; CHECK: {{^}} f32.call $push[[LR:[0-9]+]]=, fmaf, $pop{{[0-9]+}}, $pop{{[0-9]+}}, $pop{{[0-9]+}}{{$}}
 ; CHECK-NEXT: return $pop[[LR]]{{$}}
 define float @fma32(float %a, float %b, float %c) {
   %d = call float @llvm.fma.f32(float %a, float %b, float %c)

@@ -10,15 +10,11 @@
 #define LLVM_DEBUGINFO_PDB_NATIVE_SYMBOLCACHE_H
 
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/IntervalMap.h"
-#include "llvm/DebugInfo/CodeView/Line.h"
-#include "llvm/DebugInfo/CodeView/SymbolRecord.h"
 #include "llvm/DebugInfo/CodeView/TypeDeserializer.h"
 #include "llvm/DebugInfo/CodeView/TypeIndex.h"
 #include "llvm/DebugInfo/CodeView/TypeRecord.h"
-#include "llvm/DebugInfo/PDB/Native/ModuleDebugStream.h"
 #include "llvm/DebugInfo/PDB/Native/NativeRawSymbol.h"
-#include "llvm/DebugInfo/PDB/Native/NativeSourceFile.h"
+#include "llvm/Support/Allocator.h"
 
 #include <memory>
 #include <vector>
@@ -37,53 +33,26 @@ class SymbolCache {
   /// an Id.  Id allocation is an implementation, with the only guarantee
   /// being that once an Id is allocated, the symbol can be assumed to be
   /// cached.
-  mutable std::vector<std::unique_ptr<NativeRawSymbol>> Cache;
+  std::vector<std::unique_ptr<NativeRawSymbol>> Cache;
 
   /// For type records from the TPI stream which have been paresd and cached,
   /// stores a mapping to SymIndexId of the cached symbol.
-  mutable DenseMap<codeview::TypeIndex, SymIndexId> TypeIndexToSymbolId;
+  DenseMap<codeview::TypeIndex, SymIndexId> TypeIndexToSymbolId;
 
   /// For field list members which have been parsed and cached, stores a mapping
   /// from (IndexOfClass, MemberIndex) to the corresponding SymIndexId of the
   /// cached symbol.
-  mutable DenseMap<std::pair<codeview::TypeIndex, uint32_t>, SymIndexId>
+  DenseMap<std::pair<codeview::TypeIndex, uint32_t>, SymIndexId>
       FieldListMembersToSymbolId;
 
   /// List of SymIndexIds for each compiland, indexed by compiland index as they
   /// appear in the PDB file.
-  mutable std::vector<SymIndexId> Compilands;
-
-  /// List of source files, indexed by unique source file index.
-  mutable std::vector<std::unique_ptr<NativeSourceFile>> SourceFiles;
-
-  /// Map from string table offset to source file Id.
-  mutable DenseMap<uint32_t, SymIndexId> FileNameOffsetToId;
+  std::vector<SymIndexId> Compilands;
 
   /// Map from global symbol offset to SymIndexId.
-  mutable DenseMap<uint32_t, SymIndexId> GlobalOffsetToSymbolId;
+  DenseMap<uint32_t, SymIndexId> GlobalOffsetToSymbolId;
 
-  /// Map from segment and code offset to function symbols.
-  mutable DenseMap<std::pair<uint32_t, uint32_t>, SymIndexId> AddressToSymbolId;
-  /// Map from segment and code offset to public symbols.
-  mutable DenseMap<std::pair<uint32_t, uint32_t>, SymIndexId>
-      AddressToPublicSymId;
-
-  /// Map from module index and symbol table offset to SymIndexId.
-  mutable DenseMap<std::pair<uint16_t, uint32_t>, SymIndexId>
-      SymTabOffsetToSymbolId;
-
-  struct LineTableEntry {
-    uint64_t Addr;
-    codeview::LineInfo Line;
-    uint32_t ColumnNumber;
-    uint32_t FileNameIndex;
-    bool IsTerminalEntry;
-  };
-
-  std::vector<LineTableEntry> findLineTable(uint16_t Modi) const;
-  mutable DenseMap<uint16_t, std::vector<LineTableEntry>> LineTable;
-
-  SymIndexId createSymbolPlaceholder() const {
+  SymIndexId createSymbolPlaceholder() {
     SymIndexId Id = Cache.size();
     Cache.push_back(nullptr);
     return Id;
@@ -91,7 +60,7 @@ class SymbolCache {
 
   template <typename ConcreteSymbolT, typename CVRecordT, typename... Args>
   SymIndexId createSymbolForType(codeview::TypeIndex TI, codeview::CVType CVT,
-                                 Args &&...ConstructorArgs) const {
+                                 Args &&... ConstructorArgs) {
     CVRecordT Record;
     if (auto EC =
             codeview::TypeDeserializer::deserializeAs<CVRecordT>(CVT, Record)) {
@@ -104,26 +73,21 @@ class SymbolCache {
   }
 
   SymIndexId createSymbolForModifiedType(codeview::TypeIndex ModifierTI,
-                                         codeview::CVType CVT) const;
+                                         codeview::CVType CVT);
 
   SymIndexId createSimpleType(codeview::TypeIndex TI,
-                              codeview::ModifierOptions Mods) const;
-
-  std::unique_ptr<PDBSymbol> findFunctionSymbolBySectOffset(uint32_t Sect,
-                                                            uint32_t Offset);
-  std::unique_ptr<PDBSymbol> findPublicSymbolBySectOffset(uint32_t Sect,
-                                                          uint32_t Offset);
+                              codeview::ModifierOptions Mods);
 
 public:
   SymbolCache(NativeSession &Session, DbiStream *Dbi);
 
   template <typename ConcreteSymbolT, typename... Args>
-  SymIndexId createSymbol(Args &&...ConstructorArgs) const {
+  SymIndexId createSymbol(Args &&... ConstructorArgs) {
     SymIndexId Id = Cache.size();
 
     // Initial construction must not access the cache, since it must be done
     // atomically.
-    auto Result = std::make_unique<ConcreteSymbolT>(
+    auto Result = llvm::make_unique<ConcreteSymbolT>(
         Session, Id, std::forward<Args>(ConstructorArgs)...);
     Result->SymbolId = Id;
 
@@ -145,7 +109,7 @@ public:
   std::unique_ptr<IPDBEnumSymbols>
   createGlobalsEnumerator(codeview::SymbolKind Kind);
 
-  SymIndexId findSymbolByTypeIndex(codeview::TypeIndex TI) const;
+  SymIndexId findSymbolByTypeIndex(codeview::TypeIndex TI);
 
   template <typename ConcreteSymbolT, typename... Args>
   SymIndexId getOrCreateFieldListMember(codeview::TypeIndex FieldListTI,
@@ -163,15 +127,6 @@ public:
   }
 
   SymIndexId getOrCreateGlobalSymbolByOffset(uint32_t Offset);
-  SymIndexId getOrCreateInlineSymbol(codeview::InlineSiteSym Sym,
-                                     uint64_t ParentAddr, uint16_t Modi,
-                                     uint32_t RecordOffset) const;
-
-  std::unique_ptr<PDBSymbol>
-  findSymbolBySectOffset(uint32_t Sect, uint32_t Offset, PDB_SymType Type);
-
-  std::unique_ptr<IPDBEnumLineNumbers>
-  findLineNumbersByVA(uint64_t VA, uint32_t Length) const;
 
   std::unique_ptr<PDBSymbolCompiland> getOrCreateCompiland(uint32_t Index);
   uint32_t getNumCompilands() const;
@@ -184,10 +139,6 @@ public:
   ConcreteT &getNativeSymbolById(SymIndexId SymbolId) const {
     return static_cast<ConcreteT &>(getNativeSymbolById(SymbolId));
   }
-
-  std::unique_ptr<IPDBSourceFile> getSourceFileById(SymIndexId FileId) const;
-  SymIndexId
-  getOrCreateSourceFile(const codeview::FileChecksumEntry &Checksum) const;
 };
 
 } // namespace pdb

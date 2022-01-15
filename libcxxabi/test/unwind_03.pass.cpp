@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: no-exceptions
-// REQUIRES: c++03 || c++11 || c++14
+// UNSUPPORTED: libcxxabi-no-exceptions
+// REQUIRES: c++98 || c++03 || c++11 || c++14
 
 #include <exception>
 #include <stdlib.h>
@@ -15,7 +15,6 @@
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic ignored "-Wunreachable-code"
-#pragma GCC diagnostic ignored "-Wdeprecated" // dynamic exception specifications are deprecated
 #endif
 
 struct A
@@ -81,7 +80,7 @@ void u_handler()
     exit(0);
 }
 
-int main(int, char**)
+int main()
 {
     std::set_unexpected(u_handler);
     try
@@ -106,6 +105,4 @@ int main(int, char**)
         assert(false);
     }
     assert(false);
-
-    return 0;
 }

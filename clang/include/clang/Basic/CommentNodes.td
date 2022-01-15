@@ -1,27 +1,27 @@
-include "clang/Basic/ASTNode.td"
-
-class CommentNode<CommentNode base, bit abstract = 0> : ASTNode {
-  CommentNode Base = base;
+class Comment<bit abstract = 0> {
   bit Abstract = abstract;
 }
 
-def Comment : CommentNode<?, 1>;
-def InlineContentComment : CommentNode<Comment, 1>;
-  def TextComment : CommentNode<InlineContentComment>;
-  def InlineCommandComment : CommentNode<InlineContentComment>;
-  def HTMLTagComment : CommentNode<InlineContentComment, 1>;
-    def HTMLStartTagComment : CommentNode<HTMLTagComment>;
-    def HTMLEndTagComment : CommentNode<HTMLTagComment>;
+class DComment<Comment base, bit abstract = 0> : Comment<abstract> {
+  Comment Base = base;
+}
 
-def BlockContentComment : CommentNode<Comment, 1>;
-  def ParagraphComment : CommentNode<BlockContentComment>;
-  def BlockCommandComment : CommentNode<BlockContentComment>;
-    def ParamCommandComment : CommentNode<BlockCommandComment>;
-    def TParamCommandComment : CommentNode<BlockCommandComment>;
-    def VerbatimBlockComment : CommentNode<BlockCommandComment>;
-    def VerbatimLineComment : CommentNode<BlockCommandComment>;
+def InlineContentComment : Comment<1>;
+  def TextComment : DComment<InlineContentComment>;
+  def InlineCommandComment : DComment<InlineContentComment>;
+  def HTMLTagComment : DComment<InlineContentComment, 1>;
+    def HTMLStartTagComment : DComment<HTMLTagComment>;
+    def HTMLEndTagComment : DComment<HTMLTagComment>;
 
-def VerbatimBlockLineComment : CommentNode<Comment>;
+def BlockContentComment : Comment<1>;
+  def ParagraphComment : DComment<BlockContentComment>;
+  def BlockCommandComment : DComment<BlockContentComment>;
+    def ParamCommandComment : DComment<BlockCommandComment>;
+    def TParamCommandComment : DComment<BlockCommandComment>;
+    def VerbatimBlockComment : DComment<BlockCommandComment>;
+    def VerbatimLineComment : DComment<BlockCommandComment>;
 
-def FullComment : CommentNode<Comment>;
+def VerbatimBlockLineComment : Comment;
+
+def FullComment : Comment;
 

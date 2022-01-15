@@ -13,11 +13,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/IR/OptBisect.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <limits>
+#include <string>
 
 using namespace llvm;
 
@@ -52,5 +54,3 @@ bool OptBisect::checkPass(const StringRef PassName,
   printPassMessage(PassName, CurBisectNum, TargetDesc, ShouldRun);
   return ShouldRun;
 }
-
-ManagedStatic<OptBisect> llvm::OptBisector;

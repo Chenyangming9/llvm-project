@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 #include "support/pstl_test_config.h"
 
@@ -74,8 +74,8 @@ struct compare<wrapper<T>>
 struct test_one_policy
 {
 
-#if defined(_PSTL_ICC_17_VC141_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN) ||                                                             \
-    defined(_PSTL_ICC_16_VC14_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN) // dummy specializations to skip testing in case of broken configuration
+#if _PSTL_ICC_17_VC141_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN ||                                                            \
+    _PSTL_ICC_16_VC14_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN // dummy specializations to skip testing in case of broken configuration
     template <typename Iterator, typename Size>
     void
     operator()(pstl::execution::unsequenced_policy, Iterator data_b, Iterator data_e, Iterator actual_b,
@@ -162,14 +162,11 @@ test()
     }
 }
 
-int
+int32_t
 main()
 {
     test<int32_t>();
     test<wrapper<float64_t>>();
-    test<MemoryChecker>();
-    EXPECT_FALSE(MemoryChecker::alive_objects() < 0, "wrong effect from rotate: number of ctors calls < num of dtors calls");
-    EXPECT_FALSE(MemoryChecker::alive_objects() > 0, "wrong effect from rotate: number of ctors calls > num of dtors calls");
 
     std::cout << done() << std::endl;
     return 0;

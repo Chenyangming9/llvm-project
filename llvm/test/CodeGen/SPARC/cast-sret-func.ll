@@ -10,7 +10,7 @@ define void @test() nounwind {
 entry:
   %tmp = alloca %struct, align 4
   call void bitcast (void ()* @func to void (%struct*)*)
-    (%struct* nonnull sret(%struct) %tmp)
+    (%struct* nonnull sret %tmp)
   ret void
 }
 

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PLATFORM_FREEBSD_PLATFORMFREEBSD_H
-#define LLDB_SOURCE_PLUGINS_PLATFORM_FREEBSD_PLATFORMFREEBSD_H
+#ifndef liblldb_PlatformFreeBSD_h_
+#define liblldb_PlatformFreeBSD_h_
 
 #include "Plugins/Platform/POSIX/PlatformPOSIX.h"
 
@@ -17,6 +17,8 @@ namespace platform_freebsd {
 class PlatformFreeBSD : public PlatformPOSIX {
 public:
   PlatformFreeBSD(bool is_host);
+
+  ~PlatformFreeBSD() override;
 
   static void Initialize();
 
@@ -44,15 +46,26 @@ public:
 
   bool CanDebugProcess() override;
 
+  size_t GetSoftwareBreakpointTrapOpcode(Target &target,
+                                         BreakpointSite *bp_site) override;
+
+  Status LaunchProcess(ProcessLaunchInfo &launch_info) override;
+
+  lldb::ProcessSP Attach(ProcessAttachInfo &attach_info, Debugger &debugger,
+                         Target *target, Status &error) override;
+
   void CalculateTrapHandlerSymbolNames() override;
 
   MmapArgList GetMmapArgumentList(const ArchSpec &arch, lldb::addr_t addr,
                                   lldb::addr_t length, unsigned prot,
                                   unsigned flags, lldb::addr_t fd,
                                   lldb::addr_t offset) override;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(PlatformFreeBSD);
 };
 
 } // namespace platform_freebsd
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_PLATFORM_FREEBSD_PLATFORMFREEBSD_H
+#endif // liblldb_PlatformFreeBSD_h_

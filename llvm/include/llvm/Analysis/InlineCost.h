@@ -15,7 +15,6 @@
 
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/CallGraphSCCPass.h"
-#include "llvm/Analysis/InlineModelFeatureMaps.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include <cassert>
 #include <climits>
@@ -28,7 +27,6 @@ class DataLayout;
 class Function;
 class ProfileSummaryInfo;
 class TargetTransformInfo;
-class TargetLibraryInfo;
 
 namespace InlineConstants {
 // Various thresholds used by inline cost analysis.
@@ -44,30 +42,13 @@ const int OptAggressiveThreshold = 250;
 // Various magic constants used to adjust heuristics.
 const int InstrCost = 5;
 const int IndirectCallThreshold = 100;
-const int LoopPenalty = 25;
+const int CallPenalty = 25;
 const int LastCallToStaticBonus = 15000;
 const int ColdccPenalty = 2000;
 /// Do not inline functions which allocate this many bytes on the stack
 /// when the caller is recursive.
 const unsigned TotalAllocaSizeRecursiveCaller = 1024;
-/// Do not inline dynamic allocas that have been constant propagated to be
-/// static allocas above this amount in bytes.
-const uint64_t MaxSimplifiedDynamicAllocaToInline = 65536;
-} // namespace InlineConstants
-
-// The cost-benefit pair computed by cost-benefit analysis.
-class CostBenefitPair {
-public:
-  CostBenefitPair(APInt Cost, APInt Benefit) : Cost(Cost), Benefit(Benefit) {}
-
-  const APInt &getCost() const { return Cost; }
-
-  const APInt &getBenefit() const { return Benefit; }
-
-private:
-  APInt Cost;
-  APInt Benefit;
-};
+}
 
 /// Represents the cost of inlining a function.
 ///
@@ -80,25 +61,23 @@ private:
 /// directly tested to determine if inlining should occur given the cost and
 /// threshold for this cost metric.
 class InlineCost {
-  enum SentinelValues { AlwaysInlineCost = INT_MIN, NeverInlineCost = INT_MAX };
+  enum SentinelValues {
+    AlwaysInlineCost = INT_MIN,
+    NeverInlineCost = INT_MAX
+  };
 
   /// The estimated cost of inlining this callsite.
-  int Cost = 0;
+  int Cost;
 
   /// The adjusted threshold against which this cost was computed.
-  int Threshold = 0;
+  int Threshold;
 
   /// Must be set for Always and Never instances.
   const char *Reason = nullptr;
 
-  /// The cost-benefit pair computed by cost-benefit analysis.
-  Optional<CostBenefitPair> CostBenefit = None;
-
   // Trivial constructor, interesting logic in the factory functions below.
-  InlineCost(int Cost, int Threshold, const char *Reason = nullptr,
-             Optional<CostBenefitPair> CostBenefit = None)
-      : Cost(Cost), Threshold(Threshold), Reason(Reason),
-        CostBenefit(CostBenefit) {
+  InlineCost(int Cost, int Threshold, const char *Reason = nullptr)
+      : Cost(Cost), Threshold(Threshold), Reason(Reason) {
     assert((isVariable() || Reason) &&
            "Reason must be provided for Never or Always");
   }
@@ -109,17 +88,17 @@ public:
     assert(Cost < NeverInlineCost && "Cost crosses sentinel value");
     return InlineCost(Cost, Threshold);
   }
-  static InlineCost getAlways(const char *Reason,
-                              Optional<CostBenefitPair> CostBenefit = None) {
-    return InlineCost(AlwaysInlineCost, 0, Reason, CostBenefit);
+  static InlineCost getAlways(const char *Reason) {
+    return InlineCost(AlwaysInlineCost, 0, Reason);
   }
-  static InlineCost getNever(const char *Reason,
-                             Optional<CostBenefitPair> CostBenefit = None) {
-    return InlineCost(NeverInlineCost, 0, Reason, CostBenefit);
+  static InlineCost getNever(const char *Reason) {
+    return InlineCost(NeverInlineCost, 0, Reason);
   }
 
   /// Test whether the inline cost is low enough for inlining.
-  explicit operator bool() const { return Cost < Threshold; }
+  explicit operator bool() const {
+    return Cost < Threshold;
+  }
 
   bool isAlways() const { return Cost == AlwaysInlineCost; }
   bool isNever() const { return Cost == NeverInlineCost; }
@@ -138,9 +117,6 @@ public:
     return Threshold;
   }
 
-  /// Get the cost-benefit pair which was computed by cost-benefit analysis
-  Optional<CostBenefitPair> getCostBenefit() const { return CostBenefit; }
-
   /// Get the reason of Always or Never.
   const char *getReason() const {
     assert((Reason || isVariable()) &&
@@ -155,22 +131,14 @@ public:
 };
 
 /// InlineResult is basically true or false. For false results the message
-/// describes a reason.
-class InlineResult {
-  const char *Message = nullptr;
-  InlineResult(const char *Message = nullptr) : Message(Message) {}
-
-public:
-  static InlineResult success() { return {}; }
-  static InlineResult failure(const char *Reason) {
-    return InlineResult(Reason);
-  }
-  bool isSuccess() const { return Message == nullptr; }
-  const char *getFailureReason() const {
-    assert(!isSuccess() &&
-           "getFailureReason should only be called in failure cases");
-    return Message;
-  }
+/// describes a reason why it is decided not to inline.
+struct InlineResult {
+  const char *message = nullptr;
+  InlineResult(bool result, const char *message = nullptr)
+      : message(result ? nullptr : (message ? message : "cost > threshold")) {}
+  InlineResult(const char *message = nullptr) : message(message) {}
+  operator bool() const { return !message; }
+  operator const char *() const { return message; }
 };
 
 /// Thresholds to tune inline cost analysis. The inline cost analysis decides
@@ -184,7 +152,7 @@ public:
 
 struct InlineParams {
   /// The default threshold to start with for a callee.
-  int DefaultThreshold = -1;
+  int DefaultThreshold;
 
   /// Threshold to use for callees with inline hint.
   Optional<int> HintThreshold;
@@ -210,9 +178,6 @@ struct InlineParams {
 
   /// Compute inline cost even when the cost has exceeded the threshold.
   Optional<bool> ComputeFullInlineCost;
-
-  /// Indicate whether we should allow inline deferral.
-  Optional<bool> EnableDeferral = true;
 };
 
 /// Generate the parameters to tune the inline cost analysis based only on the
@@ -247,14 +212,11 @@ int getCallsiteCost(CallBase &Call, const DataLayout &DL);
 ///
 /// Also note that calling this function *dynamically* computes the cost of
 /// inlining the callsite. It is an expensive, heavyweight call.
-InlineCost
-getInlineCost(CallBase &Call, const InlineParams &Params,
-              TargetTransformInfo &CalleeTTI,
-              function_ref<AssumptionCache &(Function &)> GetAssumptionCache,
-              function_ref<const TargetLibraryInfo &(Function &)> GetTLI,
-              function_ref<BlockFrequencyInfo &(Function &)> GetBFI = nullptr,
-              ProfileSummaryInfo *PSI = nullptr,
-              OptimizationRemarkEmitter *ORE = nullptr);
+InlineCost getInlineCost(
+    CallBase &Call, const InlineParams &Params, TargetTransformInfo &CalleeTTI,
+    std::function<AssumptionCache &(Function &)> &GetAssumptionCache,
+    Optional<function_ref<BlockFrequencyInfo &(Function &)>> GetBFI,
+    ProfileSummaryInfo *PSI, OptimizationRemarkEmitter *ORE = nullptr);
 
 /// Get an InlineCost with the callee explicitly specified.
 /// This allows you to calculate the cost of inlining a function via a
@@ -264,60 +226,12 @@ getInlineCost(CallBase &Call, const InlineParams &Params,
 InlineCost
 getInlineCost(CallBase &Call, Function *Callee, const InlineParams &Params,
               TargetTransformInfo &CalleeTTI,
-              function_ref<AssumptionCache &(Function &)> GetAssumptionCache,
-              function_ref<const TargetLibraryInfo &(Function &)> GetTLI,
-              function_ref<BlockFrequencyInfo &(Function &)> GetBFI = nullptr,
-              ProfileSummaryInfo *PSI = nullptr,
-              OptimizationRemarkEmitter *ORE = nullptr);
-
-/// Returns InlineResult::success() if the call site should be always inlined
-/// because of user directives, and the inlining is viable. Returns
-/// InlineResult::failure() if the inlining may never happen because of user
-/// directives or incompatibilities detectable without needing callee traversal.
-/// Otherwise returns None, meaning that inlining should be decided based on
-/// other criteria (e.g. cost modeling).
-Optional<InlineResult> getAttributeBasedInliningDecision(
-    CallBase &Call, Function *Callee, TargetTransformInfo &CalleeTTI,
-    function_ref<const TargetLibraryInfo &(Function &)> GetTLI);
-
-/// Get the cost estimate ignoring thresholds. This is similar to getInlineCost
-/// when passed InlineParams::ComputeFullInlineCost, or a non-null ORE. It
-/// uses default InlineParams otherwise.
-/// Contrary to getInlineCost, which makes a threshold-based final evaluation of
-/// should/shouldn't inline, captured in InlineResult, getInliningCostEstimate
-/// returns:
-/// - None, if the inlining cannot happen (is illegal)
-/// - an integer, representing the cost.
-Optional<int> getInliningCostEstimate(
-    CallBase &Call, TargetTransformInfo &CalleeTTI,
-    function_ref<AssumptionCache &(Function &)> GetAssumptionCache,
-    function_ref<BlockFrequencyInfo &(Function &)> GetBFI = nullptr,
-    ProfileSummaryInfo *PSI = nullptr,
-    OptimizationRemarkEmitter *ORE = nullptr);
-
-/// Get the expanded cost features. The features are returned unconditionally,
-/// even if inlining is impossible.
-Optional<InlineCostFeatures> getInliningCostFeatures(
-    CallBase &Call, TargetTransformInfo &CalleeTTI,
-    function_ref<AssumptionCache &(Function &)> GetAssumptionCache,
-    function_ref<BlockFrequencyInfo &(Function &)> GetBFI = nullptr,
-    ProfileSummaryInfo *PSI = nullptr,
-    OptimizationRemarkEmitter *ORE = nullptr);
+              std::function<AssumptionCache &(Function &)> &GetAssumptionCache,
+              Optional<function_ref<BlockFrequencyInfo &(Function &)>> GetBFI,
+              ProfileSummaryInfo *PSI, OptimizationRemarkEmitter *ORE);
 
 /// Minimal filter to detect invalid constructs for inlining.
 InlineResult isInlineViable(Function &Callee);
-
-// This pass is used to annotate instructions during the inline process for
-// debugging and analysis. The main purpose of the pass is to see and test
-// inliner's decisions when creating new optimizations to InlineCost.
-struct InlineCostAnnotationPrinterPass
-    : PassInfoMixin<InlineCostAnnotationPrinterPass> {
-  raw_ostream &OS;
-
-public:
-  explicit InlineCostAnnotationPrinterPass(raw_ostream &OS) : OS(OS) {}
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
-};
-} // namespace llvm
+}
 
 #endif

@@ -15,7 +15,6 @@
 #define LLVM_IR_INSTRUCTION_H
 
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/Bitfields.h"
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/ilist_node.h"
@@ -23,7 +22,6 @@
 #include "llvm/IR/SymbolTableListTraits.h"
 #include "llvm/IR/User.h"
 #include "llvm/IR/Value.h"
-#include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/Casting.h"
 #include <algorithm>
 #include <cassert>
@@ -47,37 +45,11 @@ class Instruction : public User,
   BasicBlock *Parent;
   DebugLoc DbgLoc;                         // 'dbg' Metadata cache.
 
-  /// Relative order of this instruction in its parent basic block. Used for
-  /// O(1) local dominance checks between instructions.
-  mutable unsigned Order = 0;
-
-protected:
-  // The 15 first bits of `Value::SubclassData` are available for subclasses of
-  // `Instruction` to use.
-  using OpaqueField = Bitfield::Element<uint16_t, 0, 15>;
-
-  // Template alias so that all Instruction storing alignment use the same
-  // definiton.
-  // Valid alignments are powers of two from 2^0 to 2^MaxAlignmentExponent =
-  // 2^29. We store them as Log2(Alignment), so we need 5 bits to encode the 30
-  // possible values.
-  template <unsigned Offset>
-  using AlignmentBitfieldElementT =
-      typename Bitfield::Element<unsigned, Offset, 5,
-                                 Value::MaxAlignmentExponent>;
-
-  template <unsigned Offset>
-  using BoolBitfieldElementT = typename Bitfield::Element<bool, Offset, 1>;
-
-  template <unsigned Offset>
-  using AtomicOrderingBitfieldElementT =
-      typename Bitfield::Element<AtomicOrdering, Offset, 3,
-                                 AtomicOrdering::LAST>;
-
-private:
-  // The last bit is used to store whether the instruction has metadata attached
-  // or not.
-  using HasMetadataField = Bitfield::Element<bool, 15, 1>;
+  enum {
+    /// This is a bit stored in the SubClassData field which indicates whether
+    /// this instruction has metadata attached to it or not.
+    HasMetadataBit = 1 << 15
+  };
 
 protected:
   ~Instruction(); // Use deleteValue() to delete a generic Instruction.
@@ -145,13 +117,6 @@ public:
   /// the basic block that MovePos lives in, right after MovePos.
   void moveAfter(Instruction *MovePos);
 
-  /// Given an instruction Other in the same basic block as this instruction,
-  /// return true if this instruction comes before Other. In this worst case,
-  /// this takes linear time in the number of instructions in the block. The
-  /// results are cached, so in common cases when the block remains unmodified,
-  /// it takes constant time.
-  bool comesBefore(const Instruction *Other) const;
-
   //===--------------------------------------------------------------------===//
   // Subclass classification.
   //===--------------------------------------------------------------------===//
@@ -164,17 +129,12 @@ public:
   bool isUnaryOp() const { return isUnaryOp(getOpcode()); }
   bool isBinaryOp() const { return isBinaryOp(getOpcode()); }
   bool isIntDivRem() const { return isIntDivRem(getOpcode()); }
-  bool isShift() const { return isShift(getOpcode()); }
+  bool isShift() { return isShift(getOpcode()); }
   bool isCast() const { return isCast(getOpcode()); }
   bool isFuncletPad() const { return isFuncletPad(getOpcode()); }
   bool isExceptionalTerminator() const {
     return isExceptionalTerminator(getOpcode());
   }
-
-  /// It checks if this instruction is the only user of at least one of
-  /// its operands.
-  bool isOnlyUserOfAnyOperand();
-
   bool isIndirectTerminator() const {
     return isIndirectTerminator(getOpcode());
   }
@@ -261,20 +221,12 @@ public:
   //===--------------------------------------------------------------------===//
 
   /// Return true if this instruction has any metadata attached to it.
-  bool hasMetadata() const { return DbgLoc || Value::hasMetadata(); }
+  bool hasMetadata() const { return DbgLoc || hasMetadataHashEntry(); }
 
   /// Return true if this instruction has metadata attached to it other than a
   /// debug location.
-  bool hasMetadataOtherThanDebugLoc() const { return Value::hasMetadata(); }
-
-  /// Return true if this instruction has the given type of metadata attached.
-  bool hasMetadata(unsigned KindID) const {
-    return getMetadata(KindID) != nullptr;
-  }
-
-  /// Return true if this instruction has the given type of metadata attached.
-  bool hasMetadata(StringRef Kind) const {
-    return getMetadata(Kind) != nullptr;
+  bool hasMetadataOtherThanDebugLoc() const {
+    return hasMetadataHashEntry();
   }
 
   /// Get the metadata of given kind attached to this Instruction.
@@ -304,7 +256,8 @@ public:
   /// debug location.
   void getAllMetadataOtherThanDebugLoc(
       SmallVectorImpl<std::pair<unsigned, MDNode *>> &MDs) const {
-    Value::getAllMetadata(MDs);
+    if (hasMetadataOtherThanDebugLoc())
+      getAllMetadataOtherThanDebugLocImpl(MDs);
   }
 
   /// Fills the AAMDNodes structure with AA metadata from this instruction.
@@ -332,8 +285,6 @@ public:
   /// @{
   /// Passes are required to drop metadata they don't understand. This is a
   /// convenience method for passes to do so.
-  /// dropUndefImplyingAttrsAndUnknownMetadata should be used instead of
-  /// this API if the Instruction being modified is a call.
   void dropUnknownNonDebugMetadata(ArrayRef<unsigned> KnownIDs);
   void dropUnknownNonDebugMetadata() {
     return dropUnknownNonDebugMetadata(None);
@@ -347,11 +298,6 @@ public:
   }
   /// @}
 
-  /// Adds an !annotation metadata node with \p Annotation to this instruction.
-  /// If this instruction already has !annotation metadata, append \p Annotation
-  /// to the existing node.
-  void addAnnotationMetadata(StringRef Annotation);
-
   /// Sets the metadata on this instruction from the AAMDNodes structure.
   void setAAMetadata(const AAMDNodes &N);
 
@@ -364,6 +310,9 @@ public:
   /// Returns true on success with profile total weights filled in.
   /// Returns false if no metadata was found.
   bool extractProfTotalWeight(uint64_t &TotalVal) const;
+
+  /// Sets the branch_weights metadata to \p W for CallInst.
+  void setProfWeight(uint64_t W);
 
   /// Set the debug location information for this instruction.
   void setDebugLoc(DebugLoc Loc) { DbgLoc = std::move(Loc); }
@@ -392,13 +341,6 @@ public:
   /// Drops flags that may cause this instruction to evaluate to poison despite
   /// having non-poison inputs.
   void dropPoisonGeneratingFlags();
-
-  /// This function drops non-debug unknown metadata (through
-  /// dropUnknownNonDebugMetadata). For calls, it also drops parameter and 
-  /// return attributes that can cause undefined behaviour. Both of these should
-  /// be done by passes which move instructions in IR.
-  void
-  dropUndefImplyingAttrsAndUnknownMetadata(ArrayRef<unsigned> KnownIDs = {});
 
   /// Determine whether the exact flag is set.
   bool isExact() const;
@@ -432,11 +374,6 @@ public:
   /// an operator which supports this flag. See LangRef.html for the meaning of
   /// this flag.
   void setHasAllowReciprocal(bool B);
-
-  /// Set or clear the allow-contract flag on this instruction, which must be
-  /// an operator which supports this flag. See LangRef.html for the meaning of
-  /// this flag.
-  void setHasAllowContract(bool B);
 
   /// Set or clear the approximate-math-functions flag on this instruction,
   /// which must be an operator which supports this flag. See LangRef.html for
@@ -508,26 +445,21 @@ public:
   /// merged DebugLoc.
   void applyMergedLocation(const DILocation *LocA, const DILocation *LocB);
 
-  /// Updates the debug location given that the instruction has been hoisted
-  /// from a block to a predecessor of that block.
-  /// Note: it is undefined behavior to call this on an instruction not
-  /// currently inserted into a function.
-  void updateLocationAfterHoist();
-
-  /// Drop the instruction's debug location. This does not guarantee removal
-  /// of the !dbg source location attachment, as it must set a line 0 location
-  /// with scope information attached on call instructions. To guarantee
-  /// removal of the !dbg attachment, use the \ref setDebugLoc() API.
-  /// Note: it is undefined behavior to call this on an instruction not
-  /// currently inserted into a function.
-  void dropLocation();
-
 private:
+  /// Return true if we have an entry in the on-the-side metadata hash.
+  bool hasMetadataHashEntry() const {
+    return (getSubclassDataFromValue() & HasMetadataBit) != 0;
+  }
+
   // These are all implemented in Metadata.cpp.
   MDNode *getMetadataImpl(unsigned KindID) const;
   MDNode *getMetadataImpl(StringRef Kind) const;
   void
   getAllMetadataImpl(SmallVectorImpl<std::pair<unsigned, MDNode *>> &) const;
+  void getAllMetadataOtherThanDebugLocImpl(
+      SmallVectorImpl<std::pair<unsigned, MDNode *>> &) const;
+  /// Clear all hashtable-based metadata from this instruction.
+  void clearMetadataHashEntries();
 
 public:
   //===--------------------------------------------------------------------===//
@@ -553,7 +485,7 @@ public:
   /// In LLVM, these are the commutative operators, plus SetEQ and SetNE, when
   /// applied to any type.
   ///
-  bool isCommutative() const LLVM_READONLY;
+  bool isCommutative() const { return isCommutative(getOpcode()); }
   static bool isCommutative(unsigned Opcode) {
     switch (Opcode) {
     case Add: case FAdd:
@@ -611,9 +543,6 @@ public:
   /// Return true if this atomic instruction stores to memory.
   bool hasAtomicStore() const;
 
-  /// Return true if this instruction has a volatile memory access.
-  bool isVolatile() const;
-
   /// Return true if this instruction may throw an exception.
   bool mayThrow() const;
 
@@ -636,16 +565,11 @@ public:
 
   /// Return true if the instruction may have side effects.
   ///
-  /// Side effects are:
-  ///  * Writing to memory.
-  ///  * Unwinding.
-  ///  * Not returning (e.g. an infinite loop).
-  ///
   /// Note that this does not consider malloc and alloca to have side
   /// effects because the newly allocated memory is completely invisible to
   /// instructions which don't use the returned value.  For cases where this
   /// matters, isSafeToSpeculativelyExecute may be more appropriate.
-  bool mayHaveSideEffects() const;
+  bool mayHaveSideEffects() const { return mayWriteToMemory() || mayThrow(); }
 
   /// Return true if the instruction can be removed if the result is unused.
   ///
@@ -654,10 +578,6 @@ public:
   /// may have side effects cannot be removed without semantically changing the
   /// generated program.
   bool isSafeToRemove() const;
-
-  /// Return true if the instruction will return (unwinding is considered as
-  /// a form of returning control flow here).
-  bool willReturn() const;
 
   /// Return true if the instruction is a variety of EH-block.
   bool isEHPad() const {
@@ -676,33 +596,20 @@ public:
   /// llvm.lifetime.end marker.
   bool isLifetimeStartOrEnd() const;
 
-  /// Return true if the instruction is a llvm.launder.invariant.group or
-  /// llvm.strip.invariant.group.
-  bool isLaunderOrStripInvariantGroup() const;
-
-  /// Return true if the instruction is a DbgInfoIntrinsic or PseudoProbeInst.
-  bool isDebugOrPseudoInst() const;
-
   /// Return a pointer to the next non-debug instruction in the same basic
-  /// block as 'this', or nullptr if no such instruction exists. Skip any pseudo
-  /// operations if \c SkipPseudoOp is true.
-  const Instruction *
-  getNextNonDebugInstruction(bool SkipPseudoOp = false) const;
-  Instruction *getNextNonDebugInstruction(bool SkipPseudoOp = false) {
+  /// block as 'this', or nullptr if no such instruction exists.
+  const Instruction *getNextNonDebugInstruction() const;
+  Instruction *getNextNonDebugInstruction() {
     return const_cast<Instruction *>(
-        static_cast<const Instruction *>(this)->getNextNonDebugInstruction(
-            SkipPseudoOp));
+        static_cast<const Instruction *>(this)->getNextNonDebugInstruction());
   }
 
   /// Return a pointer to the previous non-debug instruction in the same basic
-  /// block as 'this', or nullptr if no such instruction exists. Skip any pseudo
-  /// operations if \c SkipPseudoOp is true.
-  const Instruction *
-  getPrevNonDebugInstruction(bool SkipPseudoOp = false) const;
-  Instruction *getPrevNonDebugInstruction(bool SkipPseudoOp = false) {
+  /// block as 'this', or nullptr if no such instruction exists.
+  const Instruction *getPrevNonDebugInstruction() const;
+  Instruction *getPrevNonDebugInstruction() {
     return const_cast<Instruction *>(
-        static_cast<const Instruction *>(this)->getPrevNonDebugInstruction(
-            SkipPseudoOp));
+        static_cast<const Instruction *>(this)->getPrevNonDebugInstruction());
   }
 
   /// Create a copy of 'this' instruction that is identical in all ways except
@@ -821,7 +728,6 @@ public:
 
 private:
   friend class SymbolTableListTraits<Instruction>;
-  friend class BasicBlock; // For renumbering.
 
   // Shadow Value::setValueSubclassData with a private forwarding method so that
   // subclasses cannot accidentally use it.
@@ -833,30 +739,25 @@ private:
     return Value::getSubclassDataFromValue();
   }
 
+  void setHasMetadataHashEntry(bool V) {
+    setValueSubclassData((getSubclassDataFromValue() & ~HasMetadataBit) |
+                         (V ? HasMetadataBit : 0));
+  }
+
   void setParent(BasicBlock *P);
 
 protected:
   // Instruction subclasses can stick up to 15 bits of stuff into the
   // SubclassData field of instruction with these members.
 
-  template <typename BitfieldElement>
-  typename BitfieldElement::Type getSubclassData() const {
-    static_assert(
-        std::is_same<BitfieldElement, HasMetadataField>::value ||
-            !Bitfield::isOverlapping<BitfieldElement, HasMetadataField>(),
-        "Must not overlap with the metadata bit");
-    return Bitfield::get<BitfieldElement>(getSubclassDataFromValue());
+  // Verify that only the low 15 bits are used.
+  void setInstructionSubclassData(unsigned short D) {
+    assert((D & HasMetadataBit) == 0 && "Out of range value put into field");
+    setValueSubclassData((getSubclassDataFromValue() & HasMetadataBit) | D);
   }
 
-  template <typename BitfieldElement>
-  void setSubclassData(typename BitfieldElement::Type Value) {
-    static_assert(
-        std::is_same<BitfieldElement, HasMetadataField>::value ||
-            !Bitfield::isOverlapping<BitfieldElement, HasMetadataField>(),
-        "Must not overlap with the metadata bit");
-    auto Storage = getSubclassDataFromValue();
-    Bitfield::set<BitfieldElement>(Storage, Value);
-    setValueSubclassData(Storage);
+  unsigned getSubclassDataFromInstruction() const {
+    return getSubclassDataFromValue() & ~HasMetadataBit;
   }
 
   Instruction(Type *Ty, unsigned iType, Use *Ops, unsigned NumOps,

@@ -155,10 +155,10 @@ private:
 /// they're moved-assigned or constructed from Success values that have already
 /// been checked. This enforces checking through all levels of the call stack.
 class LLVM_NODISCARD Error {
-  // ErrorList needs to be able to yank ErrorInfoBase pointers out of Errors
-  // to add to the error list. It can't rely on handleErrors for this, since
-  // handleErrors does not support ErrorList handlers.
+  // Both ErrorList and FileError need to be able to yank ErrorInfoBase
+  // pointers out of this class to add to the error list.
   friend class ErrorList;
+  friend class FileError;
 
   // handleErrors needs to be able to set the Checked flag.
   template <typename... HandlerTs>
@@ -269,13 +269,9 @@ private:
   }
 
   ErrorInfoBase *getPtr() const {
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS
     return reinterpret_cast<ErrorInfoBase*>(
              reinterpret_cast<uintptr_t>(Payload) &
              ~static_cast<uintptr_t>(0x1));
-#else
-    return Payload;
-#endif
   }
 
   void setPtr(ErrorInfoBase *EI) {
@@ -298,12 +294,10 @@ private:
   }
 
   void setChecked(bool V) {
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS
     Payload = reinterpret_cast<ErrorInfoBase*>(
                 (reinterpret_cast<uintptr_t>(Payload) &
                   ~static_cast<uintptr_t>(0x1)) |
                   (V ? 0 : 1));
-#endif
   }
 
   std::unique_ptr<ErrorInfoBase> takePayload() {
@@ -334,7 +328,7 @@ inline ErrorSuccess Error::success() { return ErrorSuccess(); }
 /// Make a Error instance representing failure using the given error info
 /// type.
 template <typename ErrT, typename... ArgTs> Error make_error(ArgTs &&... Args) {
-  return Error(std::make_unique<ErrT>(std::forward<ArgTs>(Args)...));
+  return Error(llvm::make_unique<ErrT>(std::forward<ArgTs>(Args)...));
 }
 
 /// Base class for user error types. Users should declare their error types
@@ -436,58 +430,25 @@ inline Error joinErrors(Error E1, Error E2) {
 /// Error cannot be copied, this class replaces getError() with
 /// takeError(). It also adds an bool errorIsA<ErrT>() method for testing the
 /// error class type.
-///
-/// Example usage of 'Expected<T>' as a function return type:
-///
-///   @code{.cpp}
-///     Expected<int> myDivide(int A, int B) {
-///       if (B == 0) {
-///         // return an Error
-///         return createStringError(inconvertibleErrorCode(),
-///                                  "B must not be zero!");
-///       }
-///       // return an integer
-///       return A / B;
-///     }
-///   @endcode
-///
-///   Checking the results of to a function returning 'Expected<T>':
-///   @code{.cpp}
-///     if (auto E = Result.takeError()) {
-///       // We must consume the error. Typically one of:
-///       // - return the error to our caller
-///       // - toString(), when logging
-///       // - consumeError(), to silently swallow the error
-///       // - handleErrors(), to distinguish error types
-///       errs() << "Problem with division " << toString(std::move(E)) << "\n";
-///       return;
-///     }
-///     // use the result
-///     outs() << "The answer is " << *Result << "\n";
-///   @endcode
-///
-///  For unit-testing a function returning an 'Expceted<T>', see the
-///  'EXPECT_THAT_EXPECTED' macros in llvm/Testing/Support/Error.h
-
 template <class T> class LLVM_NODISCARD Expected {
   template <class T1> friend class ExpectedAsOutParameter;
   template <class OtherT> friend class Expected;
 
-  static constexpr bool isRef = std::is_reference<T>::value;
+  static const bool isRef = std::is_reference<T>::value;
 
-  using wrap = std::reference_wrapper<std::remove_reference_t<T>>;
+  using wrap = std::reference_wrapper<typename std::remove_reference<T>::type>;
 
   using error_type = std::unique_ptr<ErrorInfoBase>;
 
 public:
-  using storage_type = std::conditional_t<isRef, wrap, T>;
+  using storage_type = typename std::conditional<isRef, wrap, T>::type;
   using value_type = T;
 
 private:
-  using reference = std::remove_reference_t<T> &;
-  using const_reference = const std::remove_reference_t<T> &;
-  using pointer = std::remove_reference_t<T> *;
-  using const_pointer = const std::remove_reference_t<T> *;
+  using reference = typename std::remove_reference<T>::type &;
+  using const_reference = const typename std::remove_reference<T>::type &;
+  using pointer = typename std::remove_reference<T>::type *;
+  using const_pointer = const typename std::remove_reference<T>::type *;
 
 public:
   /// Create an Expected<T> error value from the given Error.
@@ -511,12 +472,12 @@ public:
   /// must be convertible to T.
   template <typename OtherT>
   Expected(OtherT &&Val,
-           std::enable_if_t<std::is_convertible<OtherT, T>::value> * = nullptr)
+           typename std::enable_if<std::is_convertible<OtherT, T>::value>::type
+               * = nullptr)
       : HasError(false)
 #if LLVM_ENABLE_ABI_BREAKING_CHECKS
         // Expected is unchecked upon construction in Debug builds.
-        ,
-        Unchecked(true)
+        , Unchecked(true)
 #endif
   {
     new (getStorage()) storage_type(std::forward<OtherT>(Val));
@@ -528,9 +489,9 @@ public:
   /// Move construct an Expected<T> value from an Expected<OtherT>, where OtherT
   /// must be convertible to T.
   template <class OtherT>
-  Expected(
-      Expected<OtherT> &&Other,
-      std::enable_if_t<std::is_convertible<OtherT, T>::value> * = nullptr) {
+  Expected(Expected<OtherT> &&Other,
+           typename std::enable_if<std::is_convertible<OtherT, T>::value>::type
+               * = nullptr) {
     moveConstruct(std::move(Other));
   }
 
@@ -539,7 +500,8 @@ public:
   template <class OtherT>
   explicit Expected(
       Expected<OtherT> &&Other,
-      std::enable_if_t<!std::is_convertible<OtherT, T>::value> * = nullptr) {
+      typename std::enable_if<!std::is_convertible<OtherT, T>::value>::type * =
+          nullptr) {
     moveConstruct(std::move(Other));
   }
 
@@ -586,7 +548,7 @@ public:
   /// Take ownership of the stored error.
   /// After calling this the Expected<T> is in an indeterminate state that can
   /// only be safely destructed. No further calls (beside the destructor) should
-  /// be made on the Expected<T> value.
+  /// be made on the Expected<T> vaule.
   Error takeError() {
 #if LLVM_ENABLE_ABI_BREAKING_CHECKS
     Unchecked = false;
@@ -625,7 +587,7 @@ private:
   }
 
   template <class T1, class T2>
-  static bool compareThisIfSameType(const T1 &, const T2 &) {
+  static bool compareThisIfSameType(const T1 &a, const T2 &b) {
     return false;
   }
 
@@ -662,22 +624,22 @@ private:
 
   storage_type *getStorage() {
     assert(!HasError && "Cannot get value when an error exists!");
-    return reinterpret_cast<storage_type *>(&TStorage);
+    return reinterpret_cast<storage_type *>(TStorage.buffer);
   }
 
   const storage_type *getStorage() const {
     assert(!HasError && "Cannot get value when an error exists!");
-    return reinterpret_cast<const storage_type *>(&TStorage);
+    return reinterpret_cast<const storage_type *>(TStorage.buffer);
   }
 
   error_type *getErrorStorage() {
     assert(HasError && "Cannot get error when a value exists!");
-    return reinterpret_cast<error_type *>(&ErrorStorage);
+    return reinterpret_cast<error_type *>(ErrorStorage.buffer);
   }
 
   const error_type *getErrorStorage() const {
     assert(HasError && "Cannot get error when a value exists!");
-    return reinterpret_cast<const error_type *>(&ErrorStorage);
+    return reinterpret_cast<const error_type *>(ErrorStorage.buffer);
   }
 
   // Used by ExpectedAsOutParameter to reset the checked flag.
@@ -703,7 +665,7 @@ private:
   }
 #endif
 
-  void assertIsChecked() const {
+  void assertIsChecked() {
 #if LLVM_ENABLE_ABI_BREAKING_CHECKS
     if (LLVM_UNLIKELY(Unchecked))
       fatalUncheckedExpected();
@@ -742,12 +704,6 @@ inline void cantFail(Error Err, const char *Msg = nullptr) {
   if (Err) {
     if (!Msg)
       Msg = "Failure value returned from cantFail wrapped call";
-#ifndef NDEBUG
-    std::string Str;
-    raw_string_ostream OS(Str);
-    OS << Msg << "\n" << Err;
-    Msg = OS.str().c_str();
-#endif
     llvm_unreachable(Msg);
   }
 }
@@ -772,13 +728,6 @@ T cantFail(Expected<T> ValOrErr, const char *Msg = nullptr) {
   else {
     if (!Msg)
       Msg = "Failure value returned from cantFail wrapped call";
-#ifndef NDEBUG
-    std::string Str;
-    raw_string_ostream OS(Str);
-    auto E = ValOrErr.takeError();
-    OS << Msg << "\n" << E;
-    Msg = OS.str().c_str();
-#endif
     llvm_unreachable(Msg);
   }
 }
@@ -803,13 +752,6 @@ T& cantFail(Expected<T&> ValOrErr, const char *Msg = nullptr) {
   else {
     if (!Msg)
       Msg = "Failure value returned from cantFail wrapped call";
-#ifndef NDEBUG
-    std::string Str;
-    raw_string_ostream OS(Str);
-    auto E = ValOrErr.takeError();
-    OS << Msg << "\n" << E;
-    Msg = OS.str().c_str();
-#endif
     llvm_unreachable(Msg);
   }
 }
@@ -1040,20 +982,6 @@ inline void consumeError(Error Err) {
   handleAllErrors(std::move(Err), [](const ErrorInfoBase &) {});
 }
 
-/// Convert an Expected to an Optional without doing anything. This method
-/// should be used only where an error can be considered a reasonable and
-/// expected return value.
-///
-/// Uses of this method are potentially indicative of problems: perhaps the
-/// error should be propagated further, or the error-producer should just
-/// return an Optional in the first place.
-template <typename T> Optional<T> expectedToOptional(Expected<T> &&E) {
-  if (E)
-    return std::move(*E);
-  consumeError(E.takeError());
-  return None;
-}
-
 /// Helper for converting an Error to a bool.
 ///
 /// This method returns true if Err is in an error state, or false if it is
@@ -1242,10 +1170,6 @@ inline Error createStringError(std::error_code EC, char const *Fmt,
 
 Error createStringError(std::error_code EC, char const *Msg);
 
-inline Error createStringError(std::error_code EC, const Twine &S) {
-  return createStringError(EC, S.str().c_str());
-}
-
 template <typename... Ts>
 inline Error createStringError(std::errc EC, char const *Fmt,
                                const Ts &... Vals) {
@@ -1270,8 +1194,6 @@ public:
     Err->log(OS);
   }
 
-  StringRef getFileName() { return FileName; }
-
   Error takeError() { return Error(std::move(Err)); }
 
   std::error_code convertToErrorCode() const override;
@@ -1291,14 +1213,8 @@ private:
   }
 
   static Error build(const Twine &F, Optional<size_t> Line, Error E) {
-    std::unique_ptr<ErrorInfoBase> Payload;
-    handleAllErrors(std::move(E),
-                    [&](std::unique_ptr<ErrorInfoBase> EIB) -> Error {
-                      Payload = std::move(EIB);
-                      return Error::success();
-                    });
     return Error(
-        std::unique_ptr<FileError>(new FileError(F, Line, std::move(Payload))));
+        std::unique_ptr<FileError>(new FileError(F, Line, E.takePayload())));
   }
 
   std::string FileName;

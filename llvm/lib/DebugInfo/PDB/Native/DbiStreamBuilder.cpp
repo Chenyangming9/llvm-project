@@ -18,7 +18,6 @@
 #include "llvm/DebugInfo/PDB/Native/RawError.h"
 #include "llvm/Object/COFF.h"
 #include "llvm/Support/BinaryStreamWriter.h"
-#include "llvm/Support/Parallel.h"
 
 using namespace llvm;
 using namespace llvm::codeview;
@@ -57,6 +56,10 @@ void DbiStreamBuilder::setMachineType(PDB_Machine M) { MachineType = M; }
 void DbiStreamBuilder::setMachineType(COFF::MachineTypes M) {
   // These enums are mirrors of each other, so we can just cast the value.
   MachineType = static_cast<pdb::PDB_Machine>(static_cast<unsigned>(M));
+}
+
+void DbiStreamBuilder::setSectionMap(ArrayRef<SecMapEntry> SecMap) {
+  SectionMap = SecMap;
 }
 
 void DbiStreamBuilder::setGlobalsStreamIndex(uint32_t Index) {
@@ -111,7 +114,7 @@ Expected<DbiModuleDescriptorBuilder &>
 DbiStreamBuilder::addModuleInfo(StringRef ModuleName) {
   uint32_t Index = ModiList.size();
   ModiList.push_back(
-      std::make_unique<DbiModuleDescriptorBuilder>(ModuleName, Index, Msf));
+      llvm::make_unique<DbiModuleDescriptorBuilder>(ModuleName, Index, Msf));
   return *ModiList.back();
 }
 
@@ -345,18 +348,19 @@ static uint16_t toSecMapFlags(uint32_t Flags) {
   return Ret;
 }
 
-// Populate the Section Map from COFF section headers.
+// A utility function to create a Section Map for a given list of COFF sections.
 //
 // A Section Map seem to be a copy of a COFF section list in other format.
 // I don't know why a PDB file contains both a COFF section header and
 // a Section Map, but it seems it must be present in a PDB.
-void DbiStreamBuilder::createSectionMap(
+std::vector<SecMapEntry> DbiStreamBuilder::createSectionMap(
     ArrayRef<llvm::object::coff_section> SecHdrs) {
+  std::vector<SecMapEntry> Ret;
   int Idx = 0;
 
   auto Add = [&]() -> SecMapEntry & {
-    SectionMap.emplace_back();
-    auto &Entry = SectionMap.back();
+    Ret.emplace_back();
+    auto &Entry = Ret.back();
     memset(&Entry, 0, sizeof(Entry));
 
     Entry.Frame = Idx + 1;
@@ -380,6 +384,8 @@ void DbiStreamBuilder::createSectionMap(
   Entry.Flags = static_cast<uint16_t>(OMFSegDescFlags::AddressIs32Bit) |
                 static_cast<uint16_t>(OMFSegDescFlags::IsAbsoluteAddress);
   Entry.SecByteLength = UINT32_MAX;
+
+  return Ret;
 }
 
 Error DbiStreamBuilder::commit(const msf::MSFLayout &Layout,
@@ -395,16 +401,9 @@ Error DbiStreamBuilder::commit(const msf::MSFLayout &Layout,
     return EC;
 
   for (auto &M : ModiList) {
-    if (auto EC = M->commit(Writer))
+    if (auto EC = M->commit(Writer, Layout, MsfBuffer))
       return EC;
   }
-
-  // Commit symbol streams. This is a lot of data, so do it in parallel.
-  if (auto EC = parallelForEachError(
-          ModiList, [&](std::unique_ptr<DbiModuleDescriptorBuilder> &M) {
-            return M->commitSymbolStream(Layout, MsfBuffer);
-          }))
-    return EC;
 
   if (!SectionContribs.empty()) {
     if (auto EC = Writer.writeEnum(DbiSecContribVer60))
@@ -418,7 +417,7 @@ Error DbiStreamBuilder::commit(const msf::MSFLayout &Layout,
     SecMapHeader SMHeader = {Size, Size};
     if (auto EC = Writer.writeObject(SMHeader))
       return EC;
-    if (auto EC = Writer.writeArray(makeArrayRef(SectionMap)))
+    if (auto EC = Writer.writeArray(SectionMap))
       return EC;
   }
 

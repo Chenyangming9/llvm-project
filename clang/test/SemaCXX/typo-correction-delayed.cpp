@@ -149,8 +149,7 @@ void test() {
 }
 
 namespace PR21905 {
-int (*a)() = (void)Z; // expected-error-re {{use of undeclared identifier 'Z'{{$}}}} \
-                      // expected-error {{cannot initialize a variable of type 'int (*)()' with an rvalue of type 'void'}}
+int (*a) () = (void)Z;  // expected-error-re {{use of undeclared identifier 'Z'{{$}}}}
 }
 
 namespace PR21947 {

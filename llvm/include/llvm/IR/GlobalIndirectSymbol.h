@@ -35,15 +35,12 @@ public:
   GlobalIndirectSymbol &operator=(const GlobalIndirectSymbol &) = delete;
 
   // allocate space for exactly one operand
-  void *operator new(size_t S) { return User::operator new(S, 1); }
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
+  void *operator new(size_t s) {
+    return User::operator new(s, 1);
+  }
 
   /// Provide fast operand accessors
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Constant);
-
-  void copyAttributesFrom(const GlobalValue *Src) {
-    GlobalValue::copyAttributesFrom(Src);
-  }
 
   /// These methods set and retrieve indirect symbol.
   void setIndirectSymbol(Constant *Symbol) {
@@ -57,7 +54,9 @@ public:
           static_cast<const GlobalIndirectSymbol *>(this)->getIndirectSymbol());
   }
 
-  const GlobalObject *getBaseObject() const;
+  const GlobalObject *getBaseObject() const {
+    return dyn_cast<GlobalObject>(getIndirectSymbol()->stripInBoundsOffsets());
+  }
   GlobalObject *getBaseObject() {
     return const_cast<GlobalObject *>(
               static_cast<const GlobalIndirectSymbol *>(this)->getBaseObject());

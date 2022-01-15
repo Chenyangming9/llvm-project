@@ -23,8 +23,8 @@
 #include <string>
 #include <vector>
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace lldb_private {
 class ConstString;
@@ -145,8 +145,7 @@ private:
   //                             bool exact);
 
   // For Listener only
-  Listener(const Listener &) = delete;
-  const Listener &operator=(const Listener &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(Listener);
 };
 
 } // namespace lldb_private

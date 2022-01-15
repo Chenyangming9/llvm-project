@@ -33,7 +33,7 @@ moreArgsExpected()
   # $2 - number of arguments to shift
   if [ $1 -lt $2 ]
   then
-    echo "Error: Wrong number of arguments."
+    echo "Error: Wrong number of argumants."
     printUsageAndExit
   fi
 }

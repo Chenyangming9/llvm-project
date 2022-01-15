@@ -1,12 +1,16 @@
-; RUN: llc -mtriple=amdgcn--amdhsa -mcpu=fiji -verify-machineinstrs < %s | FileCheck -check-prefix=ALL %s
+; RUN: llc -mtriple=amdgcn--amdhsa -mcpu=fiji -amdgpu-spill-sgpr-to-smem=0 -verify-machineinstrs < %s | FileCheck -check-prefix=TOSGPR -check-prefix=ALL %s
+
+; If spilling to smem, additional registers are used for the resource
+; descriptor.
 
 ; FIXME: Vectorization can increase required SGPR count beyond limit.
+; FIXME: SGPR-to-SMEM requires an additional SGPR always to scavenge m0
 
-; ALL-LABEL: {{^}}max_10_sgprs:
+; ALL-LABEL: {{^}}max_9_sgprs:
 
 ; ALL: SGPRBlocks: 1
-; ALL: NumSGPRsForWavesPerEU: 10
-define amdgpu_kernel void @max_10_sgprs() #0 {
+; ALL: NumSGPRsForWavesPerEU: 9
+define amdgpu_kernel void @max_9_sgprs() #0 {
   %one = load volatile i32, i32 addrspace(4)* undef
   %two = load volatile i32, i32 addrspace(4)* undef
   %three = load volatile i32, i32 addrspace(4)* undef
@@ -17,8 +21,7 @@ define amdgpu_kernel void @max_10_sgprs() #0 {
   %eight = load volatile i32, i32 addrspace(4)* undef
   %nine = load volatile i32, i32 addrspace(4)* undef
   %ten = load volatile i32, i32 addrspace(4)* undef
-  %eleven = load volatile i32, i32 addrspace(4)* undef
-  call void asm sideeffect "", "s,s,s,s,s,s,s,s,s,s"(i32 %one, i32 %two, i32 %three, i32 %four, i32 %five, i32 %six, i32 %seven, i32 %eight, i32 %nine, i32 %ten)
+  call void asm sideeffect "", "s,s,s,s,s,s,s,s,s"(i32 %one, i32 %two, i32 %three, i32 %four, i32 %five, i32 %six, i32 %seven, i32 %eight, i32 %nine)
   store volatile i32 %one, i32 addrspace(1)* undef
   store volatile i32 %two, i32 addrspace(1)* undef
   store volatile i32 %three, i32 addrspace(1)* undef
@@ -29,7 +32,6 @@ define amdgpu_kernel void @max_10_sgprs() #0 {
   store volatile i32 %eight, i32 addrspace(1)* undef
   store volatile i32 %nine, i32 addrspace(1)* undef
   store volatile i32 %ten, i32 addrspace(1)* undef
-  store volatile i32 %eleven, i32 addrspace(1)* undef
   ret void
 }
 
@@ -53,6 +55,13 @@ define amdgpu_kernel void @max_10_sgprs() #0 {
 ; XTOSGPR: SGPRBlocks: 1
 ; XTOSGPR: NumSGPRsForWavesPerEU: 16
 
+; XTOSMEM: s_mov_b64 s[10:11], s[2:3]
+; XTOSMEM: s_mov_b64 s[8:9], s[0:1]
+; XTOSMEM: s_mov_b32 s7, s13
+
+; XTOSMEM: SGPRBlocks: 1
+; XTOSMEM: NumSGPRsForWavesPerEU: 16
+;
 ; This test case is disabled: When calculating the spillslot addresses AMDGPU
 ; creates an extra vreg to save/restore m0 which in a point of maximum register
 ; pressure would trigger an endless loop; the compiler aborts earlier with
@@ -91,6 +100,10 @@ define amdgpu_kernel void @max_10_sgprs() #0 {
 ; ; Make sure copies for input buffer are not clobbered. This requires
 ; ; swapping the order the registers are copied from what normally
 ; ; happens.
+
+; XTOSMEM: s_mov_b32 s5, s11
+; XTOSMEM: s_add_u32 m0, s5,
+; XTOSMEM: s_buffer_store_dword vcc_lo, s[0:3], m0
 
 ; XALL: SGPRBlocks: 2
 ; XALL: NumSGPRsForWavesPerEU: 18

@@ -18,7 +18,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Regex.h"
-#include "llvm/Support/VirtualFileSystem.h"
 #include <string>
 #include <system_error>
 #include <utility>
@@ -54,7 +53,7 @@ bool SpecialCaseList::Matcher::insert(std::string Regexp,
     return false;
 
   RegExes.emplace_back(
-      std::make_pair(std::make_unique<Regex>(std::move(CheckRE)), LineNumber));
+      std::make_pair(make_unique<Regex>(std::move(CheckRE)), LineNumber));
   return true;
 }
 
@@ -72,9 +71,9 @@ unsigned SpecialCaseList::Matcher::match(StringRef Query) const {
 
 std::unique_ptr<SpecialCaseList>
 SpecialCaseList::create(const std::vector<std::string> &Paths,
-                        llvm::vfs::FileSystem &FS, std::string &Error) {
+                        std::string &Error) {
   std::unique_ptr<SpecialCaseList> SCL(new SpecialCaseList());
-  if (SCL->createInternal(Paths, FS, Error))
+  if (SCL->createInternal(Paths, Error))
     return SCL;
   return nullptr;
 }
@@ -88,20 +87,19 @@ std::unique_ptr<SpecialCaseList> SpecialCaseList::create(const MemoryBuffer *MB,
 }
 
 std::unique_ptr<SpecialCaseList>
-SpecialCaseList::createOrDie(const std::vector<std::string> &Paths,
-                             llvm::vfs::FileSystem &FS) {
+SpecialCaseList::createOrDie(const std::vector<std::string> &Paths) {
   std::string Error;
-  if (auto SCL = create(Paths, FS, Error))
+  if (auto SCL = create(Paths, Error))
     return SCL;
   report_fatal_error(Error);
 }
 
 bool SpecialCaseList::createInternal(const std::vector<std::string> &Paths,
-                                     vfs::FileSystem &VFS, std::string &Error) {
+                                     std::string &Error) {
   StringMap<size_t> Sections;
   for (const auto &Path : Paths) {
     ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
-        VFS.getBufferForFile(Path);
+        MemoryBuffer::getFile(Path);
     if (std::error_code EC = FileOrErr.getError()) {
       Error = (Twine("can't open file '") + Path + "': " + EC.message()).str();
       return false;
@@ -126,7 +124,7 @@ bool SpecialCaseList::createInternal(const MemoryBuffer *MB,
 bool SpecialCaseList::parse(const MemoryBuffer *MB,
                             StringMap<size_t> &SectionsMap,
                             std::string &Error) {
-  // Iterate through each line in the exclusion list file.
+  // Iterate through each line in the blacklist file.
   SmallVector<StringRef, 16> Lines;
   MB->getBuffer().split(Lines, '\n');
 
@@ -172,14 +170,14 @@ bool SpecialCaseList::parse(const MemoryBuffer *MB,
     }
 
     std::pair<StringRef, StringRef> SplitRegexp = SplitLine.second.split("=");
-    std::string Regexp = std::string(SplitRegexp.first);
+    std::string Regexp = SplitRegexp.first;
     StringRef Category = SplitRegexp.second;
 
     // Create this section if it has not been seen before.
     if (SectionsMap.find(Section) == SectionsMap.end()) {
-      std::unique_ptr<Matcher> M = std::make_unique<Matcher>();
+      std::unique_ptr<Matcher> M = make_unique<Matcher>();
       std::string REError;
-      if (!M->insert(std::string(Section), LineNo, REError)) {
+      if (!M->insert(Section, LineNo, REError)) {
         Error = (Twine("malformed section ") + Section + ": '" + REError).str();
         return false;
       }

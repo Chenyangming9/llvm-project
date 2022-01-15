@@ -32,15 +32,16 @@ bool isLocationInMacroExpansion(const SourceManager &SM, SourceLocation Loc) {
 
 void RedundantControlFlowCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(
-      functionDecl(isDefinition(), returns(voidType()),
-                   hasBody(compoundStmt(hasAnySubstatement(
-                                            returnStmt(unless(has(expr())))))
-                               .bind("return"))),
+      functionDecl(
+          isDefinition(), returns(voidType()),
+          has(compoundStmt(hasAnySubstatement(returnStmt(unless(has(expr())))))
+                  .bind("return"))),
       this);
+  auto CompoundContinue =
+      has(compoundStmt(hasAnySubstatement(continueStmt())).bind("continue"));
   Finder->addMatcher(
-      mapAnyOf(forStmt, cxxForRangeStmt, whileStmt, doStmt)
-          .with(hasBody(compoundStmt(hasAnySubstatement(continueStmt()))
-                            .bind("continue"))),
+      stmt(anyOf(forStmt(), cxxForRangeStmt(), whileStmt(), doStmt()),
+           CompoundContinue),
       this);
 }
 
@@ -54,16 +55,16 @@ void RedundantControlFlowCheck::check(const MatchFinder::MatchResult &Result) {
 
 void RedundantControlFlowCheck::checkRedundantReturn(
     const MatchFinder::MatchResult &Result, const CompoundStmt *Block) {
-  CompoundStmt::const_reverse_body_iterator Last = Block->body_rbegin();
-  if (const auto *Return = dyn_cast<ReturnStmt>(*Last))
+  CompoundStmt::const_reverse_body_iterator last = Block->body_rbegin();
+  if (const auto *Return = dyn_cast<ReturnStmt>(*last))
     issueDiagnostic(Result, Block, Return->getSourceRange(),
                     RedundantReturnDiag);
 }
 
 void RedundantControlFlowCheck::checkRedundantContinue(
     const MatchFinder::MatchResult &Result, const CompoundStmt *Block) {
-  CompoundStmt::const_reverse_body_iterator Last = Block->body_rbegin();
-  if (const auto *Continue = dyn_cast<ContinueStmt>(*Last))
+  CompoundStmt::const_reverse_body_iterator last = Block->body_rbegin();
+  if (const auto *Continue = dyn_cast<ContinueStmt>(*last))
     issueDiagnostic(Result, Block, Continue->getSourceRange(),
                     RedundantContinueDiag);
 }

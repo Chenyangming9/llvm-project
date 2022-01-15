@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_COMMANDHISTORY_H
-#define LLDB_INTERPRETER_COMMANDHISTORY_H
+#ifndef liblldb_CommandHistory_h_
+#define liblldb_CommandHistory_h_
 
 #include <mutex>
 #include <string>
@@ -20,9 +20,9 @@ namespace lldb_private {
 
 class CommandHistory {
 public:
-  CommandHistory() = default;
+  CommandHistory();
 
-  ~CommandHistory() = default;
+  ~CommandHistory();
 
   size_t GetSize() const;
 
@@ -46,8 +46,7 @@ public:
   static const char g_repeat_char = '!';
 
 private:
-  CommandHistory(const CommandHistory &) = delete;
-  const CommandHistory &operator=(const CommandHistory &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(CommandHistory);
 
   typedef std::vector<std::string> History;
   mutable std::recursive_mutex m_mutex;
@@ -56,4 +55,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_COMMANDHISTORY_H
+#endif // liblldb_CommandHistory_h_

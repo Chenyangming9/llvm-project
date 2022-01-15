@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=s390x-linux-gnu < %s | FileCheck %s
+; RUN: llc -march=systemz < %s | FileCheck %s
 
 ; CHECK-LABEL: tail_memcpy:
 ; CHECK: jg memcpy

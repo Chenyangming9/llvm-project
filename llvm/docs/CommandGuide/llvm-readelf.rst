@@ -14,7 +14,7 @@ DESCRIPTION
 The :program:`llvm-readelf` tool displays low-level format-specific information
 about one or more object files.
 
-If ``input`` is "``-``", :program:`llvm-readelf` reads from standard
+If ``input`` is "``-``" or omitted, :program:`llvm-readelf` reads from standard
 input. Otherwise, it will read from the specified ``filenames``.
 
 OPTIONS
@@ -22,21 +22,19 @@ OPTIONS
 
 .. option:: --all
 
- Equivalent to specifying all the main display options relevant to the file
- format.
+ Equivalent to specifying all the main display options.
 
 .. option:: --addrsig
 
  Display the address-significance table.
 
-.. option:: --arch-specific, -A
+.. option:: --arm-attributes
 
- Display architecture-specific information, e.g. the ARM attributes section on ARM.
+ Display the ARM attributes section. Only applicable for ARM architectures.
 
-.. option:: --bb-addr-map
+.. option:: --color
 
- Display the contents of the basic block address map section(s), which contain the
- address of each function, along with the relative offset of each basic block.
+ Use colors in the output for warnings and errors.
 
 .. option:: --demangle, -C
 
@@ -54,11 +52,11 @@ OPTIONS
 
  Display the dynamic table.
 
-.. option:: --cg-profile
+.. option:: --elf-cg-profile
 
  Display the callgraph profile section.
 
-.. option:: --histogram, -I
+.. option:: --elf-hash-histogram, --histogram, -I
 
  Display a bucket list histogram for dynamic symbol hash tables.
 
@@ -72,7 +70,7 @@ OPTIONS
  ``GNU``. ``LLVM`` output is an expanded and structured format, whilst ``GNU``
  (the default) output mimics the equivalent GNU :program:`readelf` output.
 
-.. option:: --section-groups, -g
+.. option:: --elf-section-groups, --section-groups, -g
 
  Display section groups.
 
@@ -81,7 +79,7 @@ OPTIONS
  When used with :option:`--relocations`, display each relocation in an expanded
  multi-line format.
 
-.. option:: --file-header, -h
+.. option:: --file-headers, -h
 
  Display file headers.
 
@@ -99,12 +97,16 @@ OPTIONS
 
 .. option:: --headers, -e
 
- Equivalent to setting: :option:`--file-header`, :option:`--program-headers`,
+ Equivalent to setting: :option:`--file-headers`, :option:`--program-headers`,
  and :option:`--sections`.
 
 .. option:: --help
 
  Display a summary of command line options.
+
+.. option:: --help-list
+
+ Display an uncategorized summary of command line options.
 
 .. option:: --hex-dump=<section[,section,...]>, -x
 
@@ -140,10 +142,6 @@ OPTIONS
  When used with :option:`--sections`, display section data for each section
  shown. This option has no effect for GNU style output.
 
-.. option:: --section-details, -t
-
- Display all section details. Used as an alternative to :option:`--sections`.
-
 .. option:: --section-mapping
 
  Display the section to segment mapping.
@@ -162,12 +160,6 @@ OPTIONS
 
  Display contents of the stackmap section.
 
-.. option:: --stack-sizes
-
- Display the contents of the stack sizes section(s), i.e. pairs of function
- names and the size of their stack frames. Currently only implemented for GNU
- style output.
-
 .. option:: --string-dump=<section[,section,...]>, -p
 
  Display the specified section(s) as a list of strings. ``section`` may be a
@@ -183,7 +175,7 @@ OPTIONS
 
 .. option:: --version
 
- Display the version of the :program:`llvm-readelf` executable.
+ Display the version of this program.
 
 .. option:: --version-info, -V
 

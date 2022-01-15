@@ -13,7 +13,7 @@
 //
 // On Windows, ICF is enabled by default.
 //
-// See ELF/ICF.cpp for the details about the algorithm.
+// See ELF/ICF.cpp for the details about the algortihm.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,6 +21,7 @@
 #include "Chunks.h"
 #include "Symbols.h"
 #include "lld/Common/ErrorHandler.h"
+#include "lld/Common/Threads.h"
 #include "lld/Common/Timer.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/Support/Debug.h"
@@ -40,7 +41,6 @@ static Timer icfTimer("ICF", Timer::root());
 
 class ICF {
 public:
-  ICF(ICFLevel icfLevel) : icfLevel(icfLevel){};
   void run(ArrayRef<Chunk *> v);
 
 private:
@@ -63,7 +63,6 @@ private:
   std::vector<SectionChunk *> chunks;
   int cnt = 0;
   std::atomic<bool> repeat = {false};
-  ICFLevel icfLevel = ICFLevel::All;
 };
 
 // Returns true if section S is subject of ICF.
@@ -78,14 +77,13 @@ private:
 // section is insignificant to the user program and the behaviour matches that
 // of the Visual C++ linker.
 bool ICF::isEligible(SectionChunk *c) {
-  // Non-comdat chunks, dead chunks, and writable chunks are not eligible.
+  // Non-comdat chunks, dead chunks, and writable chunks are not elegible.
   bool writable = c->getOutputCharacteristics() & llvm::COFF::IMAGE_SCN_MEM_WRITE;
   if (!c->isCOMDAT() || !c->live || writable)
     return false;
 
-  // Under regular (not safe) ICF, all code sections are eligible.
-  if ((icfLevel == ICFLevel::All) &&
-      c->getOutputCharacteristics() & llvm::COFF::IMAGE_SCN_MEM_EXECUTE)
+  // Code sections are eligible.
+  if (c->getOutputCharacteristics() & llvm::COFF::IMAGE_SCN_MEM_EXECUTE)
     return true;
 
   // .pdata and .xdata unwind info sections are eligible.
@@ -129,19 +127,15 @@ void ICF::segregate(size_t begin, size_t end, bool constant) {
 
 // Returns true if two sections' associative children are equal.
 bool ICF::assocEquals(const SectionChunk *a, const SectionChunk *b) {
-  // Ignore associated metadata sections that don't participate in ICF, such as
-  // debug info and CFGuard metadata.
-  auto considerForICF = [](const SectionChunk &assoc) {
-    StringRef Name = assoc.getSectionName();
-    return !(Name.startswith(".debug") || Name == ".gfids$y" ||
-             Name == ".giats$y" || Name == ".gljmp$y");
+  auto childClasses = [&](const SectionChunk *sc) {
+    std::vector<uint32_t> classes;
+    for (const SectionChunk &c : sc->children())
+      if (!c.getSectionName().startswith(".debug") &&
+          c.getSectionName() != ".gfids$y" && c.getSectionName() != ".gljmp$y")
+        classes.push_back(c.eqClass[cnt % 2]);
+    return classes;
   };
-  auto ra = make_filter_range(a->children(), considerForICF);
-  auto rb = make_filter_range(b->children(), considerForICF);
-  return std::equal(ra.begin(), ra.end(), rb.begin(), rb.end(),
-                    [&](const SectionChunk &ia, const SectionChunk &ib) {
-                      return ia.eqClass[cnt % 2] == ib.eqClass[cnt % 2];
-                    });
+  return childClasses(a) == childClasses(b);
 }
 
 // Compare "non-moving" part of two sections, namely everything
@@ -280,7 +274,7 @@ void ICF::run(ArrayRef<Chunk *> vec) {
       for (Symbol *b : sc->symbols())
         if (auto *sym = dyn_cast_or_null<DefinedRegular>(b))
           hash += sym->getChunk()->eqClass[cnt % 2];
-      // Set MSB to 1 to avoid collisions with non-hash classes.
+      // Set MSB to 1 to avoid collisions with non-hash classs.
       sc->eqClass[(cnt + 1) % 2] = hash | (1U << 31);
     });
   }
@@ -303,7 +297,7 @@ void ICF::run(ArrayRef<Chunk *> vec) {
 
   log("ICF needed " + Twine(cnt) + " iterations");
 
-  // Merge sections in the same classes.
+  // Merge sections in the same classs.
   forEachClass([&](size_t begin, size_t end) {
     if (end - begin == 1)
       return;
@@ -317,9 +311,7 @@ void ICF::run(ArrayRef<Chunk *> vec) {
 }
 
 // Entry point to ICF.
-void doICF(ArrayRef<Chunk *> chunks, ICFLevel icfLevel) {
-  ICF(icfLevel).run(chunks);
-}
+void doICF(ArrayRef<Chunk *> chunks) { ICF().run(chunks); }
 
 } // namespace coff
 } // namespace lld

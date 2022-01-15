@@ -24,6 +24,12 @@
 #ifndef LLVM_C_DATATYPES_H
 #define LLVM_C_DATATYPES_H
 
+#ifdef __cplusplus
+#include <cmath>
+#else
+#include <math.h>
+#endif
+
 #include <inttypes.h>
 #include <stdint.h>
 
@@ -75,6 +81,10 @@ typedef signed int ssize_t;
 #endif
 #if !defined(UINT64_MAX)
 # define UINT64_MAX 0xffffffffffffffffULL
+#endif
+
+#ifndef HUGE_VALF
+#define HUGE_VALF (float)HUGE_VAL
 #endif
 
 #endif /* LLVM_C_DATATYPES_H */

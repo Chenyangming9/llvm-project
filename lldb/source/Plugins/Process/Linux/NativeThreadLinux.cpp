@@ -1,4 +1,4 @@
-//===-- NativeThreadLinux.cpp ---------------------------------------------===//
+//===-- NativeThreadLinux.cpp --------------------------------- -*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,7 +8,7 @@
 
 #include "NativeThreadLinux.h"
 
-#include <csignal>
+#include <signal.h>
 #include <sstream>
 
 #include "NativeProcessLinux.h"
@@ -26,7 +26,6 @@
 #include "llvm/ADT/SmallString.h"
 
 #include "Plugins/Process/POSIX/CrashReason.h"
-#include "Plugins/Process/Utility/MemoryTagManagerAArch64MTE.h"
 
 #include <sys/syscall.h>
 // Try to define a macro to encapsulate the tgkill syscall
@@ -78,9 +77,6 @@ void LogThreadStopInfo(Log &log, const ThreadStopInfo &stop_info,
   case eStopReasonInstrumentation:
     log.Printf("%s: %s instrumentation", __FUNCTION__, header);
     return;
-  case eStopReasonProcessorTrace:
-    log.Printf("%s: %s processor trace", __FUNCTION__, header);
-    return;
   default:
     log.Printf("%s: %s invalid stop reason %" PRIu32, __FUNCTION__, header,
                static_cast<uint32_t>(stop_info.reason));
@@ -103,7 +99,7 @@ std::string NativeThreadLinux::GetName() {
   auto BufferOrError = getProcFile(process.GetID(), GetID(), "comm");
   if (!BufferOrError)
     return "";
-  return std::string(BufferOrError.get()->getBuffer().rtrim('\n'));
+  return BufferOrError.get()->getBuffer().rtrim('\n');
 }
 
 lldb::StateType NativeThreadLinux::GetState() { return m_state; }
@@ -137,10 +133,9 @@ bool NativeThreadLinux::GetStopReason(ThreadStopInfo &stop_info,
   case eStateStepping:
   case eStateDetached:
     if (log) {
-      LLDB_LOGF(log,
-                "NativeThreadLinux::%s tid %" PRIu64
-                " in state %s cannot answer stop reason",
-                __FUNCTION__, GetID(), StateAsCString(m_state));
+      log->Printf("NativeThreadLinux::%s tid %" PRIu64
+                  " in state %s cannot answer stop reason",
+                  __FUNCTION__, GetID(), StateAsCString(m_state));
     }
     return false;
   }
@@ -278,8 +273,9 @@ Status NativeThreadLinux::SingleStep(uint32_t signo) {
 void NativeThreadLinux::SetStoppedBySignal(uint32_t signo,
                                            const siginfo_t *info) {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_THREAD));
-  LLDB_LOGF(log, "NativeThreadLinux::%s called with signal 0x%02" PRIx32,
-            __FUNCTION__, signo);
+  if (log)
+    log->Printf("NativeThreadLinux::%s called with signal 0x%02" PRIx32,
+                __FUNCTION__, signo);
 
   SetStopped();
 
@@ -300,67 +296,9 @@ void NativeThreadLinux::SetStoppedBySignal(uint32_t signo,
               ? CrashReason::eInvalidAddress
               : GetCrashReason(*info);
       m_stop_description = GetCrashReasonString(reason, *info);
-
-      if (reason == CrashReason::eSyncTagCheckFault) {
-        AnnotateSyncTagCheckFault(info);
-      }
-
       break;
     }
   }
-}
-
-void NativeThreadLinux::AnnotateSyncTagCheckFault(const siginfo_t *info) {
-  int32_t allocation_tag_type = 0;
-  switch (GetProcess().GetArchitecture().GetMachine()) {
-  // aarch64_32 deliberately not here because there's no 32 bit MTE
-  case llvm::Triple::aarch64:
-  case llvm::Triple::aarch64_be:
-    allocation_tag_type = MemoryTagManagerAArch64MTE::eMTE_allocation;
-    break;
-  default:
-    return;
-  }
-
-  auto details =
-      GetRegisterContext().GetMemoryTaggingDetails(allocation_tag_type);
-  if (!details) {
-    llvm::consumeError(details.takeError());
-    return;
-  }
-
-  // We assume that the stop description is currently:
-  // signal SIGSEGV: sync tag check fault (fault address: <addr>)
-  // Remove the closing )
-  m_stop_description.pop_back();
-
-  std::stringstream ss;
-  lldb::addr_t fault_addr = reinterpret_cast<uintptr_t>(info->si_addr);
-  std::unique_ptr<MemoryTagManager> manager(std::move(details->manager));
-
-  ss << " logical tag: 0x" << std::hex << manager->GetLogicalTag(fault_addr);
-
-  std::vector<uint8_t> allocation_tag_data;
-  // The fault address may not be granule aligned. ReadMemoryTags will granule
-  // align any range you give it, potentially making it larger.
-  // To prevent this set len to 1. This always results in a range that is at
-  // most 1 granule in size and includes fault_addr.
-  Status status = GetProcess().ReadMemoryTags(allocation_tag_type, fault_addr,
-                                              1, allocation_tag_data);
-
-  if (status.Success()) {
-    llvm::Expected<std::vector<lldb::addr_t>> allocation_tag =
-        manager->UnpackTagsData(allocation_tag_data, 1);
-    if (allocation_tag) {
-      ss << " allocation tag: 0x" << std::hex << allocation_tag->front() << ")";
-    } else {
-      llvm::consumeError(allocation_tag.takeError());
-      ss << ")";
-    }
-  } else
-    ss << ")";
-
-  m_stop_description += ss.str();
 }
 
 bool NativeThreadLinux::IsStopped(int *signo) {
@@ -381,9 +319,6 @@ void NativeThreadLinux::SetStopped() {
   if (m_state == StateType::eStateStepping)
     m_step_workaround.reset();
 
-  // On every stop, clear any cached register data structures
-  GetRegisterContext().InvalidateAllRegisters();
-
   const StateType new_state = StateType::eStateStopped;
   MaybeLogStateChange(new_state);
   m_state = new_state;
@@ -392,7 +327,8 @@ void NativeThreadLinux::SetStopped() {
 
 void NativeThreadLinux::SetStoppedByExec() {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_THREAD));
-  LLDB_LOGF(log, "NativeThreadLinux::%s()", __FUNCTION__);
+  if (log)
+    log->Printf("NativeThreadLinux::%s()", __FUNCTION__);
 
   SetStopped();
 
@@ -453,35 +389,11 @@ void NativeThreadLinux::SetStoppedByTrace() {
   m_stop_info.details.signal.signo = SIGTRAP;
 }
 
-void NativeThreadLinux::SetStoppedByFork(bool is_vfork, lldb::pid_t child_pid) {
-  SetStopped();
-
-  m_stop_info.reason =
-      is_vfork ? StopReason::eStopReasonVFork : StopReason::eStopReasonFork;
-  m_stop_info.details.fork.child_pid = child_pid;
-  m_stop_info.details.fork.child_tid = child_pid;
-}
-
-void NativeThreadLinux::SetStoppedByVForkDone() {
-  SetStopped();
-
-  m_stop_info.reason = StopReason::eStopReasonVForkDone;
-}
-
 void NativeThreadLinux::SetStoppedWithNoReason() {
   SetStopped();
 
   m_stop_info.reason = StopReason::eStopReasonNone;
   m_stop_info.details.signal.signo = 0;
-}
-
-void NativeThreadLinux::SetStoppedByProcessorTrace(
-    llvm::StringRef description) {
-  SetStopped();
-
-  m_stop_info.reason = StopReason::eStopReasonProcessorTrace;
-  m_stop_info.details.signal.signo = 0;
-  m_stop_description = description.str();
 }
 
 void NativeThreadLinux::SetExited() {
@@ -500,19 +412,19 @@ Status NativeThreadLinux::RequestStop() {
   lldb::pid_t pid = process.GetID();
   lldb::tid_t tid = GetID();
 
-  LLDB_LOGF(log,
-            "NativeThreadLinux::%s requesting thread stop(pid: %" PRIu64
-            ", tid: %" PRIu64 ")",
-            __FUNCTION__, pid, tid);
+  if (log)
+    log->Printf("NativeThreadLinux::%s requesting thread stop(pid: %" PRIu64
+                ", tid: %" PRIu64 ")",
+                __FUNCTION__, pid, tid);
 
   Status err;
   errno = 0;
   if (::tgkill(pid, tid, SIGSTOP) != 0) {
     err.SetErrorToErrno();
-    LLDB_LOGF(log,
-              "NativeThreadLinux::%s tgkill(%" PRIu64 ", %" PRIu64
-              ", SIGSTOP) failed: %s",
-              __FUNCTION__, pid, tid, err.AsCString());
+    if (log)
+      log->Printf("NativeThreadLinux::%s tgkill(%" PRIu64 ", %" PRIu64
+                  ", SIGSTOP) failed: %s",
+                  __FUNCTION__, pid, tid, err.AsCString());
   }
 
   return err;

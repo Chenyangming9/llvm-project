@@ -249,19 +249,6 @@ static std::vector<Testcase> getTestcases() {
         {"_Z1fRA1_i"}, {"_Z1fRA_f"},
       }
     },
-
-    // Unmangled names can be remapped as complete encodings.
-    {
-      {
-        {FragmentKind::Encoding, "3foo", "3bar"},
-      },
-      {
-        // foo == bar
-        {"foo", "bar"},
-        // void f<foo>() == void f<bar>()
-        {"_Z1fIL_Z3fooEEvv", "_Z1fIL_Z3barEEvv"},
-      }
-    },
   };
 }
 
@@ -356,7 +343,7 @@ TEST(ItaniumManglingCanonicalizerTest, TestInvalidManglings) {
             EquivalenceError::InvalidSecondMangling);
   EXPECT_EQ(Canonicalizer.canonicalize("_Z3fooE"),
             llvm::ItaniumManglingCanonicalizer::Key());
-  EXPECT_EQ(Canonicalizer.canonicalize("_Zfoo"),
+  EXPECT_EQ(Canonicalizer.canonicalize("foo"),
             llvm::ItaniumManglingCanonicalizer::Key());
 
   // A reference to a template parameter ('T_' etc) cannot appear in a <name>,

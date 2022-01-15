@@ -1,4 +1,4 @@
-//===-- PlatformRemoteiOS.cpp ---------------------------------------------===//
+//===-- PlatformRemoteiOS.cpp -----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -24,8 +24,6 @@
 
 using namespace lldb;
 using namespace lldb_private;
-
-LLDB_PLUGIN_DEFINE(PlatformRemoteiOS)
 
 // Static Variables
 static uint32_t g_initialize_count = 0;
@@ -63,8 +61,8 @@ PlatformSP PlatformRemoteiOS::CreateInstance(bool force, const ArchSpec *arch) {
     const char *triple_cstr =
         arch ? arch->GetTriple().getTriple().c_str() : "<null>";
 
-    LLDB_LOGF(log, "PlatformRemoteiOS::%s(force=%s, arch={%s,%s})",
-              __FUNCTION__, force ? "true" : "false", arch_name, triple_cstr);
+    log->Printf("PlatformRemoteiOS::%s(force=%s, arch={%s,%s})", __FUNCTION__,
+                force ? "true" : "false", arch_name, triple_cstr);
   }
 
   bool create = force;
@@ -113,14 +111,14 @@ PlatformSP PlatformRemoteiOS::CreateInstance(bool force, const ArchSpec *arch) {
 
   if (create) {
     if (log)
-      LLDB_LOGF(log, "PlatformRemoteiOS::%s() creating platform", __FUNCTION__);
+      log->Printf("PlatformRemoteiOS::%s() creating platform", __FUNCTION__);
 
     return lldb::PlatformSP(new PlatformRemoteiOS());
   }
 
   if (log)
-    LLDB_LOGF(log, "PlatformRemoteiOS::%s() aborting creation of platform",
-              __FUNCTION__);
+    log->Printf("PlatformRemoteiOS::%s() aborting creation of platform",
+                __FUNCTION__);
 
   return lldb::PlatformSP();
 }
@@ -143,10 +141,14 @@ bool PlatformRemoteiOS::GetSupportedArchitectureAtIndex(uint32_t idx,
   return ARMGetSupportedArchitectureAtIndex(idx, arch);
 }
 
-llvm::StringRef PlatformRemoteiOS::GetDeviceSupportDirectoryName() {
-  return "iOS DeviceSupport";
+
+void PlatformRemoteiOS::GetDeviceSupportDirectoryNames (std::vector<std::string> &dirnames) 
+{
+    dirnames.clear();
+    dirnames.push_back("iOS DeviceSupport");
 }
 
-llvm::StringRef PlatformRemoteiOS::GetPlatformName() {
-  return "iPhoneOS.platform";
+std::string PlatformRemoteiOS::GetPlatformName ()
+{
+    return "iPhoneOS.platform";
 }

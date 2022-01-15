@@ -30,10 +30,9 @@ void XCoreInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
   OS << StringRef(getRegisterName(RegNo)).lower();
 }
 
-void XCoreInstPrinter::printInst(const MCInst *MI, uint64_t Address,
-                                 StringRef Annot, const MCSubtargetInfo &STI,
-                                 raw_ostream &O) {
-  printInstruction(MI, Address, O);
+void XCoreInstPrinter::printInst(const MCInst *MI, raw_ostream &O,
+                                 StringRef Annot, const MCSubtargetInfo &STI) {
+  printInstruction(MI, O);
   printAnnotation(O, Annot);
 }
 

@@ -65,8 +65,8 @@ define void @bzero_4_stack() {
 
 define void @bzero_8_stack() {
 ; CHECK-LABEL: bzero_8_stack:
-; CHECK:       stp x30, xzr, [sp, #-16]!
-; CHECK:       bl something
+; CHECK:       str xzr, [sp, #8]
+; CHECK-NEXT:  bl something
   %buf = alloca [8 x i8], align 1
   %cast = bitcast [8 x i8]* %buf to i8*
   call void @llvm.memset.p0i8.i32(i8* %cast, i8 0, i32 8, i1 false)
@@ -113,9 +113,9 @@ define void @bzero_20_stack() {
 
 define void @bzero_26_stack() {
 ; CHECK-LABEL: bzero_26_stack:
-; CHECK:       stp xzr, xzr, [sp]
+; CHECK:       stp xzr, xzr, [sp, #8]
+; CHECK-NEXT:  str xzr, [sp]
 ; CHECK-NEXT:  strh wzr, [sp, #24]
-; CHECK-NEXT:  str xzr, [sp, #16]
 ; CHECK-NEXT:  bl something
   %buf = alloca [26 x i8], align 1
   %cast = bitcast [26 x i8]* %buf to i8*
@@ -232,8 +232,8 @@ define void @memset_4_stack() {
 define void @memset_8_stack() {
 ; CHECK-LABEL: memset_8_stack:
 ; CHECK:       mov x8, #-6148914691236517206
-; CHECK-NEXT:  stp x30, x8, [sp, #-16]!
-; CHECK-NEXT:  add x0, sp, #8 // =8
+; CHECK-NEXT:  add x0, sp, #8
+; CHECK-NEXT:  str x8, [sp, #8]
 ; CHECK-NEXT:  bl something
   %buf = alloca [8 x i8], align 1
   %cast = bitcast [8 x i8]* %buf to i8*

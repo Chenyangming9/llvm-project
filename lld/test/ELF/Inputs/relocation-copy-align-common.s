@@ -1,7 +1,7 @@
 .data
 .global foo
 .type foo, @object
-.align 32
-.size foo, 32
+.align 8
+.size foo, 8
 foo:
 .quad 0

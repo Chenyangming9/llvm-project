@@ -6,16 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: no-exceptions
-
-// FIXME: GCC doesn't allow turning off the warning for exceptions being caught
-//        by earlier handlers, which this test is exercising. We have to disable
-//        warnings altogether to remove the error.
-//        See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=97675.
-// ADDITIONAL_COMPILE_FLAGS: -Wno-error
-
-// The fix for PR17222 made it in the dylib for macOS 10.10
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.9
+// UNSUPPORTED: libcxxabi-no-exceptions
 
 #include <cassert>
 
@@ -207,7 +198,7 @@ void test10 ()
     }
 }
 
-int main(int, char**)
+int main()
 {
     test1();
     test2();
@@ -219,6 +210,4 @@ int main(int, char**)
     test8();
     test9();
     test10();
-
-    return 0;
 }

@@ -13,9 +13,7 @@
 #include "clang/Lex/Lexer.h"
 #include "UnicodeCharSets.h"
 #include "clang/Basic/CharInfo.h"
-#include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/IdentifierTable.h"
-#include "clang/Basic/LLVM.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
@@ -26,16 +24,18 @@
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Lex/Token.h"
+#include "clang/Basic/Diagnostic.h"
+#include "clang/Basic/LLVM.h"
+#include "clang/Basic/TokenKinds.h"
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/MemoryBufferRef.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/NativeFormatting.h"
 #include "llvm/Support/UnicodeCharRanges.h"
 #include <algorithm>
@@ -124,21 +124,18 @@ void Lexer::InitLexer(const char *BufStart, const char *BufPtr,
 
   // Default to not keeping comments.
   ExtendedTokenMode = 0;
-
-  NewLinePtr = nullptr;
 }
 
 /// Lexer constructor - Create a new lexer object for the specified buffer
 /// with the specified preprocessor managing the lexing process.  This lexer
 /// assumes that the associated file buffer and Preprocessor objects will
 /// outlive it, so it doesn't take ownership of either of them.
-Lexer::Lexer(FileID FID, const llvm::MemoryBufferRef &InputFile,
-             Preprocessor &PP)
+Lexer::Lexer(FileID FID, const llvm::MemoryBuffer *InputFile, Preprocessor &PP)
     : PreprocessorLexer(&PP, FID),
       FileLoc(PP.getSourceManager().getLocForStartOfFile(FID)),
       LangOpts(PP.getLangOpts()) {
-  InitLexer(InputFile.getBufferStart(), InputFile.getBufferStart(),
-            InputFile.getBufferEnd());
+  InitLexer(InputFile->getBufferStart(), InputFile->getBufferStart(),
+            InputFile->getBufferEnd());
 
   resetExtendedTokenMode();
 }
@@ -158,10 +155,10 @@ Lexer::Lexer(SourceLocation fileloc, const LangOptions &langOpts,
 /// Lexer constructor - Create a new raw lexer object.  This object is only
 /// suitable for calls to 'LexFromRawLexer'.  This lexer assumes that the text
 /// range will outlive it, so it doesn't take ownership of it.
-Lexer::Lexer(FileID FID, const llvm::MemoryBufferRef &FromFile,
+Lexer::Lexer(FileID FID, const llvm::MemoryBuffer *FromFile,
              const SourceManager &SM, const LangOptions &langOpts)
-    : Lexer(SM.getLocForStartOfFile(FID), langOpts, FromFile.getBufferStart(),
-            FromFile.getBufferStart(), FromFile.getBufferEnd()) {}
+    : Lexer(SM.getLocForStartOfFile(FID), langOpts, FromFile->getBufferStart(),
+            FromFile->getBufferStart(), FromFile->getBufferEnd()) {}
 
 void Lexer::resetExtendedTokenMode() {
   assert(PP && "Cannot reset token mode without a preprocessor");
@@ -194,7 +191,7 @@ Lexer *Lexer::Create_PragmaLexer(SourceLocation SpellingLoc,
 
   // Create the lexer as if we were going to lex the file normally.
   FileID SpellingFID = SM.getFileID(SpellingLoc);
-  llvm::MemoryBufferRef InputFile = SM.getBufferOrFake(SpellingFID);
+  const llvm::MemoryBuffer *InputFile = SM.getBuffer(SpellingFID);
   Lexer *L = new Lexer(SpellingFID, InputFile, PP);
 
   // Now that the lexer is created, change the start/end locations so that we
@@ -219,15 +216,6 @@ Lexer *Lexer::Create_PragmaLexer(SourceLocation SpellingLoc,
   // This lexer really is for _Pragma.
   L->Is_PragmaLexer = true;
   return L;
-}
-
-bool Lexer::skipOver(unsigned NumBytes) {
-  IsAtPhysicalStartOfLine = true;
-  IsAtStartOfLine = true;
-  if ((BufferPtr + NumBytes) > BufferEnd)
-    return true;
-  BufferPtr += NumBytes;
-  return false;
 }
 
 template <typename T> static void StringifyImpl(T &Str, char Quote) {
@@ -256,7 +244,7 @@ template <typename T> static void StringifyImpl(T &Str, char Quote) {
 }
 
 std::string Lexer::Stringify(StringRef Str, bool Charify) {
-  std::string Result = std::string(Str);
+  std::string Result = Str;
   char Quote = Charify ? '\'' : '"';
   StringifyImpl(Result, Quote);
   return Result;
@@ -588,7 +576,7 @@ PreambleBounds Lexer::ComputePreamble(StringRef Buffer,
   // Create a lexer starting at the beginning of the file. Note that we use a
   // "fake" file source location at offset 1 so that the lexer will track our
   // position within the file.
-  const SourceLocation::UIntTy StartOffset = 1;
+  const unsigned StartOffset = 1;
   SourceLocation FileLoc = SourceLocation::getFromRawEncoding(StartOffset);
   Lexer TheLexer(FileLoc, LangOpts, Buffer.begin(), Buffer.begin(),
                  Buffer.end());
@@ -682,8 +670,6 @@ PreambleBounds Lexer::ComputePreamble(StringRef Buffer,
               .Case("ifdef", PDK_Skipped)
               .Case("ifndef", PDK_Skipped)
               .Case("elif", PDK_Skipped)
-              .Case("elifdef", PDK_Skipped)
-              .Case("elifndef", PDK_Skipped)
               .Case("else", PDK_Skipped)
               .Case("endif", PDK_Skipped)
               .Default(PDK_Unknown);
@@ -877,14 +863,6 @@ static CharSourceRange makeRangeFromFileLocs(CharSourceRange Range,
   return CharSourceRange::getCharRange(Begin, End);
 }
 
-// Assumes that `Loc` is in an expansion.
-static bool isInExpansionTokenRange(const SourceLocation Loc,
-                                    const SourceManager &SM) {
-  return SM.getSLocEntry(SM.getFileID(Loc))
-      .getExpansion()
-      .isExpansionTokenRange();
-}
-
 CharSourceRange Lexer::makeFileCharRange(CharSourceRange Range,
                                          const SourceManager &SM,
                                          const LangOptions &LangOpts) {
@@ -904,12 +882,10 @@ CharSourceRange Lexer::makeFileCharRange(CharSourceRange Range,
   }
 
   if (Begin.isFileID() && End.isMacroID()) {
-    if (Range.isTokenRange()) {
-      if (!isAtEndOfMacroExpansion(End, SM, LangOpts, &End))
-        return {};
-      // Use the *original* end, not the expanded one in `End`.
-      Range.setTokenRange(isInExpansionTokenRange(Range.getEnd(), SM));
-    } else if (!isAtStartOfMacroExpansion(End, SM, LangOpts, &End))
+    if ((Range.isTokenRange() && !isAtEndOfMacroExpansion(End, SM, LangOpts,
+                                                          &End)) ||
+        (Range.isCharRange() && !isAtStartOfMacroExpansion(End, SM, LangOpts,
+                                                           &End)))
       return {};
     Range.setEnd(End);
     return makeRangeFromFileLocs(Range, SM, LangOpts);
@@ -924,9 +900,6 @@ CharSourceRange Lexer::makeFileCharRange(CharSourceRange Range,
                                                          &MacroEnd)))) {
     Range.setBegin(MacroBegin);
     Range.setEnd(MacroEnd);
-    // Use the *original* `End`, not the expanded one in `MacroEnd`.
-    if (Range.isTokenRange())
-      Range.setTokenRange(isInExpansionTokenRange(End, SM));
     return makeRangeFromFileLocs(Range, SM, LangOpts);
   }
 
@@ -1449,8 +1422,6 @@ void Lexer::SetByteOffset(unsigned Offset, bool StartOfLine) {
 static bool isAllowedIDChar(uint32_t C, const LangOptions &LangOpts) {
   if (LangOpts.AsmPreprocessor) {
     return false;
-  } else if (LangOpts.DollarIdents && '$' == C) {
-    return true;
   } else if (LangOpts.CPlusPlus11 || LangOpts.C11) {
     static const llvm::sys::UnicodeCharSet C11AllowedIDChars(
         C11AllowedIDCharRanges);
@@ -1803,14 +1774,12 @@ bool Lexer::LexNumericConstant(Token &Result, const char *CurPtr) {
   }
 
   // If we have a digit separator, continue.
-  if (C == '\'' && (getLangOpts().CPlusPlus14 || getLangOpts().C2x)) {
+  if (C == '\'' && getLangOpts().CPlusPlus14) {
     unsigned NextSize;
     char Next = getCharAndSizeNoWarn(CurPtr + Size, NextSize, getLangOpts());
     if (isIdentifierBody(Next)) {
       if (!isLexingRawMode())
-        Diag(CurPtr, getLangOpts().CPlusPlus
-                         ? diag::warn_cxx11_compat_digit_separator
-                         : diag::warn_c2x_compat_digit_separator);
+        Diag(CurPtr, diag::warn_cxx11_compat_digit_separator);
       CurPtr = ConsumeChar(CurPtr, Size, Result);
       CurPtr = ConsumeChar(CurPtr, NextSize, Result);
       return LexNumericConstant(Result, CurPtr);
@@ -1881,7 +1850,7 @@ const char *Lexer::LexUDSuffix(Token &Result, const char *CurPtr,
         char Next = getCharAndSizeNoWarn(CurPtr + Consumed, NextSize,
                                          getLangOpts());
         if (!isIdentifierBody(Next)) {
-          // End of suffix. Check whether this is on the allowed list.
+          // End of suffix. Check whether this is on the whitelist.
           const StringRef CompleteSuffix(Buffer, Chars);
           IsUDSuffix = StringLiteralParser::isValidUDSuffix(getLangOpts(),
                                                             CompleteSuffix);
@@ -2076,7 +2045,7 @@ bool Lexer::LexAngledStringLiteral(Token &Result, const char *CurPtr) {
     if (C == '\\')
       C = getAndAdvanceChar(CurPtr, Result);
 
-    if (isVerticalWhitespace(C) ||               // Newline.
+    if (C == '\n' || C == '\r' ||                // Newline.
         (C == 0 && (CurPtr - 1 == BufferEnd))) { // End of file.
       // If the filename is unterminated, then it must just be a lone <
       // character.  Return this as such.
@@ -2112,8 +2081,7 @@ void Lexer::codeCompleteIncludedFile(const char *PathStart,
                                      bool IsAngled) {
   // Completion only applies to the filename, after the last slash.
   StringRef PartialPath(PathStart, CompletionPoint - PathStart);
-  llvm::StringRef SlashChars = LangOpts.MSVCCompat ? "/\\" : "/";
-  auto Slash = PartialPath.find_last_of(SlashChars);
+  auto Slash = PartialPath.find_last_of(LangOpts.MSVCCompat ? "/\\" : "/");
   StringRef Dir =
       (Slash == StringRef::npos) ? "" : PartialPath.take_front(Slash);
   const char *StartOfFilename =
@@ -2121,8 +2089,7 @@ void Lexer::codeCompleteIncludedFile(const char *PathStart,
   // Code completion filter range is the filename only, up to completion point.
   PP->setCodeCompletionIdentifierInfo(&PP->getIdentifierTable().get(
       StringRef(StartOfFilename, CompletionPoint - StartOfFilename)));
-  // We should replace the characters up to the closing quote or closest slash,
-  // if any.
+  // We should replace the characters up to the closing quote, if any.
   while (CompletionPoint < BufferEnd) {
     char Next = *(CompletionPoint + 1);
     if (Next == 0 || Next == '\r' || Next == '\n')
@@ -2130,10 +2097,7 @@ void Lexer::codeCompleteIncludedFile(const char *PathStart,
     ++CompletionPoint;
     if (Next == (IsAngled ? '>' : '"'))
       break;
-    if (llvm::is_contained(SlashChars, Next))
-      break;
   }
-
   PP->setCodeCompletionTokenRange(
       FileLoc.getLocWithOffset(StartOfFilename - BufferStart),
       FileLoc.getLocWithOffset(CompletionPoint - BufferStart));
@@ -2216,15 +2180,6 @@ bool Lexer::SkipWhitespace(Token &Result, const char *CurPtr,
 
   unsigned char Char = *CurPtr;
 
-  const char *lastNewLine = nullptr;
-  auto setLastNewLine = [&](const char *Ptr) {
-    lastNewLine = Ptr;
-    if (!NewLinePtr)
-      NewLinePtr = Ptr;
-  };
-  if (SawNewline)
-    setLastNewLine(CurPtr - 1);
-
   // Skip consecutive spaces efficiently.
   while (true) {
     // Skip horizontal whitespace very aggressively.
@@ -2242,8 +2197,6 @@ bool Lexer::SkipWhitespace(Token &Result, const char *CurPtr,
     }
 
     // OK, but handle newline.
-    if (*CurPtr == '\n')
-      setLastNewLine(CurPtr);
     SawNewline = true;
     Char = *++CurPtr;
   }
@@ -2267,12 +2220,6 @@ bool Lexer::SkipWhitespace(Token &Result, const char *CurPtr,
   if (SawNewline) {
     Result.setFlag(Token::StartOfLine);
     TokAtPhysicalStartOfLine = true;
-
-    if (NewLinePtr && lastNewLine && NewLinePtr != lastNewLine && PP) {
-      if (auto *Handler = PP->getEmptylineHandler())
-        Handler->HandleEmptyline(SourceRange(getSourceLocation(NewLinePtr + 1),
-                                             getSourceLocation(lastNewLine)));
-    }
   }
 
   BufferPtr = CurPtr;
@@ -2413,7 +2360,7 @@ bool Lexer::SkipLineComment(Token &Result, const char *CurPtr,
   // contribute to another token), it isn't needed for correctness.  Note that
   // this is ok even in KeepWhitespaceMode, because we would have returned the
   /// comment above in that mode.
-  NewLinePtr = CurPtr++;
+  ++CurPtr;
 
   // The next returned token is at the start of the line.
   Result.setFlag(Token::StartOfLine);
@@ -2458,70 +2405,56 @@ static bool isEndOfBlockCommentWithEscapedNewLine(const char *CurPtr,
                                                   Lexer *L) {
   assert(CurPtr[0] == '\n' || CurPtr[0] == '\r');
 
-  // Position of the first trigraph in the ending sequence.
-  const char *TrigraphPos = 0;
-  // Position of the first whitespace after a '\' in the ending sequence.
-  const char *SpacePos = 0;
+  // Back up off the newline.
+  --CurPtr;
 
-  while (true) {
-    // Back up off the newline.
+  // If this is a two-character newline sequence, skip the other character.
+  if (CurPtr[0] == '\n' || CurPtr[0] == '\r') {
+    // \n\n or \r\r -> not escaped newline.
+    if (CurPtr[0] == CurPtr[1])
+      return false;
+    // \n\r or \r\n -> skip the newline.
     --CurPtr;
-
-    // If this is a two-character newline sequence, skip the other character.
-    if (CurPtr[0] == '\n' || CurPtr[0] == '\r') {
-      // \n\n or \r\r -> not escaped newline.
-      if (CurPtr[0] == CurPtr[1])
-        return false;
-      // \n\r or \r\n -> skip the newline.
-      --CurPtr;
-    }
-
-    // If we have horizontal whitespace, skip over it.  We allow whitespace
-    // between the slash and newline.
-    while (isHorizontalWhitespace(*CurPtr) || *CurPtr == 0) {
-      SpacePos = CurPtr;
-      --CurPtr;
-    }
-
-    // If we have a slash, this is an escaped newline.
-    if (*CurPtr == '\\') {
-      --CurPtr;
-    } else if (CurPtr[0] == '/' && CurPtr[-1] == '?' && CurPtr[-2] == '?') {
-      // This is a trigraph encoding of a slash.
-      TrigraphPos = CurPtr - 2;
-      CurPtr -= 3;
-    } else {
-      return false;
-    }
-
-    // If the character preceding the escaped newline is a '*', then after line
-    // splicing we have a '*/' ending the comment.
-    if (*CurPtr == '*')
-      break;
-
-    if (*CurPtr != '\n' && *CurPtr != '\r')
-      return false;
   }
 
-  if (TrigraphPos) {
+  // If we have horizontal whitespace, skip over it.  We allow whitespace
+  // between the slash and newline.
+  bool HasSpace = false;
+  while (isHorizontalWhitespace(*CurPtr) || *CurPtr == 0) {
+    --CurPtr;
+    HasSpace = true;
+  }
+
+  // If we have a slash, we know this is an escaped newline.
+  if (*CurPtr == '\\') {
+    if (CurPtr[-1] != '*') return false;
+  } else {
+    // It isn't a slash, is it the ?? / trigraph?
+    if (CurPtr[0] != '/' || CurPtr[-1] != '?' || CurPtr[-2] != '?' ||
+        CurPtr[-3] != '*')
+      return false;
+
+    // This is the trigraph ending the comment.  Emit a stern warning!
+    CurPtr -= 2;
+
     // If no trigraphs are enabled, warn that we ignored this trigraph and
     // ignore this * character.
     if (!L->getLangOpts().Trigraphs) {
       if (!L->isLexingRawMode())
-        L->Diag(TrigraphPos, diag::trigraph_ignored_block_comment);
+        L->Diag(CurPtr, diag::trigraph_ignored_block_comment);
       return false;
     }
     if (!L->isLexingRawMode())
-      L->Diag(TrigraphPos, diag::trigraph_ends_block_comment);
+      L->Diag(CurPtr, diag::trigraph_ends_block_comment);
   }
 
   // Warn about having an escaped newline between the */ characters.
   if (!L->isLexingRawMode())
-    L->Diag(CurPtr + 1, diag::escaped_newline_block_comment_end);
+    L->Diag(CurPtr, diag::escaped_newline_block_comment_end);
 
   // If there was space between the backslash and newline, warn about it.
-  if (SpacePos && !L->isLexingRawMode())
-    L->Diag(SpacePos, diag::backslash_newline_space);
+  if (HasSpace && !L->isLexingRawMode())
+    L->Diag(CurPtr, diag::backslash_newline_space);
 
   return true;
 }
@@ -2608,8 +2541,8 @@ bool Lexer::SkipBlockComment(Token &Result, const char *CurPtr,
         '/', '/', '/', '/',  '/', '/', '/', '/',
         '/', '/', '/', '/',  '/', '/', '/', '/'
       };
-      while (CurPtr + 16 <= BufferEnd &&
-             !vec_any_eq(*(const __vector unsigned char *)CurPtr, Slashes))
+      while (CurPtr+16 <= BufferEnd &&
+             !vec_any_eq(*(const vector unsigned char*)CurPtr, Slashes))
         CurPtr += 16;
 #else
       // Scan for '/' quickly.  Many block comments are very large.
@@ -2714,7 +2647,6 @@ void Lexer::ReadToEndOfLine(SmallVectorImpl<char> *Result) {
   assert(ParsingPreprocessorDirective && ParsingFilename == false &&
          "Must be in a preprocessing directive!");
   Token Tmp;
-  Tmp.startToken();
 
   // CurPtr - Cache BufferPtr in an automatic variable.
   const char *CurPtr = BufferPtr;
@@ -2793,11 +2725,6 @@ bool Lexer::LexEndOfFile(Token &Result, const char *CurPtr) {
 
   if (PP->isRecordingPreamble() && PP->isInPrimaryFile()) {
     PP->setRecordedPreambleConditionalStack(ConditionalStack);
-    // If the preamble cuts off the end of a header guard, consider it guarded.
-    // The guard is valid for the preamble content itself, and for tools the
-    // most useful answer is "yes, this file has a header guard".
-    if (!ConditionalStack.empty())
-      MIOpt.ExitTopLevelConditional();
     ConditionalStack.clear();
   }
 
@@ -2811,11 +2738,11 @@ bool Lexer::LexEndOfFile(Token &Result, const char *CurPtr) {
     ConditionalStack.pop_back();
   }
 
-  SourceLocation EndLoc = getSourceLocation(BufferEnd);
   // C99 5.1.1.2p2: If the file is non-empty and didn't end in a newline, issue
   // a pedwarn.
   if (CurPtr != BufferStart && (CurPtr[-1] != '\n' && CurPtr[-1] != '\r')) {
     DiagnosticsEngine &Diags = PP->getDiagnostics();
+    SourceLocation EndLoc = getSourceLocation(BufferEnd);
     unsigned DiagID;
 
     if (LangOpts.CPlusPlus11) {
@@ -2838,7 +2765,7 @@ bool Lexer::LexEndOfFile(Token &Result, const char *CurPtr) {
   BufferPtr = CurPtr;
 
   // Finally, let the preprocessor handle this.
-  return PP->HandleEndOfFile(Result, EndLoc, isPragmaLexer());
+  return PP->HandleEndOfFile(Result, isPragmaLexer());
 }
 
 /// isNextPPTokenLParen - Return 1 if the next unexpanded token lexed from
@@ -3242,10 +3169,10 @@ LexNextToken:
   const char *CurPtr = BufferPtr;
 
   // Small amounts of horizontal whitespace is very common between tokens.
-  if (isHorizontalWhitespace(*CurPtr)) {
-    do {
+  if ((*CurPtr == ' ') || (*CurPtr == '\t')) {
+    ++CurPtr;
+    while ((*CurPtr == ' ') || (*CurPtr == '\t'))
       ++CurPtr;
-    } while (isHorizontalWhitespace(*CurPtr));
 
     // If we are keeping whitespace and other tokens, just return what we just
     // skipped.  The next lexer invocation will return the token after the
@@ -3265,9 +3192,6 @@ LexNextToken:
   // Read a character, advancing over it.
   char Char = getAndAdvanceChar(CurPtr, Result);
   tok::TokenKind Kind;
-
-  if (!isVerticalWhitespace(Char))
-    NewLinePtr = nullptr;
 
   switch (Char) {
   case 0:  // Null.
@@ -3323,7 +3247,6 @@ LexNextToken:
       // Since we consumed a newline, we are back at the start of a line.
       IsAtStartOfLine = true;
       IsAtPhysicalStartOfLine = true;
-      NewLinePtr = CurPtr - 1;
 
       Kind = tok::eod;
       break;
@@ -3759,7 +3682,7 @@ LexNextToken:
     } else if (Char == '=') {
       char After = getCharAndSize(CurPtr+SizeTmp, SizeTmp2);
       if (After == '>') {
-        if (getLangOpts().CPlusPlus20) {
+        if (getLangOpts().CPlusPlus2a) {
           if (!isLexingRawMode())
             Diag(BufferPtr, diag::warn_cxx17_compat_spaceship);
           CurPtr = ConsumeChar(ConsumeChar(CurPtr, SizeTmp, Result),
@@ -3770,7 +3693,7 @@ LexNextToken:
         // Suggest adding a space between the '<=' and the '>' to avoid a
         // change in semantics if this turns up in C++ <=17 mode.
         if (getLangOpts().CPlusPlus && !isLexingRawMode()) {
-          Diag(BufferPtr, diag::warn_cxx20_compat_spaceship)
+          Diag(BufferPtr, diag::warn_cxx2a_compat_spaceship)
             << FixItHint::CreateInsertion(
                    getSourceLocation(CurPtr + SizeTmp, SizeTmp2), " ");
         }

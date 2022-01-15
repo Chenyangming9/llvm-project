@@ -14,7 +14,7 @@
 
 // Returns: a ^ b
 
-COMPILER_RT_ABI double __powidf2(double a, int b) {
+COMPILER_RT_ABI double __powidf2(double a, si_int b) {
   const int recip = b < 0;
   double r = 1;
   while (1) {

@@ -2,10 +2,10 @@
 ; RUN: llc < %s -mtriple=x86_64-unknown-unknown | FileCheck %s --check-prefixes=SSE,SSE2
 ; RUN: llc < %s -mtriple=x86_64-unknown-unknown -mattr=+sse4a | FileCheck %s --check-prefixes=SSE,SSE4A
 ; RUN: llc < %s -mtriple=x86_64-unknown-unknown -mattr=+sse4.1 | FileCheck %s --check-prefixes=SSE,SSE41
-; RUN: llc < %s -mtriple=x86_64-unknown-unknown -mattr=+avx | FileCheck %s --check-prefix=AVX
-; RUN: llc < %s -mtriple=x86_64-unknown-unknown -mattr=+avx2 | FileCheck %s --check-prefix=AVX
-; RUN: llc < %s -mtriple=x86_64-unknown-unknown -mattr=+avx512dq,+avx512vl | FileCheck %s --check-prefix=AVX512
-; RUN: llc < %s -mtriple=x86_64-unknown-unknown -mattr=+avx512bw,+avx512vl | FileCheck %s --check-prefix=AVX512
+; RUN: llc < %s -mtriple=x86_64-unknown-unknown -mattr=+avx | FileCheck %s --check-prefixes=AVX,AVX1
+; RUN: llc < %s -mtriple=x86_64-unknown-unknown -mattr=+avx2 | FileCheck %s --check-prefixes=AVX,AVX2
+; RUN: llc < %s -mtriple=x86_64-unknown-unknown -mattr=+avx512dq,+avx512vl | FileCheck %s --check-prefixes=AVX512,AVX512DQ
+; RUN: llc < %s -mtriple=x86_64-unknown-unknown -mattr=+avx512bw,+avx512vl | FileCheck %s --check-prefixes=AVX512,AVX512BW
 
 ; Test codegen for under aligned nontemporal vector stores
 
@@ -37,12 +37,27 @@ define void @test_zero_v2f64_align1(<2 x double>* %dst) nounwind {
 }
 
 define void @test_zero_v4f32_align1(<4 x float>* %dst) nounwind {
-; SSE-LABEL: test_zero_v4f32_align1:
-; SSE:       # %bb.0:
-; SSE-NEXT:    xorl %eax, %eax
-; SSE-NEXT:    movntiq %rax, 8(%rdi)
-; SSE-NEXT:    movntiq %rax, (%rdi)
-; SSE-NEXT:    retq
+; SSE2-LABEL: test_zero_v4f32_align1:
+; SSE2:       # %bb.0:
+; SSE2-NEXT:    xorl %eax, %eax
+; SSE2-NEXT:    movntiq %rax, 8(%rdi)
+; SSE2-NEXT:    movntiq %rax, (%rdi)
+; SSE2-NEXT:    retq
+;
+; SSE4A-LABEL: test_zero_v4f32_align1:
+; SSE4A:       # %bb.0:
+; SSE4A-NEXT:    xorl %eax, %eax
+; SSE4A-NEXT:    movntiq %rax, 8(%rdi)
+; SSE4A-NEXT:    xorps %xmm0, %xmm0
+; SSE4A-NEXT:    movntsd %xmm0, (%rdi)
+; SSE4A-NEXT:    retq
+;
+; SSE41-LABEL: test_zero_v4f32_align1:
+; SSE41:       # %bb.0:
+; SSE41-NEXT:    xorl %eax, %eax
+; SSE41-NEXT:    movntiq %rax, 8(%rdi)
+; SSE41-NEXT:    movntiq %rax, (%rdi)
+; SSE41-NEXT:    retq
 ;
 ; AVX-LABEL: test_zero_v4f32_align1:
 ; AVX:       # %bb.0:
@@ -62,12 +77,27 @@ define void @test_zero_v4f32_align1(<4 x float>* %dst) nounwind {
 }
 
 define void @test_zero_v2i64_align1(<2 x i64>* %dst) nounwind {
-; SSE-LABEL: test_zero_v2i64_align1:
-; SSE:       # %bb.0:
-; SSE-NEXT:    xorl %eax, %eax
-; SSE-NEXT:    movntiq %rax, 8(%rdi)
-; SSE-NEXT:    movntiq %rax, (%rdi)
-; SSE-NEXT:    retq
+; SSE2-LABEL: test_zero_v2i64_align1:
+; SSE2:       # %bb.0:
+; SSE2-NEXT:    xorl %eax, %eax
+; SSE2-NEXT:    movntiq %rax, 8(%rdi)
+; SSE2-NEXT:    movntiq %rax, (%rdi)
+; SSE2-NEXT:    retq
+;
+; SSE4A-LABEL: test_zero_v2i64_align1:
+; SSE4A:       # %bb.0:
+; SSE4A-NEXT:    xorl %eax, %eax
+; SSE4A-NEXT:    movntiq %rax, 8(%rdi)
+; SSE4A-NEXT:    xorps %xmm0, %xmm0
+; SSE4A-NEXT:    movntsd %xmm0, (%rdi)
+; SSE4A-NEXT:    retq
+;
+; SSE41-LABEL: test_zero_v2i64_align1:
+; SSE41:       # %bb.0:
+; SSE41-NEXT:    xorl %eax, %eax
+; SSE41-NEXT:    movntiq %rax, 8(%rdi)
+; SSE41-NEXT:    movntiq %rax, (%rdi)
+; SSE41-NEXT:    retq
 ;
 ; AVX-LABEL: test_zero_v2i64_align1:
 ; AVX:       # %bb.0:
@@ -87,12 +117,27 @@ define void @test_zero_v2i64_align1(<2 x i64>* %dst) nounwind {
 }
 
 define void @test_zero_v4i32_align1(<4 x i32>* %dst) nounwind {
-; SSE-LABEL: test_zero_v4i32_align1:
-; SSE:       # %bb.0:
-; SSE-NEXT:    xorl %eax, %eax
-; SSE-NEXT:    movntiq %rax, 8(%rdi)
-; SSE-NEXT:    movntiq %rax, (%rdi)
-; SSE-NEXT:    retq
+; SSE2-LABEL: test_zero_v4i32_align1:
+; SSE2:       # %bb.0:
+; SSE2-NEXT:    xorl %eax, %eax
+; SSE2-NEXT:    movntiq %rax, 8(%rdi)
+; SSE2-NEXT:    movntiq %rax, (%rdi)
+; SSE2-NEXT:    retq
+;
+; SSE4A-LABEL: test_zero_v4i32_align1:
+; SSE4A:       # %bb.0:
+; SSE4A-NEXT:    xorl %eax, %eax
+; SSE4A-NEXT:    movntiq %rax, 8(%rdi)
+; SSE4A-NEXT:    xorps %xmm0, %xmm0
+; SSE4A-NEXT:    movntsd %xmm0, (%rdi)
+; SSE4A-NEXT:    retq
+;
+; SSE41-LABEL: test_zero_v4i32_align1:
+; SSE41:       # %bb.0:
+; SSE41-NEXT:    xorl %eax, %eax
+; SSE41-NEXT:    movntiq %rax, 8(%rdi)
+; SSE41-NEXT:    movntiq %rax, (%rdi)
+; SSE41-NEXT:    retq
 ;
 ; AVX-LABEL: test_zero_v4i32_align1:
 ; AVX:       # %bb.0:
@@ -112,12 +157,27 @@ define void @test_zero_v4i32_align1(<4 x i32>* %dst) nounwind {
 }
 
 define void @test_zero_v8i16_align1(<8 x i16>* %dst) nounwind {
-; SSE-LABEL: test_zero_v8i16_align1:
-; SSE:       # %bb.0:
-; SSE-NEXT:    xorl %eax, %eax
-; SSE-NEXT:    movntiq %rax, 8(%rdi)
-; SSE-NEXT:    movntiq %rax, (%rdi)
-; SSE-NEXT:    retq
+; SSE2-LABEL: test_zero_v8i16_align1:
+; SSE2:       # %bb.0:
+; SSE2-NEXT:    xorl %eax, %eax
+; SSE2-NEXT:    movntiq %rax, 8(%rdi)
+; SSE2-NEXT:    movntiq %rax, (%rdi)
+; SSE2-NEXT:    retq
+;
+; SSE4A-LABEL: test_zero_v8i16_align1:
+; SSE4A:       # %bb.0:
+; SSE4A-NEXT:    xorl %eax, %eax
+; SSE4A-NEXT:    movntiq %rax, 8(%rdi)
+; SSE4A-NEXT:    xorps %xmm0, %xmm0
+; SSE4A-NEXT:    movntsd %xmm0, (%rdi)
+; SSE4A-NEXT:    retq
+;
+; SSE41-LABEL: test_zero_v8i16_align1:
+; SSE41:       # %bb.0:
+; SSE41-NEXT:    xorl %eax, %eax
+; SSE41-NEXT:    movntiq %rax, 8(%rdi)
+; SSE41-NEXT:    movntiq %rax, (%rdi)
+; SSE41-NEXT:    retq
 ;
 ; AVX-LABEL: test_zero_v8i16_align1:
 ; AVX:       # %bb.0:
@@ -137,12 +197,27 @@ define void @test_zero_v8i16_align1(<8 x i16>* %dst) nounwind {
 }
 
 define void @test_zero_v16i8_align1(<16 x i8>* %dst) nounwind {
-; SSE-LABEL: test_zero_v16i8_align1:
-; SSE:       # %bb.0:
-; SSE-NEXT:    xorl %eax, %eax
-; SSE-NEXT:    movntiq %rax, 8(%rdi)
-; SSE-NEXT:    movntiq %rax, (%rdi)
-; SSE-NEXT:    retq
+; SSE2-LABEL: test_zero_v16i8_align1:
+; SSE2:       # %bb.0:
+; SSE2-NEXT:    xorl %eax, %eax
+; SSE2-NEXT:    movntiq %rax, 8(%rdi)
+; SSE2-NEXT:    movntiq %rax, (%rdi)
+; SSE2-NEXT:    retq
+;
+; SSE4A-LABEL: test_zero_v16i8_align1:
+; SSE4A:       # %bb.0:
+; SSE4A-NEXT:    xorl %eax, %eax
+; SSE4A-NEXT:    movntiq %rax, 8(%rdi)
+; SSE4A-NEXT:    xorps %xmm0, %xmm0
+; SSE4A-NEXT:    movntsd %xmm0, (%rdi)
+; SSE4A-NEXT:    retq
+;
+; SSE41-LABEL: test_zero_v16i8_align1:
+; SSE41:       # %bb.0:
+; SSE41-NEXT:    xorl %eax, %eax
+; SSE41-NEXT:    movntiq %rax, 8(%rdi)
+; SSE41-NEXT:    movntiq %rax, (%rdi)
+; SSE41-NEXT:    retq
 ;
 ; AVX-LABEL: test_zero_v16i8_align1:
 ; AVX:       # %bb.0:
@@ -206,11 +281,10 @@ define void @test_zero_v8f32_align1(<8 x float>* %dst) nounwind {
 ;
 ; SSE4A-LABEL: test_zero_v8f32_align1:
 ; SSE4A:       # %bb.0:
-; SSE4A-NEXT:    xorl %eax, %eax
-; SSE4A-NEXT:    movntiq %rax, 8(%rdi)
-; SSE4A-NEXT:    movntiq %rax, 24(%rdi)
 ; SSE4A-NEXT:    xorps %xmm0, %xmm0
+; SSE4A-NEXT:    movntsd %xmm0, 8(%rdi)
 ; SSE4A-NEXT:    movntsd %xmm0, (%rdi)
+; SSE4A-NEXT:    movntsd %xmm0, 24(%rdi)
 ; SSE4A-NEXT:    movntsd %xmm0, 16(%rdi)
 ; SSE4A-NEXT:    retq
 ;
@@ -651,15 +725,14 @@ define void @test_zero_v16f32_align1(<16 x float>* %dst) nounwind {
 ;
 ; SSE4A-LABEL: test_zero_v16f32_align1:
 ; SSE4A:       # %bb.0:
-; SSE4A-NEXT:    xorl %eax, %eax
-; SSE4A-NEXT:    movntiq %rax, 24(%rdi)
-; SSE4A-NEXT:    movntiq %rax, 8(%rdi)
-; SSE4A-NEXT:    movntiq %rax, 56(%rdi)
-; SSE4A-NEXT:    movntiq %rax, 40(%rdi)
 ; SSE4A-NEXT:    xorps %xmm0, %xmm0
+; SSE4A-NEXT:    movntsd %xmm0, 24(%rdi)
 ; SSE4A-NEXT:    movntsd %xmm0, 16(%rdi)
+; SSE4A-NEXT:    movntsd %xmm0, 8(%rdi)
 ; SSE4A-NEXT:    movntsd %xmm0, (%rdi)
+; SSE4A-NEXT:    movntsd %xmm0, 56(%rdi)
 ; SSE4A-NEXT:    movntsd %xmm0, 48(%rdi)
+; SSE4A-NEXT:    movntsd %xmm0, 40(%rdi)
 ; SSE4A-NEXT:    movntsd %xmm0, 32(%rdi)
 ; SSE4A-NEXT:    retq
 ;

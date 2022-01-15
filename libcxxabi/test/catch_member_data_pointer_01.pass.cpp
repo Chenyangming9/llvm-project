@@ -6,10 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: no-exceptions
-
-// 1b00fc5d8133 made it in the dylib in macOS 10.11
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10}}
+// UNSUPPORTED: libcxxabi-no-exceptions
 
 #include <cassert>
 
@@ -167,13 +164,11 @@ void test5()
     }
 }
 
-int main(int, char**)
+int main()
 {
     test1();
     test2();
     test3();
     test4();
     test5();
-
-    return 0;
 }

@@ -1,5 +1,15 @@
 // RUN: %clang_builtins %s %librt -o %t && %run %t
-// REQUIRES: librt_has_powisf2
+//===-- powisf2_test.cpp - Test __powisf2 ---------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file tests __powisf2 for the compiler_rt library.
+//
+//===----------------------------------------------------------------------===//
 
 #include "int_lib.h"
 #include <stdio.h>
@@ -7,9 +17,9 @@
 
 // Returns: a ^ b
 
-COMPILER_RT_ABI float __powisf2(float a, int b);
+COMPILER_RT_ABI float __powisf2(float a, si_int b);
 
-int test__powisf2(float a, int b, float expected)
+int test__powisf2(float a, si_int b, float expected)
 {
     float x = __powisf2(a, b);
     int correct = (x == expected) && (signbit(x) == signbit(expected));
@@ -51,9 +61,9 @@ int main()
         return 1;
     if (test__powisf2(0, 4, 0))
         return 1;
-    if (test__powisf2(0, INT_MAX -1, 0))
+    if (test__powisf2(0, 0x7FFFFFFE, 0))
         return 1;
-    if (test__powisf2(0, INT_MAX, 0))
+    if (test__powisf2(0, 0x7FFFFFFF, 0))
         return 1;
 
     if (test__powisf2(-0., 1, -0.))
@@ -64,9 +74,9 @@ int main()
         return 1;
     if (test__powisf2(-0., 4, 0))
         return 1;
-    if (test__powisf2(-0., INT_MAX - 1, 0))
+    if (test__powisf2(-0., 0x7FFFFFFE, 0))
         return 1;
-    if (test__powisf2(-0., INT_MAX, -0.))
+    if (test__powisf2(-0., 0x7FFFFFFF, -0.))
         return 1;
 
     if (test__powisf2(1, 1, 1))
@@ -77,9 +87,9 @@ int main()
         return 1;
     if (test__powisf2(1, 4, 1))
         return 1;
-    if (test__powisf2(1, INT_MAX - 1, 1))
+    if (test__powisf2(1, 0x7FFFFFFE, 1))
         return 1;
-    if (test__powisf2(1, INT_MAX, 1))
+    if (test__powisf2(1, 0x7FFFFFFF, 1))
         return 1;
 
     if (test__powisf2(INFINITY, 1, INFINITY))
@@ -90,9 +100,9 @@ int main()
         return 1;
     if (test__powisf2(INFINITY, 4, INFINITY))
         return 1;
-    if (test__powisf2(INFINITY, INT_MAX - 1, INFINITY))
+    if (test__powisf2(INFINITY, 0x7FFFFFFE, INFINITY))
         return 1;
-    if (test__powisf2(INFINITY, INT_MAX, INFINITY))
+    if (test__powisf2(INFINITY, 0x7FFFFFFF, INFINITY))
         return 1;
 
     if (test__powisf2(-INFINITY, 1, -INFINITY))
@@ -103,9 +113,9 @@ int main()
         return 1;
     if (test__powisf2(-INFINITY, 4, INFINITY))
         return 1;
-    if (test__powisf2(-INFINITY, INT_MAX - 1, INFINITY))
+    if (test__powisf2(-INFINITY, 0x7FFFFFFE, INFINITY))
         return 1;
-    if (test__powisf2(-INFINITY, INT_MAX, -INFINITY))
+    if (test__powisf2(-INFINITY, 0x7FFFFFFF, -INFINITY))
         return 1;
 
     if (test__powisf2(0, -1, INFINITY))
@@ -116,11 +126,11 @@ int main()
         return 1;
     if (test__powisf2(0, -4, INFINITY))
         return 1;
-    if (test__powisf2(0, INT_MIN + 2, INFINITY))
+    if (test__powisf2(0, 0x80000002, INFINITY))
         return 1;
-    if (test__powisf2(0, INT_MIN + 1, INFINITY))
+    if (test__powisf2(0, 0x80000001, INFINITY))
         return 1;
-    if (test__powisf2(0, INT_MIN, INFINITY))
+    if (test__powisf2(0, 0x80000000, INFINITY))
         return 1;
 
     if (test__powisf2(-0., -1, -INFINITY))
@@ -131,11 +141,11 @@ int main()
         return 1;
     if (test__powisf2(-0., -4, INFINITY))
         return 1;
-    if (test__powisf2(-0., INT_MIN + 2, INFINITY))
+    if (test__powisf2(-0., 0x80000002, INFINITY))
         return 1;
-    if (test__powisf2(-0., INT_MIN + 1, -INFINITY))
+    if (test__powisf2(-0., 0x80000001, -INFINITY))
         return 1;
-    if (test__powisf2(-0., INT_MIN, INFINITY))
+    if (test__powisf2(-0., 0x80000000, INFINITY))
         return 1;
 
     if (test__powisf2(1, -1, 1))
@@ -146,11 +156,11 @@ int main()
         return 1;
     if (test__powisf2(1, -4, 1))
         return 1;
-    if (test__powisf2(1, INT_MIN + 2, 1))
+    if (test__powisf2(1, 0x80000002, 1))
         return 1;
-    if (test__powisf2(1, INT_MIN + 1, 1))
+    if (test__powisf2(1, 0x80000001, 1))
         return 1;
-    if (test__powisf2(1, INT_MIN, 1))
+    if (test__powisf2(1, 0x80000000, 1))
         return 1;
 
     if (test__powisf2(INFINITY, -1, 0))
@@ -161,11 +171,11 @@ int main()
         return 1;
     if (test__powisf2(INFINITY, -4, 0))
         return 1;
-    if (test__powisf2(INFINITY, INT_MIN + 2, 0))
+    if (test__powisf2(INFINITY, 0x80000002, 0))
         return 1;
-    if (test__powisf2(INFINITY, INT_MIN + 1, 0))
+    if (test__powisf2(INFINITY, 0x80000001, 0))
         return 1;
-    if (test__powisf2(INFINITY, INT_MIN, 0))
+    if (test__powisf2(INFINITY, 0x80000000, 0))
         return 1;
 
     if (test__powisf2(-INFINITY, -1, -0.))
@@ -176,11 +186,11 @@ int main()
         return 1;
     if (test__powisf2(-INFINITY, -4, 0))
         return 1;
-    if (test__powisf2(-INFINITY, INT_MIN + 2, 0))
+    if (test__powisf2(-INFINITY, 0x80000002, 0))
         return 1;
-    if (test__powisf2(-INFINITY, INT_MIN + 1, -0.))
+    if (test__powisf2(-INFINITY, 0x80000001, -0.))
         return 1;
-    if (test__powisf2(-INFINITY, INT_MIN, 0))
+    if (test__powisf2(-INFINITY, 0x80000000, 0))
         return 1;
 
     if (test__powisf2(2, 10, 1024.))

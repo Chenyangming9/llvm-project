@@ -29,13 +29,17 @@
 // Attributes & builtins related macros.
 
 #define INTERFACE __attribute__((visibility("default")))
-#define HIDDEN __attribute__((visibility("hidden")))
 #define WEAK __attribute__((weak))
+#define INLINE inline
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 #define ALIAS(X) __attribute__((alias(X)))
+// Please only use the ALIGNED macro before the type. Using ALIGNED after the
+// variable declaration is not portable.
+#define ALIGNED(X) __attribute__((aligned(X)))
 #define FORMAT(F, A) __attribute__((format(printf, F, A)))
 #define NOINLINE __attribute__((noinline))
 #define NORETURN __attribute__((noreturn))
+#define THREADLOCAL __thread
 #define LIKELY(X) __builtin_expect(!!(X), 1)
 #define UNLIKELY(X) __builtin_expect(!!(X), 0)
 #if defined(__i386__) || defined(__x86_64__)
@@ -48,42 +52,14 @@
 #define USED __attribute__((used))
 #define NOEXCEPT noexcept
 
-// This check is only available on Clang. This is essentially an alias of
-// C++20's 'constinit' specifier which will take care of this when (if?) we can
-// ask all libc's that use Scudo to compile us with C++20. Dynamic
-// initialization is bad; Scudo is designed to be lazy-initializated on the
-// first call to malloc/free (and friends), and this generally happens in the
-// loader somewhere in libdl's init. After the loader is done, control is
-// transferred to libc's initialization, and the dynamic initializers are run.
-// If there's a dynamic initializer for Scudo, then it will clobber the
-// already-initialized Scudo, and re-initialize all its members back to default
-// values, causing various explosions. Unfortunately, marking
-// scudo::Allocator<>'s constructor as 'constexpr' isn't sufficient to prevent
-// dynamic initialization, as default initialization is fine under 'constexpr'
-// (but not 'constinit'). Clang at -O0, and gcc at all opt levels will emit a
-// dynamic initializer for any constant-initialized variables if there is a mix
-// of default-initialized and constant-initialized variables.
-//
-// If you're looking at this because your build failed, you probably introduced
-// a new member to scudo::Allocator<> (possibly transiently) that didn't have an
-// initializer. The fix is easy - just add one.
-#if defined(__has_attribute)
-#if __has_attribute(require_constant_initialization)
-#define SCUDO_REQUIRE_CONSTANT_INITIALIZATION                                  \
-  __attribute__((__require_constant_initialization__))
-#else
-#define SCUDO_REQUIRE_CONSTANT_INITIALIZATION
-#endif
-#endif
-
 namespace scudo {
 
 typedef unsigned long uptr;
+typedef signed long sptr;
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
 typedef unsigned long long u64;
-typedef signed long sptr;
 typedef signed char s8;
 typedef signed short s16;
 typedef signed int s32;
@@ -105,12 +81,15 @@ void NORETURN die();
 
 void NORETURN reportCheckFailed(const char *File, int Line,
                                 const char *Condition, u64 Value1, u64 Value2);
+
 #define CHECK_IMPL(C1, Op, C2)                                                 \
   do {                                                                         \
-    if (UNLIKELY(!(C1 Op C2))) {                                               \
-      scudo::reportCheckFailed(__FILE__, __LINE__, #C1 " " #Op " " #C2,        \
-                               (scudo::u64)C1, (scudo::u64)C2);                \
-      scudo::die();                                                            \
+    u64 V1 = (u64)(C1);                                                        \
+    u64 V2 = (u64)(C2);                                                        \
+    if (UNLIKELY(!(V1 Op V2))) {                                               \
+      reportCheckFailed(__FILE__, __LINE__, "(" #C1 ") " #Op " (" #C2 ")", V1, \
+                        V2);                                                   \
+      die();                                                                   \
     }                                                                          \
   } while (false)
 
@@ -131,27 +110,13 @@ void NORETURN reportCheckFailed(const char *File, int Line,
 #define DCHECK_GT(A, B) CHECK_GT(A, B)
 #define DCHECK_GE(A, B) CHECK_GE(A, B)
 #else
-#define DCHECK(A)                                                              \
-  do {                                                                         \
-  } while (false)
-#define DCHECK_EQ(A, B)                                                        \
-  do {                                                                         \
-  } while (false)
-#define DCHECK_NE(A, B)                                                        \
-  do {                                                                         \
-  } while (false)
-#define DCHECK_LT(A, B)                                                        \
-  do {                                                                         \
-  } while (false)
-#define DCHECK_LE(A, B)                                                        \
-  do {                                                                         \
-  } while (false)
-#define DCHECK_GT(A, B)                                                        \
-  do {                                                                         \
-  } while (false)
-#define DCHECK_GE(A, B)                                                        \
-  do {                                                                         \
-  } while (false)
+#define DCHECK(A)
+#define DCHECK_EQ(A, B)
+#define DCHECK_NE(A, B)
+#define DCHECK_LT(A, B)
+#define DCHECK_LE(A, B)
+#define DCHECK_GT(A, B)
+#define DCHECK_GE(A, B)
 #endif
 
 // The superfluous die() call effectively makes this macro NORETURN.
@@ -160,6 +125,10 @@ void NORETURN reportCheckFailed(const char *File, int Line,
     CHECK(0 && Msg);                                                           \
     die();                                                                     \
   } while (0)
+
+#define COMPILER_CHECK(Pred) static_assert(Pred, "")
+
+enum LinkerInitialized { LINKER_INITIALIZED = 0 };
 
 } // namespace scudo
 

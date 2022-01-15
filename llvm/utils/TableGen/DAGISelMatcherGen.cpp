@@ -141,7 +141,7 @@ namespace {
                                         SmallVectorImpl<unsigned> &ResultOps);
     };
 
-} // end anonymous namespace
+} // end anon namespace.
 
 MatcherGen::MatcherGen(const PatternToMatch &pattern,
                        const CodeGenDAGPatterns &cgp)
@@ -163,7 +163,7 @@ MatcherGen::MatcherGen(const PatternToMatch &pattern,
   PatWithNoTypes->RemoveAllTypes();
 
   // If there are types that are manifestly known, infer them.
-  InferPossibleTypes(Pattern.getForceMode());
+  InferPossibleTypes(Pattern.ForceMode);
 }
 
 /// InferPossibleTypes - As we emit the pattern, we end up generating type
@@ -282,9 +282,7 @@ void MatcherGen::EmitLeafMatchCode(const TreePatternNode *N) {
     // check to ensure that this gets folded into the normal top-level
     // OpcodeSwitch.
     if (N == Pattern.getSrcPattern()) {
-      MVT VT = N->getSimpleType(0);
-      StringRef Name = VT.isScalableVector() ? "splat_vector" : "build_vector";
-      const SDNodeInfo &NI = CGP.getSDNodeInfo(CGP.getSDNodeNamed(Name));
+      const SDNodeInfo &NI = CGP.getSDNodeInfo(CGP.getSDNodeNamed("build_vector"));
       AddMatcher(new CheckOpcodeMatcher(NI));
     }
     return AddMatcher(new CheckImmAllOnesVMatcher());
@@ -294,9 +292,7 @@ void MatcherGen::EmitLeafMatchCode(const TreePatternNode *N) {
     // check to ensure that this gets folded into the normal top-level
     // OpcodeSwitch.
     if (N == Pattern.getSrcPattern()) {
-      MVT VT = N->getSimpleType(0);
-      StringRef Name = VT.isScalableVector() ? "splat_vector" : "build_vector";
-      const SDNodeInfo &NI = CGP.getSDNodeInfo(CGP.getSDNodeNamed(Name));
+      const SDNodeInfo &NI = CGP.getSDNodeInfo(CGP.getSDNodeNamed("build_vector"));
       AddMatcher(new CheckOpcodeMatcher(NI));
     }
     return AddMatcher(new CheckImmAllZerosVMatcher());
@@ -315,7 +311,7 @@ void MatcherGen::EmitOperatorMatchCode(const TreePatternNode *N,
     // The "name" of a non-leaf complex pattern (MY_PAT $op1, $op2) is
     // "MY_PAT:op1:op2". We should already have validated that the uses are
     // consistent.
-    std::string PatternName = std::string(N->getOperator()->getName());
+    std::string PatternName = N->getOperator()->getName();
     for (unsigned i = 0; i < N->getNumChildren(); ++i) {
       PatternName += ":";
       PatternName += N->getChild(i)->getName();
@@ -576,7 +572,7 @@ bool MatcherGen::EmitMatcherCode(unsigned Variant) {
 
   // Emit the matcher for the pattern structure and types.
   EmitMatchCode(Pattern.getSrcPattern(), PatWithNoTypes.get(),
-                Pattern.getForceMode());
+                Pattern.ForceMode);
 
   // If the pattern has a predicate on it (e.g. only enabled when a subtarget
   // feature is around, do the check).
@@ -711,36 +707,14 @@ void MatcherGen::EmitResultLeafAsOperand(const TreePatternNode *N,
     if (Def->isSubClassOf("RegisterOperand"))
       Def = Def->getValueAsDef("RegClass");
     if (Def->isSubClassOf("RegisterClass")) {
-      // If the register class has an enum integer value greater than 127, the
-      // encoding overflows the limit of 7 bits, which precludes the use of
-      // StringIntegerMatcher. In this case, fallback to using IntegerMatcher.
-      const CodeGenRegisterClass &RC =
-          CGP.getTargetInfo().getRegisterClass(Def);
-      if (RC.EnumValue <= 127) {
-        std::string Value = getQualifiedName(Def) + "RegClassID";
-        AddMatcher(new EmitStringIntegerMatcher(Value, MVT::i32));
-        ResultOps.push_back(NextRecordedOperandNo++);
-      } else {
-        AddMatcher(new EmitIntegerMatcher(RC.EnumValue, MVT::i32));
-        ResultOps.push_back(NextRecordedOperandNo++);
-      }
+      std::string Value = getQualifiedName(Def) + "RegClassID";
+      AddMatcher(new EmitStringIntegerMatcher(Value, MVT::i32));
+      ResultOps.push_back(NextRecordedOperandNo++);
       return;
     }
 
     // Handle a subregister index. This is used for INSERT_SUBREG etc.
     if (Def->isSubClassOf("SubRegIndex")) {
-      const CodeGenRegBank &RB = CGP.getTargetInfo().getRegBank();
-      // If we have more than 127 subreg indices the encoding can overflow
-      // 7 bit and we cannot use StringInteger.
-      if (RB.getSubRegIndices().size() > 127) {
-        const CodeGenSubRegIndex *I = RB.findSubRegIdx(Def);
-        assert(I && "Cannot find subreg index by name!");
-        if (I->EnumValue > 127) {
-          AddMatcher(new EmitIntegerMatcher(I->EnumValue, MVT::i32));
-          ResultOps.push_back(NextRecordedOperandNo++);
-          return;
-        }
-      }
       std::string Value = getQualifiedName(Def);
       AddMatcher(new EmitStringIntegerMatcher(Value, MVT::i32));
       ResultOps.push_back(NextRecordedOperandNo++);
@@ -748,7 +722,7 @@ void MatcherGen::EmitResultLeafAsOperand(const TreePatternNode *N,
     }
   }
 
-  errs() << "unhandled leaf node:\n";
+  errs() << "unhandled leaf node: \n";
   N->dump();
 }
 
@@ -893,13 +867,9 @@ EmitResultInstructionAsOperand(const TreePatternNode *N,
   if (isRoot && !PhysRegInputs.empty()) {
     // Emit all of the CopyToReg nodes for the input physical registers.  These
     // occur in patterns like (mul:i8 AL:i8, GR8:i8:$src).
-    for (unsigned i = 0, e = PhysRegInputs.size(); i != e; ++i) {
-      const CodeGenRegister *Reg =
-        CGP.getTargetInfo().getRegBank().getReg(PhysRegInputs[i].first);
+    for (unsigned i = 0, e = PhysRegInputs.size(); i != e; ++i)
       AddMatcher(new EmitCopyToRegMatcher(PhysRegInputs[i].second,
-                                          Reg));
-    }
-
+                                          PhysRegInputs[i].first));
     // Even if the node has no other glue inputs, the resultant node must be
     // glued to the CopyFromReg nodes we just generated.
     TreeHasInGlue = true;
@@ -1073,6 +1043,7 @@ void MatcherGen::EmitResultCode() {
     }
   }
 
+  assert(Ops.size() >= NumSrcResults && "Didn't provide enough results");
   SmallVector<unsigned, 8> Results(Ops);
 
   // Apply result permutation.

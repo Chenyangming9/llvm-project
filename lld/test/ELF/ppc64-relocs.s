@@ -26,28 +26,76 @@ _start:
   ld 1, .L1@toc@l(2)
 
 # CHECK-LABEL: Disassembly of section .R_PPC64_TOC16_LO_DS:
-# CHECK: ld 1, -32760(2)
+# CHECK: 1001000c:       ld 1, -32768(2)
 
 .section .R_PPC64_TOC16_LO,"ax",@progbits
   addi  1, 2, .L1@toc@l
 
 # CHECK-LABEL: Disassembly of section .R_PPC64_TOC16_LO:
-# CHECK: addi 1, 2, -32760
+# CHECK: 10010010:       addi 1, 2, -32768
 
 .section .R_PPC64_TOC16_HI,"ax",@progbits
   addis 1, 2, .L1@toc@h
 
 # CHECK-LABEL: Disassembly of section .R_PPC64_TOC16_HI:
-# CHECK: addis 1, 2, -1
+# CHECK: 10010014:       addis 1, 2, -1
+
+.section .R_PPC64_TOC16_HA,"ax",@progbits
+  addis 1, 2, .L1@toc@ha
+
+# CHECK-LABEL: Disassembly of section .R_PPC64_TOC16_HA:
+# CHECK: 10010018:       addis 1, 2, 0
+
+.section .R_PPC64_ADDR16_LO,"ax",@progbits
+  li 1, .Lfoo@l
+
+# CHECK-LABEL: Disassembly of section .R_PPC64_ADDR16_LO:
+# CHECK: li 1, 0
+
+.section .R_PPC64_ADDR16_HI,"ax",@progbits
+  li 1, .Lfoo@h
+
+# CHECK-LABEL: Disassembly of section .R_PPC64_ADDR16_HI:
+# CHECK: li 1, 4097
+
+.section .R_PPC64_ADDR16_HA,"ax",@progbits
+  li 1, .Lfoo@ha
+
+# CHECK-LABEL: Disassembly of section .R_PPC64_ADDR16_HA:
+# CHECK: li 1, 4097
+
+.section .R_PPC64_ADDR16_HIGHER,"ax",@progbits
+  li 1, .Lfoo@higher
+
+# CHECK-LABEL: Disassembly of section .R_PPC64_ADDR16_HIGHER:
+# CHECK: li 1, 0
+
+.section .R_PPC64_ADDR16_HIGHERA,"ax",@progbits
+  li 1, .Lfoo@highera
+
+# CHECK-LABEL: Disassembly of section .R_PPC64_ADDR16_HIGHERA:
+# CHECK: li 1, 0
+
+.section .R_PPC64_ADDR16_HIGHEST,"ax",@progbits
+  li 1, .Lfoo@highest
+
+# CHECK-LABEL: Disassembly of section .R_PPC64_ADDR16_HIGHEST:
+# CHECK: li 1, 0
+
+.section .R_PPC64_ADDR16_HIGHESTA,"ax",@progbits
+  li 1, .Lfoo@highesta
+
+# CHECK-LABEL: Disassembly of section .R_PPC64_ADDR16_HIGHESTA:
+# CHECK: li 1, 0
 
 .section .R_PPC64_TOC,"a",@progbits
   .quad .TOC.@tocbase
 
-# SEC: .got PROGBITS 0000000010020208
+# SEC: .got PROGBITS 0000000010020000
 
-## tocbase = .got+0x8000 = 0x10028208
+## tocbase = .got+0x8000 = 0x10028000
 # DATALE-LABEL: section '.R_PPC64_TOC':
-# DATALE-NEXT:    e8810210 00000000
+# DATALE: 00800210 00000000
 
 # DATABE-LABEL: section '.R_PPC64_TOC':
-# DATABE-NEXT:    00000000 100281e8
+# DATABE: 00000000 10028000

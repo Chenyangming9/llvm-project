@@ -38,7 +38,7 @@ public:
     std::map<std::string, tooling::Replacements> FileToReplacements;
     change_namespace::ChangeNamespaceTool NamespaceTool(
         OldNamespace, NewNamespace, FilePattern,
-        /*AllowedSymbolPatterns*/ {}, &FileToReplacements);
+        /*WhiteListedSymbolPatterns*/ {}, &FileToReplacements);
     ast_matchers::MatchFinder Finder;
     NamespaceTool.registerMatchers(&Finder);
     std::unique_ptr<tooling::FrontendActionFactory> Factory =

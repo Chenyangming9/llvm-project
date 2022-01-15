@@ -12,8 +12,6 @@
 
 // type_index(const type_index& ti);
 
-// UNSUPPORTED: no-rtti
-
 #include <typeindex>
 #include <cassert>
 

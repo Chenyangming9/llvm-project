@@ -1,4 +1,4 @@
-//===-- RegisterContextPOSIXCore_mips64.cpp -------------------------------===//
+//===-- RegisterContextPOSIXCore_mips64.cpp ---------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -32,7 +32,7 @@ RegisterContextCorePOSIX_mips64::RegisterContextCorePOSIX_mips64(
   m_fpr.SetByteOrder(fpregset.GetByteOrder());
 }
 
-RegisterContextCorePOSIX_mips64::~RegisterContextCorePOSIX_mips64() = default;
+RegisterContextCorePOSIX_mips64::~RegisterContextCorePOSIX_mips64() {}
 
 bool RegisterContextCorePOSIX_mips64::ReadGPR() { return true; }
 

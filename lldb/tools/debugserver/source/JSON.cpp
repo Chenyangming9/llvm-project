@@ -9,8 +9,8 @@
 #include "JSON.h"
 
 // C includes
-#include <cassert>
-#include <climits>
+#include <assert.h>
+#include <limits.h>
 
 // C++ includes
 #include "lldb/Host/StringConvert.h"
@@ -516,16 +516,13 @@ JSONValue::SP JSONParser::ParseJSONArray() {
   std::string value;
   std::string key;
   while (true) {
-    JSONParser::Token token = GetToken(value);
-    if (token == JSONParser::Token::ArrayEnd)
-      return JSONValue::SP(array_up.release());
-    JSONValue::SP value_sp = ParseJSONValue(value, token);
+    JSONValue::SP value_sp = ParseJSONValue();
     if (value_sp)
       array_up->AppendObject(value_sp);
     else
       break;
 
-    token = GetToken(value);
+    JSONParser::Token token = GetToken(value);
     if (token == JSONParser::Token::Comma) {
       continue;
     } else if (token == JSONParser::Token::ArrayEnd) {
@@ -540,11 +537,6 @@ JSONValue::SP JSONParser::ParseJSONArray() {
 JSONValue::SP JSONParser::ParseJSONValue() {
   std::string value;
   const JSONParser::Token token = GetToken(value);
-  return ParseJSONValue(value, token);
-}
-
-JSONValue::SP JSONParser::ParseJSONValue(const std::string &value,
-                                         const Token &token) {
   switch (token) {
   case JSONParser::Token::ObjectStart:
     return ParseJSONObject();

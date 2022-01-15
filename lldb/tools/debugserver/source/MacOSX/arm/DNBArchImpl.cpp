@@ -22,7 +22,7 @@
 #include "MacOSX/MachProcess.h"
 #include "MacOSX/MachThread.h"
 
-#include <cinttypes>
+#include <inttypes.h>
 #include <sys/sysctl.h>
 
 // BCR address match type
@@ -105,7 +105,6 @@ static uint32_t LoHi[16] = {0};
 #define MNEMONIC_STRING_SIZE 32
 #define OPERAND_STRING_SIZE 128
 
-#if !defined(__arm64__) && !defined(__aarch64__)
 // Returns true if the first 16 bit opcode of a thumb instruction indicates
 // the instruction will be a 32 bit thumb opcode
 static bool IsThumb32Opcode(uint16_t opcode) {
@@ -113,7 +112,6 @@ static bool IsThumb32Opcode(uint16_t opcode) {
     return true;
   return false;
 }
-#endif
 
 void DNBArchMachARM::Initialize() {
   DNBArchPluginInfo arch_plugin_info = {
@@ -317,7 +315,6 @@ kern_return_t DNBArchMachARM::GetEXCState(bool force) {
   return kret;
 }
 
-#if 0
 static void DumpDBGState(const DNBArchMachARM::DBG &dbg) {
   uint32_t i = 0;
   for (i = 0; i < 16; i++) {
@@ -327,7 +324,6 @@ static void DumpDBGState(const DNBArchMachARM::DBG &dbg) {
                      dbg.__wcr[i]);
   }
 }
-#endif
 
 kern_return_t DNBArchMachARM::GetDBGState(bool force) {
   int set = e_regSetDBG;
@@ -647,8 +643,8 @@ bool DNBArchMachARM::NotifyException(MachException::Data &exc) {
                                         "watchpoint %d was hit on address "
                                         "0x%llx",
                        hw_index, (uint64_t)addr);
-      const uint32_t num_watchpoints = NumSupportedHardwareWatchpoints();
-      for (uint32_t i = 0; i < num_watchpoints; i++) {
+      const int num_watchpoints = NumSupportedHardwareWatchpoints();
+      for (int i = 0; i < num_watchpoints; i++) {
         if (LoHi[i] != 0 && LoHi[i] == hw_index && LoHi[i] != i &&
             GetWatchpointAddressByIndex(i) != INVALID_NUB_ADDRESS) {
           addr = GetWatchpointAddressByIndex(i);
@@ -984,8 +980,7 @@ uint32_t DNBArchMachARM::NumSupportedHardwareWatchpoints() {
 }
 
 uint32_t DNBArchMachARM::EnableHardwareBreakpoint(nub_addr_t addr,
-                                                  nub_size_t size,
-                                                  bool also_set_on_task) {
+                                                  nub_size_t size) {
   // Make sure our address isn't bogus
   if (addr & 1)
     return INVALID_NUB_HW_INDEX;
@@ -1057,8 +1052,7 @@ uint32_t DNBArchMachARM::EnableHardwareBreakpoint(nub_addr_t addr,
   return INVALID_NUB_HW_INDEX;
 }
 
-bool DNBArchMachARM::DisableHardwareBreakpoint(uint32_t hw_index,
-                                               bool also_set_on_task) {
+bool DNBArchMachARM::DisableHardwareBreakpoint(uint32_t hw_index) {
   kern_return_t kret = GetDBGState(false);
 
   const uint32_t num_hw_points = NumSupportedHardwareBreakpoints();
@@ -1762,13 +1756,13 @@ const DNBRegisterInfo DNBArchMachARM::g_vfp_registers[] = {
 const DNBRegisterInfo DNBArchMachARM::g_exc_registers[] = {
     {e_regSetVFP, exc_exception, "exception", NULL, Uint, Hex, 4,
      EXC_OFFSET(exception), INVALID_NUB_REGNUM, INVALID_NUB_REGNUM,
-     INVALID_NUB_REGNUM, INVALID_NUB_REGNUM, NULL, NULL},
+     INVALID_NUB_REGNUM, INVALID_NUB_REGNUM},
     {e_regSetVFP, exc_fsr, "fsr", NULL, Uint, Hex, 4, EXC_OFFSET(fsr),
      INVALID_NUB_REGNUM, INVALID_NUB_REGNUM, INVALID_NUB_REGNUM,
-     INVALID_NUB_REGNUM, NULL, NULL},
+     INVALID_NUB_REGNUM},
     {e_regSetVFP, exc_far, "far", NULL, Uint, Hex, 4, EXC_OFFSET(far),
      INVALID_NUB_REGNUM, INVALID_NUB_REGNUM, INVALID_NUB_REGNUM,
-     INVALID_NUB_REGNUM, NULL, NULL}};
+     INVALID_NUB_REGNUM}};
 
 // Number of registers in each register set
 const size_t DNBArchMachARM::k_num_gpr_registers =
@@ -2118,7 +2112,7 @@ nub_size_t DNBArchMachARM::SetRegisterContext(const void *buf,
 
     // Copy each struct individually to avoid any padding that might be between
     // the structs in m_state.context
-    uint8_t *p = const_cast<uint8_t*>(reinterpret_cast<const uint8_t *>(buf));
+    uint8_t *p = (uint8_t *)buf;
     ::memcpy(&m_state.context.gpr, p, sizeof(m_state.context.gpr));
     p += sizeof(m_state.context.gpr);
     ::memcpy(&m_state.context.vfp, p, sizeof(m_state.context.vfp));
@@ -2126,7 +2120,7 @@ nub_size_t DNBArchMachARM::SetRegisterContext(const void *buf,
     ::memcpy(&m_state.context.exc, p, sizeof(m_state.context.exc));
     p += sizeof(m_state.context.exc);
 
-    size_t bytes_written = p - reinterpret_cast<const uint8_t *>(buf);
+    size_t bytes_written = p - (uint8_t *)buf;
     UNUSED_IF_ASSERT_DISABLED(bytes_written);
     assert(bytes_written == size);
 

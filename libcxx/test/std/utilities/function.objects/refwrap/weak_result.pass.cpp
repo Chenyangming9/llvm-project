@@ -12,8 +12,6 @@
 
 // has weak result type
 
-// REQUIRES: c++03 || c++11 || c++14 || c++17
-
 #include <functional>
 #include <type_traits>
 

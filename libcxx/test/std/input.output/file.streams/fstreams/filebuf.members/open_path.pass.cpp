@@ -6,11 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
-// UNSUPPORTED: libcpp-has-no-filesystem-library
-
-// Filesystem is supported on Apple platforms starting with macosx10.15.
-// UNSUPPORTED: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11|12|13|14}}
+// UNSUPPORTED: c++98, c++03, c++11, c++14
+// XFAIL: dylib-has-no-filesystem
 
 // <fstream>
 
@@ -41,7 +38,7 @@ int main(int, char**) {
     assert(f.sbumpc() == '2');
     assert(f.sbumpc() == '3');
   }
-  std::remove(p.string().c_str());
+  std::remove(p.c_str());
   {
     std::wfilebuf f;
     assert(f.open(p, std::ios_base::out) != 0);
@@ -56,7 +53,7 @@ int main(int, char**) {
     assert(f.sbumpc() == L'2');
     assert(f.sbumpc() == L'3');
   }
-  remove(p.string().c_str());
+  remove(p.c_str());
 
   return 0;
 }

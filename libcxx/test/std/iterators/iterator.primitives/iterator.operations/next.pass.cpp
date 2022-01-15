@@ -9,61 +9,85 @@
 // <iterator>
 
 // template <InputIterator Iter>
-//   Iter next(Iter x, Iter::difference_type n = 1); // constexpr in C++17
+//   Iter next(Iter x, Iter::difference_type n = 1);
 
 // LWG #2353 relaxed the requirement on next from ForwardIterator to InputIterator
 
 #include <iterator>
 #include <cassert>
-#include <type_traits>
 
 #include "test_macros.h"
 #include "test_iterators.h"
 
 template <class It>
-TEST_CONSTEXPR_CXX17 void
-check_next_n(It it, typename std::iterator_traits<It>::difference_type n, It result)
+void
+test(It i, typename std::iterator_traits<It>::difference_type n, It x)
 {
-    static_assert(std::is_same<decltype(std::next(it, n)), It>::value, "");
-    assert(std::next(it, n) == result);
+    assert(std::next(i, n) == x);
 
-    It (*next_ptr)(It, typename std::iterator_traits<It>::difference_type) = std::next;
-    assert(next_ptr(it, n) == result);
+    It (*next)(It, typename std::iterator_traits<It>::difference_type) = std::next;
+    assert(next(i, n) == x);
 }
 
 template <class It>
-TEST_CONSTEXPR_CXX17 void
-check_next_1(It it, It result)
+void
+test(It i, It x)
 {
-    static_assert(std::is_same<decltype(std::next(it)), It>::value, "");
-    assert(std::next(it) == result);
+    assert(std::next(i) == x);
 }
 
-TEST_CONSTEXPR_CXX17 bool tests()
+#if TEST_STD_VER > 14
+template <class It>
+constexpr bool
+constexpr_test(It i, typename std::iterator_traits<It>::difference_type n, It x)
 {
-    const char* s = "1234567890";
-    check_next_n(cpp17_input_iterator<const char*>(s),             10, cpp17_input_iterator<const char*>(s+10));
-    check_next_n(forward_iterator<const char*>(s),           10, forward_iterator<const char*>(s+10));
-    check_next_n(bidirectional_iterator<const char*>(s),     10, bidirectional_iterator<const char*>(s+10));
-    check_next_n(bidirectional_iterator<const char*>(s+10), -10, bidirectional_iterator<const char*>(s));
-    check_next_n(random_access_iterator<const char*>(s),     10, random_access_iterator<const char*>(s+10));
-    check_next_n(random_access_iterator<const char*>(s+10), -10, random_access_iterator<const char*>(s));
-    check_next_n(s, 10, s+10);
-
-    check_next_1(cpp17_input_iterator<const char*>(s), cpp17_input_iterator<const char*>(s+1));
-    check_next_1(forward_iterator<const char*>(s), forward_iterator<const char*>(s+1));
-    check_next_1(bidirectional_iterator<const char*>(s), bidirectional_iterator<const char*>(s+1));
-    check_next_1(random_access_iterator<const char*>(s), random_access_iterator<const char*>(s+1));
-    check_next_1(s, s+1);
-
-    return true;
+    return std::next(i, n) == x;
 }
+
+template <class It>
+constexpr bool
+constexpr_test(It i, It x)
+{
+    return std::next(i) == x;
+}
+#endif
 
 int main(int, char**)
 {
-    tests();
-#if TEST_STD_VER >= 17
-    static_assert(tests(), "");
+    {
+    const char* s = "1234567890";
+    test(input_iterator<const char*>(s),             10, input_iterator<const char*>(s+10));
+    test(forward_iterator<const char*>(s),           10, forward_iterator<const char*>(s+10));
+    test(bidirectional_iterator<const char*>(s),     10, bidirectional_iterator<const char*>(s+10));
+    test(bidirectional_iterator<const char*>(s+10), -10, bidirectional_iterator<const char*>(s));
+    test(random_access_iterator<const char*>(s),     10, random_access_iterator<const char*>(s+10));
+    test(random_access_iterator<const char*>(s+10), -10, random_access_iterator<const char*>(s));
+    test(s, 10, s+10);
+
+    test(input_iterator<const char*>(s), input_iterator<const char*>(s+1));
+    test(forward_iterator<const char*>(s), forward_iterator<const char*>(s+1));
+    test(bidirectional_iterator<const char*>(s), bidirectional_iterator<const char*>(s+1));
+    test(random_access_iterator<const char*>(s), random_access_iterator<const char*>(s+1));
+    test(s, s+1);
+    }
+#if TEST_STD_VER > 14
+    {
+    constexpr const char* s = "1234567890";
+    static_assert( constexpr_test(input_iterator<const char*>(s),             10, input_iterator<const char*>(s+10)), "" );
+    static_assert( constexpr_test(forward_iterator<const char*>(s),           10, forward_iterator<const char*>(s+10)), "" );
+    static_assert( constexpr_test(bidirectional_iterator<const char*>(s),     10, bidirectional_iterator<const char*>(s+10)), "" );
+    static_assert( constexpr_test(bidirectional_iterator<const char*>(s+10), -10, bidirectional_iterator<const char*>(s)), "" );
+    static_assert( constexpr_test(random_access_iterator<const char*>(s),     10, random_access_iterator<const char*>(s+10)), "" );
+    static_assert( constexpr_test(random_access_iterator<const char*>(s+10), -10, random_access_iterator<const char*>(s)), "" );
+    static_assert( constexpr_test(s, 10, s+10), "" );
+
+    static_assert( constexpr_test(input_iterator<const char*>(s), input_iterator<const char*>(s+1)), "" );
+    static_assert( constexpr_test(forward_iterator<const char*>(s), forward_iterator<const char*>(s+1)), "" );
+    static_assert( constexpr_test(bidirectional_iterator<const char*>(s), bidirectional_iterator<const char*>(s+1)), "" );
+    static_assert( constexpr_test(random_access_iterator<const char*>(s), random_access_iterator<const char*>(s+1)), "" );
+    static_assert( constexpr_test(s, s+1), "" );
+    }
 #endif
-    return 0;
+
+  return 0;
 }

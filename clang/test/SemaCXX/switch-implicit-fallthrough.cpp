@@ -50,8 +50,6 @@ label_default:
       break;
   }
   switch (n / 20) {
-    [[likely]] case 6:
-      [[clang::fallthrough]];
     case 7:
       n += 400;
       [[clang::fallthrough]];
@@ -75,8 +73,6 @@ label_default:
       n += 800;
   }
   switch (n / 30) {
-    case 6:
-      [[unlikely, clang::fallthrough]];
     case 11:
     case 12:  // no warning here, intended fall-through, no statement between labels
       n += 1600;
@@ -189,12 +185,9 @@ int fallthrough_position(int n) {
       return 1;
       [[clang::fallthrough]];  // expected-warning{{fallthrough annotation in unreachable code}}
     case 222:
-      return 2;
-      __attribute__((fallthrough)); // expected-warning{{fallthrough annotation in unreachable code}}
-    case 223:
       n += 400;
-    case 224: // expected-warning{{unannotated fall-through between switch labels}} expected-note{{insert '[[clang::fallthrough]];' to silence this warning}} expected-note{{insert 'break;' to avoid fall-through}}
-        ;
+    case 223:          // expected-warning{{unannotated fall-through between switch labels}} expected-note{{insert '[[clang::fallthrough]];' to silence this warning}} expected-note{{insert 'break;' to avoid fall-through}}
+      ;
   }
 
   long p = static_cast<long>(n) * n;
@@ -306,16 +299,16 @@ int fallthrough_placement_error(int n) {
 int fallthrough_targets(int n) {
   [[clang::fallthrough]]; // expected-error{{fallthrough annotation is outside switch statement}}
 
-  [[clang::fallthrough]]  // expected-error{{'fallthrough' attribute only applies to empty statements}}
+  [[clang::fallthrough]]  // expected-error{{fallthrough attribute is only allowed on empty statements}}
   switch (n) {
     case 121:
       n += 400;
       [[clang::fallthrough]]; // no warning here, correct target
     case 123:
-      [[clang::fallthrough]]  // expected-error{{'fallthrough' attribute only applies to empty statements}}
+      [[clang::fallthrough]]  // expected-error{{fallthrough attribute is only allowed on empty statements}}
       n += 800;
       break;
-    [[clang::fallthrough]]    // expected-error{{'fallthrough' attribute is only allowed on empty statements}} expected-note{{did you forget ';'?}}
+    [[clang::fallthrough]]    // expected-error{{fallthrough attribute is only allowed on empty statements}} expected-note{{did you forget ';'?}}
     case 125:
       n += 1600;
   }
@@ -331,18 +324,6 @@ int fallthrough_alt_spelling(int n) {
     n++;
     [[clang::__fallthrough__]];
   case 2:
-    n++;
-    break;
-  }
-  return n;
-}
-
-int fallthrough_attribute_spelling(int n) {
-  switch (n) {
-  case 0:
-    n++;
-    __attribute__((fallthrough));
-  case 1:
     n++;
     break;
   }

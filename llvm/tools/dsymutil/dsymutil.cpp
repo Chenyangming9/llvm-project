@@ -16,8 +16,6 @@
 #include "DebugMap.h"
 #include "LinkUtils.h"
 #include "MachOUtils.h"
-#include "Reproducer.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
@@ -28,11 +26,7 @@
 #include "llvm/DebugInfo/DWARF/DWARFVerifier.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/MachO.h"
-#include "llvm/Option/Arg.h"
-#include "llvm/Option/ArgList.h"
-#include "llvm/Option/Option.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/FileCollector.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -49,274 +43,142 @@
 #include <system_error>
 
 using namespace llvm;
+using namespace llvm::cl;
 using namespace llvm::dsymutil;
 using namespace object;
 
-namespace {
-enum ID {
-  OPT_INVALID = 0, // This is not an option ID.
-#define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
-               HELPTEXT, METAVAR, VALUES)                                      \
-  OPT_##ID,
-#include "Options.inc"
-#undef OPTION
-};
+static OptionCategory DsymCategory("Specific Options");
+static opt<bool> Help("h", desc("Alias for -help"), Hidden);
+static opt<bool> Version("v", desc("Alias for -version"), Hidden);
 
-#define PREFIX(NAME, VALUE) const char *const NAME[] = VALUE;
-#include "Options.inc"
-#undef PREFIX
+static list<std::string> InputFiles(Positional, OneOrMore,
+                                    desc("<input files>"), cat(DsymCategory));
 
-const opt::OptTable::Info InfoTable[] = {
-#define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
-               HELPTEXT, METAVAR, VALUES)                                      \
-  {                                                                            \
-      PREFIX,      NAME,      HELPTEXT,                                        \
-      METAVAR,     OPT_##ID,  opt::Option::KIND##Class,                        \
-      PARAM,       FLAGS,     OPT_##GROUP,                                     \
-      OPT_##ALIAS, ALIASARGS, VALUES},
-#include "Options.inc"
-#undef OPTION
-};
+static opt<std::string>
+    OutputFileOpt("o",
+                  desc("Specify the output file. default: <input file>.dwarf"),
+                  value_desc("filename"), cat(DsymCategory));
+static alias OutputFileOptA("out", desc("Alias for -o"),
+                            aliasopt(OutputFileOpt));
 
-class DsymutilOptTable : public opt::OptTable {
-public:
-  DsymutilOptTable() : OptTable(InfoTable) {}
-};
-} // namespace
+static opt<std::string> OsoPrependPath(
+    "oso-prepend-path",
+    desc("Specify a directory to prepend to the paths of object files."),
+    value_desc("path"), cat(DsymCategory));
 
-struct DsymutilOptions {
-  bool DumpDebugMap = false;
-  bool DumpStab = false;
-  bool Flat = false;
-  bool InputIsYAMLDebugMap = false;
-  bool PaperTrailWarnings = false;
-  bool Verify = false;
-  bool ForceKeepFunctionForStatic = false;
-  std::string SymbolMap;
-  std::string OutputFile;
-  std::string Toolchain;
-  std::string ReproducerPath;
-  std::vector<std::string> Archs;
-  std::vector<std::string> InputFiles;
-  unsigned NumThreads;
-  ReproducerMode ReproMode = ReproducerMode::Off;
-  dsymutil::LinkOptions LinkOpts;
-};
+static opt<bool> Assembly(
+    "S",
+    desc("Output textual assembly instead of a binary dSYM companion file."),
+    init(false), cat(DsymCategory), cl::Hidden);
 
-/// Return a list of input files. This function has logic for dealing with the
-/// special case where we might have dSYM bundles as input. The function
-/// returns an error when the directory structure doesn't match that of a dSYM
-/// bundle.
-static Expected<std::vector<std::string>> getInputs(opt::InputArgList &Args,
-                                                    bool DsymAsInput) {
-  std::vector<std::string> InputFiles;
-  for (auto *File : Args.filtered(OPT_INPUT))
-    InputFiles.push_back(File->getValue());
+static opt<bool> DumpStab(
+    "symtab",
+    desc("Dumps the symbol table found in executable or object file(s) and\n"
+         "exits."),
+    init(false), cat(DsymCategory));
+static alias DumpStabA("s", desc("Alias for --symtab"), aliasopt(DumpStab));
 
-  if (!DsymAsInput)
-    return InputFiles;
+static opt<bool> FlatOut("flat",
+                         desc("Produce a flat dSYM file (not a bundle)."),
+                         init(false), cat(DsymCategory));
+static alias FlatOutA("f", desc("Alias for --flat"), aliasopt(FlatOut));
 
-  // If we are updating, we might get dSYM bundles as input.
-  std::vector<std::string> Inputs;
-  for (const auto &Input : InputFiles) {
-    if (!sys::fs::is_directory(Input)) {
-      Inputs.push_back(Input);
-      continue;
-    }
+static opt<bool> Minimize(
+    "minimize",
+    desc("When used when creating a dSYM file with Apple accelerator tables,\n"
+         "this option will suppress the emission of the .debug_inlines, \n"
+         ".debug_pubnames, and .debug_pubtypes sections since dsymutil \n"
+         "has better equivalents: .apple_names and .apple_types. When used in\n"
+         "conjunction with --update option, this option will cause redundant\n"
+         "accelerator tables to be removed."),
+    init(false), cat(DsymCategory));
+static alias MinimizeA("z", desc("Alias for --minimize"), aliasopt(Minimize));
 
-    // Make sure that we're dealing with a dSYM bundle.
-    SmallString<256> BundlePath(Input);
-    sys::path::append(BundlePath, "Contents", "Resources", "DWARF");
-    if (!sys::fs::is_directory(BundlePath))
-      return make_error<StringError>(
-          Input + " is a directory, but doesn't look like a dSYM bundle.",
-          inconvertibleErrorCode());
+static opt<bool> Update(
+    "update",
+    desc("Updates existing dSYM files to contain the latest accelerator\n"
+         "tables and other DWARF optimizations."),
+    init(false), cat(DsymCategory));
+static alias UpdateA("u", desc("Alias for --update"), aliasopt(Update));
 
-    // Create a directory iterator to iterate over all the entries in the
-    // bundle.
-    std::error_code EC;
-    sys::fs::directory_iterator DirIt(BundlePath, EC);
-    sys::fs::directory_iterator DirEnd;
-    if (EC)
-      return errorCodeToError(EC);
+static opt<std::string> SymbolMap(
+    "symbol-map",
+    desc("Updates the existing dSYMs inplace using symbol map specified."),
+    value_desc("bcsymbolmap"), cat(DsymCategory));
 
-    // Add each entry to the list of inputs.
-    while (DirIt != DirEnd) {
-      Inputs.push_back(DirIt->path());
-      DirIt.increment(EC);
-      if (EC)
-        return errorCodeToError(EC);
-    }
-  }
-  return Inputs;
-}
+static cl::opt<AccelTableKind> AcceleratorTable(
+    "accelerator", cl::desc("Output accelerator tables."),
+    cl::values(clEnumValN(AccelTableKind::Default, "Default",
+                          "Default for input."),
+               clEnumValN(AccelTableKind::Apple, "Apple", "Apple"),
+               clEnumValN(AccelTableKind::Dwarf, "Dwarf", "DWARF")),
+    cl::init(AccelTableKind::Default), cat(DsymCategory));
 
-// Verify that the given combination of options makes sense.
-static Error verifyOptions(const DsymutilOptions &Options) {
-  if (Options.InputFiles.empty()) {
-    return make_error<StringError>("no input files specified",
-                                   errc::invalid_argument);
-  }
+static opt<unsigned> NumThreads(
+    "num-threads",
+    desc("Specifies the maximum number (n) of simultaneous threads to use\n"
+         "when linking multiple architectures."),
+    value_desc("n"), init(0), cat(DsymCategory));
+static alias NumThreadsA("j", desc("Alias for --num-threads"),
+                         aliasopt(NumThreads));
 
-  if (Options.LinkOpts.Update && llvm::is_contained(Options.InputFiles, "-")) {
-    // FIXME: We cannot use stdin for an update because stdin will be
-    // consumed by the BinaryHolder during the debugmap parsing, and
-    // then we will want to consume it again in DwarfLinker. If we
-    // used a unique BinaryHolder object that could cache multiple
-    // binaries this restriction would go away.
-    return make_error<StringError>(
-        "standard input cannot be used as input for a dSYM update.",
-        errc::invalid_argument);
-  }
+static opt<bool> Verbose("verbose", desc("Verbosity level"), init(false),
+                         cat(DsymCategory));
 
-  if (!Options.Flat && Options.OutputFile == "-")
-    return make_error<StringError>(
-        "cannot emit to standard output without --flat.",
-        errc::invalid_argument);
+static opt<bool>
+    NoOutput("no-output",
+             desc("Do the link in memory, but do not emit the result file."),
+             init(false), cat(DsymCategory));
 
-  if (Options.InputFiles.size() > 1 && Options.Flat &&
-      !Options.OutputFile.empty())
-    return make_error<StringError>(
-        "cannot use -o with multiple inputs in flat mode.",
-        errc::invalid_argument);
+static opt<bool>
+    NoTimestamp("no-swiftmodule-timestamp",
+                desc("Don't check timestamp for swiftmodule files."),
+                init(false), cat(DsymCategory));
 
-  if (Options.PaperTrailWarnings && Options.InputIsYAMLDebugMap)
-    return make_error<StringError>(
-        "paper trail warnings are not supported for YAML input.",
-        errc::invalid_argument);
+static list<std::string> ArchFlags(
+    "arch",
+    desc("Link DWARF debug information only for specified CPU architecture\n"
+         "types. This option can be specified multiple times, once for each\n"
+         "desired architecture. All CPU architectures will be linked by\n"
+         "default."),
+    value_desc("arch"), ZeroOrMore, cat(DsymCategory));
 
-  if (!Options.ReproducerPath.empty() &&
-      Options.ReproMode != ReproducerMode::Use)
-    return make_error<StringError>(
-        "cannot combine --gen-reproducer and --use-reproducer.",
-        errc::invalid_argument);
+static opt<bool>
+    NoODR("no-odr",
+          desc("Do not use ODR (One Definition Rule) for type uniquing."),
+          init(false), cat(DsymCategory));
 
-  return Error::success();
-}
+static opt<bool> DumpDebugMap(
+    "dump-debug-map",
+    desc("Parse and dump the debug map to standard output. Not DWARF link "
+         "will take place."),
+    init(false), cat(DsymCategory));
 
-static Expected<AccelTableKind> getAccelTableKind(opt::InputArgList &Args) {
-  if (opt::Arg *Accelerator = Args.getLastArg(OPT_accelerator)) {
-    StringRef S = Accelerator->getValue();
-    if (S == "Apple")
-      return AccelTableKind::Apple;
-    if (S == "Dwarf")
-      return AccelTableKind::Dwarf;
-    if (S == "Pub")
-      return AccelTableKind::Pub;
-    if (S == "Default")
-      return AccelTableKind::Default;
-    return make_error<StringError>(
-        "invalid accelerator type specified: '" + S +
-            "'. Support values are 'Apple', 'Dwarf', 'Pub' and 'Default'.",
-        inconvertibleErrorCode());
-  }
-  return AccelTableKind::Default;
-}
+static opt<bool> InputIsYAMLDebugMap(
+    "y", desc("Treat the input file is a YAML debug map rather than a binary."),
+    init(false), cat(DsymCategory));
 
-/// Parses the command line options into the LinkOptions struct and performs
-/// some sanity checking. Returns an error in case the latter fails.
-static Expected<DsymutilOptions> getOptions(opt::InputArgList &Args) {
-  DsymutilOptions Options;
+static opt<bool> Verify("verify", desc("Verify the linked DWARF debug info."),
+                        cat(DsymCategory));
 
-  Options.DumpDebugMap = Args.hasArg(OPT_dump_debug_map);
-  Options.DumpStab = Args.hasArg(OPT_symtab);
-  Options.Flat = Args.hasArg(OPT_flat);
-  Options.InputIsYAMLDebugMap = Args.hasArg(OPT_yaml_input);
-  Options.PaperTrailWarnings = Args.hasArg(OPT_papertrail);
-  Options.Verify = Args.hasArg(OPT_verify);
+static opt<std::string>
+    Toolchain("toolchain", desc("Embed toolchain information in dSYM bundle."),
+              cat(DsymCategory));
 
-  Options.LinkOpts.NoODR = Args.hasArg(OPT_no_odr);
-  Options.LinkOpts.NoOutput = Args.hasArg(OPT_no_output);
-  Options.LinkOpts.NoTimestamp = Args.hasArg(OPT_no_swiftmodule_timestamp);
-  Options.LinkOpts.Update = Args.hasArg(OPT_update);
-  Options.LinkOpts.Verbose = Args.hasArg(OPT_verbose);
-  Options.LinkOpts.Statistics = Args.hasArg(OPT_statistics);
-  Options.LinkOpts.KeepFunctionForStatic =
-      Args.hasArg(OPT_keep_func_for_static);
+static opt<bool>
+    PaperTrailWarnings("papertrail",
+                       desc("Embed warnings in the linked DWARF debug info."),
+                       cat(DsymCategory));
 
-  if (opt::Arg *ReproducerPath = Args.getLastArg(OPT_use_reproducer)) {
-    Options.ReproMode = ReproducerMode::Use;
-    Options.ReproducerPath = ReproducerPath->getValue();
-  }
+static Error createPlistFile(llvm::StringRef Bin, llvm::StringRef BundleRoot) {
+  if (NoOutput)
+    return Error::success();
 
-  if (Args.hasArg(OPT_gen_reproducer))
-    Options.ReproMode = ReproducerMode::Generate;
-
-  if (Expected<AccelTableKind> AccelKind = getAccelTableKind(Args)) {
-    Options.LinkOpts.TheAccelTableKind = *AccelKind;
-  } else {
-    return AccelKind.takeError();
-  }
-
-  if (opt::Arg *SymbolMap = Args.getLastArg(OPT_symbolmap))
-    Options.SymbolMap = SymbolMap->getValue();
-
-  if (Args.hasArg(OPT_symbolmap))
-    Options.LinkOpts.Update = true;
-
-  if (Expected<std::vector<std::string>> InputFiles =
-          getInputs(Args, Options.LinkOpts.Update)) {
-    Options.InputFiles = std::move(*InputFiles);
-  } else {
-    return InputFiles.takeError();
-  }
-
-  for (auto *Arch : Args.filtered(OPT_arch))
-    Options.Archs.push_back(Arch->getValue());
-
-  if (opt::Arg *OsoPrependPath = Args.getLastArg(OPT_oso_prepend_path))
-    Options.LinkOpts.PrependPath = OsoPrependPath->getValue();
-
-  for (const auto &Arg : Args.getAllArgValues(OPT_object_prefix_map)) {
-    auto Split = StringRef(Arg).split('=');
-    Options.LinkOpts.ObjectPrefixMap.insert(
-        {std::string(Split.first), std::string(Split.second)});
-  }
-
-  if (opt::Arg *OutputFile = Args.getLastArg(OPT_output))
-    Options.OutputFile = OutputFile->getValue();
-
-  if (opt::Arg *Toolchain = Args.getLastArg(OPT_toolchain))
-    Options.Toolchain = Toolchain->getValue();
-
-  if (Args.hasArg(OPT_assembly))
-    Options.LinkOpts.FileType = OutputFileType::Assembly;
-
-  if (opt::Arg *NumThreads = Args.getLastArg(OPT_threads))
-    Options.LinkOpts.Threads = atoi(NumThreads->getValue());
-  else
-    Options.LinkOpts.Threads = 0; // Use all available hardware threads
-
-  if (Options.DumpDebugMap || Options.LinkOpts.Verbose)
-    Options.LinkOpts.Threads = 1;
-
-  if (getenv("RC_DEBUG_OPTIONS"))
-    Options.PaperTrailWarnings = true;
-
-  if (opt::Arg *RemarksPrependPath = Args.getLastArg(OPT_remarks_prepend_path))
-    Options.LinkOpts.RemarksPrependPath = RemarksPrependPath->getValue();
-
-  if (opt::Arg *RemarksOutputFormat =
-          Args.getLastArg(OPT_remarks_output_format)) {
-    if (Expected<remarks::Format> FormatOrErr =
-            remarks::parseFormat(RemarksOutputFormat->getValue()))
-      Options.LinkOpts.RemarksFormat = *FormatOrErr;
-    else
-      return FormatOrErr.takeError();
-  }
-
-  if (Error E = verifyOptions(Options))
-    return std::move(E);
-  return Options;
-}
-
-static Error createPlistFile(StringRef Bin, StringRef BundleRoot,
-                             StringRef Toolchain) {
   // Create plist file to write to.
-  SmallString<128> InfoPlist(BundleRoot);
-  sys::path::append(InfoPlist, "Contents/Info.plist");
+  llvm::SmallString<128> InfoPlist(BundleRoot);
+  llvm::sys::path::append(InfoPlist, "Contents/Info.plist");
   std::error_code EC;
-  raw_fd_ostream PL(InfoPlist, EC, sys::fs::OF_TextWithCRLF);
+  llvm::raw_fd_ostream PL(InfoPlist, EC, llvm::sys::fs::F_Text);
   if (EC)
     return make_error<StringError>(
         "cannot create Plist: " + toString(errorCodeToError(EC)), EC);
@@ -324,11 +186,11 @@ static Error createPlistFile(StringRef Bin, StringRef BundleRoot,
   CFBundleInfo BI = getBundleInfo(Bin);
 
   if (BI.IDStr.empty()) {
-    StringRef BundleID = *sys::path::rbegin(BundleRoot);
-    if (sys::path::extension(BundleRoot) == ".dSYM")
-      BI.IDStr = std::string(sys::path::stem(BundleID));
+    llvm::StringRef BundleID = *llvm::sys::path::rbegin(BundleRoot);
+    if (llvm::sys::path::extension(BundleRoot) == ".dSYM")
+      BI.IDStr = llvm::sys::path::stem(BundleID);
     else
-      BI.IDStr = std::string(BundleID);
+      BI.IDStr = BundleID;
   }
 
   // Print out information to the plist file.
@@ -340,9 +202,7 @@ static Error createPlistFile(StringRef Bin, StringRef BundleRoot,
      << "\t\t<key>CFBundleDevelopmentRegion</key>\n"
      << "\t\t<string>English</string>\n"
      << "\t\t<key>CFBundleIdentifier</key>\n"
-     << "\t\t<string>com.apple.xcode.dsym.";
-  printHTMLEscaped(BI.IDStr, PL);
-  PL << "</string>\n"
+     << "\t\t<string>com.apple.xcode.dsym." << BI.IDStr << "</string>\n"
      << "\t\t<key>CFBundleInfoDictionaryVersion</key>\n"
      << "\t\t<string>6.0</string>\n"
      << "\t\t<key>CFBundlePackageType</key>\n"
@@ -376,18 +236,21 @@ static Error createPlistFile(StringRef Bin, StringRef BundleRoot,
   return Error::success();
 }
 
-static Error createBundleDir(StringRef BundleBase) {
-  SmallString<128> Bundle(BundleBase);
-  sys::path::append(Bundle, "Contents", "Resources", "DWARF");
+static Error createBundleDir(llvm::StringRef BundleBase) {
+  if (NoOutput)
+    return Error::success();
+
+  llvm::SmallString<128> Bundle(BundleBase);
+  llvm::sys::path::append(Bundle, "Contents", "Resources", "DWARF");
   if (std::error_code EC =
-          create_directories(Bundle.str(), true, sys::fs::perms::all_all))
+          create_directories(Bundle.str(), true, llvm::sys::fs::perms::all_all))
     return make_error<StringError>(
         "cannot create bundle: " + toString(errorCodeToError(EC)), EC);
 
   return Error::success();
 }
 
-static bool verify(StringRef OutputFile, StringRef Arch, bool Verbose) {
+static bool verify(llvm::StringRef OutputFile, llvm::StringRef Arch) {
   if (OutputFile == "-") {
     WithColor::warning() << "verification skipped for " << Arch
                          << "because writing to stdout.\n";
@@ -417,39 +280,33 @@ static bool verify(StringRef OutputFile, StringRef Arch, bool Verbose) {
 
 namespace {
 struct OutputLocation {
-  OutputLocation(std::string DWARFFile, Optional<std::string> ResourceDir = {})
+  OutputLocation(std::string DWARFFile,
+                 llvm::Optional<std::string> ResourceDir = {})
       : DWARFFile(DWARFFile), ResourceDir(ResourceDir) {}
   /// This method is a workaround for older compilers.
-  Optional<std::string> getResourceDir() const { return ResourceDir; }
+  llvm::Optional<std::string> getResourceDir() const { return ResourceDir; }
   std::string DWARFFile;
-  Optional<std::string> ResourceDir;
+  llvm::Optional<std::string> ResourceDir;
 };
-} // namespace
+}
 
-static Expected<OutputLocation>
-getOutputFileName(StringRef InputFile, const DsymutilOptions &Options) {
-  if (Options.OutputFile == "-")
-    return OutputLocation(Options.OutputFile);
+static Expected<OutputLocation> getOutputFileName(llvm::StringRef InputFile) {
+  if (OutputFileOpt == "-")
+    return OutputLocation(OutputFileOpt);
 
   // When updating, do in place replacement.
-  if (Options.OutputFile.empty() &&
-      (Options.LinkOpts.Update || !Options.SymbolMap.empty()))
-    return OutputLocation(std::string(InputFile));
-
-  // When dumping the debug map, just return an empty output location. This
-  // allows us to compute the output location once.
-  if (Options.DumpDebugMap)
-    return OutputLocation("");
+  if (OutputFileOpt.empty() && (Update || !SymbolMap.empty()))
+    return OutputLocation(InputFile);
 
   // If a flat dSYM has been requested, things are pretty simple.
-  if (Options.Flat) {
-    if (Options.OutputFile.empty()) {
+  if (FlatOut) {
+    if (OutputFileOpt.empty()) {
       if (InputFile == "-")
         return OutputLocation{"a.out.dwarf", {}};
       return OutputLocation((InputFile + ".dwarf").str());
     }
 
-    return OutputLocation(Options.OutputFile);
+    return OutputLocation(OutputFileOpt);
   }
 
   // We need to create/update a dSYM bundle.
@@ -461,170 +318,237 @@ getOutputFileName(StringRef InputFile, const DsymutilOptions &Options) {
   //             DWARF/
   //                <DWARF file(s)>
   std::string DwarfFile =
-      std::string(InputFile == "-" ? StringRef("a.out") : InputFile);
-  SmallString<128> Path(Options.OutputFile);
+      InputFile == "-" ? llvm::StringRef("a.out") : InputFile;
+  llvm::SmallString<128> Path(OutputFileOpt);
   if (Path.empty())
     Path = DwarfFile + ".dSYM";
-  if (!Options.LinkOpts.NoOutput) {
-    if (auto E = createBundleDir(Path))
-      return std::move(E);
-    if (auto E = createPlistFile(DwarfFile, Path, Options.Toolchain))
-      return std::move(E);
+  if (auto E = createBundleDir(Path))
+    return std::move(E);
+  if (auto E = createPlistFile(DwarfFile, Path))
+    return std::move(E);
+
+  llvm::sys::path::append(Path, "Contents", "Resources");
+  std::string ResourceDir = Path.str();
+  llvm::sys::path::append(Path, "DWARF", llvm::sys::path::filename(DwarfFile));
+  return OutputLocation(Path.str(), ResourceDir);
+}
+
+/// Parses the command line options into the LinkOptions struct and performs
+/// some sanity checking. Returns an error in case the latter fails.
+static Expected<LinkOptions> getOptions() {
+  LinkOptions Options;
+
+  Options.Verbose = Verbose;
+  Options.NoOutput = NoOutput;
+  Options.NoODR = NoODR;
+  Options.Minimize = Minimize;
+  Options.Update = Update;
+  Options.NoTimestamp = NoTimestamp;
+  Options.PrependPath = OsoPrependPath;
+  Options.TheAccelTableKind = AcceleratorTable;
+
+  if (!SymbolMap.empty())
+    Options.Update = true;
+
+  if (Assembly)
+    Options.FileType = OutputFileType::Assembly;
+
+  if (Options.Update && std::find(InputFiles.begin(), InputFiles.end(), "-") !=
+                            InputFiles.end()) {
+    // FIXME: We cannot use stdin for an update because stdin will be
+    // consumed by the BinaryHolder during the debugmap parsing, and
+    // then we will want to consume it again in DwarfLinker. If we
+    // used a unique BinaryHolder object that could cache multiple
+    // binaries this restriction would go away.
+    return make_error<StringError>(
+        "standard input cannot be used as input for a dSYM update.",
+        inconvertibleErrorCode());
   }
 
-  sys::path::append(Path, "Contents", "Resources");
-  std::string ResourceDir = std::string(Path.str());
-  sys::path::append(Path, "DWARF", sys::path::filename(DwarfFile));
-  return OutputLocation(std::string(Path.str()), ResourceDir);
+  if (NumThreads == 0)
+    Options.Threads = llvm::thread::hardware_concurrency();
+  else
+    Options.Threads = NumThreads;
+  if (DumpDebugMap || Verbose)
+    Options.Threads = 1;
+
+  return Options;
+}
+
+/// Return a list of input files. This function has logic for dealing with the
+/// special case where we might have dSYM bundles as input. The function
+/// returns an error when the directory structure doesn't match that of a dSYM
+/// bundle.
+static Expected<std::vector<std::string>> getInputs(bool DsymAsInput) {
+  if (!DsymAsInput)
+    return InputFiles;
+
+  // If we are updating, we might get dSYM bundles as input.
+  std::vector<std::string> Inputs;
+  for (const auto &Input : InputFiles) {
+    if (!llvm::sys::fs::is_directory(Input)) {
+      Inputs.push_back(Input);
+      continue;
+    }
+
+    // Make sure that we're dealing with a dSYM bundle.
+    SmallString<256> BundlePath(Input);
+    sys::path::append(BundlePath, "Contents", "Resources", "DWARF");
+    if (!llvm::sys::fs::is_directory(BundlePath))
+      return make_error<StringError>(
+          Input + " is a directory, but doesn't look like a dSYM bundle.",
+          inconvertibleErrorCode());
+
+    // Create a directory iterator to iterate over all the entries in the
+    // bundle.
+    std::error_code EC;
+    llvm::sys::fs::directory_iterator DirIt(BundlePath, EC);
+    llvm::sys::fs::directory_iterator DirEnd;
+    if (EC)
+      return errorCodeToError(EC);
+
+    // Add each entry to the list of inputs.
+    while (DirIt != DirEnd) {
+      Inputs.push_back(DirIt->path());
+      DirIt.increment(EC);
+      if (EC)
+        return errorCodeToError(EC);
+    }
+  }
+  return Inputs;
 }
 
 int main(int argc, char **argv) {
   InitLLVM X(argc, argv);
 
-  // Parse arguments.
-  DsymutilOptTable T;
-  unsigned MAI;
-  unsigned MAC;
-  ArrayRef<const char *> ArgsArr = makeArrayRef(argv + 1, argc - 1);
-  opt::InputArgList Args = T.ParseArgs(ArgsArr, MAI, MAC);
-
   void *P = (void *)(intptr_t)getOutputFileName;
-  std::string SDKPath = sys::fs::getMainExecutable(argv[0], P);
-  SDKPath = std::string(sys::path::parent_path(SDKPath));
+  std::string SDKPath = llvm::sys::fs::getMainExecutable(argv[0], P);
+  SDKPath = llvm::sys::path::parent_path(SDKPath);
 
-  for (auto *Arg : Args.filtered(OPT_UNKNOWN)) {
-    WithColor::warning() << "ignoring unknown option: " << Arg->getSpelling()
-                         << '\n';
+  HideUnrelatedOptions({&DsymCategory, &ColorCategory});
+  llvm::cl::ParseCommandLineOptions(
+      argc, argv,
+      "manipulate archived DWARF debug symbol files.\n\n"
+      "dsymutil links the DWARF debug information found in the object files\n"
+      "for the executable <input file> by using debug symbols information\n"
+      "contained in its symbol table.\n");
+
+  if (Help) {
+    PrintHelpMessage();
+    return 0;
   }
 
-  if (Args.hasArg(OPT_help)) {
-    T.printHelp(
-        outs(), (std::string(argv[0]) + " [options] <input files>").c_str(),
-        "manipulate archived DWARF debug symbol files.\n\n"
-        "dsymutil links the DWARF debug information found in the object files\n"
-        "for the executable <input file> by using debug symbols information\n"
-        "contained in its symbol table.\n",
-        false);
-    return EXIT_SUCCESS;
+  if (Version) {
+    llvm::cl::PrintVersionMessage();
+    return 0;
   }
 
-  if (Args.hasArg(OPT_version)) {
-    cl::PrintVersionMessage();
-    return EXIT_SUCCESS;
-  }
-
-  auto OptionsOrErr = getOptions(Args);
+  auto OptionsOrErr = getOptions();
   if (!OptionsOrErr) {
     WithColor::error() << toString(OptionsOrErr.takeError());
-    return EXIT_FAILURE;
+    return 1;
   }
 
-  auto &Options = *OptionsOrErr;
+  llvm::InitializeAllTargetInfos();
+  llvm::InitializeAllTargetMCs();
+  llvm::InitializeAllTargets();
+  llvm::InitializeAllAsmPrinters();
 
-  InitializeAllTargetInfos();
-  InitializeAllTargetMCs();
-  InitializeAllTargets();
-  InitializeAllAsmPrinters();
-
-  auto Repro =
-      Reproducer::createReproducer(Options.ReproMode, Options.ReproducerPath);
-  if (!Repro) {
-    WithColor::error() << toString(Repro.takeError());
-    return EXIT_FAILURE;
+  auto InputsOrErr = getInputs(OptionsOrErr->Update);
+  if (!InputsOrErr) {
+    WithColor::error() << toString(InputsOrErr.takeError()) << '\n';
+    return 1;
   }
 
-  Options.LinkOpts.VFS = (*Repro)->getVFS();
+  if (!FlatOut && OutputFileOpt == "-") {
+    WithColor::error() << "cannot emit to standard output without --flat\n";
+    return 1;
+  }
 
-  for (const auto &Arch : Options.Archs)
+  if (InputsOrErr->size() > 1 && FlatOut && !OutputFileOpt.empty()) {
+    WithColor::error() << "cannot use -o with multiple inputs in flat mode\n";
+    return 1;
+  }
+
+  if (InputFiles.size() > 1 && !SymbolMap.empty() &&
+      !llvm::sys::fs::is_directory(SymbolMap)) {
+    WithColor::error() << "when unobfuscating multiple files, --symbol-map "
+                       << "needs to point to a directory.\n";
+    return 1;
+  }
+
+  if (getenv("RC_DEBUG_OPTIONS"))
+    PaperTrailWarnings = true;
+
+  if (PaperTrailWarnings && InputIsYAMLDebugMap)
+    WithColor::warning()
+        << "Paper trail warnings are not supported for YAML input";
+
+  for (const auto &Arch : ArchFlags)
     if (Arch != "*" && Arch != "all" &&
-        !object::MachOObjectFile::isValidArch(Arch)) {
+        !llvm::object::MachOObjectFile::isValidArch(Arch)) {
       WithColor::error() << "unsupported cpu architecture: '" << Arch << "'\n";
-      return EXIT_FAILURE;
+      return 1;
     }
 
-  SymbolMapLoader SymMapLoader(Options.SymbolMap);
+  SymbolMapLoader SymMapLoader(SymbolMap);
 
-  for (auto &InputFile : Options.InputFiles) {
+  for (auto &InputFile : *InputsOrErr) {
     // Dump the symbol table for each input file and requested arch
-    if (Options.DumpStab) {
-      if (!dumpStab(Options.LinkOpts.VFS, InputFile, Options.Archs,
-                    Options.LinkOpts.PrependPath))
-        return EXIT_FAILURE;
+    if (DumpStab) {
+      if (!dumpStab(InputFile, ArchFlags, OsoPrependPath))
+        return 1;
       continue;
     }
 
     auto DebugMapPtrsOrErr =
-        parseDebugMap(Options.LinkOpts.VFS, InputFile, Options.Archs,
-                      Options.LinkOpts.PrependPath, Options.PaperTrailWarnings,
-                      Options.LinkOpts.Verbose, Options.InputIsYAMLDebugMap);
+        parseDebugMap(InputFile, ArchFlags, OsoPrependPath, PaperTrailWarnings,
+                      Verbose, InputIsYAMLDebugMap);
 
     if (auto EC = DebugMapPtrsOrErr.getError()) {
       WithColor::error() << "cannot parse the debug map for '" << InputFile
                          << "': " << EC.message() << '\n';
-      return EXIT_FAILURE;
+      return 1;
     }
 
-    // Remember the number of debug maps that are being processed to decide how
-    // to name the remark files.
-    Options.LinkOpts.NumDebugMaps = DebugMapPtrsOrErr->size();
-
-    if (Options.LinkOpts.Update) {
+    if (OptionsOrErr->Update) {
       // The debug map should be empty. Add one object file corresponding to
       // the input file.
       for (auto &Map : *DebugMapPtrsOrErr)
         Map->addDebugMapObject(InputFile,
-                               sys::TimePoint<std::chrono::seconds>());
+                               llvm::sys::TimePoint<std::chrono::seconds>());
     }
 
     // Ensure that the debug map is not empty (anymore).
     if (DebugMapPtrsOrErr->empty()) {
       WithColor::error() << "no architecture to link\n";
-      return EXIT_FAILURE;
+      return 1;
     }
 
     // Shared a single binary holder for all the link steps.
-    BinaryHolder BinHolder(Options.LinkOpts.VFS);
+    BinaryHolder BinHolder;
 
-    // Compute the output location and update the resource directory.
-    Expected<OutputLocation> OutputLocationOrErr =
-        getOutputFileName(InputFile, Options);
-    if (!OutputLocationOrErr) {
-      WithColor::error() << toString(OutputLocationOrErr.takeError());
-      return EXIT_FAILURE;
-    }
-    Options.LinkOpts.ResourceDir = OutputLocationOrErr->getResourceDir();
-
-    // Statistics only require different architectures to be processed
-    // sequentially, the link itself can still happen in parallel. Change the
-    // thread pool strategy here instead of modifying LinkOpts.Threads.
-    ThreadPoolStrategy S = hardware_concurrency(
-        Options.LinkOpts.Statistics ? 1 : Options.LinkOpts.Threads);
-    if (Options.LinkOpts.Threads == 0) {
-      // If NumThreads is not specified, create one thread for each input, up to
-      // the number of hardware threads.
-      S.ThreadsRequested = DebugMapPtrsOrErr->size();
-      S.Limit = true;
-    }
-    ThreadPool Threads(S);
+    unsigned ThreadCount =
+        std::min<unsigned>(OptionsOrErr->Threads, DebugMapPtrsOrErr->size());
+    llvm::ThreadPool Threads(ThreadCount);
 
     // If there is more than one link to execute, we need to generate
     // temporary files.
-    const bool NeedsTempFiles =
-        !Options.DumpDebugMap && (Options.OutputFile != "-") &&
-        (DebugMapPtrsOrErr->size() != 1 || Options.LinkOpts.Update);
-    const bool Verify = Options.Verify && !Options.LinkOpts.NoOutput;
+    bool NeedsTempFiles =
+        !DumpDebugMap && (OutputFileOpt != "-") &&
+        (DebugMapPtrsOrErr->size() != 1 || OptionsOrErr->Update);
 
-    SmallVector<MachOUtils::ArchAndFile, 4> TempFiles;
+    llvm::SmallVector<MachOUtils::ArchAndFile, 4> TempFiles;
     std::atomic_char AllOK(1);
     for (auto &Map : *DebugMapPtrsOrErr) {
-      if (Options.LinkOpts.Verbose || Options.DumpDebugMap)
-        Map->print(outs());
+      if (Verbose || DumpDebugMap)
+        Map->print(llvm::outs());
 
-      if (Options.DumpDebugMap)
+      if (DumpDebugMap)
         continue;
 
-      if (!Options.SymbolMap.empty())
-        Options.LinkOpts.Translator = SymMapLoader.Load(InputFile, *Map);
+      if (!SymbolMap.empty())
+        OptionsOrErr->Translator = SymMapLoader.Load(InputFile, *Map);
 
       if (Map->begin() == Map->end())
         WithColor::warning()
@@ -635,6 +559,14 @@ int main(int argc, char **argv) {
       // types don't work with std::bind in the ThreadPool implementation.
       std::shared_ptr<raw_fd_ostream> OS;
 
+      Expected<OutputLocation> OutputLocationOrErr =
+          getOutputFileName(InputFile);
+      if (!OutputLocationOrErr) {
+        WithColor::error() << toString(OutputLocationOrErr.takeError());
+        return 1;
+      }
+      OptionsOrErr->ResourceDir = OutputLocationOrErr->getResourceDir();
+
       std::string OutputFile = OutputLocationOrErr->DWARFFile;
       if (NeedsTempFiles) {
         TempFiles.emplace_back(Map->getTriple().getArchName().str());
@@ -642,7 +574,7 @@ int main(int argc, char **argv) {
         auto E = TempFiles.back().createTempFile();
         if (E) {
           WithColor::error() << toString(std::move(E));
-          return EXIT_FAILURE;
+          return 1;
         }
 
         auto &TempFile = *(TempFiles.back().File);
@@ -651,58 +583,48 @@ int main(int argc, char **argv) {
         OutputFile = TempFile.TmpName;
       } else {
         std::error_code EC;
-        OS = std::make_shared<raw_fd_ostream>(
-            Options.LinkOpts.NoOutput ? "-" : OutputFile, EC, sys::fs::OF_None);
+        OS = std::make_shared<raw_fd_ostream>(NoOutput ? "-" : OutputFile, EC,
+                                              sys::fs::F_None);
         if (EC) {
           WithColor::error() << OutputFile << ": " << EC.message();
-          return EXIT_FAILURE;
+          return 1;
         }
       }
 
-      auto LinkLambda = [&, OutputFile](std::shared_ptr<raw_fd_ostream> Stream,
-                                        LinkOptions Options) {
-        AllOK.fetch_and(
-            linkDwarf(*Stream, BinHolder, *Map, std::move(Options)));
+      auto LinkLambda = [&,
+                         OutputFile](std::shared_ptr<raw_fd_ostream> Stream) {
+        AllOK.fetch_and(linkDwarf(*Stream, BinHolder, *Map, *OptionsOrErr));
         Stream->flush();
-        if (Verify)
-          AllOK.fetch_and(verify(OutputFile, Map->getTriple().getArchName(),
-                                 Options.Verbose));
+        if (Verify && !NoOutput)
+          AllOK.fetch_and(verify(OutputFile, Map->getTriple().getArchName()));
       };
 
       // FIXME: The DwarfLinker can have some very deep recursion that can max
       // out the (significantly smaller) stack when using threads. We don't
       // want this limitation when we only have a single thread.
-      if (S.ThreadsRequested == 1)
-        LinkLambda(OS, Options.LinkOpts);
+      if (ThreadCount == 1)
+        LinkLambda(OS);
       else
-        Threads.async(LinkLambda, OS, Options.LinkOpts);
+        Threads.async(LinkLambda, OS);
     }
 
     Threads.wait();
 
     if (!AllOK)
-      return EXIT_FAILURE;
+      return 1;
 
     if (NeedsTempFiles) {
+      Expected<OutputLocation> OutputLocationOrErr = getOutputFileName(InputFile);
+      if (!OutputLocationOrErr) {
+        WithColor::error() << toString(OutputLocationOrErr.takeError());
+        return 1;
+      }
       if (!MachOUtils::generateUniversalBinary(TempFiles,
                                                OutputLocationOrErr->DWARFFile,
-                                               Options.LinkOpts, SDKPath))
-        return EXIT_FAILURE;
-    }
-
-    // The Mach-O object file format is limited to 4GB. Make sure that we print
-    // an error when we emit an invalid Mach-O companion file. Leave the
-    // invalid object file around on disk for inspection.
-    ErrorOr<vfs::Status> stat =
-        Options.LinkOpts.VFS->status(OutputLocationOrErr->DWARFFile);
-    if (stat) {
-      if (stat->getSize() > std::numeric_limits<uint32_t>::max()) {
-        WithColor::error() << "the linked debug info exceeds the 4GB Mach-O "
-                              "object file format.";
-        return EXIT_FAILURE;
-      }
+                                               *OptionsOrErr, SDKPath))
+        return 1;
     }
   }
 
-  return EXIT_SUCCESS;
+  return 0;
 }

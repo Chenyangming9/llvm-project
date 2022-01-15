@@ -11,11 +11,9 @@
 #include "clang/Basic/DiagnosticOptions.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/LangOptions.h"
-#include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TargetOptions.h"
-#include "clang/Basic/TokenKinds.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/HeaderSearchOptions.h"
 #include "clang/Lex/MacroArgs.h"
@@ -23,14 +21,11 @@
 #include "clang/Lex/ModuleLoader.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorOptions.h"
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include <memory>
-#include <vector>
+
+using namespace clang;
 
 namespace {
-using namespace clang;
-using testing::ElementsAre;
 
 // The test fixture.
 class LexerTest : public ::testing::Test {
@@ -54,7 +49,7 @@ protected:
 
     HeaderSearch HeaderInfo(std::make_shared<HeaderSearchOptions>(), SourceMgr,
                             Diags, LangOpts, Target.get());
-    std::unique_ptr<Preprocessor> PP = std::make_unique<Preprocessor>(
+    std::unique_ptr<Preprocessor> PP = llvm::make_unique<Preprocessor>(
         std::make_shared<PreprocessorOptions>(), Diags, LangOpts, SourceMgr,
         HeaderInfo, ModLoader,
         /*IILookup =*/nullptr,
@@ -66,7 +61,7 @@ protected:
 
   std::vector<Token> Lex(StringRef Source) {
     TrivialModuleLoader ModLoader;
-    PP = CreatePP(Source, ModLoader);
+    auto PP = CreatePP(Source, ModLoader);
 
     std::vector<Token> toks;
     while (1) {
@@ -99,7 +94,7 @@ protected:
                              SourceMgr, LangOpts, &Invalid);
     if (Invalid)
       return "<INVALID>";
-    return std::string(Str);
+    return Str;
   }
 
   FileSystemOptions FileMgrOpts;
@@ -110,7 +105,6 @@ protected:
   LangOptions LangOpts;
   std::shared_ptr<TargetOptions> TargetOpts;
   IntrusiveRefCntPtr<TargetInfo> Target;
-  std::unique_ptr<Preprocessor> PP;
 };
 
 TEST_F(LexerTest, GetSourceTextExpandsToMaximumInMacroArgument) {
@@ -266,14 +260,12 @@ TEST_F(LexerTest, GetSourceTextExpandsRecursively) {
 
 TEST_F(LexerTest, LexAPI) {
   std::vector<tok::TokenKind> ExpectedTokens;
-  // Line 1 (after the #defines)
   ExpectedTokens.push_back(tok::l_square);
   ExpectedTokens.push_back(tok::identifier);
   ExpectedTokens.push_back(tok::r_square);
   ExpectedTokens.push_back(tok::l_square);
   ExpectedTokens.push_back(tok::identifier);
   ExpectedTokens.push_back(tok::r_square);
-  // Line 2
   ExpectedTokens.push_back(tok::identifier);
   ExpectedTokens.push_back(tok::identifier);
   ExpectedTokens.push_back(tok::identifier);
@@ -361,65 +353,6 @@ TEST_F(LexerTest, LexAPI) {
   EXPECT_EQ("N", Lexer::getImmediateMacroName(idLoc4, SourceMgr, LangOpts));
 }
 
-TEST_F(LexerTest, HandlesSplitTokens) {
-  std::vector<tok::TokenKind> ExpectedTokens;
-  // Line 1 (after the #defines)
-  ExpectedTokens.push_back(tok::identifier);
-  ExpectedTokens.push_back(tok::less);
-  ExpectedTokens.push_back(tok::identifier);
-  ExpectedTokens.push_back(tok::less);
-  ExpectedTokens.push_back(tok::greatergreater);
-  // Line 2
-  ExpectedTokens.push_back(tok::identifier);
-  ExpectedTokens.push_back(tok::less);
-  ExpectedTokens.push_back(tok::identifier);
-  ExpectedTokens.push_back(tok::less);
-  ExpectedTokens.push_back(tok::greatergreater);
-
-  std::vector<Token> toks = CheckLex("#define TY ty\n"
-                                     "#define RANGLE ty<ty<>>\n"
-                                     "TY<ty<>>\n"
-                                     "RANGLE",
-                                     ExpectedTokens);
-
-  SourceLocation outerTyLoc = toks[0].getLocation();
-  SourceLocation innerTyLoc = toks[2].getLocation();
-  SourceLocation gtgtLoc = toks[4].getLocation();
-  // Split the token to simulate the action of the parser and force creation of
-  // an `ExpansionTokenRange`.
-  SourceLocation rangleLoc = PP->SplitToken(gtgtLoc, 1);
-
-  // Verify that it only captures the first greater-then and not the second one.
-  CharSourceRange range = Lexer::makeFileCharRange(
-      CharSourceRange::getTokenRange(innerTyLoc, rangleLoc), SourceMgr,
-      LangOpts);
-  EXPECT_TRUE(range.isCharRange());
-  EXPECT_EQ(range.getAsRange(),
-            SourceRange(innerTyLoc, gtgtLoc.getLocWithOffset(1)));
-
-  // Verify case where range begins in a macro expansion.
-  range = Lexer::makeFileCharRange(
-      CharSourceRange::getTokenRange(outerTyLoc, rangleLoc), SourceMgr,
-      LangOpts);
-  EXPECT_TRUE(range.isCharRange());
-  EXPECT_EQ(range.getAsRange(),
-            SourceRange(SourceMgr.getExpansionLoc(outerTyLoc),
-                        gtgtLoc.getLocWithOffset(1)));
-
-  SourceLocation macroInnerTyLoc = toks[7].getLocation();
-  SourceLocation macroGtgtLoc = toks[9].getLocation();
-  // Split the token to simulate the action of the parser and force creation of
-  // an `ExpansionTokenRange`.
-  SourceLocation macroRAngleLoc = PP->SplitToken(macroGtgtLoc, 1);
-
-  // Verify that it fails (because it only captures the first greater-then and
-  // not the second one, so it doesn't span the entire macro expansion).
-  range = Lexer::makeFileCharRange(
-      CharSourceRange::getTokenRange(macroInnerTyLoc, macroRAngleLoc),
-      SourceMgr, LangOpts);
-  EXPECT_TRUE(range.isInvalid());
-}
-
 TEST_F(LexerTest, DontMergeMacroArgsFromDifferentMacroFiles) {
   std::vector<Token> toks =
       Lex("#define helper1 0\n"
@@ -468,21 +401,18 @@ TEST_F(LexerTest, DontOverallocateStringifyArgs) {
   auto MacroArgsDeleter = [&PP](MacroArgs *M) { M->destroy(*PP); };
   std::unique_ptr<MacroArgs, decltype(MacroArgsDeleter)> MA(
       MacroArgs::create(MI, ArgTokens, false, *PP), MacroArgsDeleter);
-  auto StringifyArg = [&](int ArgNo) {
-    return MA->StringifyArgument(MA->getUnexpArgument(ArgNo), *PP,
-                                 /*Charify=*/false, {}, {});
-  };
-  Token Result = StringifyArg(0);
+  Token Result = MA->getStringifiedArgument(0, *PP, {}, {});
   EXPECT_EQ(tok::string_literal, Result.getKind());
   EXPECT_STREQ("\"\\\"StrArg\\\"\"", Result.getLiteralData());
-  Result = StringifyArg(1);
+  Result = MA->getStringifiedArgument(1, *PP, {}, {});
   EXPECT_EQ(tok::string_literal, Result.getKind());
   EXPECT_STREQ("\"5\"", Result.getLiteralData());
-  Result = StringifyArg(2);
+  Result = MA->getStringifiedArgument(2, *PP, {}, {});
   EXPECT_EQ(tok::string_literal, Result.getKind());
   EXPECT_STREQ("\"'C'\"", Result.getLiteralData());
 #if !defined(NDEBUG) && GTEST_HAS_DEATH_TEST
-  EXPECT_DEATH(StringifyArg(3), "Invalid arg #");
+  EXPECT_DEATH(MA->getStringifiedArgument(3, *PP, {}, {}),
+               "Invalid argument number!");
 #endif
 }
 
@@ -602,34 +532,4 @@ TEST_F(LexerTest, CharRangeOffByOne) {
   EXPECT_EQ(Lexer::getSourceText(CR, SourceMgr, LangOpts), "MOO"); // Was "MO".
 }
 
-TEST_F(LexerTest, FindNextToken) {
-  Lex("int abcd = 0;\n"
-      "int xyz = abcd;\n");
-  std::vector<std::string> GeneratedByNextToken;
-  SourceLocation Loc =
-      SourceMgr.getLocForStartOfFile(SourceMgr.getMainFileID());
-  while (true) {
-    auto T = Lexer::findNextToken(Loc, SourceMgr, LangOpts);
-    ASSERT_TRUE(T.hasValue());
-    if (T->is(tok::eof))
-      break;
-    GeneratedByNextToken.push_back(getSourceText(*T, *T));
-    Loc = T->getLocation();
-  }
-  EXPECT_THAT(GeneratedByNextToken, ElementsAre("abcd", "=", "0", ";", "int",
-                                                "xyz", "=", "abcd", ";"));
-}
-
-TEST_F(LexerTest, CreatedFIDCountForPredefinedBuffer) {
-  TrivialModuleLoader ModLoader;
-  auto PP = CreatePP("", ModLoader);
-  while (1) {
-    Token tok;
-    PP->Lex(tok);
-    if (tok.is(tok::eof))
-      break;
-  }
-  EXPECT_EQ(SourceMgr.getNumCreatedFIDsForFileID(PP->getPredefinesFileID()),
-            1U);
-}
 } // anonymous namespace

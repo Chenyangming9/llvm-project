@@ -54,6 +54,8 @@ namespace lldb_private {
 
 class Log;
 
+void LogIfAnyCategoriesSet(uint32_t mask, const char *format, ...);
+
 Log *GetLogIfAllCategoriesSet(uint32_t mask);
 
 Log *GetLogIfAnyCategoriesSet(uint32_t mask);

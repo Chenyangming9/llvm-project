@@ -6,17 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cassert>
 #include <limits>
 #include <sstream>
-#include <string>
-#include <type_traits>
+#include <cassert>
+#include <iostream>
 
 #include "test_macros.h"
 
+using namespace std;
+
 template <class T>
 bool check_stream_failed(std::string const& val) {
-    std::istringstream ss(val);
+    istringstream ss(val);
     T result;
     return !(ss >> result);
 }
@@ -25,16 +26,16 @@ template<typename T>
 void check_limits()
 {
     const bool is_unsigned = std::is_unsigned<T>::value;
-    T minv = std::numeric_limits<T>::min();
-    T maxv = std::numeric_limits<T>::max();
+    T minv = numeric_limits<T>::min();
+    T maxv = numeric_limits<T>::max();
 
-    std::ostringstream miniss, maxiss;
+    ostringstream miniss, maxiss;
     assert(miniss << minv);
     assert(maxiss << maxv);
     std::string mins = miniss.str();
     std::string maxs = maxiss.str();
 
-    std::istringstream maxoss(maxs), minoss(mins);
+    istringstream maxoss(maxs), minoss(mins);
 
     T new_minv, new_maxv;
     assert(maxoss >> new_maxv);

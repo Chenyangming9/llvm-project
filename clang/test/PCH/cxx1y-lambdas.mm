@@ -39,8 +39,6 @@ int init_capture(T t) {
   return [&, x(t)] { return sizeof(x); };
 }
 
-auto with_pack = [](auto ...xs){};
-
 #else
 
 // CHECK-PRINT: T add_slowly
@@ -56,7 +54,5 @@ int add(int x, int y) {
 
 // CHECK-PRINT: init_capture
 // CHECK-PRINT: [&, x(t)]
-
-void use_with_pack() { with_pack(1, 2, 3); }
 
 #endif

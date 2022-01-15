@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Error.h"
 #include "obj2yaml.h"
 #include "llvm/Object/Minidump.h"
 #include "llvm/ObjectYAML/MinidumpYAML.h"

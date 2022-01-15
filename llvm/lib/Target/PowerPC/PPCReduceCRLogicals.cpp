@@ -24,7 +24,6 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Config/llvm-config.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
@@ -206,9 +205,9 @@ static bool splitMBB(BlockSplitInfo &BSI) {
   NewMBB->splice(NewMBB->end(), ThisMBB, InsertPoint, ThisMBB->end());
   NewMBB->transferSuccessors(ThisMBB);
   if (!ProbOrigTarget.isUnknown()) {
-    auto MBBI = find(NewMBB->successors(), OrigTarget);
+    auto MBBI = std::find(NewMBB->succ_begin(), NewMBB->succ_end(), OrigTarget);
     NewMBB->setSuccProbability(MBBI, ProbOrigTarget);
-    MBBI = find(NewMBB->successors(), OrigFallThrough);
+    MBBI = std::find(NewMBB->succ_begin(), NewMBB->succ_end(), OrigFallThrough);
     NewMBB->setSuccProbability(MBBI, ProbOrigFallThrough);
   }
 
@@ -376,16 +375,16 @@ public:
   };
 
 private:
-  const PPCInstrInfo *TII = nullptr;
-  MachineFunction *MF = nullptr;
-  MachineRegisterInfo *MRI = nullptr;
-  const MachineBranchProbabilityInfo *MBPI = nullptr;
+  const PPCInstrInfo *TII;
+  MachineFunction *MF;
+  MachineRegisterInfo *MRI;
+  const MachineBranchProbabilityInfo *MBPI;
 
   // A vector to contain all the CR logical operations
-  SmallVector<CRLogicalOpInfo, 16> AllCRLogicalOps;
+  std::vector<CRLogicalOpInfo> AllCRLogicalOps;
   void initialize(MachineFunction &MFParm);
   void collectCRLogicals();
-  bool handleCROp(unsigned Idx);
+  bool handleCROp(CRLogicalOpInfo &CRI);
   bool splitBlockOnBinaryCROp(CRLogicalOpInfo &CRI);
   static bool isCRLogical(MachineInstr &MI) {
     unsigned Opc = MI.getOpcode();
@@ -399,7 +398,7 @@ private:
     // Not using a range-based for loop here as the vector may grow while being
     // operated on.
     for (unsigned i = 0; i < AllCRLogicalOps.size(); i++)
-      Changed |= handleCROp(i);
+      Changed |= handleCROp(AllCRLogicalOps[i]);
     return Changed;
   }
 
@@ -471,21 +470,21 @@ PPCReduceCRLogicals::createCRLogicalOpInfo(MachineInstr &MIParam) {
   } else {
     MachineInstr *Def1 = lookThroughCRCopy(MIParam.getOperand(1).getReg(),
                                            Ret.SubregDef1, Ret.CopyDefs.first);
-    assert(Def1 && "Must be able to find a definition of operand 1.");
     Ret.DefsSingleUse &=
       MRI->hasOneNonDBGUse(Def1->getOperand(0).getReg());
     Ret.DefsSingleUse &=
       MRI->hasOneNonDBGUse(Ret.CopyDefs.first->getOperand(0).getReg());
+    assert(Def1 && "Must be able to find a definition of operand 1.");
     if (isBinary(MIParam)) {
       Ret.IsBinary = 1;
       MachineInstr *Def2 = lookThroughCRCopy(MIParam.getOperand(2).getReg(),
                                              Ret.SubregDef2,
                                              Ret.CopyDefs.second);
-      assert(Def2 && "Must be able to find a definition of operand 2.");
       Ret.DefsSingleUse &=
         MRI->hasOneNonDBGUse(Def2->getOperand(0).getReg());
       Ret.DefsSingleUse &=
         MRI->hasOneNonDBGUse(Ret.CopyDefs.second->getOperand(0).getReg());
+      assert(Def2 && "Must be able to find a definition of operand 2.");
       Ret.TrueDefs = std::make_pair(Def1, Def2);
     } else {
       Ret.TrueDefs = std::make_pair(Def1, nullptr);
@@ -536,15 +535,15 @@ MachineInstr *PPCReduceCRLogicals::lookThroughCRCopy(unsigned Reg,
                                                      unsigned &Subreg,
                                                      MachineInstr *&CpDef) {
   Subreg = -1;
-  if (!Register::isVirtualRegister(Reg))
+  if (!TargetRegisterInfo::isVirtualRegister(Reg))
     return nullptr;
   MachineInstr *Copy = MRI->getVRegDef(Reg);
   CpDef = Copy;
   if (!Copy->isCopy())
     return Copy;
-  Register CopySrc = Copy->getOperand(1).getReg();
+  unsigned CopySrc = Copy->getOperand(1).getReg();
   Subreg = Copy->getOperand(1).getSubReg();
-  if (!Register::isVirtualRegister(CopySrc)) {
+  if (!TargetRegisterInfo::isVirtualRegister(CopySrc)) {
     const TargetRegisterInfo *TRI = &TII->getRegisterInfo();
     // Set the Subreg
     if (CopySrc == PPC::CR0EQ || CopySrc == PPC::CR6EQ)
@@ -579,11 +578,10 @@ void PPCReduceCRLogicals::initialize(MachineFunction &MFParam) {
 /// a unary CR logical might be used to change the condition code on a
 /// comparison feeding it. A nullary CR logical might simply be removable
 /// if the user of the bit it [un]sets can be transformed.
-bool PPCReduceCRLogicals::handleCROp(unsigned Idx) {
+bool PPCReduceCRLogicals::handleCROp(CRLogicalOpInfo &CRI) {
   // We can definitely split a block on the inputs to a binary CR operation
   // whose defs and (single) use are within the same block.
   bool Changed = false;
-  CRLogicalOpInfo CRI = AllCRLogicalOps[Idx];
   if (CRI.IsBinary && CRI.ContainedInBlock && CRI.SingleUse && CRI.FeedsBR &&
       CRI.DefsSingleUse) {
     Changed = splitBlockOnBinaryCROp(CRI);

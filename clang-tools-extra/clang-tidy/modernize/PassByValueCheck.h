@@ -21,9 +21,6 @@ namespace modernize {
 class PassByValueCheck : public ClangTidyCheck {
 public:
   PassByValueCheck(StringRef Name, ClangTidyContext *Context);
-  bool isLanguageVersionSupported(const LangOptions &LangOpts) const override {
-    return LangOpts.CPlusPlus;
-  }
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
   void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
                            Preprocessor *ModuleExpanderPP) override;
@@ -31,7 +28,8 @@ public:
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 
 private:
-  utils::IncludeInserter Inserter;
+  std::unique_ptr<utils::IncludeInserter> Inserter;
+  const utils::IncludeSorter::IncludeStyle IncludeStyle;
   const bool ValuesOnly;
 };
 

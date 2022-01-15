@@ -1,4 +1,4 @@
-//===-- ExecutionContext.cpp ----------------------------------------------===//
+//===-- ExecutionContext.cpp ------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -183,9 +183,9 @@ uint32_t ExecutionContext::GetAddressByteSize() const {
 
 lldb::ByteOrder ExecutionContext::GetByteOrder() const {
   if (m_target_sp && m_target_sp->GetArchitecture().IsValid())
-    return m_target_sp->GetArchitecture().GetByteOrder();
+    m_target_sp->GetArchitecture().GetByteOrder();
   if (m_process_sp)
-    return m_process_sp->GetByteOrder();
+    m_process_sp->GetByteOrder();
   return endian::InlHostByteOrder();
 }
 
@@ -395,7 +395,8 @@ bool ExecutionContext::HasFrameScope() const {
 }
 
 ExecutionContextRef::ExecutionContextRef()
-    : m_target_wp(), m_process_wp(), m_thread_wp(), m_stack_id() {}
+    : m_target_wp(), m_process_wp(), m_thread_wp(),
+      m_tid(LLDB_INVALID_THREAD_ID), m_stack_id() {}
 
 ExecutionContextRef::ExecutionContextRef(const ExecutionContext *exe_ctx)
     : m_target_wp(), m_process_wp(), m_thread_wp(),

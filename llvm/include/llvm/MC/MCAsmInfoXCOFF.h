@@ -18,11 +18,6 @@ class MCAsmInfoXCOFF : public MCAsmInfo {
 
 protected:
   MCAsmInfoXCOFF();
-
-public:
-  // Return true only when C is an acceptable character inside a
-  // MCSymbolXCOFF.
-  bool isAcceptableChar(char C) const override;
 };
 
 } // end namespace llvm

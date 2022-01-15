@@ -9,7 +9,6 @@
 #include "llvm/IR/User.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/GlobalValue.h"
-#include "llvm/IR/IntrinsicInst.h"
 
 namespace llvm {
 class BasicBlock;
@@ -29,12 +28,8 @@ void User::replaceUsesOfWith(Value *From, Value *To) {
       // The side effects of this setOperand call include linking to
       // "To", adding "this" to the uses list of To, and
       // most importantly, removing "this" from the use list of "From".
-      setOperand(i, To);
+      setOperand(i, To); // Fix it now...
     }
-  if (auto DVI = dyn_cast_or_null<DbgVariableIntrinsic>(this)) {
-    if (is_contained(DVI->location_ops(), From))
-      DVI->replaceVariableLocationOp(From, To);
-  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -44,18 +39,20 @@ void User::replaceUsesOfWith(Value *From, Value *To) {
 void User::allocHungoffUses(unsigned N, bool IsPhi) {
   assert(HasHungOffUses && "alloc must have hung off uses");
 
-  static_assert(alignof(Use) >= alignof(BasicBlock *),
+  static_assert(alignof(Use) >= alignof(Use::UserRef),
+                "Alignment is insufficient for 'hung-off-uses' pieces");
+  static_assert(alignof(Use::UserRef) >= alignof(BasicBlock *),
                 "Alignment is insufficient for 'hung-off-uses' pieces");
 
-  // Allocate the array of Uses
-  size_t size = N * sizeof(Use);
+  // Allocate the array of Uses, followed by a pointer (with bottom bit set) to
+  // the User.
+  size_t size = N * sizeof(Use) + sizeof(Use::UserRef);
   if (IsPhi)
     size += N * sizeof(BasicBlock *);
   Use *Begin = static_cast<Use*>(::operator new(size));
   Use *End = Begin + N;
-  setOperandList(Begin);
-  for (; Begin != End; Begin++)
-    new (Begin) Use(this);
+  (void) new(End) Use::UserRef(const_cast<User*>(this), 1);
+  setOperandList(Use::initTags(Begin, End));
 }
 
 void User::growHungoffUses(unsigned NewNumUses, bool IsPhi) {
@@ -76,8 +73,10 @@ void User::growHungoffUses(unsigned NewNumUses, bool IsPhi) {
 
   // If this is a Phi, then we need to copy the BB pointers too.
   if (IsPhi) {
-    auto *OldPtr = reinterpret_cast<char *>(OldOps + OldNumUses);
-    auto *NewPtr = reinterpret_cast<char *>(NewOps + NewNumUses);
+    auto *OldPtr =
+        reinterpret_cast<char *>(OldOps + OldNumUses) + sizeof(Use::UserRef);
+    auto *NewPtr =
+        reinterpret_cast<char *>(NewOps + NewNumUses) + sizeof(Use::UserRef);
     std::copy(OldPtr, OldPtr + (OldNumUses * sizeof(BasicBlock *)), NewPtr);
   }
   Use::zap(OldOps, OldOps + OldNumUses, true);
@@ -106,10 +105,6 @@ MutableArrayRef<uint8_t> User::getDescriptor() {
       reinterpret_cast<uint8_t *>(DI) - DI->SizeInBytes, DI->SizeInBytes);
 }
 
-bool User::isDroppable() const {
-  return isa<AssumeInst>(this);
-}
-
 //===----------------------------------------------------------------------===//
 //                         User operator new Implementations
 //===----------------------------------------------------------------------===//
@@ -133,8 +128,7 @@ void *User::allocateFixedOperandUser(size_t Size, unsigned Us,
   Obj->NumUserOperands = Us;
   Obj->HasHungOffUses = false;
   Obj->HasDescriptor = DescBytes != 0;
-  for (; Start != End; Start++)
-    new (Start) Use(Obj);
+  Use::initTags(Start, End);
 
   if (DescBytes != 0) {
     auto *DescInfo = reinterpret_cast<DescriptorInfo *>(Storage + DescBytes);
@@ -168,9 +162,7 @@ void *User::operator new(size_t Size) {
 //                         User operator delete Implementation
 //===----------------------------------------------------------------------===//
 
-// Repress memory sanitization, due to use-after-destroy by operator
-// delete. Bug report 24578 identifies this issue.
-LLVM_NO_SANITIZE_MEMORY_ATTRIBUTE void User::operator delete(void *Usr) {
+void User::operator delete(void *Usr) {
   // Hung off uses use a single Use* before the User, while other subclasses
   // use a Use[] allocated prior to the user.
   User *Obj = static_cast<User *>(Usr);
@@ -197,4 +189,4 @@ LLVM_NO_SANITIZE_MEMORY_ATTRIBUTE void User::operator delete(void *Usr) {
   }
 }
 
-} // namespace llvm
+} // End llvm namespace

@@ -225,8 +225,8 @@ static int findReferencesInBlock(struct SubtreeReferences &References,
   return 0;
 }
 
-void polly::addReferencesFromStmt(const ScopStmt *Stmt, void *UserPtr,
-                                  bool CreateScalarRefs) {
+void addReferencesFromStmt(const ScopStmt *Stmt, void *UserPtr,
+                           bool CreateScalarRefs) {
   auto &References = *static_cast<struct SubtreeReferences *>(UserPtr);
 
   if (Stmt->isBlockStmt())
@@ -300,12 +300,12 @@ addReferencesFromStmtUnionSet(isl::union_set USet,
     addReferencesFromStmtSet(Set, &References);
 }
 
-isl::union_map
-IslNodeBuilder::getScheduleForAstNode(const isl::ast_node &Node) {
-  return IslAstInfo::getSchedule(Node);
+__isl_give isl_union_map *
+IslNodeBuilder::getScheduleForAstNode(__isl_keep isl_ast_node *For) {
+  return IslAstInfo::getSchedule(For);
 }
 
-void IslNodeBuilder::getReferencesInSubtree(const isl::ast_node &For,
+void IslNodeBuilder::getReferencesInSubtree(__isl_keep isl_ast_node *For,
                                             SetVector<Value *> &Values,
                                             SetVector<const Loop *> &Loops) {
   SetVector<const SCEV *> SCEVs;
@@ -319,7 +319,8 @@ void IslNodeBuilder::getReferencesInSubtree(const isl::ast_node &For,
   for (const auto &I : OutsideLoopIterations)
     Values.insert(cast<SCEVUnknown>(I.second)->getValue());
 
-  isl::union_set Schedule = getScheduleForAstNode(For).domain();
+  isl::union_set Schedule =
+      isl::manage(isl_union_map_domain(getScheduleForAstNode(For)));
   addReferencesFromStmtUnionSet(Schedule, References);
 
   for (const SCEV *Expr : SCEVs) {
@@ -425,27 +426,7 @@ void IslNodeBuilder::createMark(__isl_take isl_ast_node *Node) {
     auto *BasePtr = static_cast<Value *>(isl_id_get_user(Id));
     Annotator.addInterIterationAliasFreeBasePtr(BasePtr);
   }
-
-  BandAttr *ChildLoopAttr = getLoopAttr(isl::manage_copy(Id));
-  BandAttr *AncestorLoopAttr;
-  if (ChildLoopAttr) {
-    // Save current LoopAttr environment to restore again when leaving this
-    // subtree. This means there was no loop between the ancestor LoopAttr and
-    // this mark, i.e. the ancestor LoopAttr did not directly mark a loop. This
-    // can happen e.g. if the AST build peeled or unrolled the loop.
-    AncestorLoopAttr = Annotator.getStagingAttrEnv();
-
-    Annotator.getStagingAttrEnv() = ChildLoopAttr;
-  }
-
   create(Child);
-
-  if (ChildLoopAttr) {
-    assert(Annotator.getStagingAttrEnv() == ChildLoopAttr &&
-           "Nest must not overwrite loop attr environment");
-    Annotator.getStagingAttrEnv() = AncestorLoopAttr;
-  }
-
   isl_id_free(Id);
 }
 
@@ -475,22 +456,22 @@ void IslNodeBuilder::createForVector(__isl_take isl_ast_node *For,
   for (int i = 1; i < VectorWidth; i++)
     IVS[i] = Builder.CreateAdd(IVS[i - 1], ValueInc, "p_vector_iv");
 
-  isl::union_map Schedule = getScheduleForAstNode(isl::manage_copy(For));
-  assert(!Schedule.is_null() &&
-         "For statement annotation does not contain its schedule");
+  isl_union_map *Schedule = getScheduleForAstNode(For);
+  assert(Schedule && "For statement annotation does not contain its schedule");
 
   IDToValue[IteratorID] = ValueLB;
 
   switch (isl_ast_node_get_type(Body)) {
   case isl_ast_node_user:
-    createUserVector(Body, IVS, isl_id_copy(IteratorID), Schedule.copy());
+    createUserVector(Body, IVS, isl_id_copy(IteratorID),
+                     isl_union_map_copy(Schedule));
     break;
   case isl_ast_node_block: {
     isl_ast_node_list *List = isl_ast_node_block_get_children(Body);
 
     for (int i = 0; i < isl_ast_node_list_n_ast_node(List); ++i)
       createUserVector(isl_ast_node_list_get_ast_node(List, i), IVS,
-                       isl_id_copy(IteratorID), Schedule.copy());
+                       isl_id_copy(IteratorID), isl_union_map_copy(Schedule));
 
     isl_ast_node_free(Body);
     isl_ast_node_list_free(List);
@@ -503,6 +484,7 @@ void IslNodeBuilder::createForVector(__isl_take isl_ast_node *For,
 
   IDToValue.erase(IDToValue.find(IteratorID));
   isl_id_free(IteratorID);
+  isl_union_map_free(Schedule);
 
   isl_ast_node_free(For);
   isl_ast_expr_free(Iterator);
@@ -683,7 +665,7 @@ void IslNodeBuilder::createForParallel(__isl_take isl_ast_node *For) {
   SetVector<Value *> SubtreeValues;
   SetVector<const Loop *> Loops;
 
-  getReferencesInSubtree(isl::manage_copy(For), SubtreeValues, Loops);
+  getReferencesInSubtree(For, SubtreeValues, Loops);
 
   // Create for all loops we depend on values that contain the current loop
   // iteration. These values are necessary to generate code for SCEVs that
@@ -780,8 +762,8 @@ static bool hasPartialAccesses(__isl_take isl_ast_node *Node) {
 void IslNodeBuilder::createFor(__isl_take isl_ast_node *For) {
   bool Vector = PollyVectorizerChoice == VECTORIZER_POLLY;
 
-  if (Vector && IslAstInfo::isInnermostParallel(isl::manage_copy(For)) &&
-      !IslAstInfo::isReductionParallel(isl::manage_copy(For))) {
+  if (Vector && IslAstInfo::isInnermostParallel(For) &&
+      !IslAstInfo::isReductionParallel(For)) {
     int VectorWidth = getNumberOfIterations(isl::manage_copy(For));
     if (1 < VectorWidth && VectorWidth <= 16 && !hasPartialAccesses(For)) {
       createForVector(For, VectorWidth);
@@ -789,12 +771,12 @@ void IslNodeBuilder::createFor(__isl_take isl_ast_node *For) {
     }
   }
 
-  if (IslAstInfo::isExecutedInParallel(isl::manage_copy(For))) {
+  if (IslAstInfo::isExecutedInParallel(For)) {
     createForParallel(For);
     return;
   }
-  bool Parallel = (IslAstInfo::isParallel(isl::manage_copy(For)) &&
-                   !IslAstInfo::isReductionParallel(isl::manage_copy(For)));
+  bool Parallel =
+      (IslAstInfo::isParallel(For) && !IslAstInfo::isReductionParallel(For));
   createForSequential(isl::manage(For), Parallel);
 }
 
@@ -850,12 +832,12 @@ void IslNodeBuilder::createIf(__isl_take isl_ast_node *If) {
 __isl_give isl_id_to_ast_expr *
 IslNodeBuilder::createNewAccesses(ScopStmt *Stmt,
                                   __isl_keep isl_ast_node *Node) {
-  isl::id_to_ast_expr NewAccesses =
-      isl::id_to_ast_expr::alloc(Stmt->getParent()->getIslCtx(), 0);
+  isl_id_to_ast_expr *NewAccesses =
+      isl_id_to_ast_expr_alloc(Stmt->getParent()->getIslCtx().get(), 0);
 
-  isl::ast_build Build = IslAstInfo::getBuild(isl::manage_copy(Node));
-  assert(!Build.is_null() && "Could not obtain isl_ast_build from user node");
-  Stmt->setAstBuild(Build);
+  auto *Build = IslAstInfo::getBuild(Node);
+  assert(Build && "Could not obtain isl_ast_build from user node");
+  Stmt->setAstBuild(isl::manage_copy(Build));
 
   for (auto *MA : *Stmt) {
     if (!MA->hasNewAccessRelation()) {
@@ -876,12 +858,13 @@ IslNodeBuilder::createNewAccesses(ScopStmt *Stmt,
     assert(MA->isAffine() &&
            "Only affine memory accesses can be code generated");
 
-    isl::union_map Schedule = Build.get_schedule();
+    auto Schedule = isl_ast_build_get_schedule(Build);
 
 #ifndef NDEBUG
     if (MA->isRead()) {
       auto Dom = Stmt->getDomain().release();
-      auto SchedDom = isl_set_from_union_set(Schedule.domain().release());
+      auto SchedDom = isl_set_from_union_set(
+          isl_union_map_domain(isl_union_map_copy(Schedule)));
       auto AccDom = isl_map_domain(MA->getAccessRelation().release());
       Dom = isl_set_intersect_params(Dom,
                                      Stmt->getParent()->getContext().release());
@@ -897,20 +880,25 @@ IslNodeBuilder::createNewAccesses(ScopStmt *Stmt,
     }
 #endif
 
-    isl::pw_multi_aff PWAccRel = MA->applyScheduleToAccessRelation(Schedule);
+    auto PWAccRel =
+        MA->applyScheduleToAccessRelation(isl::manage(Schedule)).release();
 
     // isl cannot generate an index expression for access-nothing accesses.
-    isl::set AccDomain = PWAccRel.domain();
+    isl::set AccDomain =
+        isl::manage(isl_pw_multi_aff_domain(isl_pw_multi_aff_copy(PWAccRel)));
     isl::set Context = S.getContext();
     AccDomain = AccDomain.intersect_params(Context);
-    if (AccDomain.is_empty())
+    if (AccDomain.is_empty()) {
+      isl_pw_multi_aff_free(PWAccRel);
       continue;
+    }
 
-    isl::ast_expr AccessExpr = Build.access_from(PWAccRel);
-    NewAccesses = NewAccesses.set(MA->getId(), AccessExpr);
+    auto AccessExpr = isl_ast_build_access_from_pw_multi_aff(Build, PWAccRel);
+    NewAccesses =
+        isl_id_to_ast_expr_set(NewAccesses, MA->getId().release(), AccessExpr);
   }
 
-  return NewAccesses.release();
+  return NewAccesses;
 }
 
 void IslNodeBuilder::createSubstitutions(__isl_take isl_ast_expr *Expr,
@@ -964,7 +952,7 @@ void IslNodeBuilder::generateCopyStmt(
   auto *LoadValue = ExprBuilder.create(AccessExpr);
   AccessExpr =
       isl_id_to_ast_expr_get(NewAccesses, (*WriteAccess)->getId().release());
-  auto *StoreAddr = ExprBuilder.createAccessAddress(AccessExpr).first;
+  auto *StoreAddr = ExprBuilder.createAccessAddress(AccessExpr);
   Builder.CreateStore(LoadValue, StoreAddr);
 }
 
@@ -1146,28 +1134,27 @@ static Value *buildFADOutermostDimensionLoad(Value *GlobalDescriptor,
                                              PollyIRBuilder &Builder,
                                              std::string ArrayName) {
   assert(GlobalDescriptor && "invalid global descriptor given");
-  Type *Ty = GlobalDescriptor->getType()->getPointerElementType();
 
   Value *endIdx[4] = {Builder.getInt64(0), Builder.getInt32(3),
                       Builder.getInt64(0), Builder.getInt32(2)};
-  Value *endPtr = Builder.CreateInBoundsGEP(Ty, GlobalDescriptor, endIdx,
+  Value *endPtr = Builder.CreateInBoundsGEP(GlobalDescriptor, endIdx,
                                             ArrayName + "_end_ptr");
-  Type *type = cast<GEPOperator>(endPtr)->getResultElementType();
-  assert(isa<IntegerType>(type) && "expected type of end to be integral");
-
-  Value *end = Builder.CreateLoad(type, endPtr, ArrayName + "_end");
+  Value *end = Builder.CreateLoad(endPtr, ArrayName + "_end");
 
   Value *beginIdx[4] = {Builder.getInt64(0), Builder.getInt32(3),
                         Builder.getInt64(0), Builder.getInt32(1)};
-  Value *beginPtr = Builder.CreateInBoundsGEP(Ty, GlobalDescriptor, beginIdx,
+  Value *beginPtr = Builder.CreateInBoundsGEP(GlobalDescriptor, beginIdx,
                                               ArrayName + "_begin_ptr");
-  Value *begin = Builder.CreateLoad(type, beginPtr, ArrayName + "_begin");
+  Value *begin = Builder.CreateLoad(beginPtr, ArrayName + "_begin");
 
   Value *size =
       Builder.CreateNSWSub(end, begin, ArrayName + "_end_begin_delta");
+  Type *endType = dyn_cast<IntegerType>(end->getType());
+  assert(endType && "expected type of end to be integral");
 
-  size = Builder.CreateNSWAdd(
-      end, ConstantInt::get(type, 1, /* signed = */ true), ArrayName + "_size");
+  size = Builder.CreateNSWAdd(end,
+                              ConstantInt::get(endType, 1, /* signed = */ true),
+                              ArrayName + "_size");
 
   return size;
 }
@@ -1224,9 +1211,9 @@ Value *IslNodeBuilder::preloadUnconditionally(isl_set *AccessRange,
   auto Name = Ptr->getName();
   auto AS = Ptr->getType()->getPointerAddressSpace();
   Ptr = Builder.CreatePointerCast(Ptr, Ty->getPointerTo(AS), Name + ".cast");
-  PreloadVal = Builder.CreateLoad(Ty, Ptr, Name + ".load");
+  PreloadVal = Builder.CreateLoad(Ptr, Name + ".load");
   if (LoadInst *PreloadInst = dyn_cast<LoadInst>(PreloadVal))
-    PreloadInst->setAlignment(cast<LoadInst>(AccInst)->getAlign());
+    PreloadInst->setAlignment(dyn_cast<LoadInst>(AccInst)->getAlignment());
 
   // TODO: This is only a hot fix for SCoP sequences that use the same load
   //       instruction contained and hoisted by one of the SCoPs.
@@ -1408,8 +1395,8 @@ bool IslNodeBuilder::preloadInvariantEquivClass(
 
   BasicBlock *EntryBB = &Builder.GetInsertBlock()->getParent()->getEntryBlock();
   auto *Alloca = new AllocaInst(AccInstTy, DL.getAllocaAddrSpace(),
-                                AccInst->getName() + ".preload.s2a",
-                                &*EntryBB->getFirstInsertionPt());
+                                AccInst->getName() + ".preload.s2a");
+  Alloca->insertBefore(&*EntryBB->getFirstInsertionPt());
   Builder.CreateStore(PreloadVal, Alloca);
   ValueMapT PreloadedPointer;
   PreloadedPointer[PreloadVal] = AccInst;
@@ -1509,8 +1496,7 @@ void IslNodeBuilder::allocateNewArrays(BBPair StartExitBlocks) {
 
       auto *CreatedArray = new AllocaInst(NewArrayType, DL.getAllocaAddrSpace(),
                                           SAI->getName(), &*InstIt);
-      if (PollyTargetFirstLevelCacheLineSize)
-        CreatedArray->setAlignment(Align(PollyTargetFirstLevelCacheLineSize));
+      CreatedArray->setAlignment(PollyTargetFirstLevelCacheLineSize);
       SAI->setBasePtr(CreatedArray);
     }
   }

@@ -1,4 +1,4 @@
-//===-- TypeMap.cpp -------------------------------------------------------===//
+//===-- TypeMap.cpp --------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,6 +7,18 @@
 //===----------------------------------------------------------------------===//
 
 #include <vector>
+
+#include "clang/AST/ASTConsumer.h"
+#include "clang/AST/ASTContext.h"
+#include "clang/AST/Decl.h"
+#include "clang/AST/DeclCXX.h"
+#include "clang/AST/DeclGroup.h"
+
+#include "clang/Basic/Builtins.h"
+#include "clang/Basic/IdentifierTable.h"
+#include "clang/Basic/LangOptions.h"
+#include "clang/Basic/SourceManager.h"
+#include "clang/Basic/TargetInfo.h"
 
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/raw_ostream.h"
@@ -18,11 +30,12 @@
 
 using namespace lldb;
 using namespace lldb_private;
+using namespace clang;
 
 TypeMap::TypeMap() : m_types() {}
 
 // Destructor
-TypeMap::~TypeMap() = default;
+TypeMap::~TypeMap() {}
 
 void TypeMap::Insert(const TypeSP &type_sp) {
   // Just push each type on the back for now. We will worry about uniquing
@@ -121,9 +134,9 @@ bool TypeMap::Remove(const lldb::TypeSP &type_sp) {
   return false;
 }
 
-void TypeMap::Dump(Stream *s, bool show_context, lldb::DescriptionLevel level) {
+void TypeMap::Dump(Stream *s, bool show_context) {
   for (iterator pos = m_types.begin(), end = m_types.end(); pos != end; ++pos) {
-    pos->second->Dump(s, show_context, level);
+    pos->second->Dump(s, show_context);
   }
 }
 
@@ -137,8 +150,7 @@ void TypeMap::RemoveMismatchedTypes(const char *qualified_typename,
     type_basename = qualified_typename;
     type_scope = "";
   }
-  return RemoveMismatchedTypes(std::string(type_scope),
-                               std::string(type_basename), type_class,
+  return RemoveMismatchedTypes(type_scope, type_basename, type_class,
                                exact_match);
 }
 

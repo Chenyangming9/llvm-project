@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_MACOSX_KERNEL_THREADKDP_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_MACOSX_KERNEL_THREADKDP_H
+#ifndef liblldb_ThreadKDP_h_
+#define liblldb_ThreadKDP_h_
 
 #include <string>
 
@@ -22,16 +22,16 @@ public:
 
   virtual ~ThreadKDP();
 
-  void RefreshStateAfterStop() override;
+  virtual void RefreshStateAfterStop();
 
-  const char *GetName() override;
+  virtual const char *GetName();
 
-  const char *GetQueueName() override;
+  virtual const char *GetQueueName();
 
-  lldb::RegisterContextSP GetRegisterContext() override;
+  virtual lldb::RegisterContextSP GetRegisterContext();
 
-  lldb::RegisterContextSP
-  CreateRegisterContextForFrame(lldb_private::StackFrame *frame) override;
+  virtual lldb::RegisterContextSP
+  CreateRegisterContextForFrame(lldb_private::StackFrame *frame);
 
   void Dump(lldb_private::Log *log, uint32_t index);
 
@@ -41,7 +41,7 @@ public:
 
   const char *GetBasicInfoAsString();
 
-  void SetName(const char *name) override {
+  void SetName(const char *name) {
     if (name && name[0])
       m_thread_name.assign(name);
     else
@@ -66,7 +66,7 @@ protected:
   lldb::addr_t m_thread_dispatch_qaddr;
   lldb::StopInfoSP m_cached_stop_info_sp;
   // Protected member functions.
-  bool CalculateStopInfo() override;
+  virtual bool CalculateStopInfo();
 };
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_MACOSX_KERNEL_THREADKDP_H
+#endif // liblldb_ThreadKDP_h_

@@ -22,10 +22,10 @@
 #include "Symbols.h"
 #include "Target.h"
 #include "Writer.h"
-#include "lld/Common/DWARF.h"
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
 #include "lld/Common/Strings.h"
+#include "lld/Common/Threads.h"
 #include "lld/Common/Version.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/StringExtras.h"
@@ -36,8 +36,6 @@
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/LEB128.h"
 #include "llvm/Support/MD5.h"
-#include "llvm/Support/Parallel.h"
-#include "llvm/Support/TimeProfiler.h"
 #include <cstdlib>
 #include <thread>
 
@@ -46,6 +44,7 @@ using namespace llvm::dwarf;
 using namespace llvm::ELF;
 using namespace llvm::object;
 using namespace llvm::support;
+
 using namespace lld;
 using namespace lld::elf;
 
@@ -258,8 +257,10 @@ InputSection *elf::createInterpSection() {
   StringRef s = saver.save(config->dynamicLinker);
   ArrayRef<uint8_t> contents = {(const uint8_t *)s.data(), s.size() + 1};
 
-  return make<InputSection>(nullptr, SHF_ALLOC, SHT_PROGBITS, 1, contents,
-                            ".interp");
+  auto *sec = make<InputSection>(nullptr, SHF_ALLOC, SHT_PROGBITS, 1, contents,
+                                 ".interp");
+  sec->markLive();
+  return sec;
 }
 
 Defined *elf::addSyntheticLocal(StringRef name, uint8_t type, uint64_t value,
@@ -300,8 +301,8 @@ static size_t getHashSize() {
 // sets is empty, or some input files didn't have .note.gnu.property sections),
 // we don't create this section.
 GnuPropertySection::GnuPropertySection()
-    : SyntheticSection(llvm::ELF::SHF_ALLOC, llvm::ELF::SHT_NOTE,
-                       config->wordsize, ".note.gnu.property") {}
+    : SyntheticSection(llvm::ELF::SHF_ALLOC, llvm::ELF::SHT_NOTE, 4,
+                       ".note.gnu.property") {}
 
 void GnuPropertySection::writeTo(uint8_t *buf) {
   uint32_t featureAndType = config->emachine == EM_AARCH64
@@ -370,10 +371,10 @@ CieRecord *EhFrameSection::addCie(EhSectionPiece &cie, ArrayRef<RelTy> rels) {
   return rec;
 }
 
-// There is one FDE per function. Returns a non-null pointer to the function
-// symbol if the given FDE points to a live function.
+// There is one FDE per function. Returns true if a given FDE
+// points to a live function.
 template <class ELFT, class RelTy>
-Defined *EhFrameSection::isFdeLive(EhSectionPiece &fde, ArrayRef<RelTy> rels) {
+bool EhFrameSection::isFdeLive(EhSectionPiece &fde, ArrayRef<RelTy> rels) {
   auto *sec = cast<EhInputSection>(fde.sec);
   unsigned firstRelI = fde.firstRelocation;
 
@@ -383,7 +384,7 @@ Defined *EhFrameSection::isFdeLive(EhSectionPiece &fde, ArrayRef<RelTy> rels) {
   // corresponding FDEs, which results in creating bad .eh_frame sections.
   // To deal with that, we ignore such FDEs.
   if (firstRelI == (unsigned)-1)
-    return nullptr;
+    return false;
 
   const RelTy &rel = rels[firstRelI];
   Symbol &b = sec->template getFile<ELFT>()->getRelocTargetSym(rel);
@@ -391,9 +392,9 @@ Defined *EhFrameSection::isFdeLive(EhSectionPiece &fde, ArrayRef<RelTy> rels) {
   // FDEs for garbage-collected or merged-by-ICF sections, or sections in
   // another partition, are dead.
   if (auto *d = dyn_cast<Defined>(&b))
-    if (d->section && d->section->partition == partition)
-      return d;
-  return nullptr;
+    if (SectionBase *sec = d->section)
+      return sec->partition == partition;
+  return false;
 }
 
 // .eh_frame is a sequence of CIE or FDE records. In general, there
@@ -401,7 +402,7 @@ Defined *EhFrameSection::isFdeLive(EhSectionPiece &fde, ArrayRef<RelTy> rels) {
 // a list of FDEs. This function searches an existing CIE or create a new
 // one and associates FDEs to the CIE.
 template <class ELFT, class RelTy>
-void EhFrameSection::addRecords(EhInputSection *sec, ArrayRef<RelTy> rels) {
+void EhFrameSection::addSectionAux(EhInputSection *sec, ArrayRef<RelTy> rels) {
   offsetToCie.clear();
   for (EhSectionPiece &piece : sec->pieces) {
     // The empty record is the end marker.
@@ -427,17 +428,8 @@ void EhFrameSection::addRecords(EhInputSection *sec, ArrayRef<RelTy> rels) {
   }
 }
 
-template <class ELFT>
-void EhFrameSection::addSectionAux(EhInputSection *sec) {
-  if (!sec->isLive())
-    return;
-  if (sec->areRelocsRela)
-    addRecords<ELFT>(sec, sec->template relas<ELFT>());
-  else
-    addRecords<ELFT>(sec, sec->template rels<ELFT>());
-}
-
-void EhFrameSection::addSection(EhInputSection *sec) {
+template <class ELFT> void EhFrameSection::addSection(InputSectionBase *c) {
+  auto *sec = cast<EhInputSection>(c);
   sec->parent = this;
 
   alignment = std::max(alignment, sec->alignment);
@@ -445,51 +437,14 @@ void EhFrameSection::addSection(EhInputSection *sec) {
 
   for (auto *ds : sec->dependentSections)
     dependentSections.push_back(ds);
-}
 
-// Used by ICF<ELFT>::handleLSDA(). This function is very similar to
-// EhFrameSection::addRecords().
-template <class ELFT, class RelTy>
-void EhFrameSection::iterateFDEWithLSDAAux(
-    EhInputSection &sec, ArrayRef<RelTy> rels, DenseSet<size_t> &ciesWithLSDA,
-    llvm::function_ref<void(InputSection &)> fn) {
-  for (EhSectionPiece &piece : sec.pieces) {
-    // Skip ZERO terminator.
-    if (piece.size == 4)
-      continue;
+  if (sec->pieces.empty())
+    return;
 
-    size_t offset = piece.inputOff;
-    uint32_t id =
-        endian::read32<ELFT::TargetEndianness>(piece.data().data() + 4);
-    if (id == 0) {
-      if (hasLSDA(piece))
-        ciesWithLSDA.insert(offset);
-      continue;
-    }
-    uint32_t cieOffset = offset + 4 - id;
-    if (ciesWithLSDA.count(cieOffset) == 0)
-      continue;
-
-    // The CIE has a LSDA argument. Call fn with d's section.
-    if (Defined *d = isFdeLive<ELFT>(piece, rels))
-      if (auto *s = dyn_cast_or_null<InputSection>(d->section))
-        fn(*s);
-  }
-}
-
-template <class ELFT>
-void EhFrameSection::iterateFDEWithLSDA(
-    llvm::function_ref<void(InputSection &)> fn) {
-  DenseSet<size_t> ciesWithLSDA;
-  for (EhInputSection *sec : sections) {
-    ciesWithLSDA.clear();
-    if (sec->areRelocsRela)
-      iterateFDEWithLSDAAux<ELFT>(*sec, sec->template relas<ELFT>(),
-                                  ciesWithLSDA, fn);
-    else
-      iterateFDEWithLSDAAux<ELFT>(*sec, sec->template rels<ELFT>(),
-                                  ciesWithLSDA, fn);
-  }
+  if (sec->areRelocsRela)
+    addSectionAux<ELFT>(sec, sec->template relas<ELFT>());
+  else
+    addSectionAux<ELFT>(sec, sec->template rels<ELFT>());
 }
 
 static void writeCieFde(uint8_t *buf, ArrayRef<uint8_t> d) {
@@ -506,28 +461,6 @@ static void writeCieFde(uint8_t *buf, ArrayRef<uint8_t> d) {
 
 void EhFrameSection::finalizeContents() {
   assert(!this->size); // Not finalized.
-
-  switch (config->ekind) {
-  case ELFNoneKind:
-    llvm_unreachable("invalid ekind");
-  case ELF32LEKind:
-    for (EhInputSection *sec : sections)
-      addSectionAux<ELF32LE>(sec);
-    break;
-  case ELF32BEKind:
-    for (EhInputSection *sec : sections)
-      addSectionAux<ELF32BE>(sec);
-    break;
-  case ELF64LEKind:
-    for (EhInputSection *sec : sections)
-      addSectionAux<ELF64LE>(sec);
-    break;
-  case ELF64BEKind:
-    for (EhInputSection *sec : sections)
-      addSectionAux<ELF64BE>(sec);
-    break;
-  }
-
   size_t off = 0;
   for (CieRecord *rec : cieRecords) {
     rec->cie->outputOff = off;
@@ -644,9 +577,13 @@ void EhFrameSection::writeTo(uint8_t *buf) {
 }
 
 GotSection::GotSection()
-    : SyntheticSection(SHF_ALLOC | SHF_WRITE, SHT_PROGBITS,
-                       target->gotEntrySize, ".got") {
-  numEntries = target->gotHeaderEntriesNum;
+    : SyntheticSection(SHF_ALLOC | SHF_WRITE, SHT_PROGBITS, config->wordsize,
+                       ".got") {
+  // If ElfSym::globalOffsetTable is relative to .got and is referenced,
+  // increase numEntries by the number of entries used to emit
+  // ElfSym::globalOffsetTable.
+  if (ElfSym::globalOffsetTable && !target->gotBaseSymInGotPlt)
+    numEntries += target->gotHeaderEntriesNum;
 }
 
 void GotSection::addEntry(Symbol &sym) {
@@ -682,22 +619,21 @@ uint64_t GotSection::getGlobalDynOffset(const Symbol &b) const {
 }
 
 void GotSection::finalizeContents() {
-  if (config->emachine == EM_PPC64 &&
-      numEntries <= target->gotHeaderEntriesNum && !ElfSym::globalOffsetTable)
-    size = 0;
-  else
-    size = numEntries * config->wordsize;
+  size = numEntries * config->wordsize;
 }
 
 bool GotSection::isNeeded() const {
-  // Needed if the GOT symbol is used or the number of entries is more than just
-  // the header. A GOT with just the header may not be needed.
-  return hasGotOffRel || numEntries > target->gotHeaderEntriesNum;
+  // We need to emit a GOT even if it's empty if there's a relocation that is
+  // relative to GOT(such as GOTOFFREL).
+  return numEntries || hasGotOffRel;
 }
 
 void GotSection::writeTo(uint8_t *buf) {
+  // Buf points to the start of this section's buffer,
+  // whereas InputSectionBase::relocateAlloc() expects its argument
+  // to point to the start of the output section.
   target->writeGotHeader(buf);
-  relocateAlloc(buf, buf + size);
+  relocateAlloc(buf - outSecOff, buf - outSecOff + size);
 }
 
 static uint64_t getMipsPageAddr(uint64_t addr) {
@@ -937,7 +873,7 @@ void MipsGotSection::build() {
   std::swap(gots, mergedGots);
 
   // Reduce number of "reloc-only" entries in the primary GOT
-  // by subtracting "global" entries in the primary GOT.
+  // by substracting "global" entries exist in the primary GOT.
   primGot = &gots.front();
   primGot->relocs.remove_if([&](const std::pair<Symbol *, size_t> &p) {
     return primGot->global.count(p.first);
@@ -985,37 +921,30 @@ void MipsGotSection::build() {
     for (std::pair<Symbol *, size_t> &p : got.tls) {
       Symbol *s = p.first;
       uint64_t offset = p.second * config->wordsize;
-      // When building a shared library we still need a dynamic relocation
-      // for the TP-relative offset as we don't know how much other data will
-      // be allocated before us in the static TLS block.
-      if (s->isPreemptible || config->shared)
-        mainPart->relaDyn->addReloc({target->tlsGotRel, this, offset,
-                                     DynamicReloc::AgainstSymbolWithTargetVA,
-                                     *s, 0, R_ABS});
+      if (s->isPreemptible)
+        mainPart->relaDyn->addReloc(target->tlsGotRel, this, offset, s);
     }
     for (std::pair<Symbol *, size_t> &p : got.dynTlsSymbols) {
       Symbol *s = p.first;
       uint64_t offset = p.second * config->wordsize;
       if (s == nullptr) {
-        if (!config->shared)
+        if (!config->isPic)
           continue;
-        mainPart->relaDyn->addReloc({target->tlsModuleIndexRel, this, offset});
+        mainPart->relaDyn->addReloc(target->tlsModuleIndexRel, this, offset, s);
       } else {
         // When building a shared library we still need a dynamic relocation
         // for the module index. Therefore only checking for
         // S->isPreemptible is not sufficient (this happens e.g. for
         // thread-locals that have been marked as local through a linker script)
-        if (!s->isPreemptible && !config->shared)
+        if (!s->isPreemptible && !config->isPic)
           continue;
-        mainPart->relaDyn->addSymbolReloc(target->tlsModuleIndexRel, this,
-                                          offset, *s);
+        mainPart->relaDyn->addReloc(target->tlsModuleIndexRel, this, offset, s);
         // However, we can skip writing the TLS offset reloc for non-preemptible
         // symbols since it is known even in shared libraries
         if (!s->isPreemptible)
           continue;
         offset += config->wordsize;
-        mainPart->relaDyn->addSymbolReloc(target->tlsOffsetRel, this, offset,
-                                          *s);
+        mainPart->relaDyn->addReloc(target->tlsOffsetRel, this, offset, s);
       }
     }
 
@@ -1027,8 +956,7 @@ void MipsGotSection::build() {
     // Dynamic relocations for "global" entries.
     for (const std::pair<Symbol *, size_t> &p : got.global) {
       uint64_t offset = p.second * config->wordsize;
-      mainPart->relaDyn->addSymbolReloc(target->relativeRel, this, offset,
-                                        *p.first);
+      mainPart->relaDyn->addReloc(target->relativeRel, this, offset, p.first);
     }
     if (!config->isPic)
       continue;
@@ -1039,14 +967,13 @@ void MipsGotSection::build() {
       for (size_t pi = 0; pi < pageCount; ++pi) {
         uint64_t offset = (l.second.firstIndex + pi) * config->wordsize;
         mainPart->relaDyn->addReloc({target->relativeRel, this, offset, l.first,
-                                     int64_t(pi * 0x10000)});
+                                 int64_t(pi * 0x10000)});
       }
     }
     for (const std::pair<GotEntry, size_t> &p : got.local16) {
       uint64_t offset = p.second * config->wordsize;
-      mainPart->relaDyn->addReloc({target->relativeRel, this, offset,
-                                   DynamicReloc::AddendOnlyWithTargetVA,
-                                   *p.first.first, p.first.second, R_ABS});
+      mainPart->relaDyn->addReloc({target->relativeRel, this, offset, true,
+                               p.first.first, p.first.second});
     }
   }
 }
@@ -1102,27 +1029,26 @@ void MipsGotSection::writeTo(uint8_t *buf) {
     // If TLS entry has a corresponding dynamic relocations, leave it
     // initialized by zero. Write down adjusted TLS symbol's values otherwise.
     // To calculate the adjustments use offsets for thread-local storage.
-    // http://web.archive.org/web/20190324223224/https://www.linux-mips.org/wiki/NPTL
+    // https://www.linux-mips.org/wiki/NPTL
     for (const std::pair<GotEntry, size_t> &p : g.local16)
       write(p.second, p.first.first, p.first.second);
     // Write VA to the primary GOT only. For secondary GOTs that
     // will be done by REL32 dynamic relocations.
     if (&g == &gots.front())
-      for (const std::pair<Symbol *, size_t> &p : g.global)
+      for (const std::pair<const Symbol *, size_t> &p : g.global)
         write(p.second, p.first, 0);
     for (const std::pair<Symbol *, size_t> &p : g.relocs)
       write(p.second, p.first, 0);
     for (const std::pair<Symbol *, size_t> &p : g.tls)
-      write(p.second, p.first,
-            p.first->isPreemptible || config->shared ? 0 : -0x7000);
+      write(p.second, p.first, p.first->isPreemptible ? 0 : -0x7000);
     for (const std::pair<Symbol *, size_t> &p : g.dynTlsSymbols) {
-      if (p.first == nullptr && !config->shared)
+      if (p.first == nullptr && !config->isPic)
         write(p.second, nullptr, 1);
       else if (p.first && !p.first->isPreemptible) {
-        // If we are emitting a shared libary with relocations we mustn't write
+        // If we are emitting PIC code with relocations we mustn't write
         // anything to the GOT here. When using Elf_Rel relocations the value
         // one will be treated as an addend and will cause crashes at runtime
-        if (!config->shared)
+        if (!config->isPic)
           write(p.second, nullptr, 1);
         write(p.second + 1, p.first, -0x8000);
       }
@@ -1133,7 +1059,7 @@ void MipsGotSection::writeTo(uint8_t *buf) {
 // On PowerPC the .plt section is used to hold the table of function addresses
 // instead of the .got.plt, and the type is SHT_NOBITS similar to a .bss
 // section. I don't know why we have a BSS style type for the section but it is
-// consistent across both 64-bit PowerPC ABIs as well as the 32-bit PowerPC ABI.
+// consitent across both 64-bit PowerPC ABIs as well as the 32-bit PowerPC ABI.
 GotPltSection::GotPltSection()
     : SyntheticSection(SHF_ALLOC | SHF_WRITE, SHT_PROGBITS, config->wordsize,
                        ".got.plt") {
@@ -1151,16 +1077,15 @@ void GotPltSection::addEntry(Symbol &sym) {
 }
 
 size_t GotPltSection::getSize() const {
-  return (target->gotPltHeaderEntriesNum + entries.size()) *
-         target->gotEntrySize;
+  return (target->gotPltHeaderEntriesNum + entries.size()) * config->wordsize;
 }
 
 void GotPltSection::writeTo(uint8_t *buf) {
   target->writeGotPltHeader(buf);
-  buf += target->gotPltHeaderEntriesNum * target->gotEntrySize;
+  buf += target->gotPltHeaderEntriesNum * config->wordsize;
   for (const Symbol *b : entries) {
     target->writeGotPlt(buf, *b);
-    buf += target->gotEntrySize;
+    buf += config->wordsize;
   }
 }
 
@@ -1188,7 +1113,7 @@ static StringRef getIgotPltName() {
 IgotPltSection::IgotPltSection()
     : SyntheticSection(SHF_ALLOC | SHF_WRITE,
                        config->emachine == EM_PPC64 ? SHT_NOBITS : SHT_PROGBITS,
-                       target->gotEntrySize, getIgotPltName()) {}
+                       config->wordsize, getIgotPltName()) {}
 
 void IgotPltSection::addEntry(Symbol &sym) {
   assert(sym.pltIndex == entries.size());
@@ -1196,13 +1121,13 @@ void IgotPltSection::addEntry(Symbol &sym) {
 }
 
 size_t IgotPltSection::getSize() const {
-  return entries.size() * target->gotEntrySize;
+  return entries.size() * config->wordsize;
 }
 
 void IgotPltSection::writeTo(uint8_t *buf) {
   for (const Symbol *b : entries) {
     target->writeIgotPlt(buf, *b);
-    buf += target->gotEntrySize;
+    buf += config->wordsize;
   }
 }
 
@@ -1237,12 +1162,10 @@ void StringTableSection::writeTo(uint8_t *buf) {
   }
 }
 
-// Returns the number of entries in .gnu.version_d: the number of
-// non-VER_NDX_LOCAL-non-VER_NDX_GLOBAL definitions, plus 1.
-// Note that we don't support vd_cnt > 1 yet.
-static unsigned getVerDefNum() {
-  return namedVersionDefs().size() + 1;
-}
+// Returns the number of version definition entries. Because the first entry
+// is for the version definition itself, it is the number of versioned symbols
+// plus one. Note that we don't support multiple versions yet.
+static unsigned getVerDefNum() { return config->versionDefinitions.size() + 1; }
 
 template <class ELFT>
 DynamicSection<ELFT>::DynamicSection()
@@ -1295,25 +1218,6 @@ void DynamicSection<ELFT>::addSym(int32_t tag, Symbol *sym) {
   entries.push_back({tag, [=] { return sym->getVA(); }});
 }
 
-// The output section .rela.dyn may include these synthetic sections:
-//
-// - part.relaDyn
-// - in.relaIplt: this is included if in.relaIplt is named .rela.dyn
-// - in.relaPlt: this is included if a linker script places .rela.plt inside
-//   .rela.dyn
-//
-// DT_RELASZ is the total size of the included sections.
-static std::function<uint64_t()> addRelaSz(RelocationBaseSection *relaDyn) {
-  return [=]() {
-    size_t size = relaDyn->getSize();
-    if (in.relaIplt->getParent() == relaDyn->getParent())
-      size += in.relaIplt->getSize();
-    if (in.relaPlt->getParent() == relaDyn->getParent())
-      size += in.relaPlt->getSize();
-    return size;
-  };
-}
-
 // A Linker script may assign the RELA relocation sections to the same
 // output section. When this occurs we cannot just use the OutputSection
 // Size. Moreover the [DT_JMPREL, DT_JMPREL + DT_PLTRELSZ) is permitted to
@@ -1356,7 +1260,7 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
   // Set DT_FLAGS and DT_FLAGS_1.
   uint32_t dtFlags = 0;
   uint32_t dtFlags1 = 0;
-  if (config->bsymbolic == BsymbolicKind::All)
+  if (config->bsymbolic)
     dtFlags |= DF_SYMBOLIC;
   if (config->zGlobal)
     dtFlags1 |= DF_1_GLOBAL;
@@ -1370,8 +1274,6 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
     dtFlags1 |= DF_1_NODELETE;
   if (config->zNodlopen)
     dtFlags1 |= DF_1_NOOPEN;
-  if (config->pie)
-    dtFlags1 |= DF_1_PIE;
   if (config->zNow) {
     dtFlags |= DF_BIND_NOW;
     dtFlags1 |= DF_1_NOW;
@@ -1390,7 +1292,7 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
   if (dtFlags1)
     addInt(DT_FLAGS_1, dtFlags1);
 
-  // DT_DEBUG is a pointer to debug information used by debuggers at runtime. We
+  // DT_DEBUG is a pointer to debug informaion used by debuggers at runtime. We
   // need it for each process, so we don't write it for DSOs. The loader writes
   // the pointer into this entry.
   //
@@ -1404,11 +1306,9 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
   if (OutputSection *sec = part.dynStrTab->getParent())
     this->link = sec->sectionIndex;
 
-  if (part.relaDyn->isNeeded() ||
-      (in.relaIplt->isNeeded() &&
-       part.relaDyn->getParent() == in.relaIplt->getParent())) {
+  if (part.relaDyn->isNeeded()) {
     addInSec(part.relaDyn->dynamicTag, part.relaDyn);
-    entries.push_back({part.relaDyn->sizeDynamicTag, addRelaSz(part.relaDyn)});
+    addSize(part.relaDyn->sizeDynamicTag, part.relaDyn->getParent());
 
     bool isRela = config->isRela;
     addInt(isRela ? DT_RELAENT : DT_RELENT,
@@ -1435,7 +1335,7 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
   // iplt relocations. It is possible to have only iplt relocations in the
   // output. In that case relaPlt is empty and have zero offset, the same offset
   // as relaIplt has. And we still want to emit proper dynamic tags for that
-  // case, so here we always use relaPlt as marker for the beginning of
+  // case, so here we always use relaPlt as marker for the begining of
   // .rel[a].plt section.
   if (isMain && (in.relaPlt->isNeeded() || in.relaIplt->isNeeded())) {
     addInSec(DT_JMPREL, in.relaPlt);
@@ -1447,13 +1347,6 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
     case EM_SPARCV9:
       addInSec(DT_PLTGOT, in.plt);
       break;
-    case EM_AARCH64:
-      if (llvm::find_if(in.relaPlt->relocs, [](const DynamicReloc &r) {
-           return r.type == target->pltRel &&
-                  r.sym->stOther & STO_AARCH64_VARIANT_PCS;
-          }) != in.relaPlt->relocs.end())
-        addInt(DT_AARCH64_VARIANT_PCS, 0);
-      LLVM_FALLTHROUGH;
     default:
       addInSec(DT_PLTGOT, in.gotPlt);
       break;
@@ -1464,7 +1357,7 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
   if (config->emachine == EM_AARCH64) {
     if (config->andFeatures & GNU_PROPERTY_AARCH64_FEATURE_1_BTI)
       addInt(DT_AARCH64_BTI_PLT, 0);
-    if (config->zPacPlt)
+    if (config->andFeatures & GNU_PROPERTY_AARCH64_FEATURE_1_PAC)
       addInt(DT_AARCH64_PAC_PLT, 0);
   }
 
@@ -1501,13 +1394,14 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
         addSym(DT_FINI, b);
   }
 
-  if (part.verSym && part.verSym->isNeeded())
+  bool hasVerNeed = SharedFile::vernauxNum != 0;
+  if (hasVerNeed || part.verDef)
     addInSec(DT_VERSYM, part.verSym);
-  if (part.verDef && part.verDef->isLive()) {
+  if (part.verDef) {
     addInSec(DT_VERDEF, part.verDef);
     addInt(DT_VERDEFNUM, getVerDefNum());
   }
-  if (part.verNeed && part.verNeed->isNeeded()) {
+  if (hasVerNeed) {
     addInSec(DT_VERNEED, part.verNeed);
     unsigned needNum = 0;
     for (SharedFile *f : sharedFiles)
@@ -1574,26 +1468,16 @@ uint64_t DynamicReloc::getOffset() const {
 }
 
 int64_t DynamicReloc::computeAddend() const {
-  switch (kind) {
-  case AddendOnly:
-    assert(sym == nullptr);
+  if (useSymVA)
+    return sym->getVA(addend);
+  if (!outputSec)
     return addend;
-  case AgainstSymbol:
-    assert(sym != nullptr);
-    return addend;
-  case AddendOnlyWithTargetVA:
-  case AgainstSymbolWithTargetVA:
-    return InputSection::getRelocTargetVA(inputSec->file, type, addend,
-                                          getOffset(), *sym, expr);
-  case MipsMultiGotPage:
-    assert(sym == nullptr);
-    return getMipsPageAddr(outputSec->addr) + addend;
-  }
-  llvm_unreachable("Unknown DynamicReloc::Kind enum");
+  // See the comment in the DynamicReloc ctor.
+  return getMipsPageAddr(outputSec->addr) + addend;
 }
 
 uint32_t DynamicReloc::getSymIndex(SymbolTableBaseSection *symTab) const {
-  if (needsDynSymIndex())
+  if (sym && !useSymVA)
     return symTab->getSymbolIndex(sym);
   return 0;
 }
@@ -1604,51 +1488,21 @@ RelocationBaseSection::RelocationBaseSection(StringRef name, uint32_t type,
     : SyntheticSection(SHF_ALLOC, type, config->wordsize, name),
       dynamicTag(dynamicTag), sizeDynamicTag(sizeDynamicTag) {}
 
-void RelocationBaseSection::addSymbolReloc(RelType dynType,
-                                           InputSectionBase *isec,
-                                           uint64_t offsetInSec, Symbol &sym,
-                                           int64_t addend,
-                                           Optional<RelType> addendRelType) {
-  addReloc(DynamicReloc::AgainstSymbol, dynType, isec, offsetInSec, sym, addend,
-           R_ADDEND, addendRelType ? *addendRelType : target->noneRel);
+void RelocationBaseSection::addReloc(RelType dynType, InputSectionBase *isec,
+                                     uint64_t offsetInSec, Symbol *sym) {
+  addReloc({dynType, isec, offsetInSec, false, sym, 0});
 }
 
-void RelocationBaseSection::addRelativeReloc(
-    RelType dynType, InputSectionBase *inputSec, uint64_t offsetInSec,
-    Symbol &sym, int64_t addend, RelType addendRelType, RelExpr expr) {
-  // This function should only be called for non-preemptible symbols or
-  // RelExpr values that refer to an address inside the output file (e.g. the
-  // address of the GOT entry for a potentially preemptible symbol).
-  assert((!sym.isPreemptible || expr == R_GOT) &&
-         "cannot add relative relocation against preemptible symbol");
-  assert(expr != R_ADDEND && "expected non-addend relocation expression");
-  addReloc(DynamicReloc::AddendOnlyWithTargetVA, dynType, inputSec, offsetInSec,
-           sym, addend, expr, addendRelType);
-}
-
-void RelocationBaseSection::addAddendOnlyRelocIfNonPreemptible(
-    RelType dynType, InputSectionBase *isec, uint64_t offsetInSec, Symbol &sym,
-    RelType addendRelType) {
-  // No need to write an addend to the section for preemptible symbols.
-  if (sym.isPreemptible)
-    addReloc({dynType, isec, offsetInSec, DynamicReloc::AgainstSymbol, sym, 0,
-              R_ABS});
-  else
-    addReloc(DynamicReloc::AddendOnlyWithTargetVA, dynType, isec, offsetInSec,
-             sym, 0, R_ABS, addendRelType);
-}
-
-void RelocationBaseSection::addReloc(DynamicReloc::Kind kind, RelType dynType,
+void RelocationBaseSection::addReloc(RelType dynType,
                                      InputSectionBase *inputSec,
-                                     uint64_t offsetInSec, Symbol &sym,
+                                     uint64_t offsetInSec, Symbol *sym,
                                      int64_t addend, RelExpr expr,
-                                     RelType addendRelType) {
+                                     RelType type) {
   // Write the addends to the relocated address if required. We skip
   // it if the written value would be zero.
   if (config->writeAddends && (expr != R_ADDEND || addend != 0))
-    inputSec->relocations.push_back(
-        {expr, addendRelType, offsetInSec, addend, &sym});
-  addReloc({dynType, inputSec, offsetInSec, kind, sym, addend, expr});
+    inputSec->relocations.push_back({expr, type, offsetInSec, addend, sym});
+  addReloc({dynType, inputSec, offsetInSec, expr != R_ADDEND, sym, addend});
 }
 
 void RelocationBaseSection::addReloc(const DynamicReloc &reloc) {
@@ -1668,14 +1522,10 @@ void RelocationBaseSection::finalizeContents() {
   else
     getParent()->link = 0;
 
-  if (in.relaPlt == this) {
-    getParent()->flags |= ELF::SHF_INFO_LINK;
+  if (in.relaPlt == this)
     getParent()->info = in.gotPlt->getParent()->sectionIndex;
-  }
-  if (in.relaIplt == this) {
-    getParent()->flags |= ELF::SHF_INFO_LINK;
+  if (in.relaIplt == this)
     getParent()->info = in.igotPlt->getParent()->sectionIndex;
-  }
 }
 
 RelrBaseSection::RelrBaseSection()
@@ -1829,56 +1679,6 @@ bool AndroidPackedRelocationSection<ELFT>::updateAllocSize() {
       relativeGroups.emplace_back(std::move(group));
   }
 
-  // For non-relative relocations, we would like to:
-  //   1. Have relocations with the same symbol offset to be consecutive, so
-  //      that the runtime linker can speed-up symbol lookup by implementing an
-  //      1-entry cache.
-  //   2. Group relocations by r_info to reduce the size of the relocation
-  //      section.
-  // Since the symbol offset is the high bits in r_info, sorting by r_info
-  // allows us to do both.
-  //
-  // For Rela, we also want to sort by r_addend when r_info is the same. This
-  // enables us to group by r_addend as well.
-  llvm::stable_sort(nonRelatives, [](const Elf_Rela &a, const Elf_Rela &b) {
-    if (a.r_info != b.r_info)
-      return a.r_info < b.r_info;
-    if (config->isRela)
-      return a.r_addend < b.r_addend;
-    return false;
-  });
-
-  // Group relocations with the same r_info. Note that each group emits a group
-  // header and that may make the relocation section larger. It is hard to
-  // estimate the size of a group header as the encoded size of that varies
-  // based on r_info. However, we can approximate this trade-off by the number
-  // of values encoded. Each group header contains 3 values, and each relocation
-  // in a group encodes one less value, as compared to when it is not grouped.
-  // Therefore, we only group relocations if there are 3 or more of them with
-  // the same r_info.
-  //
-  // For Rela, the addend for most non-relative relocations is zero, and thus we
-  // can usually get a smaller relocation section if we group relocations with 0
-  // addend as well.
-  std::vector<Elf_Rela> ungroupedNonRelatives;
-  std::vector<std::vector<Elf_Rela>> nonRelativeGroups;
-  for (auto i = nonRelatives.begin(), e = nonRelatives.end(); i != e;) {
-    auto j = i + 1;
-    while (j != e && i->r_info == j->r_info &&
-           (!config->isRela || i->r_addend == j->r_addend))
-      ++j;
-    if (j - i < 3 || (config->isRela && i->r_addend != 0))
-      ungroupedNonRelatives.insert(ungroupedNonRelatives.end(), i, j);
-    else
-      nonRelativeGroups.emplace_back(i, j);
-    i = j;
-  }
-
-  // Sort ungrouped relocations by offset to minimize the encoded length.
-  llvm::sort(ungroupedNonRelatives, [](const Elf_Rela &a, const Elf_Rela &b) {
-    return a.r_offset < b.r_offset;
-  });
-
   unsigned hasAddendIfRela =
       config->isRela ? RELOCATION_GROUP_HAS_ADDEND_FLAG : 0;
 
@@ -1933,23 +1733,14 @@ bool AndroidPackedRelocationSection<ELFT>::updateAllocSize() {
     }
   }
 
-  // Grouped non-relatives.
-  for (ArrayRef<Elf_Rela> g : nonRelativeGroups) {
-    add(g.size());
-    add(RELOCATION_GROUPED_BY_INFO_FLAG);
-    add(g[0].r_info);
-    for (const Elf_Rela &r : g) {
-      add(r.r_offset - offset);
-      offset = r.r_offset;
-    }
-    addend = 0;
-  }
-
-  // Finally the ungrouped non-relative relocations.
-  if (!ungroupedNonRelatives.empty()) {
-    add(ungroupedNonRelatives.size());
+  // Finally the non-relative relocations.
+  llvm::sort(nonRelatives, [](const Elf_Rela &a, const Elf_Rela &b) {
+    return a.r_offset < b.r_offset;
+  });
+  if (!nonRelatives.empty()) {
+    add(nonRelatives.size());
     add(hasAddendIfRela);
-    for (Elf_Rela &r : ungroupedNonRelatives) {
+    for (Elf_Rela &r : nonRelatives) {
       add(r.r_offset - offset);
       offset = r.r_offset;
       add(r.r_info);
@@ -2059,14 +1850,6 @@ template <class ELFT> bool RelrSection<ELFT>::updateAllocSize() {
       relrRelocs.push_back(Elf_Relr((bitmap << 1) | 1));
       base += nBits * wordsize;
     }
-  }
-
-  // Don't allow the section to shrink; otherwise the size of the section can
-  // oscillate infinitely. Trailing 1s do not decode to more relocations.
-  if (relrRelocs.size() < oldSize) {
-    log(".relr.dyn needs " + Twine(oldSize - relrRelocs.size()) +
-        " padding word(s)");
-    relrRelocs.resize(oldSize, Elf_Relr(1));
   }
 
   return relrRelocs.size() != oldSize;
@@ -2239,10 +2022,6 @@ template <class ELFT> void SymbolTableSection<ELFT>::writeTo(uint8_t *buf) {
     // See getPPC64GlobalEntryToLocalEntryOffset() for more details.
     if (config->emachine == EM_PPC64)
       eSym->st_other |= sym->stOther & 0xe0;
-    // The most significant bit of st_other is used by AArch64 ABI for the
-    // variant PCS.
-    else if (config->emachine == EM_AARCH64)
-      eSym->st_other |= sym->stOther & STO_AARCH64_VARIANT_PCS;
 
     eSym->st_name = ent.strTabOffset;
     if (isDefinedHere)
@@ -2260,8 +2039,9 @@ template <class ELFT> void SymbolTableSection<ELFT>::writeTo(uint8_t *buf) {
     else
       eSym->st_size = sym->getSize();
 
-    // st_value is usually an address of a symbol, but that has a special
-    // meaning for uninstantiated common symbols (--no-define-common).
+    // st_value is usually an address of a symbol, but that has a
+    // special meaining for uninstantiated common symbols (this can
+    // occur if -r is given).
     if (BssSection *commonSec = getCommonSec(ent.sym))
       eSym->st_value = commonSec->alignment;
     else if (isDefinedHere)
@@ -2287,7 +2067,7 @@ template <class ELFT> void SymbolTableSection<ELFT>::writeTo(uint8_t *buf) {
         // We already set the less-significant bit for symbols
         // marked by the `STO_MIPS_MICROMIPS` flag and for microMIPS PLT
         // records. That allows us to distinguish such symbols in
-        // the `MIPS<ELFT>::relocate()` routine. Now we should
+        // the `MIPS<ELFT>::relocateOne()` routine. Now we should
         // clear that bit for non-dynamic symbol table, so tools
         // like `objdump` will be able to deal with a correct
         // symbol position.
@@ -2359,7 +2139,7 @@ size_t SymtabShndxSection::getSize() const {
 // DSOs. That means resolving all dynamic symbols takes O(m)*O(n)
 // where m is the number of DSOs and n is the number of dynamic
 // symbols. For modern large programs, both m and n are large.  So
-// making each step faster by using hash tables substantially
+// making each step faster by using hash tables substiantially
 // improves time to load programs.
 //
 // (Note that this is not the only way to design the shared library.
@@ -2375,7 +2155,7 @@ size_t SymtabShndxSection::getSize() const {
 // .gnu.hash has a bloom filter in addition to a hash table to skip
 // DSOs very quickly. If you are sure that your dynamic linker knows
 // about .gnu.hash, you want to specify -hash-style=gnu. Otherwise, a
-// safe bet is to specify -hash-style=both for backward compatibility.
+// safe bet is to specify -hash-style=both for backward compatibilty.
 GnuHashTableSection::GnuHashTableSection()
     : SyntheticSection(SHF_ALLOC, SHT_GNU_HASH, config->wordsize, ".gnu.hash") {
 }
@@ -2553,21 +2333,16 @@ void HashTableSection::writeTo(uint8_t *buf) {
   }
 }
 
-PltSection::PltSection()
-    : SyntheticSection(SHF_ALLOC | SHF_EXECINSTR, SHT_PROGBITS, 16, ".plt"),
-      headerSize(target->pltHeaderSize) {
-  // On PowerPC, this section contains lazy symbol resolvers.
-  if (config->emachine == EM_PPC64) {
-    name = ".glink";
-    alignment = 4;
-  }
-
-  // On x86 when IBT is enabled, this section contains the second PLT (lazy
-  // symbol resolvers).
-  if ((config->emachine == EM_386 || config->emachine == EM_X86_64) &&
-      (config->andFeatures & GNU_PROPERTY_X86_FEATURE_1_IBT))
-    name = ".plt.sec";
-
+// On PowerPC64 the lazy symbol resolvers go into the `global linkage table`
+// in the .glink section, rather then the typical .plt section.
+PltSection::PltSection(bool isIplt)
+    : SyntheticSection(
+          SHF_ALLOC | SHF_EXECINSTR, SHT_PROGBITS, 16,
+          (config->emachine == EM_PPC || config->emachine == EM_PPC64)
+              ? ".glink"
+              : ".plt"),
+      headerSize(!isIplt || config->zRetpolineplt ? target->pltHeaderSize : 0),
+      isIplt(isIplt) {
   // The PLT needs to be writable on SPARC as the dynamic linker will
   // modify the instructions in the PLT entries.
   if (config->emachine == EM_SPARCV9)
@@ -2575,18 +2350,33 @@ PltSection::PltSection()
 }
 
 void PltSection::writeTo(uint8_t *buf) {
-  // At beginning of PLT, we have code to call the dynamic
+  if (config->emachine == EM_PPC) {
+    writePPC32GlinkSection(buf, entries.size());
+    return;
+  }
+
+  // At beginning of PLT or retpoline IPLT, we have code to call the dynamic
   // linker to resolve dynsyms at runtime. Write such code.
-  target->writePltHeader(buf);
+  if (headerSize)
+    target->writePltHeader(buf);
   size_t off = headerSize;
 
-  for (const Symbol *sym : entries) {
-    target->writePlt(buf + off, *sym, getVA() + off);
+  RelocationBaseSection *relSec = isIplt ? in.relaIplt : in.relaPlt;
+
+  // The IPlt is immediately after the Plt, account for this in relOff
+  size_t pltOff = isIplt ? in.plt->getSize() : 0;
+
+  for (size_t i = 0, e = entries.size(); i != e; ++i) {
+    const Symbol *b = entries[i];
+    unsigned relOff = relSec->entsize * i + pltOff;
+    uint64_t got = b->getGotPltVA();
+    uint64_t plt = this->getVA() + off;
+    target->writePlt(buf + off, got, plt, b->pltIndex, relOff);
     off += target->pltEntrySize;
   }
 }
 
-void PltSection::addEntry(Symbol &sym) {
+template <class ELFT> void PltSection::addEntry(Symbol &sym) {
   sym.pltIndex = entries.size();
   entries.push_back(&sym);
 }
@@ -2595,138 +2385,18 @@ size_t PltSection::getSize() const {
   return headerSize + entries.size() * target->pltEntrySize;
 }
 
-bool PltSection::isNeeded() const {
-  // For -z retpolineplt, .iplt needs the .plt header.
-  return !entries.empty() || (config->zRetpolineplt && in.iplt->isNeeded());
-}
-
-// Used by ARM to add mapping symbols in the PLT section, which aid
-// disassembly.
+// Some architectures such as additional symbols in the PLT section. For
+// example ARM uses mapping symbols to aid disassembly
 void PltSection::addSymbols() {
-  target->addPltHeaderSymbols(*this);
+  // The PLT may have symbols defined for the Header, the IPLT has no header
+  if (!isIplt)
+    target->addPltHeaderSymbols(*this);
 
   size_t off = headerSize;
   for (size_t i = 0; i < entries.size(); ++i) {
     target->addPltSymbols(*this, off);
     off += target->pltEntrySize;
   }
-}
-
-IpltSection::IpltSection()
-    : SyntheticSection(SHF_ALLOC | SHF_EXECINSTR, SHT_PROGBITS, 16, ".iplt") {
-  if (config->emachine == EM_PPC || config->emachine == EM_PPC64) {
-    name = ".glink";
-    alignment = 4;
-  }
-}
-
-void IpltSection::writeTo(uint8_t *buf) {
-  uint32_t off = 0;
-  for (const Symbol *sym : entries) {
-    target->writeIplt(buf + off, *sym, getVA() + off);
-    off += target->ipltEntrySize;
-  }
-}
-
-size_t IpltSection::getSize() const {
-  return entries.size() * target->ipltEntrySize;
-}
-
-void IpltSection::addEntry(Symbol &sym) {
-  sym.pltIndex = entries.size();
-  entries.push_back(&sym);
-}
-
-// ARM uses mapping symbols to aid disassembly.
-void IpltSection::addSymbols() {
-  size_t off = 0;
-  for (size_t i = 0, e = entries.size(); i != e; ++i) {
-    target->addPltSymbols(*this, off);
-    off += target->pltEntrySize;
-  }
-}
-
-PPC32GlinkSection::PPC32GlinkSection() {
-  name = ".glink";
-  alignment = 4;
-}
-
-void PPC32GlinkSection::writeTo(uint8_t *buf) {
-  writePPC32GlinkSection(buf, entries.size());
-}
-
-size_t PPC32GlinkSection::getSize() const {
-  return headerSize + entries.size() * target->pltEntrySize + footerSize;
-}
-
-// This is an x86-only extra PLT section and used only when a security
-// enhancement feature called CET is enabled. In this comment, I'll explain what
-// the feature is and why we have two PLT sections if CET is enabled.
-//
-// So, what does CET do? CET introduces a new restriction to indirect jump
-// instructions. CET works this way. Assume that CET is enabled. Then, if you
-// execute an indirect jump instruction, the processor verifies that a special
-// "landing pad" instruction (which is actually a repurposed NOP instruction and
-// now called "endbr32" or "endbr64") is at the jump target. If the jump target
-// does not start with that instruction, the processor raises an exception
-// instead of continuing executing code.
-//
-// If CET is enabled, the compiler emits endbr to all locations where indirect
-// jumps may jump to.
-//
-// This mechanism makes it extremely hard to transfer the control to a middle of
-// a function that is not supporsed to be a indirect jump target, preventing
-// certain types of attacks such as ROP or JOP.
-//
-// Note that the processors in the market as of 2019 don't actually support the
-// feature. Only the spec is available at the moment.
-//
-// Now, I'll explain why we have this extra PLT section for CET.
-//
-// Since you can indirectly jump to a PLT entry, we have to make PLT entries
-// start with endbr. The problem is there's no extra space for endbr (which is 4
-// bytes long), as the PLT entry is only 16 bytes long and all bytes are already
-// used.
-//
-// In order to deal with the issue, we split a PLT entry into two PLT entries.
-// Remember that each PLT entry contains code to jump to an address read from
-// .got.plt AND code to resolve a dynamic symbol lazily. With the 2-PLT scheme,
-// the former code is written to .plt.sec, and the latter code is written to
-// .plt.
-//
-// Lazy symbol resolution in the 2-PLT scheme works in the usual way, except
-// that the regular .plt is now called .plt.sec and .plt is repurposed to
-// contain only code for lazy symbol resolution.
-//
-// In other words, this is how the 2-PLT scheme works. Application code is
-// supposed to jump to .plt.sec to call an external function. Each .plt.sec
-// entry contains code to read an address from a corresponding .got.plt entry
-// and jump to that address. Addresses in .got.plt initially point to .plt, so
-// when an application calls an external function for the first time, the
-// control is transferred to a function that resolves a symbol name from
-// external shared object files. That function then rewrites a .got.plt entry
-// with a resolved address, so that the subsequent function calls directly jump
-// to a desired location from .plt.sec.
-//
-// There is an open question as to whether the 2-PLT scheme was desirable or
-// not. We could have simply extended the PLT entry size to 32-bytes to
-// accommodate endbr, and that scheme would have been much simpler than the
-// 2-PLT scheme. One reason to split PLT was, by doing that, we could keep hot
-// code (.plt.sec) from cold code (.plt). But as far as I know no one proved
-// that the optimization actually makes a difference.
-//
-// That said, the 2-PLT scheme is a part of the ABI, debuggers and other tools
-// depend on it, so we implement the ABI.
-IBTPltSection::IBTPltSection()
-    : SyntheticSection(SHF_ALLOC | SHF_EXECINSTR, SHT_PROGBITS, 16, ".plt") {}
-
-void IBTPltSection::writeTo(uint8_t *buf) {
-  target->writeIBTPlt(buf, in.plt->getNumEntries());
-}
-
-size_t IBTPltSection::getSize() const {
-  // 16 is the header size of .plt.
-  return 16 + in.plt->getNumEntries() * target->pltEntrySize;
 }
 
 // The string hash function for .gdb_index.
@@ -2760,6 +2430,15 @@ void GdbIndexSection::initOutputSize() {
   }
 }
 
+static std::vector<InputSection *> getDebugInfoSections() {
+  std::vector<InputSection *> ret;
+  for (InputSectionBase *s : inputSections)
+    if (InputSection *isec = dyn_cast<InputSection>(s))
+      if (isec->name == ".debug_info")
+        ret.push_back(isec);
+  return ret;
+}
+
 static std::vector<GdbIndexSection::CuEntry> readCuList(DWARFContext &dwarf) {
   std::vector<GdbIndexSection::CuEntry> ret;
   for (std::unique_ptr<DWARFUnit> &cu : dwarf.compile_units())
@@ -2773,13 +2452,9 @@ readAddressAreas(DWARFContext &dwarf, InputSection *sec) {
 
   uint32_t cuIdx = 0;
   for (std::unique_ptr<DWARFUnit> &cu : dwarf.compile_units()) {
-    if (Error e = cu->tryExtractDIEsIfNeeded(false)) {
-      warn(toString(sec) + ": " + toString(std::move(e)));
-      return {};
-    }
     Expected<DWARFAddressRangesVector> ranges = cu->collectAddressRanges();
     if (!ranges) {
-      warn(toString(sec) + ": " + toString(ranges.takeError()));
+      error(toString(sec) + ": " + toString(ranges.takeError()));
       return {};
     }
 
@@ -2787,11 +2462,15 @@ readAddressAreas(DWARFContext &dwarf, InputSection *sec) {
     for (DWARFAddressRange &r : *ranges) {
       if (r.SectionIndex == -1ULL)
         continue;
-      // Range list with zero size has no effect.
       InputSectionBase *s = sections[r.SectionIndex];
-      if (s && s != &InputSection::discarded && s->isLive())
-        if (r.LowPC != r.HighPC)
-          ret.push_back({cast<InputSection>(s), r.LowPC, r.HighPC, cuIdx});
+      if (!s || s == &InputSection::discarded || !s->isLive())
+        continue;
+      // Range list with zero size has no effect.
+      if (r.LowPC == r.HighPC)
+        continue;
+      auto *isec = cast<InputSection>(s);
+      uint64_t offset = isec->getOffsetInFile();
+      ret.push_back({isec, r.LowPC - offset, r.HighPC - offset, cuIdx});
     }
     ++cuIdx;
   }
@@ -2802,27 +2481,24 @@ readAddressAreas(DWARFContext &dwarf, InputSection *sec) {
 template <class ELFT>
 static std::vector<GdbIndexSection::NameAttrEntry>
 readPubNamesAndTypes(const LLDDwarfObj<ELFT> &obj,
-                     const std::vector<GdbIndexSection::CuEntry> &cus) {
-  const LLDDWARFSection &pubNames = obj.getGnuPubnamesSection();
-  const LLDDWARFSection &pubTypes = obj.getGnuPubtypesSection();
+                     const std::vector<GdbIndexSection::CuEntry> &cUs) {
+  const DWARFSection &pubNames = obj.getGnuPubNamesSection();
+  const DWARFSection &pubTypes = obj.getGnuPubTypesSection();
 
   std::vector<GdbIndexSection::NameAttrEntry> ret;
-  for (const LLDDWARFSection *pub : {&pubNames, &pubTypes}) {
-    DWARFDataExtractor data(obj, *pub, config->isLE, config->wordsize);
-    DWARFDebugPubTable table;
-    table.extract(data, /*GnuStyle=*/true, [&](Error e) {
-      warn(toString(pub->sec) + ": " + toString(std::move(e)));
-    });
+  for (const DWARFSection *pub : {&pubNames, &pubTypes}) {
+    DWARFDebugPubTable table(obj, *pub, config->isLE, true);
     for (const DWARFDebugPubTable::Set &set : table.getData()) {
       // The value written into the constant pool is kind << 24 | cuIndex. As we
       // don't know how many compilation units precede this object to compute
       // cuIndex, we compute (kind << 24 | cuIndexInThisObject) instead, and add
       // the number of preceding compilation units later.
-      uint32_t i = llvm::partition_point(cus,
-                                         [&](GdbIndexSection::CuEntry cu) {
-                                           return cu.cuOffset < set.Offset;
-                                         }) -
-                   cus.begin();
+      uint32_t i =
+          lower_bound(cUs, set.Offset,
+                      [](GdbIndexSection::CuEntry cu, uint32_t offset) {
+                        return cu.cuOffset < offset;
+                      }) -
+          cUs.begin();
       for (const DWARFDebugPubTable::Entry &ent : set.Entries)
         ret.push_back({{ent.Name, computeGdbHash(ent.Name)},
                        (ent.Descriptor.toBits() << 24) | i});
@@ -2850,11 +2526,11 @@ createSymbols(ArrayRef<std::vector<GdbIndexSection::NameAttrEntry>> nameAttrs,
   // The number of symbols we will handle in this function is of the order
   // of millions for very large executables, so we use multi-threading to
   // speed it up.
-  constexpr size_t numShards = 32;
-  size_t concurrency = PowerOf2Floor(
-      std::min<size_t>(hardware_concurrency(parallel::strategy.ThreadsRequested)
-                           .compute_thread_count(),
-                       numShards));
+  size_t numShards = 32;
+  size_t concurrency = 1;
+  if (threadsEnabled)
+    concurrency =
+        std::min<size_t>(PowerOf2Floor(hardware_concurrency()), numShards);
 
   // A sharded map to uniquify symbols by name.
   std::vector<DenseMap<CachedHashStringRef, size_t>> map(numShards);
@@ -2913,47 +2589,28 @@ createSymbols(ArrayRef<std::vector<GdbIndexSection::NameAttrEntry>> nameAttrs,
 
 // Returns a newly-created .gdb_index section.
 template <class ELFT> GdbIndexSection *GdbIndexSection::create() {
-  // Collect InputFiles with .debug_info. See the comment in
-  // LLDDwarfObj<ELFT>::LLDDwarfObj. If we do lightweight parsing in the future,
-  // note that isec->data() may uncompress the full content, which should be
-  // parallelized.
-  SetVector<InputFile *> files;
-  for (InputSectionBase *s : inputSections) {
-    InputSection *isec = dyn_cast<InputSection>(s);
-    if (!isec)
-      continue;
-    // .debug_gnu_pub{names,types} are useless in executables.
-    // They are present in input object files solely for creating
-    // a .gdb_index. So we can remove them from the output.
+  std::vector<InputSection *> sections = getDebugInfoSections();
+
+  // .debug_gnu_pub{names,types} are useless in executables.
+  // They are present in input object files solely for creating
+  // a .gdb_index. So we can remove them from the output.
+  for (InputSectionBase *s : inputSections)
     if (s->name == ".debug_gnu_pubnames" || s->name == ".debug_gnu_pubtypes")
       s->markDead();
-    else if (isec->name == ".debug_info")
-      files.insert(isec->file);
-  }
-  // Drop .rel[a].debug_gnu_pub{names,types} for --emit-relocs.
-  llvm::erase_if(inputSections, [](InputSectionBase *s) {
-    if (auto *isec = dyn_cast<InputSection>(s))
-      if (InputSectionBase *rel = isec->getRelocatedSection())
-        return !rel->isLive();
-    return !s->isLive();
-  });
 
-  std::vector<GdbChunk> chunks(files.size());
-  std::vector<std::vector<NameAttrEntry>> nameAttrs(files.size());
+  std::vector<GdbChunk> chunks(sections.size());
+  std::vector<std::vector<NameAttrEntry>> nameAttrs(sections.size());
 
-  parallelForEachN(0, files.size(), [&](size_t i) {
-    // To keep memory usage low, we don't want to keep cached DWARFContext, so
-    // avoid getDwarf() here.
-    ObjFile<ELFT> *file = cast<ObjFile<ELFT>>(files[i]);
-    DWARFContext dwarf(std::make_unique<LLDDwarfObj<ELFT>>(file));
-    auto &dobj = static_cast<const LLDDwarfObj<ELFT> &>(dwarf.getDWARFObj());
+  parallelForEachN(0, sections.size(), [&](size_t i) {
+    ObjFile<ELFT> *file = sections[i]->getFile<ELFT>();
+    DWARFContext dwarf(make_unique<LLDDwarfObj<ELFT>>(file));
 
-    // If the are multiple compile units .debug_info (very rare ld -r --unique),
-    // this only picks the last one. Other address ranges are lost.
-    chunks[i].sec = dobj.getInfoSection();
+    chunks[i].sec = sections[i];
     chunks[i].compilationUnits = readCuList(dwarf);
-    chunks[i].addressAreas = readAddressAreas(dwarf, chunks[i].sec);
-    nameAttrs[i] = readPubNamesAndTypes<ELFT>(dobj, chunks[i].compilationUnits);
+    chunks[i].addressAreas = readAddressAreas(dwarf, sections[i]);
+    nameAttrs[i] = readPubNamesAndTypes<ELFT>(
+        static_cast<const LLDDwarfObj<ELFT> &>(dwarf.getDWARFObj()),
+        chunks[i].compilationUnits);
   });
 
   auto *ret = make<GdbIndexSection>();
@@ -2986,8 +2643,7 @@ void GdbIndexSection::writeTo(uint8_t *buf) {
   uint32_t cuOff = 0;
   for (GdbChunk &chunk : chunks) {
     for (AddressEntry &e : chunk.addressAreas) {
-      // In the case of ICF there may be duplicate address range entries.
-      const uint64_t baseAddr = e.section->repl->getVA(0);
+      uint64_t baseAddr = e.section->getVA(0);
       write64le(buf, baseAddr + e.lowAddress);
       write64le(buf + 8, baseAddr + e.highAddress);
       write32le(buf + 16, e.cuIndex + cuOff);
@@ -3094,7 +2750,7 @@ StringRef VersionDefinitionSection::getFileDefName() {
 
 void VersionDefinitionSection::finalizeContents() {
   fileDefNameOff = getPartition().dynStrTab->addString(getFileDefName());
-  for (const VersionDefinition &v : namedVersionDefs())
+  for (VersionDefinition &v : config->versionDefinitions)
     verDefNameOffs.push_back(getPartition().dynStrTab->addString(v.name));
 
   if (OutputSection *sec = getPartition().dynStrTab->getParent())
@@ -3128,7 +2784,7 @@ void VersionDefinitionSection::writeTo(uint8_t *buf) {
   writeOne(buf, 1, getFileDefName(), fileDefNameOff);
 
   auto nameOffIt = verDefNameOffs.begin();
-  for (const VersionDefinition &v : namedVersionDefs()) {
+  for (VersionDefinition &v : config->versionDefinitions) {
     buf += EntrySize;
     writeOne(buf, v.id, v.name, *nameOffIt++);
   }
@@ -3161,17 +2817,13 @@ size_t VersionTableSection::getSize() const {
 void VersionTableSection::writeTo(uint8_t *buf) {
   buf += 2;
   for (const SymbolTableEntry &s : getPartition().dynSymTab->getSymbols()) {
-    // Use the original versionId for an unfetched lazy symbol (undefined weak),
-    // which must be VER_NDX_GLOBAL (an undefined versioned symbol is an error).
-    write16(buf, s.sym->isLazy() ? static_cast<uint16_t>(VER_NDX_GLOBAL)
-                                 : s.sym->versionId);
+    write16(buf, s.sym->versionId);
     buf += 2;
   }
 }
 
 bool VersionTableSection::isNeeded() const {
-  return isLive() &&
-         (getPartition().verDef || getPartition().verNeed->isNeeded());
+  return getPartition().verDef || getPartition().verNeed->isNeeded();
 }
 
 void elf::addVerneed(Symbol *ss) {
@@ -3259,7 +2911,7 @@ template <class ELFT> size_t VersionNeedSection<ELFT>::getSize() const {
 }
 
 template <class ELFT> bool VersionNeedSection<ELFT>::isNeeded() const {
-  return isLive() && SharedFile::vernauxNum != 0;
+  return SharedFile::vernauxNum != 0;
 }
 
 void MergeSyntheticSection::addSection(MergeInputSection *ms) {
@@ -3318,10 +2970,10 @@ void MergeNoTailSection::finalizeContents() {
 
   // Concurrency level. Must be a power of 2 to avoid expensive modulo
   // operations in the following tight loop.
-  size_t concurrency = PowerOf2Floor(
-      std::min<size_t>(hardware_concurrency(parallel::strategy.ThreadsRequested)
-                           .compute_thread_count(),
-                       numShards));
+  size_t concurrency = 1;
+  if (threadsEnabled)
+    concurrency =
+        std::min<size_t>(PowerOf2Floor(hardware_concurrency()), numShards);
 
   // Add section pieces to the builders.
   parallelForEachN(0, concurrency, [&](size_t threadId) {
@@ -3357,9 +3009,10 @@ void MergeNoTailSection::finalizeContents() {
   });
 }
 
-MergeSyntheticSection *elf::createMergeSynthetic(StringRef name, uint32_t type,
-                                                 uint64_t flags,
-                                                 uint32_t alignment) {
+static MergeSyntheticSection *createMergeSynthetic(StringRef name,
+                                                   uint32_t type,
+                                                   uint64_t flags,
+                                                   uint32_t alignment) {
   bool shouldTailMerge = (flags & SHF_STRINGS) && config->optimize >= 2;
   if (shouldTailMerge)
     return make<MergeTailSection>(name, type, flags, alignment);
@@ -3367,7 +3020,6 @@ MergeSyntheticSection *elf::createMergeSynthetic(StringRef name, uint32_t type,
 }
 
 template <class ELFT> void elf::splitSections() {
-  llvm::TimeTraceScope timeScope("Split sections");
   // splitIntoPieces needs to be called on each MergeInputSection
   // before calling finalizeContents().
   parallelForEach(inputSections, [](InputSectionBase *sec) {
@@ -3376,6 +3028,63 @@ template <class ELFT> void elf::splitSections() {
     else if (auto *eh = dyn_cast<EhInputSection>(sec))
       eh->split<ELFT>();
   });
+}
+
+// This function scans over the inputsections to create mergeable
+// synthetic sections.
+//
+// It removes MergeInputSections from the input section array and adds
+// new synthetic sections at the location of the first input section
+// that it replaces. It then finalizes each synthetic section in order
+// to compute an output offset for each piece of each input section.
+void elf::mergeSections() {
+  std::vector<MergeSyntheticSection *> mergeSections;
+  for (InputSectionBase *&s : inputSections) {
+    MergeInputSection *ms = dyn_cast<MergeInputSection>(s);
+    if (!ms)
+      continue;
+
+    // We do not want to handle sections that are not alive, so just remove
+    // them instead of trying to merge.
+    if (!ms->isLive()) {
+      s = nullptr;
+      continue;
+    }
+
+    StringRef outsecName = getOutputSectionName(ms);
+
+    auto i = llvm::find_if(mergeSections, [=](MergeSyntheticSection *sec) {
+      // While we could create a single synthetic section for two different
+      // values of Entsize, it is better to take Entsize into consideration.
+      //
+      // With a single synthetic section no two pieces with different Entsize
+      // could be equal, so we may as well have two sections.
+      //
+      // Using Entsize in here also allows us to propagate it to the synthetic
+      // section.
+      //
+      // SHF_STRINGS section with different alignments should not be merged.
+      return sec->name == outsecName && sec->flags == ms->flags &&
+             sec->entsize == ms->entsize &&
+             (sec->alignment == ms->alignment || !(sec->flags & SHF_STRINGS));
+    });
+    if (i == mergeSections.end()) {
+      MergeSyntheticSection *syn =
+          createMergeSynthetic(outsecName, ms->type, ms->flags, ms->alignment);
+      mergeSections.push_back(syn);
+      i = std::prev(mergeSections.end());
+      s = syn;
+      syn->entsize = ms->entsize;
+    } else {
+      s = nullptr;
+    }
+    (*i)->addSection(ms);
+  }
+  for (auto *ms : mergeSections)
+    ms->finalizeContents();
+
+  std::vector<InputSectionBase *> &v = inputSections;
+  v.erase(std::remove(v.begin(), v.end(), nullptr), v.end());
 }
 
 MipsRldMapSection::MipsRldMapSection()
@@ -3388,31 +3097,22 @@ ARMExidxSyntheticSection::ARMExidxSyntheticSection()
 
 static InputSection *findExidxSection(InputSection *isec) {
   for (InputSection *d : isec->dependentSections)
-    if (d->type == SHT_ARM_EXIDX && d->isLive())
+    if (d->type == SHT_ARM_EXIDX)
       return d;
   return nullptr;
 }
 
-static bool isValidExidxSectionDep(InputSection *isec) {
-  return (isec->flags & SHF_ALLOC) && (isec->flags & SHF_EXECINSTR) &&
-         isec->getSize() > 0;
-}
-
 bool ARMExidxSyntheticSection::addSection(InputSection *isec) {
   if (isec->type == SHT_ARM_EXIDX) {
-    if (InputSection *dep = isec->getLinkOrderDep())
-      if (isValidExidxSectionDep(dep)) {
-        exidxSections.push_back(isec);
-        // Every exidxSection is 8 bytes, we need an estimate of
-        // size before assignAddresses can be called. Final size
-        // will only be known after finalize is called.
-        size += 8;
-      }
+    exidxSections.push_back(isec);
     return true;
   }
 
-  if (isValidExidxSectionDep(isec)) {
+  if ((isec->flags & SHF_ALLOC) && (isec->flags & SHF_EXECINSTR) &&
+      isec->getSize() > 0) {
     executableSections.push_back(isec);
+    if (empty && findExidxSection(isec))
+      empty = false;
     return false;
   }
 
@@ -3482,36 +3182,28 @@ static bool isDuplicateArmExidxSec(InputSection *prev, InputSection *cur) {
 // with the highest address and any InputSections that have mergeable
 // .ARM.exidx table entries are removed from it.
 void ARMExidxSyntheticSection::finalizeContents() {
-  // The executableSections and exidxSections that we use to derive the final
-  // contents of this SyntheticSection are populated before
-  // processSectionCommands() and ICF. A /DISCARD/ entry in SECTIONS command or
-  // ICF may remove executable InputSections and their dependent .ARM.exidx
-  // section that we recorded earlier.
-  auto isDiscarded = [](const InputSection *isec) { return !isec->isLive(); };
-  llvm::erase_if(exidxSections, isDiscarded);
-  // We need to remove discarded InputSections and InputSections without
-  // .ARM.exidx sections that if we generated the .ARM.exidx it would be out
-  // of range.
-  auto isDiscardedOrOutOfRange = [this](InputSection *isec) {
-    if (!isec->isLive())
-      return true;
-    if (findExidxSection(isec))
-      return false;
-    int64_t off = static_cast<int64_t>(isec->getVA() - getVA());
-    return off != llvm::SignExtend64(off, 31);
-  };
-  llvm::erase_if(executableSections, isDiscardedOrOutOfRange);
+  if (script->hasSectionsCommand) {
+    // The executableSections and exidxSections that we use to derive the
+    // final contents of this SyntheticSection are populated before the
+    // linker script assigns InputSections to OutputSections. The linker script
+    // SECTIONS command may have a /DISCARD/ entry that removes executable
+    // InputSections and their dependent .ARM.exidx section that we recorded
+    // earlier.
+    auto isDiscarded = [](const InputSection *isec) { return !isec->isLive(); };
+    llvm::erase_if(executableSections, isDiscarded);
+    llvm::erase_if(exidxSections, isDiscarded);
+  }
 
   // Sort the executable sections that may or may not have associated
   // .ARM.exidx sections by order of ascending address. This requires the
-  // relative positions of InputSections and OutputSections to be known.
+  // relative positions of InputSections to be known.
   auto compareByFilePosition = [](const InputSection *a,
                                   const InputSection *b) {
     OutputSection *aOut = a->getParent();
     OutputSection *bOut = b->getParent();
 
     if (aOut != bOut)
-      return aOut->addr < bOut->addr;
+      return aOut->sectionIndex < bOut->sectionIndex;
     return a->outSecOff < b->outSecOff;
   };
   llvm::stable_sort(executableSections, compareByFilePosition);
@@ -3571,14 +3263,14 @@ void ARMExidxSyntheticSection::writeTo(uint8_t *buf) {
     assert(isec->getParent() != nullptr);
     if (InputSection *d = findExidxSection(isec)) {
       memcpy(buf + offset, d->data().data(), d->data().size());
-      d->relocateAlloc(buf + d->outSecOff, buf + d->outSecOff + d->getSize());
+      d->relocateAlloc(buf, buf + d->getSize());
       offset += d->getSize();
     } else {
       // A Linker generated CANTUNWIND section.
       memcpy(buf + offset, cantUnwindData, sizeof(cantUnwindData));
       uint64_t s = isec->getVA();
       uint64_t p = getVA() + offset;
-      target->relocateNoSym(buf + offset, R_ARM_PREL31, s - p);
+      target->relocateOne(buf + offset, R_ARM_PREL31, s - p);
       offset += 8;
     }
   }
@@ -3586,14 +3278,8 @@ void ARMExidxSyntheticSection::writeTo(uint8_t *buf) {
   memcpy(buf + offset, cantUnwindData, sizeof(cantUnwindData));
   uint64_t s = sentinel->getVA(sentinel->getSize());
   uint64_t p = getVA() + offset;
-  target->relocateNoSym(buf + offset, R_ARM_PREL31, s - p);
+  target->relocateOne(buf + offset, R_ARM_PREL31, s - p);
   assert(size == offset + 8);
-}
-
-bool ARMExidxSyntheticSection::isNeeded() const {
-  return llvm::find_if(exidxSections, [](InputSection *isec) {
-           return isec->isLive();
-         }) != exidxSections.end();
 }
 
 bool ARMExidxSyntheticSection::classof(const SectionBase *d) {
@@ -3602,15 +3288,9 @@ bool ARMExidxSyntheticSection::classof(const SectionBase *d) {
 
 ThunkSection::ThunkSection(OutputSection *os, uint64_t off)
     : SyntheticSection(SHF_ALLOC | SHF_EXECINSTR, SHT_PROGBITS,
-                       config->emachine == EM_PPC64 ? 16 : 4, ".text.thunk") {
+                       config->wordsize, ".text.thunk") {
   this->parent = os;
   this->outSecOff = off;
-}
-
-size_t ThunkSection::getSize() const {
-  if (roundUpSizeForErrata)
-    return alignTo(size, 4096);
-  return size;
 }
 
 void ThunkSection::addThunk(Thunk *t) {
@@ -3684,19 +3364,10 @@ PPC64LongBranchTargetSection::PPC64LongBranchTargetSection()
                        config->isPic ? SHT_NOBITS : SHT_PROGBITS, 8,
                        ".branch_lt") {}
 
-uint64_t PPC64LongBranchTargetSection::getEntryVA(const Symbol *sym,
-                                                  int64_t addend) {
-  return getVA() + entry_index.find({sym, addend})->second * 8;
-}
-
-Optional<uint32_t> PPC64LongBranchTargetSection::addEntry(const Symbol *sym,
-                                                          int64_t addend) {
-  auto res =
-      entry_index.try_emplace(std::make_pair(sym, addend), entries.size());
-  if (!res.second)
-    return None;
-  entries.emplace_back(sym, addend);
-  return res.first->second;
+void PPC64LongBranchTargetSection::addEntry(Symbol &sym) {
+  assert(sym.ppc64BranchltIndex == 0xffff);
+  sym.ppc64BranchltIndex = entries.size();
+  entries.push_back(&sym);
 }
 
 size_t PPC64LongBranchTargetSection::getSize() const {
@@ -3710,14 +3381,12 @@ void PPC64LongBranchTargetSection::writeTo(uint8_t *buf) {
   if (config->isPic)
     return;
 
-  for (auto entry : entries) {
-    const Symbol *sym = entry.first;
-    int64_t addend = entry.second;
+  for (const Symbol *sym : entries) {
     assert(sym->getVA());
     // Need calls to branch to the local entry-point since a long-branch
     // must be a local-call.
-    write64(buf, sym->getVA(addend) +
-                     getPPC64GlobalEntryToLocalEntryOffset(sym->stOther));
+    write64(buf,
+            sym->getVA() + getPPC64GlobalEntryToLocalEntryOffset(sym->stOther));
     buf += 8;
   }
 }
@@ -3727,9 +3396,26 @@ bool PPC64LongBranchTargetSection::isNeeded() const {
   // is too early to determine if this section will be empty or not. We need
   // Finalized to keep the section alive until after thunk creation. Finalized
   // only gets set to true once `finalizeSections()` is called after thunk
-  // creation. Because of this, if we don't create any long-branch thunks we end
+  // creation. Becuase of this, if we don't create any long-branch thunks we end
   // up with an empty .branch_lt section in the binary.
   return !finalized || !entries.empty();
+}
+
+RISCVSdataSection::RISCVSdataSection()
+    : SyntheticSection(SHF_ALLOC | SHF_WRITE, SHT_PROGBITS, 1, ".sdata") {}
+
+bool RISCVSdataSection::isNeeded() const {
+  if (!ElfSym::riscvGlobalPointer)
+    return false;
+
+  // __global_pointer$ is defined relative to .sdata . If the section does not
+  // exist, create a dummy one.
+  for (BaseCommand *base : getParent()->sectionCommands)
+    if (auto *isd = dyn_cast<InputSectionDescription>(base))
+      for (InputSection *isec : isd->sections)
+        if (isec != this)
+          return false;
+  return true;
 }
 
 static uint8_t getAbiVersion() {
@@ -3868,6 +3554,16 @@ template void elf::splitSections<ELF32BE>();
 template void elf::splitSections<ELF64LE>();
 template void elf::splitSections<ELF64BE>();
 
+template void EhFrameSection::addSection<ELF32LE>(InputSectionBase *);
+template void EhFrameSection::addSection<ELF32BE>(InputSectionBase *);
+template void EhFrameSection::addSection<ELF64LE>(InputSectionBase *);
+template void EhFrameSection::addSection<ELF64BE>(InputSectionBase *);
+
+template void PltSection::addEntry<ELF32LE>(Symbol &Sym);
+template void PltSection::addEntry<ELF32BE>(Symbol &Sym);
+template void PltSection::addEntry<ELF64LE>(Symbol &Sym);
+template void PltSection::addEntry<ELF64BE>(Symbol &Sym);
+
 template class elf::MipsAbiFlagsSection<ELF32LE>;
 template class elf::MipsAbiFlagsSection<ELF32BE>;
 template class elf::MipsAbiFlagsSection<ELF64LE>;
@@ -3877,15 +3573,6 @@ template class elf::MipsOptionsSection<ELF32LE>;
 template class elf::MipsOptionsSection<ELF32BE>;
 template class elf::MipsOptionsSection<ELF64LE>;
 template class elf::MipsOptionsSection<ELF64BE>;
-
-template void EhFrameSection::iterateFDEWithLSDA<ELF32LE>(
-    function_ref<void(InputSection &)>);
-template void EhFrameSection::iterateFDEWithLSDA<ELF32BE>(
-    function_ref<void(InputSection &)>);
-template void EhFrameSection::iterateFDEWithLSDA<ELF64LE>(
-    function_ref<void(InputSection &)>);
-template void EhFrameSection::iterateFDEWithLSDA<ELF64BE>(
-    function_ref<void(InputSection &)>);
 
 template class elf::MipsReginfoSection<ELF32LE>;
 template class elf::MipsReginfoSection<ELF32BE>;

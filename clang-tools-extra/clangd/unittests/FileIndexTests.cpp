@@ -8,40 +8,25 @@
 
 #include "AST.h"
 #include "Annotations.h"
-#include "Compiler.h"
-#include "Headers.h"
-#include "ParsedAST.h"
+#include "ClangdUnit.h"
 #include "SyncAPI.h"
 #include "TestFS.h"
 #include "TestTU.h"
-#include "TestWorkspace.h"
-#include "URI.h"
 #include "index/CanonicalIncludes.h"
 #include "index/FileIndex.h"
 #include "index/Index.h"
-#include "index/Ref.h"
-#include "index/Relation.h"
-#include "index/Serialization.h"
-#include "index/Symbol.h"
-#include "index/SymbolID.h"
-#include "support/Threading.h"
 #include "clang/Frontend/CompilerInvocation.h"
 #include "clang/Frontend/Utils.h"
 #include "clang/Index/IndexSymbol.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Tooling/CompilationDatabase.h"
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/Support/Allocator.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include <utility>
-#include <vector>
 
 using ::testing::_;
 using ::testing::AllOf;
 using ::testing::Contains;
 using ::testing::ElementsAre;
-using ::testing::Gt;
 using ::testing::IsEmpty;
 using ::testing::Pair;
 using ::testing::UnorderedElementsAre;
@@ -82,7 +67,7 @@ std::unique_ptr<SymbolSlab> numSlab(int Begin, int End) {
   SymbolSlab::Builder Slab;
   for (int i = Begin; i <= End; i++)
     Slab.insert(symbol(std::to_string(i)));
-  return std::make_unique<SymbolSlab>(std::move(Slab).build());
+  return llvm::make_unique<SymbolSlab>(std::move(Slab).build());
 }
 
 std::unique_ptr<RefSlab> refSlab(const SymbolID &ID, const char *Path) {
@@ -91,18 +76,11 @@ std::unique_ptr<RefSlab> refSlab(const SymbolID &ID, const char *Path) {
   R.Location.FileURI = Path;
   R.Kind = RefKind::Reference;
   Slab.insert(ID, R);
-  return std::make_unique<RefSlab>(std::move(Slab).build());
-}
-
-std::unique_ptr<RelationSlab> relSlab(llvm::ArrayRef<const Relation> Rels) {
-  RelationSlab::Builder RelBuilder;
-  for (auto &Rel : Rels)
-    RelBuilder.insert(Rel);
-  return std::make_unique<RelationSlab>(std::move(RelBuilder).build());
+  return llvm::make_unique<RefSlab>(std::move(Slab).build());
 }
 
 TEST(FileSymbolsTest, UpdateAndGet) {
-  FileSymbols FS(IndexContents::All);
+  FileSymbols FS;
   EXPECT_THAT(runFuzzyFind(*FS.buildIndex(IndexType::Light), ""), IsEmpty());
 
   FS.update("f1", numSlab(1, 3), refSlab(SymbolID("1"), "f1.cc"), nullptr,
@@ -114,7 +92,7 @@ TEST(FileSymbolsTest, UpdateAndGet) {
 }
 
 TEST(FileSymbolsTest, Overlap) {
-  FileSymbols FS(IndexContents::All);
+  FileSymbols FS;
   FS.update("f1", numSlab(1, 3), nullptr, nullptr, false);
   FS.update("f2", numSlab(3, 5), nullptr, nullptr, false);
   for (auto Type : {IndexType::Light, IndexType::Heavy})
@@ -124,11 +102,11 @@ TEST(FileSymbolsTest, Overlap) {
 }
 
 TEST(FileSymbolsTest, MergeOverlap) {
-  FileSymbols FS(IndexContents::All);
+  FileSymbols FS;
   auto OneSymboSlab = [](Symbol Sym) {
     SymbolSlab::Builder S;
     S.insert(Sym);
-    return std::make_unique<SymbolSlab>(std::move(S).build());
+    return llvm::make_unique<SymbolSlab>(std::move(S).build());
   };
   auto X1 = symbol("x");
   X1.CanonicalDeclaration.FileURI = "file:///x1";
@@ -145,7 +123,7 @@ TEST(FileSymbolsTest, MergeOverlap) {
 }
 
 TEST(FileSymbolsTest, SnapshotAliveAfterRemove) {
-  FileSymbols FS(IndexContents::All);
+  FileSymbols FS;
 
   SymbolID ID("1");
   FS.update("f1", numSlab(1, 3), refSlab(ID, "f1.cc"), nullptr, false);
@@ -170,10 +148,9 @@ void update(FileIndex &M, llvm::StringRef Basename, llvm::StringRef Code) {
   TestTU File;
   File.Filename = (Basename + ".cpp").str();
   File.HeaderFilename = (Basename + ".h").str();
-  File.HeaderCode = std::string(Code);
+  File.HeaderCode = Code;
   auto AST = File.build();
-  M.updatePreamble(testPath(File.Filename), /*Version=*/"null",
-                   AST.getASTContext(), AST.getPreprocessorPtr(),
+  M.updatePreamble(File.Filename, AST.getASTContext(), AST.getPreprocessorPtr(),
                    AST.getCanonicalIncludes());
 }
 
@@ -286,14 +263,14 @@ TEST(FileIndexTest, RebuildWithPreamble) {
   PI.CompileCommand.Filename = FooCpp;
   PI.CompileCommand.CommandLine = {"clang", "-xc++", FooCpp};
 
-  MockFS FS;
-  FS.Files[FooCpp] = "";
-  FS.Files[FooH] = R"cpp(
+  llvm::StringMap<std::string> Files;
+  Files[FooCpp] = "";
+  Files[FooH] = R"cpp(
     namespace ns_in_header {
       int func_in_header();
     }
   )cpp";
-  PI.TFS = &FS;
+  PI.FS = buildTestFS(std::move(Files));
 
   PI.Contents = R"cpp(
     #include "foo.h"
@@ -303,21 +280,19 @@ TEST(FileIndexTest, RebuildWithPreamble) {
   )cpp";
 
   // Rebuild the file.
-  IgnoreDiagnostics IgnoreDiags;
-  auto CI = buildCompilerInvocation(PI, IgnoreDiags);
+  auto CI = buildCompilerInvocation(PI);
 
   FileIndex Index;
   bool IndexUpdated = false;
-  buildPreamble(FooCpp, *CI, PI,
-                /*StoreInMemory=*/true,
-                [&](ASTContext &Ctx, std::shared_ptr<Preprocessor> PP,
-                    const CanonicalIncludes &CanonIncludes) {
-                  EXPECT_FALSE(IndexUpdated)
-                      << "Expected only a single index update";
-                  IndexUpdated = true;
-                  Index.updatePreamble(FooCpp, /*Version=*/"null", Ctx,
-                                       std::move(PP), CanonIncludes);
-                });
+  buildPreamble(
+      FooCpp, *CI, /*OldPreamble=*/nullptr, tooling::CompileCommand(), PI,
+      /*StoreInMemory=*/true,
+      [&](ASTContext &Ctx, std::shared_ptr<Preprocessor> PP,
+          const CanonicalIncludes &CanonIncludes) {
+        EXPECT_FALSE(IndexUpdated) << "Expected only a single index update";
+        IndexUpdated = true;
+        Index.updatePreamble(FooCpp, Ctx, std::move(PP), CanonIncludes);
+      });
   ASSERT_TRUE(IndexUpdated);
 
   // Check the index contains symbols from the preamble, but not from the main
@@ -349,57 +324,23 @@ TEST(FileIndexTest, Refs) {
   // Add test.cc
   TestTU Test;
   Test.HeaderCode = HeaderCode;
-  Test.Code = std::string(MainCode.code());
+  Test.Code = MainCode.code();
   Test.Filename = "test.cc";
   auto AST = Test.build();
-  Index.updateMain(testPath(Test.Filename), AST);
+  Index.updateMain(Test.Filename, AST);
   // Add test2.cc
   TestTU Test2;
   Test2.HeaderCode = HeaderCode;
-  Test2.Code = std::string(MainCode.code());
+  Test2.Code = MainCode.code();
   Test2.Filename = "test2.cc";
   AST = Test2.build();
-  Index.updateMain(testPath(Test2.Filename), AST);
+  Index.updateMain(Test2.Filename, AST);
 
   EXPECT_THAT(getRefs(Index, Foo.ID),
               RefsAre({AllOf(RefRange(MainCode.range("foo")),
                              FileURI("unittest:///test.cc")),
                        AllOf(RefRange(MainCode.range("foo")),
                              FileURI("unittest:///test2.cc"))}));
-}
-
-TEST(FileIndexTest, MacroRefs) {
-  Annotations HeaderCode(R"cpp(
-    #define $def1[[HEADER_MACRO]](X) (X+1)
-  )cpp");
-  Annotations MainCode(R"cpp(
-  #define $def2[[MAINFILE_MACRO]](X) (X+1)
-  void f() {
-    int a = $ref1[[HEADER_MACRO]](2);
-    int b = $ref2[[MAINFILE_MACRO]](1);
-  }
-  )cpp");
-
-  FileIndex Index;
-  // Add test.cc
-  TestTU Test;
-  Test.HeaderCode = std::string(HeaderCode.code());
-  Test.Code = std::string(MainCode.code());
-  Test.Filename = "test.cc";
-  auto AST = Test.build();
-  Index.updateMain(testPath(Test.Filename), AST);
-
-  auto HeaderMacro = findSymbol(Test.headerSymbols(), "HEADER_MACRO");
-  EXPECT_THAT(getRefs(Index, HeaderMacro.ID),
-              RefsAre({AllOf(RefRange(MainCode.range("ref1")),
-                             FileURI("unittest:///test.cc"))}));
-
-  auto MainFileMacro = findSymbol(Test.headerSymbols(), "MAINFILE_MACRO");
-  EXPECT_THAT(getRefs(Index, MainFileMacro.ID),
-              RefsAre({AllOf(RefRange(MainCode.range("def2")),
-                             FileURI("unittest:///test.cc")),
-                       AllOf(RefRange(MainCode.range("ref2")),
-                             FileURI("unittest:///test.cc"))}));
 }
 
 TEST(FileIndexTest, CollectMacros) {
@@ -415,54 +356,27 @@ TEST(FileIndexTest, Relations) {
   TU.HeaderCode = "class A {}; class B : public A {};";
   auto AST = TU.build();
   FileIndex Index;
-  Index.updatePreamble(testPath(TU.Filename), /*Version=*/"null",
-                       AST.getASTContext(), AST.getPreprocessorPtr(),
-                       AST.getCanonicalIncludes());
+  Index.updatePreamble(TU.Filename, AST.getASTContext(),
+                       AST.getPreprocessorPtr(), AST.getCanonicalIncludes());
   SymbolID A = findSymbol(TU.headerSymbols(), "A").ID;
   uint32_t Results = 0;
   RelationsRequest Req;
   Req.Subjects.insert(A);
-  Req.Predicate = RelationKind::BaseOf;
+  Req.Predicate = index::SymbolRole::RelationBaseOf;
   Index.relations(Req, [&](const SymbolID &, const Symbol &) { ++Results; });
   EXPECT_EQ(Results, 1u);
-}
-
-TEST(FileIndexTest, RelationsMultiFile) {
-  TestWorkspace Workspace;
-  Workspace.addSource("Base.h", "class Base {};");
-  Workspace.addMainFile("A.cpp", R"cpp(
-    #include "Base.h"
-    class A : public Base {};
-  )cpp");
-  Workspace.addMainFile("B.cpp", R"cpp(
-    #include "Base.h"
-    class B : public Base {};
-  )cpp");
-
-  auto Index = Workspace.index();
-  FuzzyFindRequest FFReq;
-  FFReq.Query = "Base";
-  FFReq.AnyScope = true;
-  SymbolID Base;
-  Index->fuzzyFind(FFReq, [&](const Symbol &S) { Base = S.ID; });
-
-  RelationsRequest Req;
-  Req.Subjects.insert(Base);
-  Req.Predicate = RelationKind::BaseOf;
-  uint32_t Results = 0;
-  Index->relations(Req, [&](const SymbolID &, const Symbol &) { ++Results; });
-  EXPECT_EQ(Results, 2u);
 }
 
 TEST(FileIndexTest, ReferencesInMainFileWithPreamble) {
   TestTU TU;
   TU.HeaderCode = "class Foo{};";
   Annotations Main(R"cpp(
+    #include "foo.h"
     void f() {
       [[Foo]] foo;
     }
   )cpp");
-  TU.Code = std::string(Main.code());
+  TU.Code = Main.code();
   auto AST = TU.build();
   FileIndex Index;
   Index.updateMain(testPath(TU.Filename), AST);
@@ -474,7 +388,7 @@ TEST(FileIndexTest, ReferencesInMainFileWithPreamble) {
 }
 
 TEST(FileIndexTest, MergeMainFileSymbols) {
-  const char *CommonHeader = "void foo();";
+  const char* CommonHeader = "void foo();";
   TestTU Header = TestTU::withCode(CommonHeader);
   TestTU Cpp = TestTU::withCode("void foo() {}");
   Cpp.Filename = "foo.cpp";
@@ -495,7 +409,7 @@ TEST(FileIndexTest, MergeMainFileSymbols) {
 }
 
 TEST(FileSymbolsTest, CountReferencesNoRefSlabs) {
-  FileSymbols FS(IndexContents::All);
+  FileSymbols FS;
   FS.update("f1", numSlab(1, 3), nullptr, nullptr, true);
   FS.update("f2", numSlab(1, 3), nullptr, nullptr, false);
   EXPECT_THAT(
@@ -507,7 +421,7 @@ TEST(FileSymbolsTest, CountReferencesNoRefSlabs) {
 }
 
 TEST(FileSymbolsTest, CountReferencesWithRefSlabs) {
-  FileSymbols FS(IndexContents::All);
+  FileSymbols FS;
   FS.update("f1cpp", numSlab(1, 3), refSlab(SymbolID("1"), "f1.cpp"), nullptr,
             true);
   FS.update("f1h", numSlab(1, 3), refSlab(SymbolID("1"), "f1.h"), nullptr,
@@ -526,206 +440,6 @@ TEST(FileSymbolsTest, CountReferencesWithRefSlabs) {
       UnorderedElementsAre(AllOf(QName("1"), NumReferences(1u)),
                            AllOf(QName("2"), NumReferences(1u)),
                            AllOf(QName("3"), NumReferences(1u))));
-}
-
-TEST(FileIndexTest, StalePreambleSymbolsDeleted) {
-  FileIndex M;
-  TestTU File;
-  File.HeaderFilename = "a.h";
-
-  File.Filename = "f1.cpp";
-  File.HeaderCode = "int a;";
-  auto AST = File.build();
-  M.updatePreamble(testPath(File.Filename), /*Version=*/"null",
-                   AST.getASTContext(), AST.getPreprocessorPtr(),
-                   AST.getCanonicalIncludes());
-  EXPECT_THAT(runFuzzyFind(M, ""), UnorderedElementsAre(QName("a")));
-
-  File.Filename = "f2.cpp";
-  File.HeaderCode = "int b;";
-  AST = File.build();
-  M.updatePreamble(testPath(File.Filename), /*Version=*/"null",
-                   AST.getASTContext(), AST.getPreprocessorPtr(),
-                   AST.getCanonicalIncludes());
-  EXPECT_THAT(runFuzzyFind(M, ""), UnorderedElementsAre(QName("b")));
-}
-
-// Verifies that concurrent calls to updateMain don't "lose" any updates.
-TEST(FileIndexTest, Threadsafety) {
-  FileIndex M;
-  Notification Go;
-
-  constexpr int Count = 10;
-  {
-    // Set up workers to concurrently call updateMain() with separate files.
-    AsyncTaskRunner Pool;
-    for (unsigned I = 0; I < Count; ++I) {
-      auto TU = TestTU::withCode(llvm::formatv("int xxx{0};", I).str());
-      TU.Filename = llvm::formatv("x{0}.c", I).str();
-      Pool.runAsync(TU.Filename, [&, Filename(testPath(TU.Filename)),
-                                  AST(TU.build())]() mutable {
-        Go.wait();
-        M.updateMain(Filename, AST);
-      });
-    }
-    // On your marks, get set...
-    Go.notify();
-  }
-
-  EXPECT_THAT(runFuzzyFind(M, "xxx"), ::testing::SizeIs(Count));
-}
-
-TEST(FileShardedIndexTest, Sharding) {
-  auto AHeaderUri = URI::create(testPath("a.h")).toString();
-  auto BHeaderUri = URI::create(testPath("b.h")).toString();
-  auto BSourceUri = URI::create(testPath("b.cc")).toString();
-
-  auto Sym1 = symbol("1");
-  Sym1.CanonicalDeclaration.FileURI = AHeaderUri.c_str();
-
-  auto Sym2 = symbol("2");
-  Sym2.CanonicalDeclaration.FileURI = BHeaderUri.c_str();
-  Sym2.Definition.FileURI = BSourceUri.c_str();
-
-  auto Sym3 = symbol("3"); // not stored
-
-  IndexFileIn IF;
-  {
-    SymbolSlab::Builder B;
-    // Should be stored in only a.h
-    B.insert(Sym1);
-    // Should be stored in both b.h and b.cc
-    B.insert(Sym2);
-    IF.Symbols.emplace(std::move(B).build());
-  }
-  {
-    // Should be stored in b.cc
-    IF.Refs.emplace(std::move(*refSlab(Sym1.ID, BSourceUri.c_str())));
-  }
-  {
-    RelationSlab::Builder B;
-    // Should be stored in a.h and b.h
-    B.insert(Relation{Sym1.ID, RelationKind::BaseOf, Sym2.ID});
-    // Should be stored in a.h and b.h
-    B.insert(Relation{Sym2.ID, RelationKind::BaseOf, Sym1.ID});
-    // Should be stored in a.h (where Sym1 is stored) even though
-    // the relation is dangling as Sym3 is unknown.
-    B.insert(Relation{Sym3.ID, RelationKind::BaseOf, Sym1.ID});
-    IF.Relations.emplace(std::move(B).build());
-  }
-
-  IF.Sources.emplace();
-  IncludeGraph &IG = *IF.Sources;
-  {
-    // b.cc includes b.h
-    auto &Node = IG[BSourceUri];
-    Node.DirectIncludes = {BHeaderUri};
-    Node.URI = BSourceUri;
-  }
-  {
-    // b.h includes a.h
-    auto &Node = IG[BHeaderUri];
-    Node.DirectIncludes = {AHeaderUri};
-    Node.URI = BHeaderUri;
-  }
-  {
-    // a.h includes nothing.
-    auto &Node = IG[AHeaderUri];
-    Node.DirectIncludes = {};
-    Node.URI = AHeaderUri;
-  }
-
-  IF.Cmd = tooling::CompileCommand(testRoot(), "b.cc", {"clang"}, "out");
-
-  FileShardedIndex ShardedIndex(std::move(IF));
-  ASSERT_THAT(ShardedIndex.getAllSources(),
-              UnorderedElementsAre(AHeaderUri, BHeaderUri, BSourceUri));
-
-  {
-    auto Shard = ShardedIndex.getShard(AHeaderUri);
-    ASSERT_TRUE(Shard);
-    EXPECT_THAT(*Shard->Symbols, UnorderedElementsAre(QName("1")));
-    EXPECT_THAT(*Shard->Refs, IsEmpty());
-    EXPECT_THAT(
-        *Shard->Relations,
-        UnorderedElementsAre(Relation{Sym1.ID, RelationKind::BaseOf, Sym2.ID},
-                             Relation{Sym2.ID, RelationKind::BaseOf, Sym1.ID},
-                             Relation{Sym3.ID, RelationKind::BaseOf, Sym1.ID}));
-    ASSERT_THAT(Shard->Sources->keys(), UnorderedElementsAre(AHeaderUri));
-    EXPECT_THAT(Shard->Sources->lookup(AHeaderUri).DirectIncludes, IsEmpty());
-    EXPECT_TRUE(Shard->Cmd.hasValue());
-  }
-  {
-    auto Shard = ShardedIndex.getShard(BHeaderUri);
-    ASSERT_TRUE(Shard);
-    EXPECT_THAT(*Shard->Symbols, UnorderedElementsAre(QName("2")));
-    EXPECT_THAT(*Shard->Refs, IsEmpty());
-    EXPECT_THAT(
-        *Shard->Relations,
-        UnorderedElementsAre(Relation{Sym1.ID, RelationKind::BaseOf, Sym2.ID},
-                             Relation{Sym2.ID, RelationKind::BaseOf, Sym1.ID}));
-    ASSERT_THAT(Shard->Sources->keys(),
-                UnorderedElementsAre(BHeaderUri, AHeaderUri));
-    EXPECT_THAT(Shard->Sources->lookup(BHeaderUri).DirectIncludes,
-                UnorderedElementsAre(AHeaderUri));
-    EXPECT_TRUE(Shard->Cmd.hasValue());
-  }
-  {
-    auto Shard = ShardedIndex.getShard(BSourceUri);
-    ASSERT_TRUE(Shard);
-    EXPECT_THAT(*Shard->Symbols, UnorderedElementsAre(QName("2")));
-    EXPECT_THAT(*Shard->Refs, UnorderedElementsAre(Pair(Sym1.ID, _)));
-    EXPECT_THAT(*Shard->Relations, IsEmpty());
-    ASSERT_THAT(Shard->Sources->keys(),
-                UnorderedElementsAre(BSourceUri, BHeaderUri));
-    EXPECT_THAT(Shard->Sources->lookup(BSourceUri).DirectIncludes,
-                UnorderedElementsAre(BHeaderUri));
-    EXPECT_TRUE(Shard->Cmd.hasValue());
-  }
-}
-
-TEST(FileIndexTest, Profile) {
-  FileIndex FI;
-
-  auto FileName = testPath("foo.cpp");
-  auto AST = TestTU::withHeaderCode("int a;").build();
-  FI.updateMain(FileName, AST);
-  FI.updatePreamble(FileName, "v1", AST.getASTContext(),
-                    AST.getPreprocessorPtr(), AST.getCanonicalIncludes());
-
-  llvm::BumpPtrAllocator Alloc;
-  MemoryTree MT(&Alloc);
-  FI.profile(MT);
-  ASSERT_THAT(MT.children(),
-              UnorderedElementsAre(Pair("preamble", _), Pair("main_file", _)));
-
-  ASSERT_THAT(MT.child("preamble").children(),
-              UnorderedElementsAre(Pair("index", _), Pair("slabs", _)));
-  ASSERT_THAT(MT.child("main_file").children(),
-              UnorderedElementsAre(Pair("index", _), Pair("slabs", _)));
-
-  ASSERT_THAT(MT.child("preamble").child("index").total(), Gt(0U));
-  ASSERT_THAT(MT.child("main_file").child("index").total(), Gt(0U));
-}
-
-TEST(FileSymbolsTest, Profile) {
-  FileSymbols FS(IndexContents::All);
-  FS.update("f1", numSlab(1, 2), nullptr, nullptr, false);
-  FS.update("f2", nullptr, refSlab(SymbolID("1"), "f1"), nullptr, false);
-  FS.update("f3", nullptr, nullptr,
-            relSlab({{SymbolID("1"), RelationKind::BaseOf, SymbolID("2")}}),
-            false);
-  llvm::BumpPtrAllocator Alloc;
-  MemoryTree MT(&Alloc);
-  FS.profile(MT);
-  ASSERT_THAT(MT.children(), UnorderedElementsAre(Pair("f1", _), Pair("f2", _),
-                                                  Pair("f3", _)));
-  EXPECT_THAT(MT.child("f1").children(), ElementsAre(Pair("symbols", _)));
-  EXPECT_THAT(MT.child("f1").total(), Gt(0U));
-  EXPECT_THAT(MT.child("f2").children(), ElementsAre(Pair("references", _)));
-  EXPECT_THAT(MT.child("f2").total(), Gt(0U));
-  EXPECT_THAT(MT.child("f3").children(), ElementsAre(Pair("relations", _)));
-  EXPECT_THAT(MT.child("f3").total(), Gt(0U));
 }
 } // namespace
 } // namespace clangd

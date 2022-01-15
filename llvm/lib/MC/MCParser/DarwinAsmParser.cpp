@@ -23,7 +23,6 @@
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/SectionKind.h"
-#include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SMLoc.h"
@@ -493,7 +492,7 @@ bool DarwinAsmParser::parseSectionSwitch(StringRef Segment, StringRef Section,
   // is no good reason for someone to intentionally emit incorrectly sized
   // values into the implicitly aligned sections.
   if (Align)
-    getStreamer().emitValueToAlignment(Align);
+    getStreamer().EmitValueToAlignment(Align);
 
   return false;
 }
@@ -511,7 +510,7 @@ bool DarwinAsmParser::parseDirectiveAltEntry(StringRef, SMLoc) {
   if (Sym->isDefined())
     return TokError(".alt_entry must preceed symbol definition");
 
-  if (!getStreamer().emitSymbolAttribute(Sym, MCSA_AltEntry))
+  if (!getStreamer().EmitSymbolAttribute(Sym, MCSA_AltEntry))
     return TokError("unable to emit symbol attribute");
 
   Lex();
@@ -542,7 +541,7 @@ bool DarwinAsmParser::parseDirectiveDesc(StringRef, SMLoc) {
   Lex();
 
   // Set the n_desc field of this Symbol to this DescValue
-  getStreamer().emitSymbolDesc(Sym, DescValue);
+  getStreamer().EmitSymbolDesc(Sym, DescValue);
 
   return false;
 }
@@ -570,7 +569,7 @@ bool DarwinAsmParser::parseDirectiveIndirectSymbol(StringRef, SMLoc Loc) {
   if (Sym->isTemporary())
     return TokError("non-local symbol required in directive");
 
-  if (!getStreamer().emitSymbolAttribute(Sym, MCSA_IndirectSymbol))
+  if (!getStreamer().EmitSymbolAttribute(Sym, MCSA_IndirectSymbol))
     return TokError("unable to emit indirect symbol attribute for: " + Name);
 
   if (getLexer().isNot(AsmToken::EndOfStatement))
@@ -626,7 +625,7 @@ bool DarwinAsmParser::parseDirectiveLinkerOption(StringRef IDVal, SMLoc) {
     Lex();
   }
 
-  getStreamer().emitLinkerOptions(Args);
+  getStreamer().EmitLinkerOptions(Args);
   return false;
 }
 
@@ -673,7 +672,7 @@ bool DarwinAsmParser::parseDirectiveSection(StringRef, SMLoc) {
   if (!getLexer().is(AsmToken::Comma))
     return TokError("unexpected token in '.section' directive");
 
-  std::string SectionSpec = std::string(SectionName);
+  std::string SectionSpec = SectionName;
   SectionSpec += ",";
 
   // Add all the tokens until the end of the line, ParseSectionSpecifier will
@@ -690,12 +689,15 @@ bool DarwinAsmParser::parseDirectiveSection(StringRef, SMLoc) {
   unsigned StubSize;
   unsigned TAA;
   bool TAAParsed;
-  if (class Error E = MCSectionMachO::ParseSectionSpecifier(
-          SectionSpec, Segment, Section, TAA, TAAParsed, StubSize))
-    return Error(Loc, toString(std::move(E)));
+  std::string ErrorStr =
+    MCSectionMachO::ParseSectionSpecifier(SectionSpec, Segment, Section,
+                                          TAA, TAAParsed, StubSize);
+
+  if (!ErrorStr.empty())
+    return Error(Loc, ErrorStr);
 
   // Issue a warning if the target is not powerpc and Section is a *coal* section.
-  Triple TT = getParser().getContext().getTargetTriple();
+  Triple TT = getParser().getContext().getObjectFileInfo()->getTargetTriple();
   Triple::ArchType ArchTy = TT.getArch();
 
   if (ArchTy != Triple::ppc && ArchTy != Triple::ppc64) {
@@ -776,9 +778,8 @@ bool DarwinAsmParser::parseDirectiveSecureLogUnique(StringRef, SMLoc IDLoc) {
   raw_fd_ostream *OS = getContext().getSecureLog();
   if (!OS) {
     std::error_code EC;
-    auto NewOS = std::make_unique<raw_fd_ostream>(StringRef(SecureLogFile), EC,
-                                                  sys::fs::OF_Append |
-                                                      sys::fs::OF_TextWithCRLF);
+    auto NewOS = llvm::make_unique<raw_fd_ostream>(
+        StringRef(SecureLogFile), EC, sys::fs::F_Append | sys::fs::F_Text);
     if (EC)
        return Error(IDLoc, Twine("can't open secure log file: ") +
                                SecureLogFile + " (" + EC.message() + ")");
@@ -818,7 +819,7 @@ bool DarwinAsmParser::parseDirectiveSubsectionsViaSymbols(StringRef, SMLoc) {
 
   Lex();
 
-  getStreamer().emitAssemblerFlag(MCAF_SubsectionsViaSymbols);
+  getStreamer().EmitAssemblerFlag(MCAF_SubsectionsViaSymbols);
 
   return false;
 }
@@ -869,11 +870,11 @@ bool DarwinAsmParser::parseDirectiveTBSS(StringRef, SMLoc) {
   if (!Sym->isUndefined())
     return Error(IDLoc, "invalid symbol redefinition");
 
-  getStreamer().emitTBSSSymbol(
-      getContext().getMachOSection("__DATA", "__thread_bss",
-                                   MachO::S_THREAD_LOCAL_ZEROFILL, 0,
-                                   SectionKind::getThreadBSS()),
-      Sym, Size, 1 << Pow2Alignment);
+  getStreamer().EmitTBSSSymbol(getContext().getMachOSection(
+                                 "__DATA", "__thread_bss",
+                                 MachO::S_THREAD_LOCAL_ZEROFILL,
+                                 0, SectionKind::getThreadBSS()),
+                               Sym, Size, 1 << Pow2Alignment);
 
   return false;
 }
@@ -900,7 +901,7 @@ bool DarwinAsmParser::parseDirectiveZerofill(StringRef, SMLoc) {
   // the section but with no symbol.
   if (getLexer().is(AsmToken::EndOfStatement)) {
     // Create the zerofill section but no symbol
-    getStreamer().emitZerofill(
+    getStreamer().EmitZerofill(
         getContext().getMachOSection(Segment, Section, MachO::S_ZEROFILL, 0,
                                      SectionKind::getBSS()),
         /*Symbol=*/nullptr, /*Size=*/0, /*ByteAlignment=*/0, SectionLoc);
@@ -959,7 +960,7 @@ bool DarwinAsmParser::parseDirectiveZerofill(StringRef, SMLoc) {
   // Create the zerofill Symbol with Size and Pow2Alignment
   //
   // FIXME: Arch specific.
-  getStreamer().emitZerofill(getContext().getMachOSection(
+  getStreamer().EmitZerofill(getContext().getMachOSection(
                                Segment, Section, MachO::S_ZEROFILL,
                                0, SectionKind::getBSS()),
                              Sym, Size, 1 << Pow2Alignment, SectionLoc);
@@ -972,7 +973,7 @@ bool DarwinAsmParser::parseDirectiveZerofill(StringRef, SMLoc) {
 bool DarwinAsmParser::parseDirectiveDataRegion(StringRef, SMLoc) {
   if (getLexer().is(AsmToken::EndOfStatement)) {
     Lex();
-    getStreamer().emitDataRegion(MCDR_DataRegion);
+    getStreamer().EmitDataRegion(MCDR_DataRegion);
     return false;
   }
   StringRef RegionType;
@@ -988,7 +989,7 @@ bool DarwinAsmParser::parseDirectiveDataRegion(StringRef, SMLoc) {
     return Error(Loc, "unknown region type in '.data_region' directive");
   Lex();
 
-  getStreamer().emitDataRegion((MCDataRegionType)Kind);
+  getStreamer().EmitDataRegion((MCDataRegionType)Kind);
   return false;
 }
 
@@ -999,7 +1000,7 @@ bool DarwinAsmParser::parseDirectiveDataRegionEnd(StringRef, SMLoc) {
     return TokError("unexpected token in '.end_data_region' directive");
 
   Lex();
-  getStreamer().emitDataRegion(MCDR_DataRegionEnd);
+  getStreamer().EmitDataRegion(MCDR_DataRegionEnd);
   return false;
 }
 
@@ -1091,7 +1092,7 @@ bool DarwinAsmParser::parseSDKVersion(VersionTuple &SDKVersion) {
 
 void DarwinAsmParser::checkVersion(StringRef Directive, StringRef Arg,
                                    SMLoc Loc, Triple::OSType ExpectedOS) {
-  const Triple &Target = getContext().getTargetTriple();
+  const Triple &Target = getContext().getObjectFileInfo()->getTargetTriple();
   if (Target.getOS() != ExpectedOS)
     Warning(Loc, Twine(Directive) +
             (Arg.empty() ? Twine() : Twine(' ') + Arg) +
@@ -1136,7 +1137,7 @@ bool DarwinAsmParser::parseVersionMin(StringRef Directive, SMLoc Loc,
 
   Triple::OSType ExpectedOS = getOSTypeFromMCVM(Type);
   checkVersion(Directive, StringRef(), Loc, ExpectedOS);
-  getStreamer().emitVersionMin(Type, Major, Minor, Update, SDKVersion);
+  getStreamer().EmitVersionMin(Type, Major, Minor, Update, SDKVersion);
   return false;
 }
 
@@ -1151,7 +1152,6 @@ static Triple::OSType getOSTypeFromPlatform(MachO::PlatformType Type) {
   case MachO::PLATFORM_IOSSIMULATOR:     /* silence warning */ break;
   case MachO::PLATFORM_TVOSSIMULATOR:    /* silence warning */ break;
   case MachO::PLATFORM_WATCHOSSIMULATOR: /* silence warning */ break;
-  case MachO::PLATFORM_DRIVERKIT:        /* silence warning */ break;
   }
   llvm_unreachable("Invalid mach-o platform type");
 }
@@ -1194,7 +1194,7 @@ bool DarwinAsmParser::parseBuildVersion(StringRef Directive, SMLoc Loc) {
   Triple::OSType ExpectedOS
     = getOSTypeFromPlatform((MachO::PlatformType)Platform);
   checkVersion(Directive, PlatformName, Loc, ExpectedOS);
-  getStreamer().emitBuildVersion(Platform, Major, Minor, Update, SDKVersion);
+  getStreamer().EmitBuildVersion(Platform, Major, Minor, Update, SDKVersion);
   return false;
 }
 

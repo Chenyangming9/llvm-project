@@ -9,7 +9,6 @@
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_SYMBOL_COLLECTOR_H
 
 #include "CanonicalIncludes.h"
-#include "CollectMacros.h"
 #include "Index.h"
 #include "SymbolOrigin.h"
 #include "clang/AST/ASTContext.h"
@@ -26,7 +25,7 @@
 namespace clang {
 namespace clangd {
 
-/// Collect declarations (symbols) from an AST.
+/// \brief Collect declarations (symbols) from an AST.
 /// It collects most declarations except:
 /// - Implicit declarations
 /// - Anonymous declarations (anonymous enum/class/struct, etc)
@@ -75,12 +74,9 @@ public:
     /// collect macros. For example, `indexTopLevelDecls` will not index any
     /// macro even if this is true.
     bool CollectMacro = false;
-    /// Collect symbols local to main-files, such as static functions, symbols
-    /// inside an anonymous namespace, function-local classes and its member
-    /// functions.
+    /// Collect symbols local to main-files, such as static functions
+    /// and symbols inside an anonymous namespace.
     bool CollectMainFileSymbols = true;
-    /// Collect references to main-file symbols.
-    bool CollectMainFileRefs = false;
     /// If set to true, SymbolCollector will collect doc for all symbols.
     /// Note that documents of symbols being indexed for completion will always
     /// be collected regardless of this option.
@@ -91,7 +87,6 @@ public:
   };
 
   SymbolCollector(Options Opts);
-  ~SymbolCollector();
 
   /// Returns true is \p ND should be collected.
   static bool shouldCollectSymbol(const NamedDecl &ND, const ASTContext &ASTCtx,
@@ -104,16 +99,14 @@ public:
   }
 
   bool
-  handleDeclOccurrence(const Decl *D, index::SymbolRoleSet Roles,
-                       ArrayRef<index::SymbolRelation> Relations,
-                       SourceLocation Loc,
-                       index::IndexDataConsumer::ASTNodeInfo ASTNode) override;
+  handleDeclOccurence(const Decl *D, index::SymbolRoleSet Roles,
+                      ArrayRef<index::SymbolRelation> Relations,
+                      SourceLocation Loc,
+                      index::IndexDataConsumer::ASTNodeInfo ASTNode) override;
 
-  bool handleMacroOccurrence(const IdentifierInfo *Name, const MacroInfo *MI,
-                             index::SymbolRoleSet Roles,
-                             SourceLocation Loc) override;
-
-  void handleMacros(const MainFileMacros &MacroRefsToIndex);
+  bool handleMacroOccurence(const IdentifierInfo *Name, const MacroInfo *MI,
+                            index::SymbolRoleSet Roles,
+                            SourceLocation Loc) override;
 
   SymbolSlab takeSymbols() { return std::move(Symbols).build(); }
   RefSlab takeRefs() { return std::move(Refs).build(); }
@@ -133,9 +126,10 @@ private:
   void processRelations(const NamedDecl &ND, const SymbolID &ID,
                         ArrayRef<index::SymbolRelation> Relations);
 
-  llvm::Optional<SymbolLocation> getTokenLocation(SourceLocation TokLoc);
-
-  llvm::Optional<std::string> getIncludeHeader(const Symbol &S, FileID);
+  llvm::Optional<std::string> getIncludeHeader(llvm::StringRef QName, FileID);
+  bool isSelfContainedHeader(FileID);
+  // Heuristically headers that only want to be included via an umbrella.
+  static bool isDontIncludeMeHeader(llvm::StringRef);
 
   // All Symbols collected from the AST.
   SymbolSlab::Builder Symbols;
@@ -157,16 +151,11 @@ private:
   std::shared_ptr<GlobalCodeCompletionAllocator> CompletionAllocator;
   std::unique_ptr<CodeCompletionTUInfo> CompletionTUInfo;
   Options Opts;
-  struct SymbolRef {
-    SourceLocation Loc;
-    index::SymbolRoleSet Roles;
-    const Decl *Container;
-  };
+  using DeclRef = std::pair<SourceLocation, index::SymbolRoleSet>;
   // Symbols referenced from the current TU, flushed on finish().
   llvm::DenseSet<const NamedDecl *> ReferencedDecls;
   llvm::DenseSet<const IdentifierInfo *> ReferencedMacros;
-  llvm::DenseMap<const NamedDecl *, std::vector<SymbolRef>> DeclRefs;
-  llvm::DenseMap<SymbolID, std::vector<SymbolRef>> MacroRefs;
+  llvm::DenseMap<const NamedDecl *, std::vector<DeclRef>> DeclRefs;
   // Maps canonical declaration provided by clang to canonical declaration for
   // an index symbol, if clangd prefers a different declaration than that
   // provided by clang. For example, friend declaration might be considered
@@ -175,10 +164,7 @@ private:
   llvm::DenseMap<const Decl *, const Decl *> CanonicalDecls;
   // Cache whether to index a file or not.
   llvm::DenseMap<FileID, bool> FilesToIndexCache;
-  // Encapsulates calculations and caches around header paths, which headers
-  // to insert for which symbol, etc.
-  class HeaderFileURICache;
-  std::unique_ptr<HeaderFileURICache> HeaderFileURIs;
+  llvm::DenseMap<FileID, bool> HeaderIsSelfContainedCache;
 };
 
 } // namespace clangd

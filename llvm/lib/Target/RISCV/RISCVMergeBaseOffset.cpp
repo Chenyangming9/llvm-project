@@ -45,7 +45,7 @@ struct RISCVMergeBaseOffsetOpt : public MachineFunctionPass {
   bool detectAndFoldOffset(MachineInstr &HiLUI, MachineInstr &LoADDI);
   void foldOffset(MachineInstr &HiLUI, MachineInstr &LoADDI, MachineInstr &Tail,
                   int64_t Offset);
-  bool matchLargeOffset(MachineInstr &TailAdd, Register GSReg, int64_t &Offset);
+  bool matchLargeOffset(MachineInstr &TailAdd, unsigned GSReg, int64_t &Offset);
   RISCVMergeBaseOffsetOpt() : MachineFunctionPass(ID) {}
 
   MachineFunctionProperties getRequiredProperties() const override {
@@ -64,7 +64,7 @@ private:
 } // end anonymous namespace
 
 char RISCVMergeBaseOffsetOpt::ID = 0;
-INITIALIZE_PASS(RISCVMergeBaseOffsetOpt, DEBUG_TYPE,
+INITIALIZE_PASS(RISCVMergeBaseOffsetOpt, "riscv-merge-base-offset",
                 RISCV_MERGE_BASE_OFFSET_NAME, false, false)
 
 // Detect the pattern:
@@ -85,7 +85,7 @@ bool RISCVMergeBaseOffsetOpt::detectLuiAddiGlobal(MachineInstr &HiLUI,
       HiLUI.getOperand(1).getOffset() != 0 ||
       !MRI->hasOneUse(HiLUI.getOperand(0).getReg()))
     return false;
-  Register HiLuiDestReg = HiLUI.getOperand(0).getReg();
+  unsigned HiLuiDestReg = HiLUI.getOperand(0).getReg();
   LoADDI = MRI->use_begin(HiLuiDestReg)->getParent();
   if (LoADDI->getOpcode() != RISCV::ADDI ||
       LoADDI->getOperand(2).getTargetFlags() != RISCVII::MO_LO ||
@@ -132,12 +132,12 @@ void RISCVMergeBaseOffsetOpt::foldOffset(MachineInstr &HiLUI,
 //                       \                                  /
 //                         TailAdd: add  vreg4, vreg2, voff
 bool RISCVMergeBaseOffsetOpt::matchLargeOffset(MachineInstr &TailAdd,
-                                               Register GAReg,
+                                               unsigned GAReg,
                                                int64_t &Offset) {
   assert((TailAdd.getOpcode() == RISCV::ADD) && "Expected ADD instruction!");
-  Register Rs = TailAdd.getOperand(1).getReg();
-  Register Rt = TailAdd.getOperand(2).getReg();
-  Register Reg = Rs == GAReg ? Rt : Rs;
+  unsigned Rs = TailAdd.getOperand(1).getReg();
+  unsigned Rt = TailAdd.getOperand(2).getReg();
+  unsigned Reg = Rs == GAReg ? Rt : Rs;
 
   // Can't fold if the register has more than one use.
   if (!MRI->hasOneUse(Reg))
@@ -178,7 +178,7 @@ bool RISCVMergeBaseOffsetOpt::matchLargeOffset(MachineInstr &TailAdd,
 
 bool RISCVMergeBaseOffsetOpt::detectAndFoldOffset(MachineInstr &HiLUI,
                                                   MachineInstr &LoADDI) {
-  Register DestReg = LoADDI.getOperand(0).getReg();
+  unsigned DestReg = LoADDI.getOperand(0).getReg();
   assert(MRI->hasOneUse(DestReg) && "expected one use for LoADDI");
   // LoADDI has only one use.
   MachineInstr &Tail = *MRI->use_begin(DestReg)->getParent();
@@ -216,14 +216,12 @@ bool RISCVMergeBaseOffsetOpt::detectAndFoldOffset(MachineInstr &HiLUI,
   case RISCV::LHU:
   case RISCV::LWU:
   case RISCV::LD:
-  case RISCV::FLH:
   case RISCV::FLW:
   case RISCV::FLD:
   case RISCV::SB:
   case RISCV::SH:
   case RISCV::SW:
   case RISCV::SD:
-  case RISCV::FSH:
   case RISCV::FSW:
   case RISCV::FSD: {
     // Transforms the sequence:            Into:
@@ -234,7 +232,7 @@ bool RISCVMergeBaseOffsetOpt::detectAndFoldOffset(MachineInstr &HiLUI,
       return false;
     // Register defined by LoADDI should be used in the base part of the
     // load\store instruction. Otherwise, no folding possible.
-    Register BaseAddrReg = Tail.getOperand(1).getReg();
+    unsigned BaseAddrReg = Tail.getOperand(1).getReg();
     if (DestReg != BaseAddrReg)
       return false;
     MachineOperand &TailImmOp = Tail.getOperand(2);

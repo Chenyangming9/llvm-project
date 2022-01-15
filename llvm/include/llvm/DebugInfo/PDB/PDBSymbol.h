@@ -17,11 +17,13 @@
 #include "llvm/Support/Casting.h"
 
 #define FORWARD_SYMBOL_METHOD(MethodName)                                      \
-  decltype(auto) MethodName() const { return RawSymbol->MethodName(); }
+  auto MethodName() const->decltype(RawSymbol->MethodName()) {                 \
+    return RawSymbol->MethodName();                                            \
+  }
 
 #define FORWARD_CONCRETE_SYMBOL_ID_METHOD_WITH_NAME(ConcreteType, PrivateName, \
                                                     PublicName)                \
-  decltype(auto) PublicName##Id() const {                                      \
+  auto PublicName##Id() const->decltype(RawSymbol->PrivateName##Id()) {        \
     return RawSymbol->PrivateName##Id();                                       \
   }                                                                            \
   std::unique_ptr<ConcreteType> PublicName() const {                           \
@@ -42,6 +44,7 @@ class StringRef;
 class raw_ostream;
 
 namespace pdb {
+class IPDBRawSymbol;
 class IPDBSession;
 
 #define DECLARE_PDB_SYMBOL_CONCRETE_TYPE(TagValue)                             \
@@ -128,7 +131,7 @@ public:
     auto BaseIter = RawSymbol->findChildren(T::Tag);
     if (!BaseIter)
       return nullptr;
-    return std::make_unique<ConcreteSymbolEnumerator<T>>(std::move(BaseIter));
+    return llvm::make_unique<ConcreteSymbolEnumerator<T>>(std::move(BaseIter));
   }
   std::unique_ptr<IPDBEnumSymbols> findAllChildren(PDB_SymType Type) const;
   std::unique_ptr<IPDBEnumSymbols> findAllChildren() const;
@@ -140,14 +143,7 @@ public:
                                                      StringRef Name,
                                                      PDB_NameSearchFlags Flags,
                                                      uint32_t RVA) const;
-  std::unique_ptr<IPDBEnumSymbols> findInlineFramesByVA(uint64_t VA) const;
   std::unique_ptr<IPDBEnumSymbols> findInlineFramesByRVA(uint32_t RVA) const;
-  std::unique_ptr<IPDBEnumLineNumbers>
-  findInlineeLinesByVA(uint64_t VA, uint32_t Length) const;
-  std::unique_ptr<IPDBEnumLineNumbers>
-  findInlineeLinesByRVA(uint32_t RVA, uint32_t Length) const;
-
-  std::string getName() const;
 
   const IPDBRawSymbol &getRawSymbol() const { return *RawSymbol; }
   IPDBRawSymbol &getRawSymbol() { return *RawSymbol; }

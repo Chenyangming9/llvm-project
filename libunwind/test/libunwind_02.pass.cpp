@@ -32,8 +32,7 @@ int test(int i) {
   }
 }
 
-int main(int, char**) {
+int main() {
   int total = test(50);
   assert(total == 1275);
-  return 0;
 }

@@ -17,47 +17,48 @@
 
 using namespace llvm;
 
-static void ComputeNumbering(const Function *F,
-                             DenseMap<const Value *, unsigned> &Numbering) {
+static void ComputeNumbering(Function *F, DenseMap<Value*,unsigned> &Numbering){
   unsigned IN = 0;
 
   // Arguments get the first numbers.
-  for (const auto &Arg : F->args())
-    if (!Arg.hasName())
-      Numbering[&Arg] = IN++;
+  for (Function::arg_iterator
+         AI = F->arg_begin(), AE = F->arg_end(); AI != AE; ++AI)
+    if (!AI->hasName())
+      Numbering[&*AI] = IN++;
 
   // Walk the basic blocks in order.
-  for (const auto &Func : *F) {
-    if (!Func.hasName())
-      Numbering[&Func] = IN++;
+  for (Function::iterator FI = F->begin(), FE = F->end(); FI != FE; ++FI) {
+    if (!FI->hasName())
+      Numbering[&*FI] = IN++;
 
     // Walk the instructions in order.
-    for (const auto &BB : Func)
+    for (BasicBlock::iterator BI = FI->begin(), BE = FI->end(); BI != BE; ++BI)
       // void instructions don't get numbers.
-      if (!BB.hasName() && !BB.getType()->isVoidTy())
-        Numbering[&BB] = IN++;
+      if (!BI->hasName() && !BI->getType()->isVoidTy())
+        Numbering[&*BI] = IN++;
   }
 
   assert(!Numbering.empty() && "asked for numbering but numbering was no-op");
 }
 
+
 void Consumer::anchor() { }
 
-void DiffConsumer::printValue(const Value *V, bool isL) {
+void DiffConsumer::printValue(Value *V, bool isL) {
   if (V->hasName()) {
     out << (isa<GlobalValue>(V) ? '@' : '%') << V->getName();
     return;
   }
   if (V->getType()->isVoidTy()) {
-    if (auto *SI = dyn_cast<StoreInst>(V)) {
+    if (isa<StoreInst>(V)) {
       out << "store to ";
-      printValue(SI->getPointerOperand(), isL);
-    } else if (auto *CI = dyn_cast<CallInst>(V)) {
+      printValue(cast<StoreInst>(V)->getPointerOperand(), isL);
+    } else if (isa<CallInst>(V)) {
       out << "call to ";
-      printValue(CI->getCalledOperand(), isL);
-    } else if (auto *II = dyn_cast<InvokeInst>(V)) {
+      printValue(cast<CallInst>(V)->getCalledValue(), isL);
+    } else if (isa<InvokeInst>(V)) {
       out << "invoke to ";
-      printValue(II->getCalledOperand(), isL);
+      printValue(cast<InvokeInst>(V)->getCalledValue(), isL);
     } else {
       out << *V;
     }
@@ -98,16 +99,16 @@ void DiffConsumer::header() {
       // Extra newline between functions.
       if (Differences) out << "\n";
 
-      const Function *L = cast<Function>(I->L);
-      const Function *R = cast<Function>(I->R);
+      Function *L = cast<Function>(I->L);
+      Function *R = cast<Function>(I->R);
       if (L->getName() != R->getName())
         out << "in function " << L->getName()
             << " / " << R->getName() << ":\n";
       else
         out << "in function " << L->getName() << ":\n";
     } else if (isa<BasicBlock>(I->L)) {
-      const BasicBlock *L = cast<BasicBlock>(I->L);
-      const BasicBlock *R = cast<BasicBlock>(I->R);
+      BasicBlock *L = cast<BasicBlock>(I->L);
+      BasicBlock *R = cast<BasicBlock>(I->R);
       if (L->hasName() && R->hasName() && L->getName() == R->getName())
         out << "  in block %" << L->getName() << ":\n";
       else {
@@ -138,7 +139,7 @@ bool DiffConsumer::hadDifferences() const {
   return Differences;
 }
 
-void DiffConsumer::enterContext(const Value *L, const Value *R) {
+void DiffConsumer::enterContext(Value *L, Value *R) {
   contexts.push_back(DiffContext(L, R));
   Indent += 2;
 }

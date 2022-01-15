@@ -1,13 +1,10 @@
-// RUN: not llvm-mc -arch=amdgcn %s 2>&1 | FileCheck -check-prefix=GCN --implicit-check-not=error: %s
-// RUN: not llvm-mc -arch=amdgcn -mcpu=tonga %s 2>&1 | FileCheck -check-prefix=GCN --implicit-check-not=error: %s
+// RUN: not llvm-mc -arch=amdgcn -show-encoding %s 2>&1 | FileCheck -check-prefix=GCN %s
+// RUN: not llvm-mc -arch=amdgcn -mcpu=tonga -show-encoding %s 2>&1 | FileCheck -check-prefix=GCN %s
 
 exp mrt8 v3, v2, v1, v0
 // GCN: :5: error: invalid exp target
 
 exp pos4 v3, v2, v1, v0
-// GCN: :5: error: exp target is not supported on this GPU
-
-exp pos5 v3, v2, v1, v0
 // GCN: :5: error: invalid exp target
 
 exp param32 v3, v2, v1, v0
@@ -26,37 +23,28 @@ exp invalid_target_11 v3, v2, v1, v0 done
 // GCN: :5: error: invalid exp target
 
 exp mrt-1 v3, v2, v1, v0
-// GCN: :5: error: invalid exp target
+// GCN: :5: error: failed parsing operand
 
 exp mrtX v3, v2, v1, v0
-// GCN: :5: error: invalid exp target
+// GCN: :5: error: failed parsing operand
 
 exp pos-1 v3, v2, v1, v0
-// GCN: :5: error: invalid exp target
+// GCN: :5: error: failed parsing operand
 
 exp posX v3, v2, v1, v0
-// GCN: :5: error: invalid exp target
+// GCN: :5: error: failed parsing operand
 
 exp param-1 v3, v2, v1, v0
-// GCN: :5: error: invalid exp target
+// GCN: :5: error: failed parsing operand
 
 exp paramX v3, v2, v1, v0
-// GCN: :5: error: invalid exp target
+// GCN: :5: error: failed parsing operand
 
 exp invalid_target_-1 v3, v2, v1, v0
-// GCN: :5: error: invalid exp target
+// GCN: :5: error: failed parsing operand
 
 exp invalid_target_X v3, v2, v1, v0
-// GCN: :5: error: invalid exp target
-
-exp 0 v3, v2, v1, v0
-// GCN: :5: error: invalid operand for instruction
-
-exp , v3, v2, v1, v0
-// GCN: :5: error: unknown token in expression
-
-exp
-// GCN: :1: error: too few operands for instruction
+// GCN: :5: error: failed parsing operand
 
 exp mrt0 s0, v0, v0, v0
 // GCN: 10: error: invalid operand for instruction

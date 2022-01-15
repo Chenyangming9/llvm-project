@@ -10,9 +10,8 @@
 
 using namespace llvm;
 
-MCWasmObjectTargetWriter::MCWasmObjectTargetWriter(bool Is64Bit,
-                                                   bool IsEmscripten)
-    : Is64Bit(Is64Bit), IsEmscripten(IsEmscripten) {}
+MCWasmObjectTargetWriter::MCWasmObjectTargetWriter(bool Is64Bit)
+    : Is64Bit(Is64Bit) {}
 
 // Pin the vtable to this object file
 MCWasmObjectTargetWriter::~MCWasmObjectTargetWriter() = default;

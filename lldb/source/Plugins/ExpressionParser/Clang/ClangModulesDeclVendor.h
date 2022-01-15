@@ -6,29 +6,25 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGMODULESDECLVENDOR_H
-#define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGMODULESDECLVENDOR_H
+#ifndef liblldb_ClangModulesDeclVendor_h
+#define liblldb_ClangModulesDeclVendor_h
 
+#include "lldb/Core/ClangForward.h"
+#include "lldb/Symbol/DeclVendor.h"
 #include "lldb/Symbol/SourceModule.h"
 #include "lldb/Target/Platform.h"
-
-#include "Plugins/ExpressionParser/Clang/ClangDeclVendor.h"
 
 #include <set>
 #include <vector>
 
 namespace lldb_private {
 
-class ClangModulesDeclVendor : public ClangDeclVendor {
+class ClangModulesDeclVendor : public DeclVendor {
 public:
   // Constructors and Destructors
   ClangModulesDeclVendor();
 
   ~ClangModulesDeclVendor() override;
-
-  static bool classof(const DeclVendor *vendor) {
-    return vendor->GetKind() == eClangModuleDeclVendor;
-  }
 
   static ClangModulesDeclVendor *Create(Target &target);
 
@@ -90,13 +86,13 @@ public:
   ///     if module A #defines a macro and module B #undefs it.
   ///
   /// \param[in] handler
-  ///     A function to call with the identifier of this macro and the text of
-  ///     each #define (including the #define directive). #undef directives are
-  ///     not included; we simply elide any corresponding #define. If this
-  ///     function returns true, we stop the iteration immediately.
-  virtual void ForEachMacro(
-      const ModuleVector &modules,
-      std::function<bool(llvm::StringRef, llvm::StringRef)> handler) = 0;
+  ///     A function to call with the text of each #define (including the
+  ///     #define directive).  #undef directives are not included; we simply
+  ///     elide any corresponding #define.  If this function returns true,
+  ///     we stop the iteration immediately.
+  virtual void
+  ForEachMacro(const ModuleVector &modules,
+               std::function<bool(const std::string &)> handler) = 0;
 
   /// Query whether Clang supports modules for a particular language.
   /// LLDB uses this to decide whether to try to find the modules loaded
@@ -112,4 +108,4 @@ public:
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGMODULESDECLVENDOR_H
+#endif // liblldb_ClangModulesDeclVendor_h

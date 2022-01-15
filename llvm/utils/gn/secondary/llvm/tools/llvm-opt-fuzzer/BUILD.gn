@@ -25,5 +25,7 @@ fuzzer("llvm-opt-fuzzer") {
     "//llvm/lib/Transforms/Vectorize",
   ]
   dummy_main = "DummyOptFuzzer.cpp"
-  sources = [ "llvm-opt-fuzzer.cpp" ]
+  sources = [
+    "llvm-opt-fuzzer.cpp",
+  ]
 }

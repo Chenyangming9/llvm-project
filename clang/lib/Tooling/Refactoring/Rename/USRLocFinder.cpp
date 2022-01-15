@@ -15,13 +15,12 @@
 
 #include "clang/Tooling/Refactoring/Rename/USRLocFinder.h"
 #include "clang/AST/ASTContext.h"
-#include "clang/AST/ParentMapContext.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
-#include "clang/Tooling/Refactoring/Lookup.h"
+#include "clang/Tooling/Core/Lookup.h"
 #include "clang/Tooling/Refactoring/RecursiveSymbolVisitor.h"
 #include "clang/Tooling/Refactoring/Rename/SymbolName.h"
 #include "clang/Tooling/Refactoring/Rename/USRFinder.h"
@@ -222,24 +221,6 @@ public:
                             /*Context=*/nullptr,
                             /*Specifier=*/nullptr,
                             /*IgnorePrefixQualifiers=*/true});
-    }
-    return true;
-  }
-
-  bool VisitDesignatedInitExpr(const DesignatedInitExpr *E) {
-    for (const DesignatedInitExpr::Designator &D : E->designators()) {
-      if (D.isFieldDesignator() && D.getField()) {
-        const FieldDecl *Decl = D.getField();
-        if (isInUSRSet(Decl)) {
-          auto StartLoc = D.getFieldLoc();
-          auto EndLoc = D.getFieldLoc();
-          RenameInfos.push_back({StartLoc, EndLoc,
-                                 /*FromDecl=*/nullptr,
-                                 /*Context=*/nullptr,
-                                 /*Specifier=*/nullptr,
-                                 /*IgnorePrefixQualifiers=*/true});
-        }
-      }
     }
     return true;
   }
@@ -445,7 +426,8 @@ public:
               StartLoc,
               EndLoc,
               TemplateSpecType->getTemplateName().getAsTemplateDecl(),
-              getClosestAncestorDecl(DynTypedNode::create(TargetLoc)),
+              getClosestAncestorDecl(
+                  ast_type_traits::DynTypedNode::create(TargetLoc)),
               GetNestedNameForType(TargetLoc),
               /*IgnorePrefixQualifers=*/false};
           RenameInfos.push_back(Info);
@@ -484,7 +466,8 @@ private:
     // FIXME: figure out how to handle it when there are multiple parents.
     if (Parents.size() != 1)
       return nullptr;
-    if (ASTNodeKind::getFromNodeKind<Decl>().isBaseOf(Parents[0].getNodeKind()))
+    if (ast_type_traits::ASTNodeKind::getFromNodeKind<Decl>().isBaseOf(
+            Parents[0].getNodeKind()))
       return Parents[0].template get<Decl>();
     return getClosestAncestorDecl(Parents[0]);
   }
@@ -553,7 +536,7 @@ createRenameAtomicChanges(llvm::ArrayRef<std::string> USRs,
       // Get the name without prefix qualifiers from NewName.
       size_t LastColonPos = NewName.find_last_of(':');
       if (LastColonPos != std::string::npos)
-        ReplacedName = std::string(NewName.substr(LastColonPos + 1));
+        ReplacedName = NewName.substr(LastColonPos + 1);
     } else {
       if (RenameInfo.FromDecl && RenameInfo.Context) {
         if (!llvm::isa<clang::TranslationUnitDecl>(

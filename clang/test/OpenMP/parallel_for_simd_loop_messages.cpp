@@ -1,8 +1,6 @@
-// RUN: %clang_cc1 -fsyntax-only -fopenmp -fopenmp-version=45 -x c++ -std=c++11 -fexceptions -fcxx-exceptions -verify=expected,omp4 %s -Wuninitialized
-// RUN: %clang_cc1 -fsyntax-only -fopenmp -x c++ -std=c++11 -fexceptions -fcxx-exceptions -verify=expected,omp5 %s -Wuninitialized
+// RUN: %clang_cc1 -fsyntax-only -fopenmp -x c++ -std=c++11 -fexceptions -fcxx-exceptions -verify %s -Wuninitialized
 
-// RUN: %clang_cc1 -fsyntax-only -fopenmp-simd -fopenmp-version=45 -x c++ -std=c++11 -fexceptions -fcxx-exceptions -verify=expected,omp4 %s -Wuninitialized
-// RUN: %clang_cc1 -fsyntax-only -fopenmp-simd -x c++ -std=c++11 -fexceptions -fcxx-exceptions -verify=expected,omp5 %s -Wuninitialized
+// RUN: %clang_cc1 -fsyntax-only -fopenmp-simd -x c++ -std=c++11 -fexceptions -fcxx-exceptions -verify %s -Wuninitialized
 
 class S {
   int a;
@@ -94,28 +92,28 @@ int test_iteration_spaces() {
   for (((ii)) = 0; ii < 10; ++ii)
     c[ii] = a[ii];
 
-// omp4-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'i'}} omp5-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', '>=', or '!=') of loop variable 'i'}}
+// expected-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'i'}}
 #pragma omp parallel for simd
   for (int i = 0; i; i++)
     c[i] = a[i];
 
-// omp4-error@+3 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'i'}} omp5-error@+3 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', '>=', or '!=') of loop variable 'i'}}
+// expected-error@+3 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'i'}}
 // expected-error@+2 {{increment clause of OpenMP for loop must perform simple addition or subtraction on loop variable 'i'}}
 #pragma omp parallel for simd
   for (int i = 0; jj < kk; ii++)
     c[i] = a[i];
 
-// omp4-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'i'}} omp5-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', '>=', or '!=') of loop variable 'i'}}
+// expected-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'i'}}
 #pragma omp parallel for simd
   for (int i = 0; !!i; i++)
     c[i] = a[i];
 
-// omp4-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'i'}}
+// Ok
 #pragma omp parallel for simd
   for (int i = 0; i != 1; i++)
     c[i] = a[i];
 
-// omp4-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'i'}} omp5-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', '>=', or '!=') of loop variable 'i'}}
+// expected-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'i'}}
 #pragma omp parallel for simd
   for (int i = 0;; i++)
     c[i] = a[i];
@@ -251,14 +249,14 @@ int test_iteration_spaces() {
   for (ii = 0; ii < 10; ii++)
     c[ii] = a[ii];
 
-// omp4-note@+2 {{defined as private}}
-// omp4-error@+2 {{loop iteration variable in the associated loop of 'omp parallel for simd' directive may not be private, predetermined as linear}}
+// expected-note@+2 {{defined as private}}
+// expected-error@+2 {{loop iteration variable in the associated loop of 'omp parallel for simd' directive may not be private, predetermined as linear}}
 #pragma omp parallel for simd private(ii)
   for (ii = 0; ii < 10; ii++)
     c[ii] = a[ii];
 
-// omp4-note@+2 {{defined as lastprivate}}
-// omp4-error@+2 {{loop iteration variable in the associated loop of 'omp parallel for simd' directive may not be lastprivate, predetermined as linear}}
+// expected-note@+2 {{defined as lastprivate}}
+// expected-error@+2 {{loop iteration variable in the associated loop of 'omp parallel for simd' directive may not be lastprivate, predetermined as linear}}
 #pragma omp parallel for simd lastprivate(ii)
   for (ii = 0; ii < 10; ii++)
     c[ii] = a[ii];
@@ -283,7 +281,7 @@ int test_iteration_spaces() {
       c[globalii] += a[globalii] + ii;
   }
 
-// omp4-error@+2 {{statement after '#pragma omp parallel for simd' must be a for loop}}
+// expected-error@+2 {{statement after '#pragma omp parallel for simd' must be a for loop}}
 #pragma omp parallel for simd
   for (auto &item : a) {
     item = item + 1;
@@ -419,15 +417,15 @@ int test_with_random_access_iterator() {
 #pragma omp parallel for simd
   for (begin = end; begin < end; ++begin)
     ++begin;
-// omp4-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'I'}} omp5-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', '>=', or '!=') of loop variable 'I'}}
+// expected-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'I'}}
 #pragma omp parallel for simd
   for (GoodIter I = begin; I - I; ++I)
     ++I;
-// omp4-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'I'}} omp5-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', '>=', or '!=') of loop variable 'I'}}
+// expected-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'I'}}
 #pragma omp parallel for simd
   for (GoodIter I = begin; begin < end; ++I)
     ++I;
-// omp4-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'I'}} omp5-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', '>=', or '!=') of loop variable 'I'}}
+// expected-error@+2 {{condition of OpenMP for loop must be a relational comparison ('<', '<=', '>', or '>=') of loop variable 'I'}}
 #pragma omp parallel for simd
   for (GoodIter I = begin; !I; ++I)
     ++I;

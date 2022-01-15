@@ -6,15 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_UTILITY_VMRANGE_H
-#define LLDB_UTILITY_VMRANGE_H
+#ifndef liblldb_VMRange_h_
+#define liblldb_VMRange_h_
 
 #include "lldb/lldb-types.h"
-#include "llvm/Support/raw_ostream.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 #include <vector>
+
+namespace lldb_private {
+class Stream;
+}
 
 namespace lldb_private {
 
@@ -26,13 +29,13 @@ public:
   typedef collection::iterator iterator;
   typedef collection::const_iterator const_iterator;
 
-  VMRange() = default;
+  VMRange() : m_base_addr(0), m_byte_size(0) {}
 
   VMRange(lldb::addr_t start_addr, lldb::addr_t end_addr)
       : m_base_addr(start_addr),
         m_byte_size(end_addr > start_addr ? end_addr - start_addr : 0) {}
 
-  ~VMRange() = default;
+  ~VMRange() {}
 
   void Clear() {
     m_base_addr = 0;
@@ -78,7 +81,7 @@ public:
     return false;
   }
 
-  void Dump(llvm::raw_ostream &s, lldb::addr_t base_addr = 0,
+  void Dump(Stream *s, lldb::addr_t base_addr = 0,
             uint32_t addr_width = 8) const;
 
   static bool ContainsValue(const VMRange::collection &coll,
@@ -88,8 +91,8 @@ public:
                             const VMRange &range);
 
 protected:
-  lldb::addr_t m_base_addr = 0;
-  lldb::addr_t m_byte_size = 0;
+  lldb::addr_t m_base_addr;
+  lldb::addr_t m_byte_size;
 };
 
 bool operator==(const VMRange &lhs, const VMRange &rhs);
@@ -101,4 +104,4 @@ bool operator>=(const VMRange &lhs, const VMRange &rhs);
 
 } // namespace lldb_private
 
-#endif // LLDB_UTILITY_VMRANGE_H
+#endif // liblldb_VMRange_h_

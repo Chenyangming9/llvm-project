@@ -159,9 +159,6 @@ clang_InlineCommandComment_getRenderKind(CXComment CXC) {
 
   case InlineCommandComment::RenderEmphasized:
     return CXCommentInlineCommandRenderKind_Emphasized;
-
-  case InlineCommandComment::RenderAnchor:
-    return CXCommentInlineCommandRenderKind_Anchor;
   }
   llvm_unreachable("unknown InlineCommandComment::RenderKind");
 }

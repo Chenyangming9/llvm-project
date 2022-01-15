@@ -39,10 +39,9 @@ void NORETURN reportAllocationAlignmentNotPowerOfTwo(uptr Alignment) {
 }
 
 void NORETURN reportInvalidPosixMemalignAlignment(uptr Alignment) {
-  dieWithMessage(
-      "invalid alignment requested in posix_memalign: %zd, alignment"
+  dieWithMessage("invalid alignment requested in posix_memalign: %zd, alignment"
       " must be a power of two and a multiple of sizeof(void *) == %zd\n",
-      Alignment, sizeof(void *));
+      Alignment, sizeof(void *));  // NOLINT
 }
 
 void NORETURN reportInvalidAlignedAllocAlignment(uptr Size, uptr Alignment) {

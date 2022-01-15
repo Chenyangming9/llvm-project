@@ -1,3 +1,5 @@
 executable("count") {
-  sources = [ "count.c" ]
+  sources = [
+    "count.c",
+  ]
 }

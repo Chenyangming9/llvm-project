@@ -21,6 +21,7 @@ TEST(FSTests, PreambleStatusCache) {
   Files["y"] = "";
   Files["main"] = "";
   auto FS = buildTestFS(Files);
+  FS->setCurrentWorkingDirectory(testRoot());
 
   PreambleFileStatusCache StatCache(testPath("main"));
   auto ProduceFS = StatCache.getProducingFS(FS);

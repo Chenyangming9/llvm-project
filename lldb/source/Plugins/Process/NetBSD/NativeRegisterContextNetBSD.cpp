@@ -1,4 +1,4 @@
-//===-- NativeRegisterContextNetBSD.cpp -----------------------------------===//
+//===-- NativeRegisterContextNetBSD.cpp -------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,8 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "NativeRegisterContextNetBSD.h"
-
-#include "Plugins/Process/NetBSD/NativeProcessNetBSD.h"
 
 #include "lldb/Host/common/NativeProcessProtocol.h"
 
@@ -19,6 +17,12 @@ using namespace lldb_private::process_netbsd;
 #include <sys/types.h>
 #include <sys/ptrace.h>
 // clang-format on
+
+NativeRegisterContextNetBSD::NativeRegisterContextNetBSD(
+    NativeThreadProtocol &native_thread,
+    RegisterInfoInterface *reg_info_interface_p)
+    : NativeRegisterContextRegisterInfo(native_thread,
+                                        reg_info_interface_p) {}
 
 Status NativeRegisterContextNetBSD::DoRegisterSet(int ptrace_req, void *buf) {
   return NativeProcessNetBSD::PtraceWrapper(ptrace_req, GetProcessPid(), buf,

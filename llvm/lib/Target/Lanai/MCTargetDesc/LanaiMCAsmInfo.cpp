@@ -18,8 +18,7 @@ using namespace llvm;
 
 void LanaiMCAsmInfo::anchor() {}
 
-LanaiMCAsmInfo::LanaiMCAsmInfo(const Triple & /*TheTriple*/,
-                               const MCTargetOptions &Options) {
+LanaiMCAsmInfo::LanaiMCAsmInfo(const Triple & /*TheTriple*/) {
   IsLittleEndian = false;
   PrivateGlobalPrefix = ".L";
   WeakRefDirective = "\t.weak\t";
@@ -27,6 +26,9 @@ LanaiMCAsmInfo::LanaiMCAsmInfo(const Triple & /*TheTriple*/,
 
   // Lanai assembly requires ".section" before ".bss"
   UsesELFSectionDirectiveForBSS = true;
+
+  // Use the integrated assembler instead of system one.
+  UseIntegratedAssembler = true;
 
   // Use '!' as comment string to correspond with old toolchain.
   CommentString = "!";

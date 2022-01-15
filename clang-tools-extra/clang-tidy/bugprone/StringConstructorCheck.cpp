@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "StringConstructorCheck.h"
-#include "../utils/OptionsUtils.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Tooling/FixIt.h"
@@ -22,39 +21,23 @@ namespace {
 AST_MATCHER_P(IntegerLiteral, isBiggerThan, unsigned, N) {
   return Node.getValue().getZExtValue() > N;
 }
-
-const char DefaultStringNames[] =
-    "::std::basic_string;::std::basic_string_view";
-
-static std::vector<StringRef>
-removeNamespaces(const std::vector<std::string> &Names) {
-  std::vector<StringRef> Result;
-  Result.reserve(Names.size());
-  for (StringRef Name : Names) {
-    std::string::size_type ColonPos = Name.rfind(':');
-    Result.push_back(
-        Name.substr(ColonPos == std::string::npos ? 0 : ColonPos + 1));
-  }
-  return Result;
-}
-
 } // namespace
 
 StringConstructorCheck::StringConstructorCheck(StringRef Name,
                                                ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      WarnOnLargeLength(Options.get("WarnOnLargeLength", true)),
-      LargeLengthThreshold(Options.get("LargeLengthThreshold", 0x800000)),
-      StringNames(utils::options::parseStringList(
-          Options.get("StringNames", DefaultStringNames))) {}
+      WarnOnLargeLength(Options.get("WarnOnLargeLength", 1) != 0),
+      LargeLengthThreshold(Options.get("LargeLengthThreshold", 0x800000)) {}
 
 void StringConstructorCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "WarnOnLargeLength", WarnOnLargeLength);
   Options.store(Opts, "LargeLengthThreshold", LargeLengthThreshold);
-  Options.store(Opts, "StringNames", DefaultStringNames);
 }
 
 void StringConstructorCheck::registerMatchers(MatchFinder *Finder) {
+  if (!getLangOpts().CPlusPlus)
+    return;
+
   const auto ZeroExpr = expr(ignoringParenImpCasts(integerLiteral(equals(0))));
   const auto CharExpr = expr(ignoringParenImpCasts(characterLiteral()));
   const auto NegativeExpr = expr(ignoringParenImpCasts(
@@ -100,8 +83,7 @@ void StringConstructorCheck::registerMatchers(MatchFinder *Finder) {
   // parameters. [i.e. string (const char* s, size_t n);]
   Finder->addMatcher(
       cxxConstructExpr(
-          hasDeclaration(cxxConstructorDecl(ofClass(
-              cxxRecordDecl(hasAnyName(removeNamespaces(StringNames)))))),
+          hasDeclaration(cxxMethodDecl(hasName("basic_string"))),
           hasArgument(0, hasType(CharPtrType)),
           hasArgument(1, hasType(isInteger())),
           anyOf(
@@ -121,17 +103,10 @@ void StringConstructorCheck::registerMatchers(MatchFinder *Finder) {
   // Check the literal string constructor with char pointer.
   // [i.e. string (const char* s);]
   Finder->addMatcher(
-      traverse(TK_AsIs,
-               cxxConstructExpr(
-                   hasDeclaration(cxxConstructorDecl(ofClass(cxxRecordDecl(
-                       hasAnyName(removeNamespaces(StringNames)))))),
-                   hasArgument(0, expr().bind("from-ptr")),
-                   // do not match std::string(ptr, int)
-                   // match std::string(ptr, alloc)
-                   // match std::string(ptr)
-                   anyOf(hasArgument(1, unless(hasType(isInteger()))),
-                         argumentCountIs(1)))
-                   .bind("constructor")),
+      cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("basic_string"))),
+                       hasArgument(0, expr().bind("from-ptr")),
+                       hasArgument(1, unless(hasType(isInteger()))))
+          .bind("constructor"),
       this);
 }
 

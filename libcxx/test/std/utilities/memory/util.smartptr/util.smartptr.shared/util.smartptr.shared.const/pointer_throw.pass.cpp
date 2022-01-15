@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: no-exceptions
+// UNSUPPORTED: libcpp-no-exceptions
 // UNSUPPORTED: sanitizer-new-delete
 
 // <memory>
@@ -19,7 +19,7 @@
 #include <cstdlib>
 #include <cassert>
 
-#include "count_new.h"
+#include "count_new.hpp"
 
 #include "test_macros.h"
 
@@ -37,7 +37,6 @@ int A::count = 0;
 
 int main(int, char**)
 {
-    globalMemCounter.reset();
     A* ptr = new A;
     assert(A::count == 1);
     globalMemCounter.throw_after = 0;

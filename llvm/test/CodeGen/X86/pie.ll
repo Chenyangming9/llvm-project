@@ -10,11 +10,11 @@
 ; CHECK:  call{{l|q}}  internal_foo{{$}}
 ; CHECK:  call{{l|q}}  ext_baz@PLT
 
-define weak dso_local void @weak_foo() {
+define weak void @weak_foo() {
   ret void
 }
 
-define weak_odr dso_local void @weak_odr_foo() {
+define weak_odr void @weak_odr_foo() {
   ret void
 }
 
@@ -24,11 +24,11 @@ define internal void @internal_foo() {
 
 declare i32 @ext_baz()
 
-define dso_local void @foo() {
+define void @foo() {
   ret void
 }
 
-define dso_local void @bar() {
+define void @bar() {
 entry:
   call void @foo()
   call void @weak_odr_foo()

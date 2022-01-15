@@ -13,6 +13,8 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Regex.h"
+#include <fstream>
+#include <streambuf>
 #include <string>
 
 const char *IndexFilename;
@@ -32,15 +34,9 @@ std::unique_ptr<SymbolIndex> buildDex() {
 
 // Reads JSON array of serialized FuzzyFindRequest's from user-provided file.
 std::vector<FuzzyFindRequest> extractQueriesFromLogs() {
-
-  auto Buffer = llvm::MemoryBuffer::getFile(RequestsFilename);
-  if (!Buffer) {
-    llvm::errs() << "Error cannot open JSON request file:" << RequestsFilename
-                 << ": " << Buffer.getError().message() << "\n";
-    exit(1);
-  }
-
-  StringRef Log = Buffer.get()->getBuffer();
+  std::ifstream InputStream(RequestsFilename);
+  std::string Log((std::istreambuf_iterator<char>(InputStream)),
+                  std::istreambuf_iterator<char>());
 
   std::vector<FuzzyFindRequest> Requests;
   auto JSONArray = llvm::json::parse(Log);
@@ -60,10 +56,8 @@ std::vector<FuzzyFindRequest> extractQueriesFromLogs() {
   for (const auto &Item : *JSONArray->getAsArray()) {
     FuzzyFindRequest Request;
     // Panic if the provided file couldn't be parsed.
-    llvm::json::Path::Root Root("FuzzyFindRequest");
-    if (!fromJSON(Item, Request, Root)) {
-      llvm::errs() << llvm::toString(Root.getError()) << "\n";
-      Root.printErrorContext(Item, llvm::errs());
+    if (!fromJSON(Item, Request)) {
+      llvm::errs() << "Error when deserializing request: " << Item << '\n';
       exit(1);
     }
     Requests.push_back(Request);
@@ -89,12 +83,6 @@ static void DexQueries(benchmark::State &State) {
 }
 BENCHMARK(DexQueries);
 
-static void DexBuild(benchmark::State &State) {
-  for (auto _ : State)
-    buildDex();
-}
-BENCHMARK(DexBuild);
-
 } // namespace
 } // namespace clangd
 } // namespace clang
@@ -106,7 +94,7 @@ BENCHMARK(DexBuild);
 int main(int argc, char *argv[]) {
   if (argc < 3) {
     llvm::errs() << "Usage: " << argv[0]
-                 << " global-symbol-index.dex requests.json "
+                 << " global-symbol-index.yaml requests.json "
                     "BENCHMARK_OPTIONS...\n";
     return -1;
   }

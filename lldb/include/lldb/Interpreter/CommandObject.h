@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_COMMANDOBJECT_H
-#define LLDB_INTERPRETER_COMMANDOBJECT_H
+#ifndef liblldb_CommandObject_h_
+#define liblldb_CommandObject_h_
 
 #include <map>
 #include <string>
@@ -40,7 +40,7 @@ int AddNamesMatchingPartialString(
   const bool add_all = cmd_str.empty();
 
   for (auto iter = in_map.begin(), end = in_map.end(); iter != end; iter++) {
-    if (add_all || (iter->first.find(std::string(cmd_str), 0) == 0)) {
+    if (add_all || (iter->first.find(cmd_str, 0) == 0)) {
       ++number_added;
       matches.AppendString(iter->first.c_str());
       if (descriptions)
@@ -90,15 +90,14 @@ public:
   {
     lldb::CommandArgumentType arg_type;
     ArgumentRepetitionType arg_repetition;
-    /// This arg might be associated only with some particular option set(s). By
-    /// default the arg associates to all option sets.
-    uint32_t arg_opt_set_association;
-
-    CommandArgumentData(lldb::CommandArgumentType type = lldb::eArgTypeNone,
-                        ArgumentRepetitionType repetition = eArgRepeatPlain,
-                        uint32_t opt_set = LLDB_OPT_SET_ALL)
-        : arg_type(type), arg_repetition(repetition),
-          arg_opt_set_association(opt_set) {}
+    uint32_t arg_opt_set_association; // This arg might be associated only with
+                                      // some particular option set(s).
+    CommandArgumentData()
+        : arg_type(lldb::eArgTypeNone), arg_repetition(eArgRepeatPlain),
+          arg_opt_set_association(LLDB_OPT_SET_ALL) // By default, the arg
+                                                    // associates to all option
+                                                    // sets.
+    {}
   };
 
   typedef std::vector<CommandArgumentData>
@@ -113,7 +112,7 @@ public:
     llvm::StringRef help = "", llvm::StringRef syntax = "",
                 uint32_t flags = 0);
 
-  virtual ~CommandObject() = default;
+  virtual ~CommandObject();
 
   static const char *
   GetArgumentTypeAsCString(const lldb::CommandArgumentType arg_type);
@@ -227,20 +226,38 @@ public:
   /// option. Don't override this method, override HandleArgumentCompletion
   /// instead unless you have special reasons.
   ///
-  /// \param[in,out] request
+  /// \param[in/out] request
   ///    The completion request that needs to be answered.
-  virtual void HandleCompletion(CompletionRequest &request);
-
-  /// The input array contains a parsed version of the line.
   ///
+  /// FIXME: This is the wrong return value, since we also need to make a
+  /// distinction between
+  /// total number of matches, and the window the user wants returned.
+  ///
+  /// \return
+  ///     \btrue if we were in an option, \bfalse otherwise.
+  virtual int HandleCompletion(CompletionRequest &request);
+
+  /// The input array contains a parsed version of the line.  The insertion
+  /// point is given by cursor_index (the index in input of the word containing
+  /// the cursor) and cursor_char_position (the position of the cursor in that
+  /// word.)
   /// We've constructed the map of options and their arguments as well if that
   /// is helpful for the completion.
   ///
-  /// \param[in,out] request
+  /// \param[in/out] request
   ///    The completion request that needs to be answered.
-  virtual void
+  ///
+  /// FIXME: This is the wrong return value, since we also need to make a
+  /// distinction between
+  /// total number of matches, and the window the user wants returned.
+  ///
+  /// \return
+  ///     The number of completions.
+  virtual int
   HandleArgumentCompletion(CompletionRequest &request,
-                           OptionElementVector &opt_element_vector) {}
+                           OptionElementVector &opt_element_vector) {
+    return 0;
+  }
 
   bool HelpTextContainsWord(llvm::StringRef search_word,
                             bool search_short_help = true,
@@ -262,8 +279,8 @@ public:
 
   /// Get the command that appropriate for a "repeat" of the current command.
   ///
-  /// \param[in] current_command_args
-  ///    The command arguments.
+  /// \param[in] current_command_line
+  ///    The complete current command line.
   ///
   /// \return
   ///     nullptr if there is no special repeat command - it will use the
@@ -331,9 +348,8 @@ protected:
   // This is for use in the command interpreter, when you either want the
   // selected target, or if no target is present you want to prime the dummy
   // target with entities that will be copied over to new targets.
-  Target &GetSelectedOrDummyTarget(bool prefer_dummy = false);
-  Target &GetSelectedTarget();
-  Target &GetDummyTarget();
+  Target *GetSelectedOrDummyTarget(bool prefer_dummy = false);
+  Target *GetDummyTarget();
 
   // If a command needs to use the "current" thread, use this call. Command
   // objects will have an ExecutionContext to use, and that may or may not have
@@ -412,4 +428,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_COMMANDOBJECT_H
+#endif // liblldb_CommandObject_h_

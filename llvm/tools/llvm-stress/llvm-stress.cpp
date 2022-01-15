@@ -38,7 +38,8 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/ManagedStatic.h"
+#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -52,20 +53,16 @@
 
 namespace llvm {
 
-static cl::OptionCategory StressCategory("Stress Options");
+static cl::opt<unsigned> SeedCL("seed",
+  cl::desc("Seed used for randomness"), cl::init(0));
 
-static cl::opt<unsigned> SeedCL("seed", cl::desc("Seed used for randomness"),
-                                cl::init(0), cl::cat(StressCategory));
+static cl::opt<unsigned> SizeCL("size",
+  cl::desc("The estimated size of the generated function (# of instrs)"),
+  cl::init(100));
 
-static cl::opt<unsigned> SizeCL(
-    "size",
-    cl::desc("The estimated size of the generated function (# of instrs)"),
-    cl::init(100), cl::cat(StressCategory));
-
-static cl::opt<std::string> OutputFilename("o",
-                                           cl::desc("Override output filename"),
-                                           cl::value_desc("filename"),
-                                           cl::cat(StressCategory));
+static cl::opt<std::string>
+OutputFilename("o", cl::desc("Override output filename"),
+               cl::value_desc("filename"));
 
 static LLVMContext Context;
 
@@ -241,7 +238,7 @@ protected:
         return ConstantFP::getAllOnesValue(Tp);
       return ConstantFP::getNullValue(Tp);
     } else if (Tp->isVectorTy()) {
-      auto *VTp = cast<FixedVectorType>(Tp);
+      VectorType *VTp = cast<VectorType>(Tp);
 
       std::vector<Constant*> TempValues;
       TempValues.reserve(VTp->getNumElements());
@@ -303,7 +300,7 @@ protected:
 
     if (len != (unsigned)-1)
       width = len;
-    return FixedVectorType::get(Ty, width);
+    return VectorType::get(Ty, width);
   }
 
   /// Pick a random scalar type.
@@ -319,7 +316,8 @@ protected:
         Type::getFloatTy(Context),
         Type::getDoubleTy(Context)
       });
-      llvm::append_range(ScalarTypes, AdditionalScalarTypes);
+      ScalarTypes.insert(ScalarTypes.end(),
+        AdditionalScalarTypes.begin(), AdditionalScalarTypes.end());
     }
 
     return ScalarTypes[getRandom() % ScalarTypes.size()];
@@ -345,9 +343,7 @@ struct LoadModifier: public Modifier {
   void Act() override {
     // Try to use predefined pointers. If non-exist, use undef pointer value;
     Value *Ptr = getRandomPointerValue();
-    PointerType *Tp = cast<PointerType>(Ptr->getType());
-    Value *V = new LoadInst(Tp->getElementType(), Ptr, "L",
-                            BB->getTerminator());
+    Value *V = new LoadInst(Ptr, "L", BB->getTerminator());
     PT->push_back(V);
   }
 };
@@ -485,13 +481,10 @@ struct ExtractElementModifier: public Modifier {
 
   void Act() override {
     Value *Val0 = getRandomVectorValue();
-    Value *V = ExtractElementInst::Create(
-        Val0,
-        ConstantInt::get(
-            Type::getInt32Ty(BB->getContext()),
-            getRandom() %
-                cast<FixedVectorType>(Val0->getType())->getNumElements()),
-        "E", BB->getTerminator());
+    Value *V = ExtractElementInst::Create(Val0,
+             ConstantInt::get(Type::getInt32Ty(BB->getContext()),
+             getRandom() % cast<VectorType>(Val0->getType())->getNumElements()),
+             "E", BB->getTerminator());
     return PT->push_back(V);
   }
 };
@@ -504,7 +497,7 @@ struct ShuffModifier: public Modifier {
     Value *Val0 = getRandomVectorValue();
     Value *Val1 = getRandomValue(Val0->getType());
 
-    unsigned Width = cast<FixedVectorType>(Val0->getType())->getNumElements();
+    unsigned Width = cast<VectorType>(Val0->getType())->getNumElements();
     std::vector<Constant*> Idxs;
 
     Type *I32 = Type::getInt32Ty(BB->getContext());
@@ -532,13 +525,10 @@ struct InsertElementModifier: public Modifier {
     Value *Val0 = getRandomVectorValue();
     Value *Val1 = getRandomValue(Val0->getType()->getScalarType());
 
-    Value *V = InsertElementInst::Create(
-        Val0, Val1,
-        ConstantInt::get(
-            Type::getInt32Ty(BB->getContext()),
-            getRandom() %
-                cast<FixedVectorType>(Val0->getType())->getNumElements()),
-        "I", BB->getTerminator());
+    Value *V = InsertElementInst::Create(Val0, Val1,
+              ConstantInt::get(Type::getInt32Ty(BB->getContext()),
+              getRandom() % cast<VectorType>(Val0->getType())->getNumElements()),
+              "I",  BB->getTerminator());
     return PT->push_back(V);
   }
 };
@@ -554,7 +544,7 @@ struct CastModifier: public Modifier {
 
     // Handle vector casts vectors.
     if (VTy->isVectorTy()) {
-      auto *VecTy = cast<FixedVectorType>(VTy);
+      VectorType *VecTy = cast<VectorType>(VTy);
       DestTy = pickVectorType(VecTy->getNumElements());
     }
 
@@ -636,10 +626,9 @@ struct SelectModifier: public Modifier {
 
     // If the value type is a vector, and we allow vector select, then in 50%
     // of the cases generate a vector select.
-    if (isa<FixedVectorType>(Val0->getType()) && (getRandom() & 1)) {
-      unsigned NumElem =
-          cast<FixedVectorType>(Val0->getType())->getNumElements();
-      CondTy = FixedVectorType::get(CondTy, NumElem);
+    if (Val0->getType()->isVectorTy() && (getRandom() % 1)) {
+      unsigned NumElem = cast<VectorType>(Val0->getType())->getNumElements();
+      CondTy = VectorType::get(CondTy, NumElem);
     }
 
     Value *Cond = getRandomValue(CondTy);
@@ -722,7 +711,7 @@ static void IntroduceControlFlow(Function *F, Random &R) {
       BoolInst.push_back(&Instr);
   }
 
-  llvm::shuffle(BoolInst.begin(), BoolInst.end(), R);
+  std::shuffle(BoolInst.begin(), BoolInst.end(), R);
 
   for (auto *Instr : BoolInst) {
     BasicBlock *Curr = Instr->getParent();
@@ -741,11 +730,12 @@ static void IntroduceControlFlow(Function *F, Random &R) {
 int main(int argc, char **argv) {
   using namespace llvm;
 
-  InitLLVM X(argc, argv);
-  cl::HideUnrelatedOptions({&StressCategory, &getColorCategory()});
+  // Init LLVM, call llvm_shutdown() on exit, parse args, etc.
+  PrettyStackTraceProgram X(argc, argv);
   cl::ParseCommandLineOptions(argc, argv, "llvm codegen stress-tester\n");
+  llvm_shutdown_obj Y;
 
-  auto M = std::make_unique<Module>("/tmp/autogen.bc", Context);
+  auto M = llvm::make_unique<Module>("/tmp/autogen.bc", Context);
   Function *F = GenEmptyFunction(M.get());
 
   // Pick an initial seed value
@@ -762,7 +752,7 @@ int main(int argc, char **argv) {
     OutputFilename = "-";
 
   std::error_code EC;
-  Out.reset(new ToolOutputFile(OutputFilename, EC, sys::fs::OF_None));
+  Out.reset(new ToolOutputFile(OutputFilename, EC, sys::fs::F_None));
   if (EC) {
     errs() << EC.message() << '\n';
     return 1;

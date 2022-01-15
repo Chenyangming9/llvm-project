@@ -19,7 +19,6 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
-#include "llvm/InitializePasses.h"
 #include "isl/isl-noexceptions.h"
 #include "isl/union_map.h"
 #include <cassert>
@@ -121,7 +120,7 @@ static bool isDimBoundedByConstant(isl::set Set, unsigned dim) {
   auto ParamDims = Set.dim(isl::dim::param);
   Set = Set.project_out(isl::dim::param, 0, ParamDims);
   Set = Set.project_out(isl::dim::set, 0, dim);
-  auto SetDims = Set.tuple_dim();
+  auto SetDims = Set.dim(isl::dim::set);
   Set = Set.project_out(isl::dim::set, 1, SetDims - 1);
   return bool(Set.is_bounded());
 }
@@ -136,7 +135,7 @@ isl::union_map MaximalStaticExpander::filterDependences(
   auto AccessDomainSet = MA->getAccessRelation().domain();
   auto AccessDomainId = AccessDomainSet.get_tuple_id();
 
-  isl::union_map MapDependences = isl::union_map::empty(S.getIslCtx());
+  isl::union_map MapDependences = isl::union_map::empty(S.getParamSpace());
 
   for (isl::map Map : Dependences.get_map_list()) {
     // Filter out Statement to Statement dependences.
@@ -161,7 +160,7 @@ isl::union_map MaximalStaticExpander::filterDependences(
       continue;
 
     // Add the corresponding map to MapDependences.
-    MapDependences = MapDependences.unite(NewMap);
+    MapDependences = MapDependences.add_map(NewMap);
   }
 
   return MapDependences;
@@ -184,12 +183,12 @@ bool MaximalStaticExpander::isExpandable(
     auto Writes = S.getPHIIncomings(SAI);
 
     // Get the domain where all the writes are writing to.
-    auto WriteDomain = isl::union_set::empty(S.getIslCtx());
+    auto WriteDomain = isl::union_set::empty(S.getParamSpace());
 
     for (auto Write : Writes) {
       auto MapDeps = filterDependences(S, Dependences, Write);
       for (isl::map Map : MapDeps.get_map_list())
-        WriteDomain = WriteDomain.unite(Map.range());
+        WriteDomain = WriteDomain.add_set(Map.range());
     }
 
     // For now, read from original scalar is not possible.
@@ -209,8 +208,8 @@ bool MaximalStaticExpander::isExpandable(
 
   int NumberWrites = 0;
   for (ScopStmt &Stmt : S) {
-    auto StmtReads = isl::union_map::empty(S.getIslCtx());
-    auto StmtWrites = isl::union_map::empty(S.getIslCtx());
+    auto StmtReads = isl::union_map::empty(S.getParamSpace());
+    auto StmtWrites = isl::union_map::empty(S.getParamSpace());
 
     for (MemoryAccess *MA : Stmt) {
       // Check if the current MemoryAccess involved the current SAI.
@@ -350,7 +349,7 @@ ScopArrayInfo *MaximalStaticExpander::expandAccess(Scop &S, MemoryAccess *MA) {
   // Get the current AM.
   auto CurrentAccessMap = MA->getAccessRelation();
 
-  unsigned in_dimensions = CurrentAccessMap.domain_tuple_dim();
+  unsigned in_dimensions = CurrentAccessMap.dim(isl::dim::in);
 
   // Get domain from the current AM.
   auto Domain = CurrentAccessMap.domain();
@@ -382,7 +381,7 @@ ScopArrayInfo *MaximalStaticExpander::expandAccess(Scop &S, MemoryAccess *MA) {
     assert(!UpperBound.is_null() && UpperBound.is_pos() &&
            !UpperBound.is_nan() &&
            "The upper bound is not a positive integer.");
-    assert(UpperBound.le(isl::val(CurrentAccessMap.ctx(),
+    assert(UpperBound.le(isl::val(CurrentAccessMap.get_ctx(),
                                   std::numeric_limits<int>::max() - 1)) &&
            "The upper bound overflow a int.");
     Sizes.push_back(UpperBound.get_num_si() + 1);

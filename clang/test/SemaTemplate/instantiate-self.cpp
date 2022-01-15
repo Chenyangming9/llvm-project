@@ -62,11 +62,10 @@ namespace test5 {
 namespace test6 {
   template<typename T> constexpr T f(T);
   template<typename T> constexpr T g(T t) {
-    // FIXME: It'd be nice to say that the function is currently being defined, rather than being undefined.
-    typedef int arr[f(T())]; // expected-error {{variable length array}} expected-note {{undefined function 'f<int>'}}
+    typedef int arr[f(T())]; // expected-error {{variable length array}}
     return t;
   }
-  template<typename T> constexpr T f(T t) { // expected-note {{declared here}}
+  template<typename T> constexpr T f(T t) {
     typedef int arr[g(T())]; // expected-error {{zero size array}} expected-note {{instantiation of}}
     return t;
   }
@@ -110,8 +109,7 @@ namespace test11 {
   int k = var<int>;
 
   template<typename T> struct X {
-    static const int b = false;
-    static const int k = X<T>::b ? X<T>::k : 0;
+    static const int k = X<T>::k;
   };
   template<typename T> const int X<T>::k;
   int q = X<int>::k;
@@ -119,7 +117,6 @@ namespace test11 {
   template<typename T> struct Y {
     static const int k;
   };
-  // OK (but not constant initialization).
   template<typename T> const int Y<T>::k = Y<T>::k;
   int r = Y<int>::k;
 }

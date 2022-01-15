@@ -17,8 +17,8 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/GlobalVariable.h"
-#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Casting.h"
 #include <cassert>
@@ -57,17 +57,10 @@ public:
   bool EvaluateFunction(Function *F, Constant *&RetVal,
                         const SmallVectorImpl<Constant*> &ActualArgs);
 
-  const DenseMap<Constant *, Constant *> &getMutatedMemory() const {
-    return MutatedMemory;
-  }
-
-  const SmallPtrSetImpl<GlobalVariable *> &getInvariants() const {
-    return Invariants;
-  }
-
-private:
-  bool EvaluateBlock(BasicBlock::iterator CurInst, BasicBlock *&NextBB,
-                     bool &StrippedPointerCastsForAliasAnalysis);
+  /// Evaluate all instructions in block BB, returning true if successful, false
+  /// if we can't evaluate it.  NewBB returns the next BB that control flows
+  /// into, or null upon return.
+  bool EvaluateBlock(BasicBlock::iterator CurInst, BasicBlock *&NextBB);
 
   Constant *getVal(Value *V) {
     if (Constant *CV = dyn_cast<Constant>(V)) return CV;
@@ -80,19 +73,28 @@ private:
     ValueStack.back()[V] = C;
   }
 
-  /// Casts call result to a type of bitcast call expression
-  Constant *castCallResultIfNeeded(Value *CallExpr, Constant *RV);
-
   /// Given call site return callee and list of its formal arguments
-  Function *getCalleeWithFormalArgs(CallBase &CB,
-                                    SmallVectorImpl<Constant *> &Formals);
+  Function *getCalleeWithFormalArgs(CallSite &CS,
+                                    SmallVector<Constant *, 8> &Formals);
 
   /// Given call site and callee returns list of callee formal argument
   /// values converting them when necessary
-  bool getFormalParams(CallBase &CB, Function *F,
-                       SmallVectorImpl<Constant *> &Formals);
+  bool getFormalParams(CallSite &CS, Function *F,
+                       SmallVector<Constant *, 8> &Formals);
 
-  Constant *ComputeLoadResult(Constant *P, Type *Ty);
+  /// Casts call result to a type of bitcast call expression
+  Constant *castCallResultIfNeeded(Value *CallExpr, Constant *RV);
+
+  const DenseMap<Constant*, Constant*> &getMutatedMemory() const {
+    return MutatedMemory;
+  }
+
+  const SmallPtrSetImpl<GlobalVariable*> &getInvariants() const {
+    return Invariants;
+  }
+
+private:
+  Constant *ComputeLoadResult(Constant *P);
 
   /// As we compute SSA register values, we store their contents here. The back
   /// of the deque contains the current function and the stack contains the

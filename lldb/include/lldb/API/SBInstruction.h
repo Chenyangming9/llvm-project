@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_API_SBINSTRUCTION_H
-#define LLDB_API_SBINSTRUCTION_H
+#ifndef LLDB_SBInstruction_h_
+#define LLDB_SBInstruction_h_
 
 #include "lldb/API/SBData.h"
 #include "lldb/API/SBDefines.h"
 
-#include <cstdio>
+#include <stdio.h>
 
 // There's a lot to be fixed here, but need to wait for underlying insn
 // implementation to be revised & settle down first.
@@ -55,10 +55,6 @@ public:
 
   void Print(FILE *out);
 
-  void Print(SBFile out);
-
-  void Print(FileSP out);
-
   bool GetDescription(lldb::SBStream &description);
 
   bool EmulateWithFrame(lldb::SBFrame &frame, uint32_t evaluate_options);
@@ -86,4 +82,4 @@ private:
 
 } // namespace lldb
 
-#endif // LLDB_API_SBINSTRUCTION_H
+#endif // LLDB_SBInstruction_h_

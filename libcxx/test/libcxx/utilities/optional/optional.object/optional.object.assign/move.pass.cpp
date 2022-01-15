@@ -6,11 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
-
-// This test segfaults GCC 5
-// UNSUPPORTED: gcc-5
-
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 // <optional>
 
 // optional<T>& operator=(optional<T>&& rhs);

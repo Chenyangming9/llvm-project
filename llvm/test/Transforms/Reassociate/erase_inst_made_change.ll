@@ -20,7 +20,8 @@ entry:
   ret void
 }
 
-define internal void @bar() noinline nounwind readnone willreturn {
+define internal void @bar() noinline nounwind readnone {
+; CHECK-NOT: bar
 entry:
   ret void
 }

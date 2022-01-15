@@ -1,10 +1,7 @@
 import("//llvm/utils/TableGen/tablegen.gni")
 
 tablegen("RISCVGenAsmMatcher") {
-  visibility = [
-    ":AsmParser",
-    "//llvm/lib/Target/RISCV:LLVMRISCVCodeGen",
-  ]
+  visibility = [ ":AsmParser" ]
   args = [ "-gen-asm-matcher" ]
   td_file = "../RISCV.td"
 }
@@ -18,7 +15,10 @@ static_library("AsmParser") {
     "//llvm/lib/Support",
     "//llvm/lib/Target/RISCV:RISCVGenCompressInstEmitter",
     "//llvm/lib/Target/RISCV/MCTargetDesc",
+    "//llvm/lib/Target/RISCV/Utils",
   ]
   include_dirs = [ ".." ]
-  sources = [ "RISCVAsmParser.cpp" ]
+  sources = [
+    "RISCVAsmParser.cpp",
+  ]
 }

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_MODULESPEC_H
-#define LLDB_CORE_MODULESPEC_H
+#ifndef liblldb_ModuleSpec_h_
+#define liblldb_ModuleSpec_h_
 
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Target/PathMappingList.h"
@@ -27,27 +27,44 @@ class ModuleSpec {
 public:
   ModuleSpec()
       : m_file(), m_platform_file(), m_symbol_file(), m_arch(), m_uuid(),
-        m_object_name(), m_source_mappings() {}
+        m_object_name(), m_object_offset(0), m_object_size(0),
+        m_source_mappings() {}
 
-  /// If the \c data argument is passed, its contents will be used
-  /// as the module contents instead of trying to read them from
-  /// \c file_spec .
-  ModuleSpec(const FileSpec &file_spec, const UUID &uuid = UUID(),
-             lldb::DataBufferSP data = lldb::DataBufferSP())
+  ModuleSpec(const FileSpec &file_spec, const UUID &uuid = UUID())
       : m_file(file_spec), m_platform_file(), m_symbol_file(), m_arch(),
-        m_uuid(uuid), m_object_name(), m_object_offset(0), m_source_mappings(),
-        m_data(data) {
-    if (data)
-      m_object_size = data->GetByteSize();
-    else if (m_file)
-      m_object_size = FileSystem::Instance().GetByteSize(file_spec);
-  }
+        m_uuid(uuid), m_object_name(), m_object_offset(0),
+        m_object_size(FileSystem::Instance().GetByteSize(file_spec)),
+        m_source_mappings() {}
 
   ModuleSpec(const FileSpec &file_spec, const ArchSpec &arch)
       : m_file(file_spec), m_platform_file(), m_symbol_file(), m_arch(arch),
         m_uuid(), m_object_name(), m_object_offset(0),
         m_object_size(FileSystem::Instance().GetByteSize(file_spec)),
         m_source_mappings() {}
+
+  ModuleSpec(const ModuleSpec &rhs)
+      : m_file(rhs.m_file), m_platform_file(rhs.m_platform_file),
+        m_symbol_file(rhs.m_symbol_file), m_arch(rhs.m_arch),
+        m_uuid(rhs.m_uuid), m_object_name(rhs.m_object_name),
+        m_object_offset(rhs.m_object_offset), m_object_size(rhs.m_object_size),
+        m_object_mod_time(rhs.m_object_mod_time),
+        m_source_mappings(rhs.m_source_mappings) {}
+
+  ModuleSpec &operator=(const ModuleSpec &rhs) {
+    if (this != &rhs) {
+      m_file = rhs.m_file;
+      m_platform_file = rhs.m_platform_file;
+      m_symbol_file = rhs.m_symbol_file;
+      m_arch = rhs.m_arch;
+      m_uuid = rhs.m_uuid;
+      m_object_name = rhs.m_object_name;
+      m_object_offset = rhs.m_object_offset;
+      m_object_size = rhs.m_object_size;
+      m_object_mod_time = rhs.m_object_mod_time;
+      m_source_mappings = rhs.m_source_mappings;
+    }
+    return *this;
+  }
 
   FileSpec *GetFileSpecPtr() { return (m_file ? &m_file : nullptr); }
 
@@ -129,8 +146,6 @@ public:
 
   PathMappingList &GetSourceMappingList() const { return m_source_mappings; }
 
-  lldb::DataBufferSP GetData() const { return m_data; }
-
   void Clear() {
     m_file.Clear();
     m_platform_file.Clear();
@@ -192,7 +207,7 @@ public:
       if (dumped_something)
         strm.PutCString(", ");
       strm.Printf("arch = ");
-      m_arch.DumpTriple(strm.AsRawOstream());
+      m_arch.DumpTriple(strm);
       dumped_something = true;
     }
     if (m_uuid.IsValid()) {
@@ -236,18 +251,24 @@ public:
     if (match_module_spec.GetObjectName() &&
         match_module_spec.GetObjectName() != GetObjectName())
       return false;
-    if (!FileSpec::Match(match_module_spec.GetFileSpec(), GetFileSpec()))
-      return false;
-    if (GetPlatformFileSpec() &&
-        !FileSpec::Match(match_module_spec.GetPlatformFileSpec(),
-                         GetPlatformFileSpec())) {
-      return false;
+    if (match_module_spec.GetFileSpecPtr()) {
+      const FileSpec &fspec = match_module_spec.GetFileSpec();
+      if (!FileSpec::Equal(fspec, GetFileSpec(),
+                           !fspec.GetDirectory().IsEmpty()))
+        return false;
+    }
+    if (GetPlatformFileSpec() && match_module_spec.GetPlatformFileSpecPtr()) {
+      const FileSpec &fspec = match_module_spec.GetPlatformFileSpec();
+      if (!FileSpec::Equal(fspec, GetPlatformFileSpec(),
+                           !fspec.GetDirectory().IsEmpty()))
+        return false;
     }
     // Only match the symbol file spec if there is one in this ModuleSpec
-    if (GetSymbolFileSpec() &&
-        !FileSpec::Match(match_module_spec.GetSymbolFileSpec(),
-                         GetSymbolFileSpec())) {
-      return false;
+    if (GetSymbolFileSpec() && match_module_spec.GetSymbolFileSpecPtr()) {
+      const FileSpec &fspec = match_module_spec.GetSymbolFileSpec();
+      if (!FileSpec::Equal(fspec, GetSymbolFileSpec(),
+                           !fspec.GetDirectory().IsEmpty()))
+        return false;
     }
     if (match_module_spec.GetArchitecturePtr()) {
       if (exact_arch_match) {
@@ -270,11 +291,10 @@ protected:
   ArchSpec m_arch;
   UUID m_uuid;
   ConstString m_object_name;
-  uint64_t m_object_offset = 0;
-  uint64_t m_object_size = 0;
+  uint64_t m_object_offset;
+  uint64_t m_object_size;
   llvm::sys::TimePoint<> m_object_mod_time;
   mutable PathMappingList m_source_mappings;
-  lldb::DataBufferSP m_data = {};
 };
 
 class ModuleSpecList {
@@ -360,8 +380,8 @@ public:
     return false;
   }
 
-  void FindMatchingModuleSpecs(const ModuleSpec &module_spec,
-                               ModuleSpecList &matching_list) const {
+  size_t FindMatchingModuleSpecs(const ModuleSpec &module_spec,
+                                 ModuleSpecList &matching_list) const {
     std::lock_guard<std::recursive_mutex> guard(m_mutex);
     bool exact_arch_match = true;
     const size_t initial_match_count = matching_list.GetSize();
@@ -380,6 +400,7 @@ public:
           matching_list.Append(spec);
       }
     }
+    return matching_list.GetSize() - initial_match_count;
   }
 
   void Dump(Stream &strm) {
@@ -401,4 +422,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_MODULESPEC_H
+#endif // liblldb_ModuleSpec_h_

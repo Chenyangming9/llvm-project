@@ -10,10 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TOOLS_DEBUGSERVER_SOURCE_TTYSTATE_H
-#define LLDB_TOOLS_DEBUGSERVER_SOURCE_TTYSTATE_H
+#ifndef __TTYState_h__
+#define __TTYState_h__
 
-#include <cstdint>
+#include <stdint.h>
 #include <termios.h>
 
 class TTYState {

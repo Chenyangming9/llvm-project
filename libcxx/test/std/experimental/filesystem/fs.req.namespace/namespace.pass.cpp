@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
-// UNSUPPORTED: libcpp-has-no-filesystem-library
+// UNSUPPORTED: c++98, c++03
 
 // <experimental/filesystem>
 

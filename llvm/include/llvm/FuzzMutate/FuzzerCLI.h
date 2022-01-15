@@ -11,15 +11,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_FUZZMUTATE_FUZZERCLI_H
-#define LLVM_FUZZMUTATE_FUZZERCLI_H
+#ifndef LLVM_FUZZMUTATE_FUZZER_CLI_H
+#define LLVM_FUZZMUTATE_FUZZER_CLI_H
 
+#include "llvm/ADT/StringRef.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/Support/DataTypes.h"
 
 namespace llvm {
-
-class StringRef;
 
 /// Parse cl::opts from a fuzz target commandline.
 ///
@@ -76,4 +75,4 @@ std::unique_ptr<Module> parseAndVerify(const uint8_t *Data, size_t Size,
 
 } // end llvm namespace
 
-#endif // LLVM_FUZZMUTATE_FUZZERCLI_H
+#endif // LLVM_FUZZMUTATE_FUZZER_CLI_H

@@ -6,9 +6,8 @@ Sections:
   - Type:            TYPE
     Signatures:
       - Index:           0
+        ReturnType:      I32
         ParamTypes:
-          - I32
-        ReturnTypes:
           - I32
   - Type:            IMPORT
     Imports:
@@ -26,25 +25,24 @@ Sections:
         Kind:            MEMORY
         Memory:
           Flags:           [ HAS_MAX ]
-          Minimum:         0x00000010
+          Initial:         0x00000010
           Maximum:         0x00000011
       - Module:          foo
         Field:           imported_table
         Kind:            TABLE
         Table:
-          Index:         0
           ElemType:      FUNCREF
           Limits:
             Flags:           [ HAS_MAX ]
-            Minimum:         0x00000020
+            Initial:         0x00000020
             Maximum:         0x00000022
 ...
 # CHECK: --- !WASM
 # CHECK: FileHeader:
-# CHECK:   Version:           0x1
+# CHECK:   Version:           0x00000001
 # CHECK: Sections:
 # CHECK:   - Type:            IMPORT
-# CHECK:     Imports:
+# CHECK:     Imports:         
 # CHECK:       - Module:          foo
 # CHECK:         Field:           imported_function
 # CHECK:         Kind:            FUNCTION
@@ -59,8 +57,8 @@ Sections:
 # CHECK:         Kind:            MEMORY
 # CHECK:         Memory:
 # CHECK:           Flags:           [ HAS_MAX ]
-# CHECK:           Minimum:         0x10
-# CHECK:           Maximum:         0x11
+# CHECK:           Initial:         0x00000010
+# CHECK:           Maximum:         0x00000011
 # CHECK:       - Module:          foo
 # CHECK:         Field:           imported_table
 # CHECK:         Kind:            TABLE
@@ -68,6 +66,6 @@ Sections:
 # CHECK:           ElemType:      FUNCREF
 # CHECK:           Limits:
 # CHECK:             Flags:           [ HAS_MAX ]
-# CHECK:             Minimum:         0x20
-# CHECK:             Maximum:         0x22
+# CHECK:             Initial:         0x00000020
+# CHECK:             Maximum:         0x00000022
 # CHECK: ...

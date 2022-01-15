@@ -7,8 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 // <string>
-// UNSUPPORTED: c++03, c++11, c++14
-// UNSUPPORTED: gcc-7
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 // XFAIL: libcpp-no-deduction-guides
 
 // template<class InputIterator>

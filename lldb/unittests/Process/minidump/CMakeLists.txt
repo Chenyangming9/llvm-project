@@ -19,6 +19,7 @@ set(test_inputs
    fizzbuzz_no_heap.dmp
    fizzbuzz_wow64.dmp
    linux-x86_64.dmp
+   linux-x86_64_not_crashed.dmp
    regions-memlist64.dmp
    )
 

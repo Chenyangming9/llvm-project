@@ -21,7 +21,6 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/PassManager.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/GenericDomTreeConstruction.h"
@@ -90,11 +89,9 @@ template void llvm::DomTreeBuilder::DeleteEdge<DomTreeBuilder::BBPostDomTree>(
     DomTreeBuilder::BBPostDomTree &DT, BasicBlock *From, BasicBlock *To);
 
 template void llvm::DomTreeBuilder::ApplyUpdates<DomTreeBuilder::BBDomTree>(
-    DomTreeBuilder::BBDomTree &DT, DomTreeBuilder::BBDomTreeGraphDiff &,
-    DomTreeBuilder::BBDomTreeGraphDiff *);
+    DomTreeBuilder::BBDomTree &DT, DomTreeBuilder::BBUpdates);
 template void llvm::DomTreeBuilder::ApplyUpdates<DomTreeBuilder::BBPostDomTree>(
-    DomTreeBuilder::BBPostDomTree &DT, DomTreeBuilder::BBPostDomTreeGraphDiff &,
-    DomTreeBuilder::BBPostDomTreeGraphDiff *);
+    DomTreeBuilder::BBPostDomTree &DT, DomTreeBuilder::BBUpdates);
 
 template bool llvm::DomTreeBuilder::Verify<DomTreeBuilder::BBDomTree>(
     const DomTreeBuilder::BBDomTree &DT,
@@ -112,28 +109,11 @@ bool DominatorTree::invalidate(Function &F, const PreservedAnalyses &PA,
            PAC.preservedSet<CFGAnalyses>());
 }
 
-bool DominatorTree::dominates(const BasicBlock *BB, const Use &U) const {
-  Instruction *UserInst = cast<Instruction>(U.getUser());
-  if (auto *PN = dyn_cast<PHINode>(UserInst))
-    // A phi use using a value from a block is dominated by the end of that
-    // block.  Note that the phi's parent block may not be.
-    return dominates(BB, PN->getIncomingBlock(U));
-  else
-    return properlyDominates(BB, UserInst->getParent());
-}
-
 // dominates - Return true if Def dominates a use in User. This performs
 // the special checks necessary if Def and User are in the same basic block.
 // Note that Def doesn't dominate a use in Def itself!
-bool DominatorTree::dominates(const Value *DefV,
+bool DominatorTree::dominates(const Instruction *Def,
                               const Instruction *User) const {
-  const Instruction *Def = dyn_cast<Instruction>(DefV);
-  if (!Def) {
-    assert((isa<Argument>(DefV) || isa<Constant>(DefV)) &&
-           "Should be called with an instruction, argument or constant");
-    return true; // Arguments and constants dominate everything.
-  }
-
   const BasicBlock *UseBB = User->getParent();
   const BasicBlock *DefBB = Def->getParent();
 
@@ -153,13 +133,18 @@ bool DominatorTree::dominates(const Value *DefV,
   // dominates every instruction in UseBB.
   // A PHI is dominated only if the instruction dominates every possible use in
   // the UseBB.
-  if (isa<InvokeInst>(Def) || isa<CallBrInst>(Def) || isa<PHINode>(User))
+  if (isa<InvokeInst>(Def) || isa<PHINode>(User))
     return dominates(Def, UseBB);
 
   if (DefBB != UseBB)
     return dominates(DefBB, UseBB);
 
-  return Def->comesBefore(User);
+  // Loop through the basic block until we find Def or User.
+  BasicBlock::const_iterator I = DefBB->begin();
+  for (; &*I != Def && &*I != User; ++I)
+    /*empty*/;
+
+  return &*I == Def;
 }
 
 // true if Def would dominate a use in any instruction in UseBB.
@@ -183,13 +168,6 @@ bool DominatorTree::dominates(const Instruction *Def,
   // exceptional destination.
   if (const auto *II = dyn_cast<InvokeInst>(Def)) {
     BasicBlock *NormalDest = II->getNormalDest();
-    BasicBlockEdge E(DefBB, NormalDest);
-    return dominates(E, UseBB);
-  }
-
-  // Callbr results are similarly only usable in the default destination.
-  if (const auto *CBI = dyn_cast<CallBrInst>(Def)) {
-    BasicBlock *NormalDest = CBI->getDefaultDest();
     BasicBlockEdge E(DefBB, NormalDest);
     return dominates(E, UseBB);
   }
@@ -232,7 +210,9 @@ bool DominatorTree::dominates(const BasicBlockEdge &BBE,
   // other predecessors. Since the only way out of X is via NormalDest, X can
   // only properly dominate a node if NormalDest dominates that node too.
   int IsDuplicateEdge = 0;
-  for (const BasicBlock *BB : predecessors(End)) {
+  for (const_pred_iterator PI = pred_begin(End), E = pred_end(End);
+       PI != E; ++PI) {
+    const BasicBlock *BB = *PI;
     if (BB == Start) {
       // If there are multiple edges between Start and End, by definition they
       // can't dominate anything.
@@ -265,14 +245,7 @@ bool DominatorTree::dominates(const BasicBlockEdge &BBE, const Use &U) const {
   return dominates(BBE, UseBB);
 }
 
-bool DominatorTree::dominates(const Value *DefV, const Use &U) const {
-  const Instruction *Def = dyn_cast<Instruction>(DefV);
-  if (!Def) {
-    assert((isa<Argument>(DefV) || isa<Constant>(DefV)) &&
-           "Should be called with an instruction, argument or constant");
-    return true; // Arguments and constants dominate everything.
-  }
-
+bool DominatorTree::dominates(const Instruction *Def, const Use &U) const {
   Instruction *UserInst = cast<Instruction>(U.getUser());
   const BasicBlock *DefBB = Def->getParent();
 
@@ -304,13 +277,6 @@ bool DominatorTree::dominates(const Value *DefV, const Use &U) const {
     return dominates(E, U);
   }
 
-  // Callbr results are similarly only usable in the default destination.
-  if (const auto *CBI = dyn_cast<CallBrInst>(Def)) {
-    BasicBlock *NormalDest = CBI->getDefaultDest();
-    BasicBlockEdge E(DefBB, NormalDest);
-    return dominates(E, U);
-  }
-
   // If the def and use are in different blocks, do a simple CFG dominator
   // tree query.
   if (DefBB != UseBB)
@@ -322,7 +288,12 @@ bool DominatorTree::dominates(const Value *DefV, const Use &U) const {
   if (isa<PHINode>(UserInst))
     return true;
 
-  return Def->comesBefore(UserInst);
+  // Otherwise, just loop through the basic block until we find Def or User.
+  BasicBlock::const_iterator I = DefBB->begin();
+  for (; &*I != Def && &*I != UserInst; ++I)
+    /*empty*/;
+
+  return &*I != UserInst;
 }
 
 bool DominatorTree::isReachableFromEntry(const Use &U) const {
@@ -338,14 +309,6 @@ bool DominatorTree::isReachableFromEntry(const Use &U) const {
 
   // Everything else uses their operands in their own block.
   return isReachableFromEntry(I->getParent());
-}
-
-// Edge BBE1 dominates edge BBE2 if they match or BBE1 dominates start of BBE2.
-bool DominatorTree::dominates(const BasicBlockEdge &BBE1,
-                              const BasicBlockEdge &BBE2) const {
-  if (BBE1.getStart() == BBE2.getStart() && BBE1.getEnd() == BBE2.getEnd())
-    return true;
-  return dominates(BBE1, BBE2.getStart());
 }
 
 //===----------------------------------------------------------------------===//
@@ -394,11 +357,6 @@ PreservedAnalyses DominatorTreeVerifierPass::run(Function &F,
 //===----------------------------------------------------------------------===//
 
 char DominatorTreeWrapperPass::ID = 0;
-
-DominatorTreeWrapperPass::DominatorTreeWrapperPass() : FunctionPass(ID) {
-  initializeDominatorTreeWrapperPassPass(*PassRegistry::getPassRegistry());
-}
-
 INITIALIZE_PASS(DominatorTreeWrapperPass, "domtree",
                 "Dominator Tree Construction", true, true)
 
@@ -417,3 +375,4 @@ void DominatorTreeWrapperPass::verifyAnalysis() const {
 void DominatorTreeWrapperPass::print(raw_ostream &OS, const Module *) const {
   DT.print(OS);
 }
+

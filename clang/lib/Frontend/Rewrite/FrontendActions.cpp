@@ -9,7 +9,6 @@
 #include "clang/Rewrite/Frontend/FrontendActions.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/Basic/CharInfo.h"
-#include "clang/Basic/LangStandard.h"
 #include "clang/Config/config.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
@@ -21,7 +20,7 @@
 #include "clang/Rewrite/Frontend/FixItRewriter.h"
 #include "clang/Rewrite/Frontend/Rewriters.h"
 #include "clang/Serialization/ASTReader.h"
-#include "clang/Serialization/ModuleFile.h"
+#include "clang/Serialization/Module.h"
 #include "clang/Serialization/ModuleManager.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/CrashRecoveryContext.h"
@@ -50,7 +49,7 @@ FixItAction::~FixItAction() {}
 
 std::unique_ptr<ASTConsumer>
 FixItAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
-  return std::make_unique<ASTConsumer>();
+  return llvm::make_unique<ASTConsumer>();
 }
 
 namespace {
@@ -77,7 +76,7 @@ public:
     SmallString<128> Path(Filename);
     llvm::sys::path::replace_extension(Path,
       NewSuffix + llvm::sys::path::extension(Path));
-    return std::string(Path.str());
+    return Path.str();
   }
 };
 
@@ -88,7 +87,7 @@ public:
     llvm::sys::fs::createTemporaryFile(llvm::sys::path::filename(Filename),
                                        llvm::sys::path::extension(Filename).drop_front(), fd,
                                        Path);
-    return std::string(Path.str());
+    return Path.str();
   }
 };
 } // end anonymous namespace
@@ -166,11 +165,11 @@ RewriteObjCAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
           CI.createDefaultOutputFile(false, InFile, "cpp")) {
     if (CI.getLangOpts().ObjCRuntime.isNonFragile())
       return CreateModernObjCRewriter(
-          std::string(InFile), std::move(OS), CI.getDiagnostics(),
-          CI.getLangOpts(), CI.getDiagnosticOpts().NoRewriteMacros,
+          InFile, std::move(OS), CI.getDiagnostics(), CI.getLangOpts(),
+          CI.getDiagnosticOpts().NoRewriteMacros,
           (CI.getCodeGenOpts().getDebugInfo() != codegenoptions::NoDebugInfo));
-    return CreateObjCRewriter(std::string(InFile), std::move(OS),
-                              CI.getDiagnostics(), CI.getLangOpts(),
+    return CreateObjCRewriter(InFile, std::move(OS), CI.getDiagnostics(),
+                              CI.getLangOpts(),
                               CI.getDiagnosticOpts().NoRewriteMacros);
   }
   return nullptr;
@@ -185,7 +184,7 @@ RewriteObjCAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 void RewriteMacrosAction::ExecuteAction() {
   CompilerInstance &CI = getCompilerInstance();
   std::unique_ptr<raw_ostream> OS =
-      CI.createDefaultOutputFile(/*Binary=*/true, getCurrentFileOrBufferName());
+      CI.createDefaultOutputFile(true, getCurrentFileOrBufferName());
   if (!OS) return;
 
   RewriteMacrosInInput(CI.getPreprocessor(), OS.get());
@@ -194,7 +193,7 @@ void RewriteMacrosAction::ExecuteAction() {
 void RewriteTestAction::ExecuteAction() {
   CompilerInstance &CI = getCompilerInstance();
   std::unique_ptr<raw_ostream> OS =
-      CI.createDefaultOutputFile(/*Binary=*/false, getCurrentFileOrBufferName());
+      CI.createDefaultOutputFile(false, getCurrentFileOrBufferName());
   if (!OS) return;
 
   DoRewriteTest(CI.getPreprocessor(), OS.get());
@@ -212,16 +211,16 @@ public:
 
   void visitModuleFile(StringRef Filename,
                        serialization::ModuleKind Kind) override {
-    auto File = CI.getFileManager().getFile(Filename);
+    auto *File = CI.getFileManager().getFile(Filename);
     assert(File && "missing file for loaded module?");
 
     // Only rewrite each module file once.
-    if (!Rewritten.insert(*File).second)
+    if (!Rewritten.insert(File).second)
       return;
 
     serialization::ModuleFile *MF =
-        CI.getASTReader()->getModuleManager().lookup(*File);
-    assert(MF && "missing module file for loaded module?");
+        CI.getModuleManager()->getModuleManager().lookup(File);
+    assert(File && "missing module file for loaded module?");
 
     // Not interested in PCH / preambles.
     if (!MF->isModule())
@@ -251,7 +250,7 @@ public:
     Instance.getFrontendOpts().DisableFree = false;
     Instance.getFrontendOpts().Inputs.clear();
     Instance.getFrontendOpts().Inputs.emplace_back(
-        Filename, InputKind(Language::Unknown, InputKind::Precompiled));
+        Filename, InputKind(InputKind::Unknown, InputKind::Precompiled));
     Instance.getFrontendOpts().ModuleFiles.clear();
     Instance.getFrontendOpts().ModuleMapFiles.clear();
     // Don't recursively rewrite imports. We handle them all at the top level.
@@ -270,7 +269,7 @@ public:
 bool RewriteIncludesAction::BeginSourceFileAction(CompilerInstance &CI) {
   if (!OutputStream) {
     OutputStream =
-        CI.createDefaultOutputFile(/*Binary=*/true, getCurrentFileOrBufferName());
+        CI.createDefaultOutputFile(true, getCurrentFileOrBufferName());
     if (!OutputStream)
       return false;
   }
@@ -293,9 +292,9 @@ bool RewriteIncludesAction::BeginSourceFileAction(CompilerInstance &CI) {
   // If we're rewriting imports, set up a listener to track when we import
   // module files.
   if (CI.getPreprocessorOutputOpts().RewriteImports) {
-    CI.createASTReader();
-    CI.getASTReader()->addListener(
-        std::make_unique<RewriteImportsListener>(CI, OutputStream));
+    CI.createModuleManager();
+    CI.getModuleManager()->addListener(
+        llvm::make_unique<RewriteImportsListener>(CI, OutputStream));
   }
 
   return true;

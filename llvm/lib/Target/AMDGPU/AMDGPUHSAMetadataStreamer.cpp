@@ -14,27 +14,15 @@
 
 #include "AMDGPUHSAMetadataStreamer.h"
 #include "AMDGPU.h"
-#include "GCNSubtarget.h"
+#include "AMDGPUSubtarget.h"
 #include "MCTargetDesc/AMDGPUTargetStreamer.h"
 #include "SIMachineFunctionInfo.h"
 #include "SIProgramInfo.h"
+#include "Utils/AMDGPUBaseInfo.h"
+#include "llvm/ADT/StringSwitch.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Module.h"
-using namespace llvm;
-
-static std::pair<Type *, Align> getArgumentTypeAlign(const Argument &Arg,
-                                                     const DataLayout &DL) {
-  Type *Ty = Arg.getType();
-  MaybeAlign ArgAlign;
-  if (Arg.hasByRefAttr()) {
-    Ty = Arg.getParamByRefType();
-    ArgAlign = Arg.getParamAlign();
-  }
-
-  if (!ArgAlign)
-    ArgAlign = DL.getABITypeAlign(Ty);
-
-  return std::make_pair(Ty, *ArgAlign);
-}
+#include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
 
@@ -139,6 +127,38 @@ ValueKind MetadataStreamerV2::getValueKind(Type *Ty, StringRef TypeQual,
                       ValueKind::ByValue);
 }
 
+ValueType MetadataStreamerV2::getValueType(Type *Ty, StringRef TypeName) const {
+  switch (Ty->getTypeID()) {
+  case Type::IntegerTyID: {
+    auto Signed = !TypeName.startswith("u");
+    switch (Ty->getIntegerBitWidth()) {
+    case 8:
+      return Signed ? ValueType::I8 : ValueType::U8;
+    case 16:
+      return Signed ? ValueType::I16 : ValueType::U16;
+    case 32:
+      return Signed ? ValueType::I32 : ValueType::U32;
+    case 64:
+      return Signed ? ValueType::I64 : ValueType::U64;
+    default:
+      return ValueType::Struct;
+    }
+  }
+  case Type::HalfTyID:
+    return ValueType::F16;
+  case Type::FloatTyID:
+    return ValueType::F32;
+  case Type::DoubleTyID:
+    return ValueType::F64;
+  case Type::PointerTyID:
+    return getValueType(Ty->getPointerElementType(), TypeName);
+  case Type::VectorTyID:
+    return getValueType(Ty->getVectorElementType(), TypeName);
+  default:
+    return ValueType::Struct;
+  }
+}
+
 std::string MetadataStreamerV2::getTypeName(Type *Ty, bool Signed) const {
   switch (Ty->getTypeID()) {
   case Type::IntegerTyID: {
@@ -165,10 +185,10 @@ std::string MetadataStreamerV2::getTypeName(Type *Ty, bool Signed) const {
     return "float";
   case Type::DoubleTyID:
     return "double";
-  case Type::FixedVectorTyID: {
-    auto VecTy = cast<FixedVectorType>(Ty);
+  case Type::VectorTyID: {
+    auto VecTy = cast<VectorType>(Ty);
     auto ElTy = VecTy->getElementType();
-    auto NumElements = VecTy->getNumElements();
+    auto NumElements = VecTy->getVectorNumElements();
     return (Twine(getTypeName(ElTy, Signed)) + Twine(NumElements)).str();
   }
   default:
@@ -198,13 +218,12 @@ MetadataStreamerV2::getHSACodeProps(const MachineFunction &MF,
   assert(F.getCallingConv() == CallingConv::AMDGPU_KERNEL ||
          F.getCallingConv() == CallingConv::SPIR_KERNEL);
 
-  Align MaxKernArgAlign;
+  unsigned MaxKernArgAlign;
   HSACodeProps.mKernargSegmentSize = STM.getKernArgSegmentSize(F,
                                                                MaxKernArgAlign);
   HSACodeProps.mGroupSegmentFixedSize = ProgramInfo.LDSSize;
   HSACodeProps.mPrivateSegmentFixedSize = ProgramInfo.ScratchSize;
-  HSACodeProps.mKernargSegmentAlign =
-      std::max(MaxKernArgAlign, Align(4)).value();
+  HSACodeProps.mKernargSegmentAlign = std::max(MaxKernArgAlign, 4u);
   HSACodeProps.mWavefrontSize = STM.getWavefrontSize();
   HSACodeProps.mNumSGPRs = ProgramInfo.NumSGPR;
   HSACodeProps.mNumVGPRs = ProgramInfo.NumVGPR;
@@ -226,8 +245,8 @@ MetadataStreamerV2::getHSADebugProps(const MachineFunction &MF,
 void MetadataStreamerV2::emitVersion() {
   auto &Version = HSAMetadata.mVersion;
 
-  Version.push_back(VersionMajorV2);
-  Version.push_back(VersionMinorV2);
+  Version.push_back(VersionMajor);
+  Version.push_back(VersionMinor);
 }
 
 void MetadataStreamerV2::emitPrintf(const Module &Mod) {
@@ -239,8 +258,7 @@ void MetadataStreamerV2::emitPrintf(const Module &Mod) {
 
   for (auto Op : Node->operands())
     if (Op->getNumOperands())
-      Printf.push_back(
-          std::string(cast<MDString>(Op->getOperand(0))->getString()));
+      Printf.push_back(cast<MDString>(Op->getOperand(0))->getString());
 }
 
 void MetadataStreamerV2::emitKernelLanguage(const Function &Func) {
@@ -323,41 +341,38 @@ void MetadataStreamerV2::emitKernelArg(const Argument &Arg) {
   if (Node && ArgNo < Node->getNumOperands())
     TypeQual = cast<MDString>(Node->getOperand(ArgNo))->getString();
 
+  Type *Ty = Arg.getType();
   const DataLayout &DL = Func->getParent()->getDataLayout();
 
-  MaybeAlign PointeeAlign;
-  if (auto PtrTy = dyn_cast<PointerType>(Arg.getType())) {
+  unsigned PointeeAlign = 0;
+  if (auto PtrTy = dyn_cast<PointerType>(Ty)) {
     if (PtrTy->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS) {
-      // FIXME: Should report this for all address spaces
-      PointeeAlign = DL.getValueOrABITypeAlignment(Arg.getParamAlign(),
-                                                   PtrTy->getElementType());
+      PointeeAlign = Arg.getParamAlignment();
+      if (PointeeAlign == 0)
+        PointeeAlign = DL.getABITypeAlignment(PtrTy->getElementType());
     }
   }
 
-  Type *ArgTy;
-  Align ArgAlign;
-  std::tie(ArgTy, ArgAlign) = getArgumentTypeAlign(Arg, DL);
-
-  emitKernelArg(DL, ArgTy, ArgAlign,
-                getValueKind(ArgTy, TypeQual, BaseTypeName), PointeeAlign, Name,
-                TypeName, BaseTypeName, AccQual, TypeQual);
+  emitKernelArg(DL, Ty, getValueKind(Arg.getType(), TypeQual, BaseTypeName),
+                PointeeAlign, Name, TypeName, BaseTypeName, AccQual, TypeQual);
 }
 
 void MetadataStreamerV2::emitKernelArg(const DataLayout &DL, Type *Ty,
-                                       Align Alignment, ValueKind ValueKind,
-                                       MaybeAlign PointeeAlign, StringRef Name,
+                                       ValueKind ValueKind,
+                                       unsigned PointeeAlign, StringRef Name,
                                        StringRef TypeName,
                                        StringRef BaseTypeName,
                                        StringRef AccQual, StringRef TypeQual) {
   HSAMetadata.mKernels.back().mArgs.push_back(Kernel::Arg::Metadata());
   auto &Arg = HSAMetadata.mKernels.back().mArgs.back();
 
-  Arg.mName = std::string(Name);
-  Arg.mTypeName = std::string(TypeName);
+  Arg.mName = Name;
+  Arg.mTypeName = TypeName;
   Arg.mSize = DL.getTypeAllocSize(Ty);
-  Arg.mAlign = Alignment.value();
+  Arg.mAlign = DL.getABITypeAlignment(Ty);
   Arg.mValueKind = ValueKind;
-  Arg.mPointeeAlign = PointeeAlign ? PointeeAlign->value() : 0;
+  Arg.mValueType = getValueType(Ty, BaseTypeName);
+  Arg.mPointeeAlign = PointeeAlign;
 
   if (auto PtrTy = dyn_cast<PointerType>(Ty))
     Arg.mAddrSpaceQual = getAddressSpaceQualifier(PtrTy->getAddressSpace());
@@ -391,11 +406,11 @@ void MetadataStreamerV2::emitHiddenKernelArgs(const Function &Func) {
   auto Int64Ty = Type::getInt64Ty(Func.getContext());
 
   if (HiddenArgNumBytes >= 8)
-    emitKernelArg(DL, Int64Ty, Align(8), ValueKind::HiddenGlobalOffsetX);
+    emitKernelArg(DL, Int64Ty, ValueKind::HiddenGlobalOffsetX);
   if (HiddenArgNumBytes >= 16)
-    emitKernelArg(DL, Int64Ty, Align(8), ValueKind::HiddenGlobalOffsetY);
+    emitKernelArg(DL, Int64Ty, ValueKind::HiddenGlobalOffsetY);
   if (HiddenArgNumBytes >= 24)
-    emitKernelArg(DL, Int64Ty, Align(8), ValueKind::HiddenGlobalOffsetZ);
+    emitKernelArg(DL, Int64Ty, ValueKind::HiddenGlobalOffsetZ);
 
   auto Int8PtrTy = Type::getInt8PtrTy(Func.getContext(),
                                       AMDGPUAS::GLOBAL_ADDRESS);
@@ -404,39 +419,33 @@ void MetadataStreamerV2::emitHiddenKernelArgs(const Function &Func) {
   // "none" argument.
   if (HiddenArgNumBytes >= 32) {
     if (Func.getParent()->getNamedMetadata("llvm.printf.fmts"))
-      emitKernelArg(DL, Int8PtrTy, Align(8), ValueKind::HiddenPrintfBuffer);
-    else if (Func.getParent()->getFunction("__ockl_hostcall_internal")) {
-      // The printf runtime binding pass should have ensured that hostcall and
-      // printf are not used in the same module.
-      assert(!Func.getParent()->getNamedMetadata("llvm.printf.fmts"));
-      emitKernelArg(DL, Int8PtrTy, Align(8), ValueKind::HiddenHostcallBuffer);
-    } else
-      emitKernelArg(DL, Int8PtrTy, Align(8), ValueKind::HiddenNone);
+      emitKernelArg(DL, Int8PtrTy, ValueKind::HiddenPrintfBuffer);
+    else
+      emitKernelArg(DL, Int8PtrTy, ValueKind::HiddenNone);
   }
 
   // Emit "default queue" and "completion action" arguments if enqueue kernel is
   // used, otherwise emit dummy "none" arguments.
   if (HiddenArgNumBytes >= 48) {
     if (Func.hasFnAttribute("calls-enqueue-kernel")) {
-      emitKernelArg(DL, Int8PtrTy, Align(8), ValueKind::HiddenDefaultQueue);
-      emitKernelArg(DL, Int8PtrTy, Align(8), ValueKind::HiddenCompletionAction);
+      emitKernelArg(DL, Int8PtrTy, ValueKind::HiddenDefaultQueue);
+      emitKernelArg(DL, Int8PtrTy, ValueKind::HiddenCompletionAction);
     } else {
-      emitKernelArg(DL, Int8PtrTy, Align(8), ValueKind::HiddenNone);
-      emitKernelArg(DL, Int8PtrTy, Align(8), ValueKind::HiddenNone);
+      emitKernelArg(DL, Int8PtrTy, ValueKind::HiddenNone);
+      emitKernelArg(DL, Int8PtrTy, ValueKind::HiddenNone);
     }
   }
 
   // Emit the pointer argument for multi-grid object.
   if (HiddenArgNumBytes >= 56)
-    emitKernelArg(DL, Int8PtrTy, Align(8), ValueKind::HiddenMultiGridSyncArg);
+    emitKernelArg(DL, Int8PtrTy, ValueKind::HiddenMultiGridSyncArg);
 }
 
 bool MetadataStreamerV2::emitTo(AMDGPUTargetStreamer &TargetStreamer) {
   return TargetStreamer.EmitHSAMetadata(getHSAMetadata());
 }
 
-void MetadataStreamerV2::begin(const Module &Mod,
-                               const IsaInfo::AMDGPUTargetID &TargetID) {
+void MetadataStreamerV2::begin(const Module &Mod) {
   emitVersion();
   emitPrintf(Mod);
 }
@@ -464,7 +473,7 @@ void MetadataStreamerV2::emitKernel(const MachineFunction &MF,
   HSAMetadata.mKernels.push_back(Kernel::Metadata());
   auto &Kernel = HSAMetadata.mKernels.back();
 
-  Kernel.mName = std::string(Func.getName());
+  Kernel.mName = Func.getName();
   Kernel.mSymbolName = (Twine(Func.getName()) + Twine("@kd")).str();
   emitKernelLanguage(Func);
   emitKernelAttrs(Func);
@@ -558,6 +567,38 @@ StringRef MetadataStreamerV3::getValueKind(Type *Ty, StringRef TypeQual,
                    : "by_value");
 }
 
+StringRef MetadataStreamerV3::getValueType(Type *Ty, StringRef TypeName) const {
+  switch (Ty->getTypeID()) {
+  case Type::IntegerTyID: {
+    auto Signed = !TypeName.startswith("u");
+    switch (Ty->getIntegerBitWidth()) {
+    case 8:
+      return Signed ? "i8" : "u8";
+    case 16:
+      return Signed ? "i16" : "u16";
+    case 32:
+      return Signed ? "i32" : "u32";
+    case 64:
+      return Signed ? "i64" : "u64";
+    default:
+      return "struct";
+    }
+  }
+  case Type::HalfTyID:
+    return "f16";
+  case Type::FloatTyID:
+    return "f32";
+  case Type::DoubleTyID:
+    return "f64";
+  case Type::PointerTyID:
+    return getValueType(Ty->getPointerElementType(), TypeName);
+  case Type::VectorTyID:
+    return getValueType(Ty->getVectorElementType(), TypeName);
+  default:
+    return "struct";
+  }
+}
+
 std::string MetadataStreamerV3::getTypeName(Type *Ty, bool Signed) const {
   switch (Ty->getTypeID()) {
   case Type::IntegerTyID: {
@@ -584,10 +625,10 @@ std::string MetadataStreamerV3::getTypeName(Type *Ty, bool Signed) const {
     return "float";
   case Type::DoubleTyID:
     return "double";
-  case Type::FixedVectorTyID: {
-    auto VecTy = cast<FixedVectorType>(Ty);
+  case Type::VectorTyID: {
+    auto VecTy = cast<VectorType>(Ty);
     auto ElTy = VecTy->getElementType();
-    auto NumElements = VecTy->getNumElements();
+    auto NumElements = VecTy->getVectorNumElements();
     return (Twine(getTypeName(ElTy, Signed)) + Twine(NumElements)).str();
   }
   default:
@@ -609,8 +650,8 @@ MetadataStreamerV3::getWorkGroupDimensions(MDNode *Node) const {
 
 void MetadataStreamerV3::emitVersion() {
   auto Version = HSAMetadataDoc->getArrayNode();
-  Version.push_back(Version.getDocument()->getNode(VersionMajorV3));
-  Version.push_back(Version.getDocument()->getNode(VersionMinorV3));
+  Version.push_back(Version.getDocument()->getNode(VersionMajor));
+  Version.push_back(Version.getDocument()->getNode(VersionMinor));
   getRootMetadata("amdhsa.version") = Version;
 }
 
@@ -717,34 +758,31 @@ void MetadataStreamerV3::emitKernelArg(const Argument &Arg, unsigned &Offset,
   if (Node && ArgNo < Node->getNumOperands())
     TypeQual = cast<MDString>(Node->getOperand(ArgNo))->getString();
 
+  Type *Ty = Arg.getType();
   const DataLayout &DL = Func->getParent()->getDataLayout();
 
-  MaybeAlign PointeeAlign;
-  Type *Ty = Arg.hasByRefAttr() ? Arg.getParamByRefType() : Arg.getType();
-
-  // FIXME: Need to distinguish in memory alignment from pointer alignment.
+  unsigned PointeeAlign = 0;
   if (auto PtrTy = dyn_cast<PointerType>(Ty)) {
     if (PtrTy->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS) {
-      PointeeAlign = DL.getValueOrABITypeAlignment(Arg.getParamAlign(),
-                                                   PtrTy->getElementType());
+      PointeeAlign = Arg.getParamAlignment();
+      if (PointeeAlign == 0)
+        PointeeAlign = DL.getABITypeAlignment(PtrTy->getElementType());
     }
   }
 
-  // There's no distinction between byval aggregates and raw aggregates.
-  Type *ArgTy;
-  Align ArgAlign;
-  std::tie(ArgTy, ArgAlign) = getArgumentTypeAlign(Arg, DL);
-
-  emitKernelArg(DL, ArgTy, ArgAlign,
-                getValueKind(ArgTy, TypeQual, BaseTypeName), Offset, Args,
-                PointeeAlign, Name, TypeName, BaseTypeName, AccQual, TypeQual);
+  emitKernelArg(Func->getParent()->getDataLayout(), Arg.getType(),
+                getValueKind(Arg.getType(), TypeQual, BaseTypeName), Offset,
+                Args, PointeeAlign, Name, TypeName, BaseTypeName, AccQual,
+                TypeQual);
 }
 
-void MetadataStreamerV3::emitKernelArg(
-    const DataLayout &DL, Type *Ty, Align Alignment, StringRef ValueKind,
-    unsigned &Offset, msgpack::ArrayDocNode Args, MaybeAlign PointeeAlign,
-    StringRef Name, StringRef TypeName, StringRef BaseTypeName,
-    StringRef AccQual, StringRef TypeQual) {
+void MetadataStreamerV3::emitKernelArg(const DataLayout &DL, Type *Ty,
+                                       StringRef ValueKind, unsigned &Offset,
+                                       msgpack::ArrayDocNode Args,
+                                       unsigned PointeeAlign, StringRef Name,
+                                       StringRef TypeName,
+                                       StringRef BaseTypeName,
+                                       StringRef AccQual, StringRef TypeQual) {
   auto Arg = Args.getDocument()->getMapNode();
 
   if (!Name.empty())
@@ -752,13 +790,16 @@ void MetadataStreamerV3::emitKernelArg(
   if (!TypeName.empty())
     Arg[".type_name"] = Arg.getDocument()->getNode(TypeName, /*Copy=*/true);
   auto Size = DL.getTypeAllocSize(Ty);
+  auto Align = DL.getABITypeAlignment(Ty);
   Arg[".size"] = Arg.getDocument()->getNode(Size);
-  Offset = alignTo(Offset, Alignment);
+  Offset = alignTo(Offset, Align);
   Arg[".offset"] = Arg.getDocument()->getNode(Offset);
   Offset += Size;
   Arg[".value_kind"] = Arg.getDocument()->getNode(ValueKind, /*Copy=*/true);
+  Arg[".value_type"] =
+      Arg.getDocument()->getNode(getValueType(Ty, BaseTypeName), /*Copy=*/true);
   if (PointeeAlign)
-    Arg[".pointee_align"] = Arg.getDocument()->getNode(PointeeAlign->value());
+    Arg[".pointee_align"] = Arg.getDocument()->getNode(PointeeAlign);
 
   if (auto PtrTy = dyn_cast<PointerType>(Ty))
     if (auto Qualifier = getAddressSpaceQualifier(PtrTy->getAddressSpace()))
@@ -798,14 +839,11 @@ void MetadataStreamerV3::emitHiddenKernelArgs(const Function &Func,
   auto Int64Ty = Type::getInt64Ty(Func.getContext());
 
   if (HiddenArgNumBytes >= 8)
-    emitKernelArg(DL, Int64Ty, Align(8), "hidden_global_offset_x", Offset,
-                  Args);
+    emitKernelArg(DL, Int64Ty, "hidden_global_offset_x", Offset, Args);
   if (HiddenArgNumBytes >= 16)
-    emitKernelArg(DL, Int64Ty, Align(8), "hidden_global_offset_y", Offset,
-                  Args);
+    emitKernelArg(DL, Int64Ty, "hidden_global_offset_y", Offset, Args);
   if (HiddenArgNumBytes >= 24)
-    emitKernelArg(DL, Int64Ty, Align(8), "hidden_global_offset_z", Offset,
-                  Args);
+    emitKernelArg(DL, Int64Ty, "hidden_global_offset_z", Offset, Args);
 
   auto Int8PtrTy =
       Type::getInt8PtrTy(Func.getContext(), AMDGPUAS::GLOBAL_ADDRESS);
@@ -814,36 +852,26 @@ void MetadataStreamerV3::emitHiddenKernelArgs(const Function &Func,
   // "none" argument.
   if (HiddenArgNumBytes >= 32) {
     if (Func.getParent()->getNamedMetadata("llvm.printf.fmts"))
-      emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_printf_buffer", Offset,
-                    Args);
-    else if (Func.getParent()->getFunction("__ockl_hostcall_internal")) {
-      // The printf runtime binding pass should have ensured that hostcall and
-      // printf are not used in the same module.
-      assert(!Func.getParent()->getNamedMetadata("llvm.printf.fmts"));
-      emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_hostcall_buffer", Offset,
-                    Args);
-    } else
-      emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_none", Offset, Args);
+      emitKernelArg(DL, Int8PtrTy, "hidden_printf_buffer", Offset, Args);
+    else
+      emitKernelArg(DL, Int8PtrTy, "hidden_none", Offset, Args);
   }
 
   // Emit "default queue" and "completion action" arguments if enqueue kernel is
   // used, otherwise emit dummy "none" arguments.
   if (HiddenArgNumBytes >= 48) {
     if (Func.hasFnAttribute("calls-enqueue-kernel")) {
-      emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_default_queue", Offset,
-                    Args);
-      emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_completion_action", Offset,
-                    Args);
+      emitKernelArg(DL, Int8PtrTy, "hidden_default_queue", Offset, Args);
+      emitKernelArg(DL, Int8PtrTy, "hidden_completion_action", Offset, Args);
     } else {
-      emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_none", Offset, Args);
-      emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_none", Offset, Args);
+      emitKernelArg(DL, Int8PtrTy, "hidden_none", Offset, Args);
+      emitKernelArg(DL, Int8PtrTy, "hidden_none", Offset, Args);
     }
   }
 
   // Emit the pointer argument for multi-grid object.
   if (HiddenArgNumBytes >= 56)
-    emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_multigrid_sync_arg", Offset,
-                  Args);
+    emitKernelArg(DL, Int8PtrTy, "hidden_multigrid_sync_arg", Offset, Args);
 }
 
 msgpack::MapDocNode
@@ -855,7 +883,7 @@ MetadataStreamerV3::getHSAKernelProps(const MachineFunction &MF,
 
   auto Kern = HSAMetadataDoc->getMapNode();
 
-  Align MaxKernArgAlign;
+  unsigned MaxKernArgAlign;
   Kern[".kernarg_segment_size"] = Kern.getDocument()->getNode(
       STM.getKernArgSegmentSize(F, MaxKernArgAlign));
   Kern[".group_segment_fixed_size"] =
@@ -863,7 +891,7 @@ MetadataStreamerV3::getHSAKernelProps(const MachineFunction &MF,
   Kern[".private_segment_fixed_size"] =
       Kern.getDocument()->getNode(ProgramInfo.ScratchSize);
   Kern[".kernarg_segment_align"] =
-      Kern.getDocument()->getNode(std::max(Align(4), MaxKernArgAlign).value());
+      Kern.getDocument()->getNode(std::max(uint32_t(4), MaxKernArgAlign));
   Kern[".wavefront_size"] =
       Kern.getDocument()->getNode(STM.getWavefrontSize());
   Kern[".sgpr_count"] = Kern.getDocument()->getNode(ProgramInfo.NumSGPR);
@@ -882,8 +910,7 @@ bool MetadataStreamerV3::emitTo(AMDGPUTargetStreamer &TargetStreamer) {
   return TargetStreamer.EmitHSAMetadata(*HSAMetadataDoc, true);
 }
 
-void MetadataStreamerV3::begin(const Module &Mod,
-                               const IsaInfo::AMDGPUTargetID &TargetID) {
+void MetadataStreamerV3::begin(const Module &Mod) {
   emitVersion();
   emitPrintf(Mod);
   getRootMetadata("amdhsa.kernels") = HSAMetadataDoc->getArrayNode();
@@ -921,30 +948,6 @@ void MetadataStreamerV3::emitKernel(const MachineFunction &MF,
   }
 
   Kernels.push_back(Kern);
-}
-
-//===----------------------------------------------------------------------===//
-// HSAMetadataStreamerV4
-//===----------------------------------------------------------------------===//
-
-void MetadataStreamerV4::emitVersion() {
-  auto Version = HSAMetadataDoc->getArrayNode();
-  Version.push_back(Version.getDocument()->getNode(VersionMajorV4));
-  Version.push_back(Version.getDocument()->getNode(VersionMinorV4));
-  getRootMetadata("amdhsa.version") = Version;
-}
-
-void MetadataStreamerV4::emitTargetID(const IsaInfo::AMDGPUTargetID &TargetID) {
-  getRootMetadata("amdhsa.target") =
-      HSAMetadataDoc->getNode(TargetID.toString(), /*Copy=*/true);
-}
-
-void MetadataStreamerV4::begin(const Module &Mod,
-                               const IsaInfo::AMDGPUTargetID &TargetID) {
-  emitVersion();
-  emitTargetID(TargetID);
-  emitPrintf(Mod);
-  getRootMetadata("amdhsa.kernels") = HSAMetadataDoc->getArrayNode();
 }
 
 } // end namespace HSAMD

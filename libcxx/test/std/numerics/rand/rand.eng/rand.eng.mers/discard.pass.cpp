@@ -16,6 +16,7 @@
 // void discard(unsigned long long z);
 
 #include <random>
+#include <sstream>
 #include <cassert>
 
 #include "test_macros.h"

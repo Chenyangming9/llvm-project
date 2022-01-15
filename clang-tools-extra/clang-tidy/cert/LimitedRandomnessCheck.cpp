@@ -24,12 +24,12 @@ void LimitedRandomnessCheck::registerMatchers(MatchFinder *Finder) {
 }
 
 void LimitedRandomnessCheck::check(const MatchFinder::MatchResult &Result) {
-  std::string Msg = "";
+  std::string msg = "";
   if (getLangOpts().CPlusPlus)
-    Msg = "; use C++11 random library instead";
+    msg = "; use C++11 random library instead";
 
   const auto *MatchedDecl = Result.Nodes.getNodeAs<CallExpr>("randomGenerator");
-  diag(MatchedDecl->getBeginLoc(), "rand() has limited randomness" + Msg);
+  diag(MatchedDecl->getBeginLoc(), "rand() has limited randomness" + msg);
 }
 
 } // namespace cert

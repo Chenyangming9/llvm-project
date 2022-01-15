@@ -6,14 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TOOLS_DEBUGSERVER_SOURCE_JSON_H
-#define LLDB_TOOLS_DEBUGSERVER_SOURCE_JSON_H
+#ifndef utility_JSON_h_
+#define utility_JSON_h_
 
 #include "StdStringExtractor.h"
 
 // C includes
-#include <cinttypes>
-#include <cstdint>
+#include <inttypes.h>
+#include <stdint.h>
 
 // C++ includes
 #include <map>
@@ -292,11 +292,9 @@ public:
   JSONValue::SP ParseJSONValue();
 
 protected:
-  JSONValue::SP ParseJSONValue(const std::string &value, const Token &token);
-
   JSONValue::SP ParseJSONObject();
 
   JSONValue::SP ParseJSONArray();
 };
 
-#endif // LLDB_TOOLS_DEBUGSERVER_SOURCE_JSON_H
+#endif // utility_JSON_h_

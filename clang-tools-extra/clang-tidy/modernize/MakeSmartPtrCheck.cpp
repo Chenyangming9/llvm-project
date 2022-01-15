@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../utils/TypeTraits.h"
 #include "MakeSharedCheck.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/Lexer.h"
@@ -20,11 +19,13 @@ namespace modernize {
 
 namespace {
 
+constexpr char StdMemoryHeader[] = "memory";
 constexpr char ConstructorCall[] = "constructorCall";
 constexpr char ResetCall[] = "resetCall";
 constexpr char NewExpression[] = "newExpression";
 
-std::string getNewExprName(const CXXNewExpr *NewExpr, const SourceManager &SM,
+std::string GetNewExprName(const CXXNewExpr *NewExpr,
+                           const SourceManager &SM,
                            const LangOptions &Lang) {
   StringRef WrittenName = Lexer::getSourceText(
       CharSourceRange::getTokenRange(
@@ -40,26 +41,23 @@ std::string getNewExprName(const CXXNewExpr *NewExpr, const SourceManager &SM,
 
 const char MakeSmartPtrCheck::PointerType[] = "pointerType";
 
-MakeSmartPtrCheck::MakeSmartPtrCheck(StringRef Name, ClangTidyContext *Context,
+MakeSmartPtrCheck::MakeSmartPtrCheck(StringRef Name,
+                                     ClangTidyContext* Context,
                                      StringRef MakeSmartPtrFunctionName)
     : ClangTidyCheck(Name, Context),
-      Inserter(Options.getLocalOrGlobal("IncludeStyle",
-                                        utils::IncludeSorter::IS_LLVM)),
+      IncludeStyle(utils::IncludeSorter::parseIncludeStyle(
+          Options.getLocalOrGlobal("IncludeStyle", "llvm"))),
       MakeSmartPtrFunctionHeader(
-          Options.get("MakeSmartPtrFunctionHeader", "<memory>")),
+          Options.get("MakeSmartPtrFunctionHeader", StdMemoryHeader)),
       MakeSmartPtrFunctionName(
           Options.get("MakeSmartPtrFunction", MakeSmartPtrFunctionName)),
-      IgnoreMacros(Options.getLocalOrGlobal("IgnoreMacros", true)),
-      IgnoreDefaultInitialization(
-          Options.get("IgnoreDefaultInitialization", true)) {}
+      IgnoreMacros(Options.getLocalOrGlobal("IgnoreMacros", true)) {}
 
 void MakeSmartPtrCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
-  Options.store(Opts, "IncludeStyle", Inserter.getStyle());
+  Options.store(Opts, "IncludeStyle", IncludeStyle);
   Options.store(Opts, "MakeSmartPtrFunctionHeader", MakeSmartPtrFunctionHeader);
   Options.store(Opts, "MakeSmartPtrFunction", MakeSmartPtrFunctionName);
   Options.store(Opts, "IgnoreMacros", IgnoreMacros);
-  Options.store(Opts, "IgnoreDefaultInitialization",
-                IgnoreDefaultInitialization);
 }
 
 bool MakeSmartPtrCheck::isLanguageVersionSupported(
@@ -70,41 +68,42 @@ bool MakeSmartPtrCheck::isLanguageVersionSupported(
 void MakeSmartPtrCheck::registerPPCallbacks(const SourceManager &SM,
                                             Preprocessor *PP,
                                             Preprocessor *ModuleExpanderPP) {
-  Inserter.registerPreprocessor(PP);
+  if (isLanguageVersionSupported(getLangOpts())) {
+    Inserter = llvm::make_unique<utils::IncludeInserter>(SM, getLangOpts(),
+                                                         IncludeStyle);
+    PP->addPPCallbacks(Inserter->CreatePPCallbacks());
+  }
 }
 
 void MakeSmartPtrCheck::registerMatchers(ast_matchers::MatchFinder *Finder) {
+  if (!isLanguageVersionSupported(getLangOpts()))
+    return;
+
   // Calling make_smart_ptr from within a member function of a type with a
   // private or protected constructor would be ill-formed.
   auto CanCallCtor = unless(has(ignoringImpCasts(
       cxxConstructExpr(hasDeclaration(decl(unless(isPublic())))))));
 
-  auto IsPlacement = hasAnyPlacementArg(anything());
-
   Finder->addMatcher(
-      traverse(
-          TK_AsIs,
-          cxxBindTemporaryExpr(has(ignoringParenImpCasts(
-              cxxConstructExpr(
-                  hasType(getSmartPointerTypeMatcher()), argumentCountIs(1),
-                  hasArgument(
-                      0, cxxNewExpr(hasType(pointsTo(qualType(hasCanonicalType(
-                                        equalsBoundNode(PointerType))))),
-                                    CanCallCtor, unless(IsPlacement))
-                             .bind(NewExpression)),
-                  unless(isInTemplateInstantiation()))
-                  .bind(ConstructorCall))))),
+      cxxBindTemporaryExpr(has(ignoringParenImpCasts(
+          cxxConstructExpr(
+              hasType(getSmartPointerTypeMatcher()), argumentCountIs(1),
+              hasArgument(0,
+                          cxxNewExpr(hasType(pointsTo(qualType(hasCanonicalType(
+                                         equalsBoundNode(PointerType))))),
+                                     CanCallCtor)
+                              .bind(NewExpression)),
+              unless(isInTemplateInstantiation()))
+              .bind(ConstructorCall)))),
       this);
 
   Finder->addMatcher(
-      traverse(TK_AsIs,
-               cxxMemberCallExpr(
-                   thisPointerType(getSmartPointerTypeMatcher()),
-                   callee(cxxMethodDecl(hasName("reset"))),
-                   hasArgument(0, cxxNewExpr(CanCallCtor, unless(IsPlacement))
-                                      .bind(NewExpression)),
-                   unless(isInTemplateInstantiation()))
-                   .bind(ResetCall)),
+      cxxMemberCallExpr(
+          thisPointerType(getSmartPointerTypeMatcher()),
+          callee(cxxMethodDecl(hasName("reset"))),
+          hasArgument(0, cxxNewExpr(CanCallCtor).bind(NewExpression)),
+          unless(isInTemplateInstantiation()))
+          .bind(ResetCall),
       this);
 }
 
@@ -120,22 +119,20 @@ void MakeSmartPtrCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *Type = Result.Nodes.getNodeAs<QualType>(PointerType);
   const auto *New = Result.Nodes.getNodeAs<CXXNewExpr>(NewExpression);
 
+  if (New->getNumPlacementArgs() != 0)
+    return;
   // Skip when this is a new-expression with `auto`, e.g. new auto(1)
   if (New->getType()->getPointeeType()->getContainedAutoType())
     return;
 
-  // Be conservative for cases where we construct and default initialize.
-  //
+  // Be conservative for cases where we construct an array without any
+  // initalization.
   // For example,
-  //    P.reset(new int)    // check fix: P = std::make_unique<int>()
-  //    P.reset(new int[5]) // check fix: P = std::make_unique<int []>(5)
+  //    P.reset(new int[5]) // check fix: P = make_unique<int []>(5)
   //
-  // The fix of the check has side effect, it introduces value initialization
+  // The fix of the check has side effect, it introduces default initialization
   // which maybe unexpected and cause performance regression.
-  bool Initializes = New->hasInitializer() ||
-                     !utils::type_traits::isTriviallyDefaultConstructible(
-                         New->getAllocatedType(), *Result.Context);
-  if (!Initializes && IgnoreDefaultInitialization)
+  if (New->isArray() && !New->hasInitializer())
     return;
   if (Construct)
     checkConstruct(SM, Result.Context, Construct, Type, New);
@@ -175,14 +172,15 @@ void MakeSmartPtrCheck::checkConstruct(SourceManager &SM, ASTContext *Ctx,
   }
 
   // Find the location of the template's left angle.
-  size_t LAngle = ExprStr.find('<');
+  size_t LAngle = ExprStr.find("<");
   SourceLocation ConstructCallEnd;
   if (LAngle == StringRef::npos) {
     // If the template argument is missing (because it is part of the alias)
     // we have to add it back.
     ConstructCallEnd = ConstructCallStart.getLocWithOffset(ExprStr.size());
     Diag << FixItHint::CreateInsertion(
-        ConstructCallEnd, "<" + getNewExprName(New, SM, getLangOpts()) + ">");
+        ConstructCallEnd,
+        "<" + GetNewExprName(New, SM, getLangOpts()) + ">");
   } else {
     ConstructCallEnd = ConstructCallStart.getLocWithOffset(LAngle);
   }
@@ -246,7 +244,7 @@ void MakeSmartPtrCheck::checkReset(SourceManager &SM, ASTContext *Ctx,
   Diag << FixItHint::CreateReplacement(
       CharSourceRange::getCharRange(OperatorLoc, ExprEnd),
       (llvm::Twine(" = ") + MakeSmartPtrFunctionName + "<" +
-       getNewExprName(New, SM, getLangOpts()) + ">")
+       GetNewExprName(New, SM, getLangOpts()) + ">")
           .str());
 
   if (Expr->isArrow())
@@ -259,8 +257,6 @@ bool MakeSmartPtrCheck::replaceNew(DiagnosticBuilder &Diag,
                                    const CXXNewExpr *New, SourceManager &SM,
                                    ASTContext *Ctx) {
   auto SkipParensParents = [&](const Expr *E) {
-    TraversalKindScope RAII(*Ctx, TK_AsIs);
-
     for (const Expr *OldE = nullptr; E != OldE;) {
       OldE = E;
       for (const auto &Node : Ctx->getParents(*E)) {
@@ -380,25 +376,26 @@ bool MakeSmartPtrCheck::replaceNew(DiagnosticBuilder &Diag,
         //   struct S { S(std::initializer_list<int>); };
         //   struct S2 { S2(S, int); };
         //   smart_ptr<S>(new S{1, 2, 3});  // C++11 direct list-initialization
-        //   smart_ptr<S>(new S{});  // use initializer-list constructor
+        //   smart_ptr<S>(new S{});  // use initializer-list consturctor
         //   smart_ptr<S2>()new S2{ {1,2}, 3 }; // have a list-initialized arg
         // The above cases have to be replaced with:
         //   std::make_smart_ptr<S>(std::initializer_list<int>({1, 2, 3}));
         //   std::make_smart_ptr<S>(std::initializer_list<int>({}));
         //   std::make_smart_ptr<S2>(S{1, 2}, 3);
         return false;
+      } else {
+        // Direct initialization with ordinary constructors.
+        //   struct S { S(int x); S(); };
+        //   smart_ptr<S>(new S{5});
+        //   smart_ptr<S>(new S{}); // use default constructor
+        // The arguments in the initialization list are going to be forwarded to
+        // the constructor, so this has to be replaced with:
+        //   std::make_smart_ptr<S>(5);
+        //   std::make_smart_ptr<S>();
+        InitRange = SourceRange(
+            NewConstruct->getParenOrBraceRange().getBegin().getLocWithOffset(1),
+            NewConstruct->getParenOrBraceRange().getEnd().getLocWithOffset(-1));
       }
-      // Direct initialization with ordinary constructors.
-      //   struct S { S(int x); S(); };
-      //   smart_ptr<S>(new S{5});
-      //   smart_ptr<S>(new S{}); // use default constructor
-      // The arguments in the initialization list are going to be forwarded to
-      // the constructor, so this has to be replaced with:
-      //   std::make_smart_ptr<S>(5);
-      //   std::make_smart_ptr<S>();
-      InitRange = SourceRange(
-          NewConstruct->getParenOrBraceRange().getBegin().getLocWithOffset(1),
-          NewConstruct->getParenOrBraceRange().getEnd().getLocWithOffset(-1));
     } else {
       // Aggregate initialization.
       //   smart_ptr<Pair>(new Pair{first, second});
@@ -435,7 +432,11 @@ void MakeSmartPtrCheck::insertHeader(DiagnosticBuilder &Diag, FileID FD) {
   if (MakeSmartPtrFunctionHeader.empty()) {
     return;
   }
-  Diag << Inserter.createIncludeInsertion(FD, MakeSmartPtrFunctionHeader);
+  if (auto IncludeFixit = Inserter->CreateIncludeInsertion(
+          FD, MakeSmartPtrFunctionHeader,
+          /*IsAngled=*/MakeSmartPtrFunctionHeader == StdMemoryHeader)) {
+    Diag << *IncludeFixit;
+  }
 }
 
 } // namespace modernize

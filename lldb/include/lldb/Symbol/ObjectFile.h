@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SYMBOL_OBJECTFILE_H
-#define LLDB_SYMBOL_OBJECTFILE_H
+#ifndef liblldb_ObjectFile_h_
+#define liblldb_ObjectFile_h_
 
 #include "lldb/Core/FileSpecList.h"
 #include "lldb/Core/ModuleChild.h"
@@ -25,9 +25,9 @@ namespace lldb_private {
 
 class ObjectFileJITDelegate {
 public:
-  ObjectFileJITDelegate() = default;
+  ObjectFileJITDelegate() {}
 
-  virtual ~ObjectFileJITDelegate() = default;
+  virtual ~ObjectFileJITDelegate() {}
 
   virtual lldb::ByteOrder GetByteOrder() const = 0;
 
@@ -63,22 +63,16 @@ class ObjectFile : public std::enable_shared_from_this<ObjectFile>,
 public:
   enum Type {
     eTypeInvalid = 0,
-    /// A core file that has a checkpoint of a program's execution state.
-    eTypeCoreFile,
-    /// A normal executable.
-    eTypeExecutable,
-    /// An object file that contains only debug information.
-    eTypeDebugInfo,
-    /// The platform's dynamic linker executable.
-    eTypeDynamicLinker,
-    /// An intermediate object file.
-    eTypeObjectFile,
-    /// A shared library that can be used during execution.
-    eTypeSharedLibrary,
-    /// A library that can be linked against but not used for execution.
-    eTypeStubLibrary,
-    /// JIT code that has symbols, sections and possibly debug info.
-    eTypeJIT,
+    eTypeCoreFile,      /// A core file that has a checkpoint of a program's
+                        /// execution state
+    eTypeExecutable,    /// A normal executable
+    eTypeDebugInfo,     /// An object file that contains only debug information
+    eTypeDynamicLinker, /// The platform's dynamic linker executable
+    eTypeObjectFile,    /// An intermediate object file
+    eTypeSharedLibrary, /// A shared library that can be used during execution
+    eTypeStubLibrary, /// A library that can be linked against but not used for
+                      /// execution
+    eTypeJIT, /// JIT code that has symbols, sections and possibly debug info
     eTypeUnknown
   };
 
@@ -89,17 +83,6 @@ public:
     eStrataKernel,
     eStrataRawImage,
     eStrataJIT
-  };
-
-  /// If we have a corefile binary hint, this enum
-  /// specifies the binary type which we can use to
-  /// select the correct DynamicLoader plugin.
-  enum BinaryType {
-    eBinaryTypeInvalid = 0,
-    eBinaryTypeUnknown,
-    eBinaryTypeKernel,    /// kernel binary
-    eBinaryTypeUser,      /// user process binary
-    eBinaryTypeStandalone /// standalone binary / firmware
   };
 
   struct LoadableData {
@@ -141,7 +124,7 @@ public:
   /// ObjectFile plug-in interface and returns the first instance that can
   /// parse the file.
   ///
-  /// \param[in] module_sp
+  /// \param[in] module
   ///     The parent module that owns this object file.
   ///
   /// \param[in] file_spec
@@ -169,7 +152,7 @@ public:
   /// ObjectFile plug-in interface and returns the first instance that can
   /// parse the file.
   ///
-  /// \param[in] module_sp
+  /// \param[in] module
   ///     The parent module that owns this object file.
   ///
   /// \param[in] process_sp
@@ -183,10 +166,10 @@ public:
                                        lldb::addr_t header_addr,
                                        lldb::DataBufferSP &file_data_sp);
 
-  static size_t
-  GetModuleSpecifications(const FileSpec &file, lldb::offset_t file_offset,
-                          lldb::offset_t file_size, ModuleSpecList &specs,
-                          lldb::DataBufferSP data_sp = lldb::DataBufferSP());
+  static size_t GetModuleSpecifications(const FileSpec &file,
+                                        lldb::offset_t file_offset,
+                                        lldb::offset_t file_size,
+                                        ModuleSpecList &specs);
 
   static size_t GetModuleSpecifications(const lldb_private::FileSpec &file,
                                         lldb::DataBufferSP &data_sp,
@@ -218,12 +201,8 @@ public:
   ///     \b false otherwise and \a archive_file and \a archive_object
   ///     are guaranteed to be remain unchanged.
   static bool SplitArchivePathWithObject(
-      llvm::StringRef path_with_object, lldb_private::FileSpec &archive_file,
+      const char *path_with_object, lldb_private::FileSpec &archive_file,
       lldb_private::ConstString &archive_object, bool must_exist);
-
-  // LLVM RTTI support
-  static char ID;
-  virtual bool isA(const void *ClassID) const { return ClassID == &ID; }
 
   /// Gets the address size in bytes for the current object file.
   ///
@@ -367,6 +346,13 @@ public:
   /// Frees the symbol table.
   ///
   /// This function should only be used when an object file is
+  ///
+  /// \param[in] flags
+  ///     eSymtabFromUnifiedSectionList: Whether to clear symbol table
+  ///     for unified module section list, or object file.
+  ///
+  /// \return
+  ///     The symbol table for this object file.
   virtual void ClearSymtab();
 
   /// Gets the UUID for this object file.
@@ -379,6 +365,17 @@ public:
   ///     The object file's UUID. In case of an error, an empty UUID is
   ///     returned.
   virtual UUID GetUUID() = 0;
+
+  /// Gets the symbol file spec list for this object file.
+  ///
+  /// If the object file format contains a debug symbol file link, the values
+  /// will be returned in the FileSpecList.
+  ///
+  /// \return
+  ///     Returns filespeclist.
+  virtual lldb_private::FileSpecList GetDebugSymbolFilePaths() {
+    return FileSpecList();
+  }
 
   /// Gets the file spec list of libraries re-exported by this object file.
   ///
@@ -491,19 +488,9 @@ public:
   /// \return
   ///     Returns the identifier string if one exists, else an empty
   ///     string.
-  virtual std::string GetIdentifierString () {
-      return std::string();
+  virtual std::string GetIdentifierString () { 
+      return std::string(); 
   }
-
-  /// Some object files may have the number of bits used for addressing
-  /// embedded in them, e.g. a Mach-O core file using an LC_NOTE.  These
-  /// object files can return the address mask that should be used in
-  /// the Process.
-  /// \return
-  ///     The mask will have bits set which aren't used for addressing --
-  ///     typically, the high bits.
-  ///     Zero is returned when no address bits mask is available.
-  virtual lldb::addr_t GetAddressMask() { return 0; }
 
   /// When the ObjectFile is a core file, lldb needs to locate the "binary" in
   /// the core file.  lldb can iterate over the pages looking for a valid
@@ -521,17 +508,12 @@ public:
   ///   If the uuid of the binary is specified, this will be set.
   ///   If no UUID is available, will be cleared.
   ///
-  /// \param[out] type
-  ///   Return the type of the binary, which will dictate which
-  ///   DynamicLoader plugin should be used.
-  ///
   /// \return
   ///   Returns true if either address or uuid has been set.
-  virtual bool GetCorefileMainBinaryInfo(lldb::addr_t &address, UUID &uuid,
-                                         ObjectFile::BinaryType &type) {
-    address = LLDB_INVALID_ADDRESS;
-    uuid.Clear();
-    return false;
+  virtual bool GetCorefileMainBinaryInfo (lldb::addr_t &address, UUID &uuid) {
+      address = LLDB_INVALID_ADDRESS;
+      uuid.Clear();
+      return false;
   }
 
   virtual lldb::RegisterContextSP
@@ -671,26 +653,9 @@ public:
   ///
   /// \param[in] target
   ///     Target where to load.
-  virtual std::vector<LoadableData> GetLoadableData(Target &target);
-
-  /// Creates a plugin-specific call frame info
-  virtual std::unique_ptr<CallFrameInfo> CreateCallFrameInfo();
-
-  /// Load binaries listed in a corefile
-  ///
-  /// A corefile may have metadata listing binaries that can be loaded,
-  /// and the offsets at which they were loaded.  This method will try
-  /// to add them to the Target.  If any binaries were loaded,
-  ///
-  /// \param[in] process
-  ///     Process where to load binaries.
   ///
   /// \return
-  ///     Returns true if any binaries were loaded.
-
-  virtual bool LoadCoreFileImages(lldb_private::Process &process) {
-    return false;
-  }
+  virtual std::vector<LoadableData> GetLoadableData(Target &target);
 
 protected:
   // Member variables.
@@ -722,12 +687,13 @@ protected:
   ///     false otherwise.
   bool SetModulesArchitecture(const ArchSpec &new_arch);
 
+  ConstString GetNextSyntheticSymbolName();
+
   static lldb::DataBufferSP MapFileData(const FileSpec &file, uint64_t Size,
                                         uint64_t Offset);
 
 private:
-  ObjectFile(const ObjectFile &) = delete;
-  const ObjectFile &operator=(const ObjectFile &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(ObjectFile);
 };
 
 } // namespace lldb_private
@@ -744,4 +710,4 @@ template <> struct format_provider<lldb_private::ObjectFile::Strata> {
 };
 } // namespace llvm
 
-#endif // LLDB_SYMBOL_OBJECTFILE_H
+#endif // liblldb_ObjectFile_h_

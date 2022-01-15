@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDKernelCodeTUtils.h"
-#include "AMDKernelCodeT.h"
 #include "SIDefines.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringMap.h"
@@ -19,6 +18,9 @@
 #include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCAsmParser.h"
 #include "llvm/Support/raw_ostream.h"
+#include <cassert>
+#include <cstdint>
+#include <utility>
 
 using namespace llvm;
 

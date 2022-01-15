@@ -42,5 +42,6 @@ Sections:
 ProgramHeaders:
   # Use an arbitrary segment type to show that the segment type is unimportant.
   - Type: 0x61234567
-    FirstSec: shf_alloc
-    LastSec:  non_alloc
+    Sections:
+      - Section: shf_alloc
+      - Section: non_alloc

@@ -54,8 +54,6 @@ const char coff_bigobj[] =
 const char coff_import_library[] = "\x00\x00\xff\xff....";
 const char elf_relocatable[] = {0x7f, 'E', 'L', 'F', 1, 2, 1, 0, 0,
                                 0,    0,   0,   0,   0, 0, 0, 0, 1};
-
-const char goff_object[] = "\x03\xF0\x00";
 const char macho_universal_binary[] = "\xca\xfe\xba\xbe...\x00";
 const char macho_object[] =
     "\xfe\xed\xfa\xce........\x00\x00\x00\x01............";
@@ -84,8 +82,6 @@ const char macho_dynamically_linked_shared_lib_stub[] =
 const char ms_dos_stub_broken[] = "\x4d\x5a\x20\x20";
 const char pdb[] = "Microsoft C/C++ MSF 7.00\r\n\x1a"
                    "DS\x00\x00\x00";
-const char tapi_file[] = "--- !tapi-tbd-v1\n";
-const char tapi_file_tbd_v1[] = "---\narchs: [";
 
 TEST_F(MagicTest, Magic) {
   struct type {
@@ -102,7 +98,6 @@ TEST_F(MagicTest, Magic) {
        file_magic::coff_object},
       DEFINE(coff_import_library),
       DEFINE(elf_relocatable),
-      DEFINE(goff_object),
       DEFINE(macho_universal_binary),
       DEFINE(macho_object),
       DEFINE(macho_executable),
@@ -119,9 +114,6 @@ TEST_F(MagicTest, Magic) {
       DEFINE(pdb),
       {"ms_dos_stub_broken", ms_dos_stub_broken, sizeof(ms_dos_stub_broken),
        file_magic::unknown},
-      DEFINE(tapi_file),
-      {"tapi_file_tbd_v1", tapi_file_tbd_v1, sizeof(tapi_file_tbd_v1),
-       file_magic::tapi_file},
 #undef DEFINE
   };
 
@@ -131,7 +123,7 @@ TEST_F(MagicTest, Magic) {
     SmallString<128> file_pathname(TestDirectory);
     llvm::sys::path::append(file_pathname, i->filename);
     std::error_code EC;
-    raw_fd_ostream file(file_pathname, EC, sys::fs::OF_None);
+    raw_fd_ostream file(file_pathname, EC, sys::fs::F_None);
     ASSERT_FALSE(file.has_error());
     StringRef magic(i->magic_str, i->magic_str_len);
     file << magic;

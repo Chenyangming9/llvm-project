@@ -1,5 +1,3 @@
-add_llvm_component_group(XCore)
-
 set(LLVM_TARGET_DEFINITIONS XCore.td)
 
 tablegen(LLVM XCoreGenAsmWriter.inc -gen-asm-writer)
@@ -27,22 +25,6 @@ add_llvm_target(XCoreCodeGen
   XCoreTargetObjectFile.cpp
   XCoreSelectionDAGInfo.cpp
   XCoreFrameToArgsOffsetElim.cpp
-
-  LINK_COMPONENTS
-  Analysis
-  AsmPrinter
-  CodeGen
-  Core
-  MC
-  SelectionDAG
-  Support
-  Target
-  TransformUtils
-  XCoreDesc
-  XCoreInfo
-
-  ADD_TO_COMPONENT
-  XCore
   )
 
 add_subdirectory(Disassembler)

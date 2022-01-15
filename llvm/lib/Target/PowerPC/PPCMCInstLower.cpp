@@ -29,6 +29,10 @@
 #include "llvm/Target/TargetLoweringObjectFile.h"
 using namespace llvm;
 
+static MachineModuleInfoMachO &getMachOMMI(AsmPrinter &AP) {
+  return AP.MMI->getObjFileInfo<MachineModuleInfoMachO>();
+}
+
 static MCSymbol *GetSymbolFromOperand(const MachineOperand &MO,
                                       AsmPrinter &AP) {
   const TargetMachine &TM = AP.TM;
@@ -37,6 +41,13 @@ static MCSymbol *GetSymbolFromOperand(const MachineOperand &MO,
   MCContext &Ctx = AP.OutContext;
 
   SmallString<128> Name;
+  StringRef Suffix;
+  if (MO.getTargetFlags() & PPCII::MO_NLP_FLAG)
+    Suffix = "$non_lazy_ptr";
+
+  if (!Suffix.empty())
+    Name += DL.getPrivateGlobalPrefix();
+
   if (!MO.isGlobal()) {
     assert(MO.isSymbol() && "Isn't a symbol reference");
     Mangler::getNameWithPrefix(Name, MO.getSymbolName(), DL);
@@ -45,13 +56,30 @@ static MCSymbol *GetSymbolFromOperand(const MachineOperand &MO,
     TM.getNameWithPrefix(Name, GV, Mang);
   }
 
+  Name += Suffix;
   MCSymbol *Sym = Ctx.getOrCreateSymbol(Name);
+
+  // If the symbol reference is actually to a non_lazy_ptr, not to the symbol,
+  // then add the suffix.
+  if (MO.getTargetFlags() & PPCII::MO_NLP_FLAG) {
+    MachineModuleInfoMachO &MachO = getMachOMMI(AP);
+
+    MachineModuleInfoImpl::StubValueTy &StubSym = MachO.getGVStubEntry(Sym);
+
+    if (!StubSym.getPointer()) {
+      assert(MO.isGlobal() && "Extern symbol not handled yet");
+      StubSym = MachineModuleInfoImpl::
+                   StubValueTy(AP.getSymbol(MO.getGlobal()),
+                               !MO.getGlobal()->hasInternalLinkage());
+    }
+    return Sym;
+  }
 
   return Sym;
 }
 
 static MCOperand GetSymbolRef(const MachineOperand &MO, const MCSymbol *Symbol,
-                              AsmPrinter &Printer) {
+                              AsmPrinter &Printer, bool isDarwin) {
   MCContext &Ctx = Printer.OutContext;
   MCSymbolRefExpr::VariantKind RefKind = MCSymbolRefExpr::VK_None;
 
@@ -74,46 +102,17 @@ static MCOperand GetSymbolRef(const MachineOperand &MO, const MCSymbol *Symbol,
       RefKind = MCSymbolRefExpr::VK_PPC_TOC_LO;
       break;
     case PPCII::MO_TLS:
-      bool IsPCRel = (MO.getTargetFlags() & ~access) == PPCII::MO_PCREL_FLAG;
-      RefKind = IsPCRel ? MCSymbolRefExpr::VK_PPC_TLS_PCREL
-                        : MCSymbolRefExpr::VK_PPC_TLS;
+      RefKind = MCSymbolRefExpr::VK_PPC_TLS;
       break;
   }
 
-  if (MO.getTargetFlags() == PPCII::MO_PLT)
+ if (MO.getTargetFlags() == PPCII::MO_PLT)
     RefKind = MCSymbolRefExpr::VK_PLT;
-  else if (MO.getTargetFlags() == PPCII::MO_PCREL_FLAG)
-    RefKind = MCSymbolRefExpr::VK_PCREL;
-  else if (MO.getTargetFlags() == (PPCII::MO_PCREL_FLAG | PPCII::MO_GOT_FLAG))
-    RefKind = MCSymbolRefExpr::VK_PPC_GOT_PCREL;
-  else if (MO.getTargetFlags() == (PPCII::MO_PCREL_FLAG | PPCII::MO_TPREL_FLAG))
-    RefKind = MCSymbolRefExpr::VK_TPREL;
-  else if (MO.getTargetFlags() == PPCII::MO_GOT_TLSGD_PCREL_FLAG)
-    RefKind = MCSymbolRefExpr::VK_PPC_GOT_TLSGD_PCREL;
-  else if (MO.getTargetFlags() == PPCII::MO_GOT_TLSLD_PCREL_FLAG)
-    RefKind = MCSymbolRefExpr::VK_PPC_GOT_TLSLD_PCREL;
-  else if (MO.getTargetFlags() == PPCII::MO_GOT_TPREL_PCREL_FLAG)
-    RefKind = MCSymbolRefExpr::VK_PPC_GOT_TPREL_PCREL;
 
-  const MachineInstr *MI = MO.getParent();
-  const MachineFunction *MF = MI->getMF();
+  const MachineFunction *MF = MO.getParent()->getParent()->getParent();
   const Module *M = MF->getFunction().getParent();
   const PPCSubtarget *Subtarget = &(MF->getSubtarget<PPCSubtarget>());
   const TargetMachine &TM = Printer.TM;
-
-  unsigned MIOpcode = MI->getOpcode();
-  assert((Subtarget->isUsingPCRelativeCalls() || MIOpcode != PPC::BL8_NOTOC) &&
-         "BL8_NOTOC is only valid when using PC Relative Calls.");
-  if (Subtarget->isUsingPCRelativeCalls()) {
-    if (MIOpcode == PPC::TAILB || MIOpcode == PPC::TAILB8 ||
-        MIOpcode == PPC::TCRETURNdi || MIOpcode == PPC::TCRETURNdi8 ||
-        MIOpcode == PPC::BL8_NOTOC) {
-      RefKind = MCSymbolRefExpr::VK_PPC_NOTOC;
-    }
-    if (MO.getTargetFlags() == PPCII::MO_PCREL_OPT_FLAG)
-      RefKind = MCSymbolRefExpr::VK_PPC_PCREL_OPT;
-  }
-
   const MCExpr *Expr = MCSymbolRefExpr::create(Symbol, RefKind, Ctx);
   // If -msecure-plt -fPIC, add 32768 to symbol.
   if (Subtarget->isSecurePlt() && TM.isPositionIndependent() &&
@@ -138,10 +137,10 @@ static MCOperand GetSymbolRef(const MachineOperand &MO, const MCSymbol *Symbol,
   // Add ha16() / lo16() markers if required.
   switch (access) {
     case PPCII::MO_LO:
-      Expr = PPCMCExpr::createLo(Expr, Ctx);
+      Expr = PPCMCExpr::createLo(Expr, isDarwin, Ctx);
       break;
     case PPCII::MO_HA:
-      Expr = PPCMCExpr::createHa(Expr, Ctx);
+      Expr = PPCMCExpr::createHa(Expr, isDarwin, Ctx);
       break;
   }
 
@@ -149,18 +148,20 @@ static MCOperand GetSymbolRef(const MachineOperand &MO, const MCSymbol *Symbol,
 }
 
 void llvm::LowerPPCMachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
-                                        AsmPrinter &AP) {
+                                        AsmPrinter &AP, bool isDarwin) {
   OutMI.setOpcode(MI->getOpcode());
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     MCOperand MCOp;
-    if (LowerPPCMachineOperandToMCOperand(MI->getOperand(i), MCOp, AP))
+    if (LowerPPCMachineOperandToMCOperand(MI->getOperand(i), MCOp, AP,
+                                          isDarwin))
       OutMI.addOperand(MCOp);
   }
 }
 
 bool llvm::LowerPPCMachineOperandToMCOperand(const MachineOperand &MO,
-                                             MCOperand &OutMO, AsmPrinter &AP) {
+                                             MCOperand &OutMO, AsmPrinter &AP,
+                                             bool isDarwin) {
   switch (MO.getType()) {
   default:
     llvm_unreachable("unknown operand type");
@@ -169,9 +170,6 @@ bool llvm::LowerPPCMachineOperandToMCOperand(const MachineOperand &MO,
     assert(MO.getReg() > PPC::NoRegister &&
            MO.getReg() < PPC::NUM_TARGET_REGS &&
            "Invalid register for this target!");
-    // Ignore all implicit register operands.
-    if (MO.isImplicit())
-      return false;
     OutMO = MCOperand::createReg(MO.getReg());
     return true;
   case MachineOperand::MO_Immediate:
@@ -183,20 +181,17 @@ bool llvm::LowerPPCMachineOperandToMCOperand(const MachineOperand &MO,
     return true;
   case MachineOperand::MO_GlobalAddress:
   case MachineOperand::MO_ExternalSymbol:
-    OutMO = GetSymbolRef(MO, GetSymbolFromOperand(MO, AP), AP);
+    OutMO = GetSymbolRef(MO, GetSymbolFromOperand(MO, AP), AP, isDarwin);
     return true;
   case MachineOperand::MO_JumpTableIndex:
-    OutMO = GetSymbolRef(MO, AP.GetJTISymbol(MO.getIndex()), AP);
+    OutMO = GetSymbolRef(MO, AP.GetJTISymbol(MO.getIndex()), AP, isDarwin);
     return true;
   case MachineOperand::MO_ConstantPoolIndex:
-    OutMO = GetSymbolRef(MO, AP.GetCPISymbol(MO.getIndex()), AP);
+    OutMO = GetSymbolRef(MO, AP.GetCPISymbol(MO.getIndex()), AP, isDarwin);
     return true;
   case MachineOperand::MO_BlockAddress:
-    OutMO =
-        GetSymbolRef(MO, AP.GetBlockAddressSymbol(MO.getBlockAddress()), AP);
-    return true;
-  case MachineOperand::MO_MCSymbol:
-    OutMO = GetSymbolRef(MO, MO.getMCSymbol(), AP);
+    OutMO = GetSymbolRef(MO, AP.GetBlockAddressSymbol(MO.getBlockAddress()), AP,
+                         isDarwin);
     return true;
   case MachineOperand::MO_RegisterMask:
     return false;

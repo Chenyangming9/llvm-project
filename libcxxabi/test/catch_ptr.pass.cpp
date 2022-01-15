@@ -12,13 +12,7 @@
     check against.  It also checks that virtual bases work properly
 */
 
-// UNSUPPORTED: no-exceptions
-
-// FIXME: GCC doesn't allow turning off the warning for exceptions being caught
-//        by earlier handlers, which this test is exercising. We have to disable
-//        warnings altogether to remove the error.
-//        See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=97675.
-// ADDITIONAL_COMPILE_FLAGS: -Wno-error
+// UNSUPPORTED: libcxxabi-no-exceptions
 
 #include <exception>
 #include <stdlib.h>
@@ -78,11 +72,11 @@ struct A
 
 int A::count = 0;
 
-A global_a(5);
+A a(5);
 
 void f1()
 {
-    throw &global_a;
+    throw &a;
     assert(false);
 }
 
@@ -182,7 +176,7 @@ void f5()
     }
 }
 
-int main(int, char**)
+int main()
 {
     try
     {
@@ -192,6 +186,4 @@ int main(int, char**)
     catch (...)
     {
     }
-
-    return 0;
 }

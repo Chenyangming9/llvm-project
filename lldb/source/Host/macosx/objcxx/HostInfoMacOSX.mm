@@ -6,17 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "lldb/Host/FileSystem.h"
-#include "lldb/Host/Host.h"
-#include "lldb/Host/HostInfo.h"
 #include "lldb/Host/macosx/HostInfoMacOSX.h"
+#include "lldb/Host/FileSystem.h"
+#include "lldb/Host/HostInfo.h"
 #include "lldb/Utility/Args.h"
 #include "lldb/Utility/Log.h"
-#include "lldb/Utility/Timer.h"
-#include "Utility/UuidCompatibility.h"
 
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/StringMap.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
@@ -25,7 +21,7 @@
 #include <string>
 
 // C inclues
-#include <cstdlib>
+#include <stdlib.h>
 #include <sys/sysctl.h>
 #include <sys/syslimits.h>
 #include <sys/types.h>
@@ -44,11 +40,6 @@
 #endif
 #ifndef CPU_TYPE_ARM64
 #define CPU_TYPE_ARM64 (CPU_TYPE_ARM | CPU_ARCH_ABI64)
-#endif
-
-#ifndef CPU_TYPE_ARM64_32
-#define CPU_ARCH_ABI64_32 0x02000000
-#define CPU_TYPE_ARM64_32 (CPU_TYPE_ARM | CPU_ARCH_ABI64_32)
 #endif
 
 #include <TargetConditionals.h> // for TARGET_OS_TV, TARGET_OS_WATCH
@@ -80,31 +71,22 @@ bool HostInfoMacOSX::GetOSKernelDescription(std::string &s) {
   return false;
 }
 
-static void ParseOSVersion(llvm::VersionTuple &version, NSString *Key) {
-  @autoreleasepool {
-    NSDictionary *version_info =
-      [NSDictionary dictionaryWithContentsOfFile:
-       @"/System/Library/CoreServices/SystemVersion.plist"];
-    NSString *version_value = [version_info objectForKey: Key];
-    const char *version_str = [version_value UTF8String];
-    version.tryParse(version_str);
-  }
-}
-
 llvm::VersionTuple HostInfoMacOSX::GetOSVersion() {
   static llvm::VersionTuple g_version;
-  if (g_version.empty())
-    ParseOSVersion(g_version, @"ProductVersion");
+
+  if (g_version.empty()) {
+    @autoreleasepool {
+      NSDictionary *version_info = [NSDictionary
+          dictionaryWithContentsOfFile:
+              @"/System/Library/CoreServices/SystemVersion.plist"];
+      NSString *version_value = [version_info objectForKey:@"ProductVersion"];
+      const char *version_str = [version_value UTF8String];
+      g_version.tryParse(version_str);
+    }
+  }
+
   return g_version;
 }
-
-llvm::VersionTuple HostInfoMacOSX::GetMacCatalystVersion() {
-  static llvm::VersionTuple g_version;
-  if (g_version.empty())
-    ParseOSVersion(g_version, @"iOSSupportVersion");
-  return g_version;
-}
-
 
 FileSpec HostInfoMacOSX::GetProgramFileSpec() {
   static FileSpec g_program_filespec;
@@ -139,7 +121,7 @@ bool HostInfoMacOSX::ComputeSupportExeDirectory(FileSpec &file_spec) {
   size_t framework_pos = raw_path.find("LLDB.framework");
   if (framework_pos != std::string::npos) {
     framework_pos += strlen("LLDB.framework");
-#if TARGET_OS_IPHONE
+#if defined(__arm__) || defined(__arm64__) || defined(__aarch64__)
     // Shallow bundle
     raw_path.resize(framework_pos);
 #else
@@ -160,8 +142,9 @@ bool HostInfoMacOSX::ComputeSupportExeDirectory(FileSpec &file_spec) {
     FileSystem::Instance().Resolve(support_dir_spec);
     if (!FileSystem::Instance().IsDirectory(support_dir_spec)) {
       Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
-      LLDB_LOGF(log, "HostInfoMacOSX::%s(): failed to find support directory",
-                __FUNCTION__);
+      if (log)
+        log->Printf("HostInfoMacOSX::%s(): failed to find support directory",
+                    __FUNCTION__);
       return false;
     }
 
@@ -243,12 +226,6 @@ void HostInfoMacOSX::ComputeHostArchitectureSupport(ArchSpec &arch_32,
     len = sizeof(is_64_bit_capable);
     ::sysctlbyname("hw.cpu64bit_capable", &is_64_bit_capable, &len, NULL, 0);
 
-    if (cputype == CPU_TYPE_ARM64 && cpusubtype == CPU_SUBTYPE_ARM64E) {
-      // The arm64e architecture is a preview. Pretend the host architecture
-      // is arm64.
-      cpusubtype = CPU_SUBTYPE_ARM64_ALL;
-    }
-
     if (is_64_bit_capable) {
       if (cputype & CPU_ARCH_ABI64) {
         // We have a 64 bit kernel on a 64 bit system
@@ -272,9 +249,7 @@ void HostInfoMacOSX::ComputeHostArchitectureSupport(ArchSpec &arch_32,
       arch_32.SetArchitecture(eArchTypeMachO, cputype & ~(CPU_ARCH_MASK),
                               cpusubtype32);
 
-      if (cputype == CPU_TYPE_ARM || 
-          cputype == CPU_TYPE_ARM64 || 
-          cputype == CPU_TYPE_ARM64_32) {
+      if (cputype == CPU_TYPE_ARM || cputype == CPU_TYPE_ARM64) {
 // When running on a watch or tv, report the host os correctly
 #if defined(TARGET_OS_TV) && TARGET_OS_TV == 1
         arch_32.GetTriple().setOS(llvm::Triple::TvOS);
@@ -282,12 +257,6 @@ void HostInfoMacOSX::ComputeHostArchitectureSupport(ArchSpec &arch_32,
 #elif defined(TARGET_OS_BRIDGE) && TARGET_OS_BRIDGE == 1
         arch_32.GetTriple().setOS(llvm::Triple::BridgeOS);
         arch_64.GetTriple().setOS(llvm::Triple::BridgeOS);
-#elif defined(TARGET_OS_WATCHOS) && TARGET_OS_WATCHOS == 1
-        arch_32.GetTriple().setOS(llvm::Triple::WatchOS);
-        arch_64.GetTriple().setOS(llvm::Triple::WatchOS);
-#elif defined(TARGET_OS_OSX) && TARGET_OS_OSX == 1
-        arch_32.GetTriple().setOS(llvm::Triple::MacOSX);
-        arch_64.GetTriple().setOS(llvm::Triple::MacOSX);
 #else
         arch_32.GetTriple().setOS(llvm::Triple::IOS);
         arch_64.GetTriple().setOS(llvm::Triple::IOS);
@@ -307,250 +276,4 @@ void HostInfoMacOSX::ComputeHostArchitectureSupport(ArchSpec &arch_32,
       arch_64.Clear();
     }
   }
-}
-
-/// Return and cache $DEVELOPER_DIR if it is set and exists.
-static std::string GetEnvDeveloperDir() {
-  static std::string g_env_developer_dir;
-  static std::once_flag g_once_flag;
-  std::call_once(g_once_flag, [&]() {
-    if (const char *developer_dir_env_var = getenv("DEVELOPER_DIR")) {
-      FileSpec fspec(developer_dir_env_var);
-      if (FileSystem::Instance().Exists(fspec))
-        g_env_developer_dir = fspec.GetPath();
-    }});
-  return g_env_developer_dir;
-}
-
-FileSpec HostInfoMacOSX::GetXcodeContentsDirectory() {
-  static FileSpec g_xcode_contents_path;
-  static std::once_flag g_once_flag;
-  std::call_once(g_once_flag, [&]() {
-    // Try the shlib dir first.
-    if (FileSpec fspec = HostInfo::GetShlibDir()) {
-      if (FileSystem::Instance().Exists(fspec)) {
-        std::string xcode_contents_dir =
-            XcodeSDK::FindXcodeContentsDirectoryInPath(fspec.GetPath());
-        if (!xcode_contents_dir.empty()) {
-          g_xcode_contents_path = FileSpec(xcode_contents_dir);
-          return;
-        }
-      }
-    }
-
-    llvm::SmallString<128> env_developer_dir(GetEnvDeveloperDir());
-    if (!env_developer_dir.empty()) {
-      llvm::sys::path::append(env_developer_dir, "Contents");
-      std::string xcode_contents_dir =
-          XcodeSDK::FindXcodeContentsDirectoryInPath(env_developer_dir);
-      if (!xcode_contents_dir.empty()) {
-        g_xcode_contents_path = FileSpec(xcode_contents_dir);
-        return;
-      }
-    }
-
-    FileSpec fspec(HostInfo::GetXcodeSDKPath(XcodeSDK::GetAnyMacOS()));
-    if (fspec) {
-      if (FileSystem::Instance().Exists(fspec)) {
-        std::string xcode_contents_dir =
-            XcodeSDK::FindXcodeContentsDirectoryInPath(fspec.GetPath());
-        if (!xcode_contents_dir.empty()) {
-          g_xcode_contents_path = FileSpec(xcode_contents_dir);
-          return;
-        }
-      }
-    }
-  });
-  return g_xcode_contents_path;
-}
-
-lldb_private::FileSpec HostInfoMacOSX::GetXcodeDeveloperDirectory() {
-  static lldb_private::FileSpec g_developer_directory;
-  static llvm::once_flag g_once_flag;
-  llvm::call_once(g_once_flag, []() {
-    if (FileSpec fspec = GetXcodeContentsDirectory()) {
-      fspec.AppendPathComponent("Developer");
-      if (FileSystem::Instance().Exists(fspec))
-        g_developer_directory = fspec;
-    }
-  });
-  return g_developer_directory;
-}
-
-static std::string GetXcodeSDK(XcodeSDK sdk) {
-  XcodeSDK::Info info = sdk.Parse();
-  std::string sdk_name = XcodeSDK::GetCanonicalName(info);
-
-  auto xcrun = [](const std::string &sdk,
-                  llvm::StringRef developer_dir = "") -> std::string {
-    Args args;
-    if (!developer_dir.empty()) {
-      args.AppendArgument("/usr/bin/env");
-      args.AppendArgument("DEVELOPER_DIR=" + developer_dir.str());
-    }
-    args.AppendArgument("/usr/bin/xcrun");
-    args.AppendArgument("--show-sdk-path");
-    args.AppendArgument("--sdk");
-    args.AppendArgument(sdk);
-
-    int status = 0;
-    int signo = 0;
-    std::string output_str;
-    lldb_private::Status error =
-        Host::RunShellCommand(args, FileSpec(), &status, &signo, &output_str,
-                              std::chrono::seconds(15));
-
-    // Check that xcrun return something useful.
-    if (status != 0 || output_str.empty())
-      return {};
-
-    // Convert to a StringRef so we can manipulate the string without modifying
-    // the underlying data.
-    llvm::StringRef output(output_str);
-
-    // Remove any trailing newline characters.
-    output = output.rtrim();
-
-    // Strip any leading newline characters and everything before them.
-    const size_t last_newline = output.rfind('\n');
-    if (last_newline != llvm::StringRef::npos)
-      output = output.substr(last_newline + 1);
-
-    return output.str();
-  };
-
-  auto find_sdk = [&xcrun](const std::string &sdk_name) -> std::string {
-    // Invoke xcrun with the developer dir specified in the environment.
-    std::string developer_dir = GetEnvDeveloperDir();
-    if (!developer_dir.empty()) {
-      // Don't fallback if DEVELOPER_DIR was set.
-      return xcrun(sdk_name, developer_dir);
-    }
-
-    // Invoke xcrun with the shlib dir.
-    if (FileSpec fspec = HostInfo::GetShlibDir()) {
-      if (FileSystem::Instance().Exists(fspec)) {
-        std::string contents_dir =
-            XcodeSDK::FindXcodeContentsDirectoryInPath(fspec.GetPath());
-        llvm::StringRef shlib_developer_dir =
-            llvm::sys::path::parent_path(contents_dir);
-        if (!shlib_developer_dir.empty()) {
-          std::string sdk = xcrun(sdk_name, std::move(shlib_developer_dir));
-          if (!sdk.empty())
-            return sdk;
-        }
-      }
-    }
-
-    // Invoke xcrun without a developer dir as a last resort.
-    return xcrun(sdk_name);
-  };
-
-  std::string path = find_sdk(sdk_name);
-  while (path.empty()) {
-    // Try an alternate spelling of the name ("macosx10.9internal").
-    if (info.type == XcodeSDK::Type::MacOSX && !info.version.empty() &&
-        info.internal) {
-      llvm::StringRef fixed(sdk_name);
-      if (fixed.consume_back(".internal"))
-        sdk_name = fixed.str() + "internal";
-      path = find_sdk(sdk_name);
-      if (!path.empty())
-        break;
-    }
-    Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
-    LLDB_LOGF(log, "Couldn't find SDK %s on host", sdk_name.c_str());
-
-    // Try without the version.
-    if (!info.version.empty()) {
-      info.version = {};
-      sdk_name = XcodeSDK::GetCanonicalName(info);
-      path = find_sdk(sdk_name);
-      if (!path.empty())
-        break;
-    }
-
-    LLDB_LOGF(log, "Couldn't find any matching SDK on host");
-    return {};
-  }
-
-  // Whatever is left in output should be a valid path.
-  if (!FileSystem::Instance().Exists(path))
-    return {};
-  return path;
-}
-
-llvm::StringRef HostInfoMacOSX::GetXcodeSDKPath(XcodeSDK sdk) {
-  static llvm::StringMap<std::string> g_sdk_path;
-  static std::mutex g_sdk_path_mutex;
-
-  std::lock_guard<std::mutex> guard(g_sdk_path_mutex);
-  LLDB_SCOPED_TIMER();
-
-  auto it = g_sdk_path.find(sdk.GetString());
-  if (it != g_sdk_path.end())
-    return it->second;
-  auto it_new = g_sdk_path.insert({sdk.GetString(), GetXcodeSDK(sdk)});
-  return it_new.first->second;
-}
-
-namespace {
-struct dyld_shared_cache_dylib_text_info {
-  uint64_t version; // current version 1
-  // following fields all exist in version 1
-  uint64_t loadAddressUnslid;
-  uint64_t textSegmentSize;
-  uuid_t dylibUuid;
-  const char *path; // pointer invalid at end of iterations
-  // following fields all exist in version 2
-  uint64_t textSegmentOffset; // offset from start of cache
-};
-typedef struct dyld_shared_cache_dylib_text_info
-    dyld_shared_cache_dylib_text_info;
-}
-
-extern "C" int dyld_shared_cache_iterate_text(
-    const uuid_t cacheUuid,
-    void (^callback)(const dyld_shared_cache_dylib_text_info *info));
-extern "C" uint8_t *_dyld_get_shared_cache_range(size_t *length);
-extern "C" bool _dyld_get_shared_cache_uuid(uuid_t uuid);
-
-namespace {
-class SharedCacheInfo {
-public:
-  const UUID &GetUUID() const { return m_uuid; }
-  const llvm::StringMap<SharedCacheImageInfo> &GetImages() const {
-    return m_images;
-  }
-
-  SharedCacheInfo();
-
-private:
-  llvm::StringMap<SharedCacheImageInfo> m_images;
-  UUID m_uuid;
-};
-}
-
-SharedCacheInfo::SharedCacheInfo() {
-  size_t shared_cache_size;
-  uint8_t *shared_cache_start =
-      _dyld_get_shared_cache_range(&shared_cache_size);
-  uuid_t dsc_uuid;
-  _dyld_get_shared_cache_uuid(dsc_uuid);
-  m_uuid = UUID::fromData(dsc_uuid);
-
-  dyld_shared_cache_iterate_text(
-      dsc_uuid, ^(const dyld_shared_cache_dylib_text_info *info) {
-        m_images[info->path] = SharedCacheImageInfo{
-            UUID::fromData(info->dylibUuid, 16),
-            std::make_shared<DataBufferUnowned>(
-                shared_cache_start + info->textSegmentOffset,
-                shared_cache_size - info->textSegmentOffset)};
-      });
-}
-
-SharedCacheImageInfo
-HostInfoMacOSX::GetSharedCacheImageInfo(llvm::StringRef image_name) {
-  static SharedCacheInfo g_shared_cache_info;
-  return g_shared_cache_info.GetImages().lookup(image_name);
 }

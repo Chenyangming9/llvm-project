@@ -9,23 +9,22 @@
 
 #include <ctype.h>
 #include <string.h>
-#include <isl_ctx_private.h>
+#include <isl/ctx.h>
 #include <isl_stream_private.h>
 #include <isl/map.h>
 #include <isl/aff.h>
 #include <isl_val_private.h>
-#include <isl_options_private.h>
 
 struct isl_keyword {
 	char			*name;
 	enum isl_token_type	type;
 };
 
-static isl_bool same_name(const void *entry, const void *val)
+static int same_name(const void *entry, const void *val)
 {
 	const struct isl_keyword *keyword = (const struct isl_keyword *)entry;
 
-	return isl_bool_ok(!strcmp(keyword->name, val));
+	return !strcmp(keyword->name, val);
 }
 
 enum isl_token_type isl_stream_register_keyword(__isl_keep isl_stream *s,
@@ -135,12 +134,6 @@ void isl_stream_error(__isl_keep isl_stream *s, struct isl_token *tok,
 {
 	int line = tok ? tok->line : s->line;
 	int col = tok ? tok->col : s->col;
-
-	isl_ctx_set_full_error(s->ctx, isl_error_invalid, "syntax error",
-				__FILE__, __LINE__);
-
-	if (s->ctx->opt->on_error == ISL_ON_ERROR_CONTINUE)
-		return;
 	fprintf(stderr, "syntax error (%d, %d): %s\n", line, col, msg);
 	if (tok) {
 		if (tok->type < 256)
@@ -172,8 +165,6 @@ void isl_stream_error(__isl_keep isl_stream *s, struct isl_token *tok,
 		else
 			fprintf(stderr, "got token type %d\n", tok->type);
 	}
-	if (s->ctx->opt->on_error == ISL_ON_ERROR_ABORT)
-		abort();
 }
 
 static __isl_give isl_stream* isl_stream_new(struct isl_ctx *ctx)
@@ -354,9 +345,7 @@ static enum isl_token_type check_keywords(__isl_keep isl_stream *s)
 	name_hash = isl_hash_string(isl_hash_init(), s->buffer);
 	entry = isl_hash_table_find(s->ctx, s->keywords, name_hash, same_name,
 					s->buffer, 0);
-	if (!entry)
-		return ISL_TOKEN_ERROR;
-	if (entry != isl_hash_table_entry_none) {
+	if (entry) {
 		keyword = entry->data;
 		return keyword->type;
 	}
@@ -628,19 +617,13 @@ static struct isl_token *next_token(__isl_keep isl_stream *s, int same_line)
 		tok = isl_token_new(s->ctx, line, col, old_line != line);
 		if (!tok)
 			return NULL;
-		if ((c = isl_stream_getc(s)) == '\\') {
+		if ((c = isl_stream_getc(s)) != '\\' && c != -1) {
+			tok->type = (enum isl_token_type) '/';
+			isl_stream_ungetc(s, c);
+		} else {
 			tok->u.s = strdup("/\\");
 			tok->type = ISL_TOKEN_AND;
-			return tok;
-		} else if (c == '/') {
-			tok->u.s = strdup("//");
-			tok->type = ISL_TOKEN_INT_DIV;
-			return tok;
-		} else {
-			tok->type = (enum isl_token_type) '/';
 		}
-		if (c != -1)
-			isl_stream_ungetc(s, c);
 		return tok;
 	}
 	if (c == '\\') {

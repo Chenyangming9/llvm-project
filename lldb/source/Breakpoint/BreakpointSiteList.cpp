@@ -1,4 +1,4 @@
-//===-- BreakpointSiteList.cpp --------------------------------------------===//
+//===-- BreakpointSiteList.cpp ----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,7 +16,7 @@ using namespace lldb_private;
 
 BreakpointSiteList::BreakpointSiteList() : m_mutex(), m_bp_site_list() {}
 
-BreakpointSiteList::~BreakpointSiteList() = default;
+BreakpointSiteList::~BreakpointSiteList() {}
 
 // Add breakpoint site to the list.  However, if the element already exists in
 // the list, then we don't add it, and return LLDB_INVALID_BREAK_ID.

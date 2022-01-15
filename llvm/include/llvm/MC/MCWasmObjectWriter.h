@@ -15,33 +15,29 @@
 namespace llvm {
 
 class MCFixup;
-class MCSectionWasm;
 class MCValue;
 class raw_pwrite_stream;
 
 class MCWasmObjectTargetWriter : public MCObjectTargetWriter {
   const unsigned Is64Bit : 1;
-  const unsigned IsEmscripten : 1;
 
 protected:
-  explicit MCWasmObjectTargetWriter(bool Is64Bit_, bool IsEmscripten);
+  explicit MCWasmObjectTargetWriter(bool Is64Bit_);
 
 public:
   virtual ~MCWasmObjectTargetWriter();
 
-  Triple::ObjectFormatType getFormat() const override { return Triple::Wasm; }
+  virtual Triple::ObjectFormatType getFormat() const { return Triple::Wasm; }
   static bool classof(const MCObjectTargetWriter *W) {
     return W->getFormat() == Triple::Wasm;
   }
 
-  virtual unsigned getRelocType(const MCValue &Target, const MCFixup &Fixup,
-                                const MCSectionWasm &FixupSection,
-                                bool IsLocRel) const = 0;
+  virtual unsigned getRelocType(const MCValue &Target,
+                                const MCFixup &Fixup) const = 0;
 
   /// \name Accessors
   /// @{
   bool is64Bit() const { return Is64Bit; }
-  bool isEmscripten() const { return IsEmscripten; }
   /// @}
 };
 
@@ -53,10 +49,6 @@ public:
 std::unique_ptr<MCObjectWriter>
 createWasmObjectWriter(std::unique_ptr<MCWasmObjectTargetWriter> MOTW,
                        raw_pwrite_stream &OS);
-
-std::unique_ptr<MCObjectWriter>
-createWasmDwoObjectWriter(std::unique_ptr<MCWasmObjectTargetWriter> MOTW,
-                          raw_pwrite_stream &OS, raw_pwrite_stream &DwoOS);
 
 } // namespace llvm
 

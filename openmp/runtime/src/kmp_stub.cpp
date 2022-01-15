@@ -125,7 +125,7 @@ int kmpc_get_affinity_mask_proc(int proc, void **mask) {
 /* kmp API functions */
 void kmp_set_stacksize(omp_int_t arg) {
   i;
-  __kmps_set_stacksize((size_t)arg);
+  __kmps_set_stacksize(arg);
 }
 void kmp_set_stacksize_s(size_t arg) {
   i;
@@ -147,7 +147,7 @@ void *kmp_malloc(size_t size) {
   i;
   void *res;
 #if KMP_OS_WINDOWS
-  // If successful returns a pointer to the memory block, otherwise returns
+  // If succesfull returns a pointer to the memory block, otherwise returns
   // NULL.
   // Sets errno to ENOMEM or EINVAL if memory allocation failed or parameter
   // validation failed.
@@ -164,7 +164,7 @@ void *kmp_aligned_malloc(size_t sz, size_t a) {
 #if KMP_OS_WINDOWS
   res = _aligned_malloc(sz, a);
 #else
-  if ((err = posix_memalign(&res, a, sz))) {
+  if (err = posix_memalign(&res, a, sz)) {
     errno = err; // can be EINVAL or ENOMEM
     res = NULL;
   }
@@ -250,12 +250,12 @@ int __kmps_get_nested(void) {
 
 static size_t __kmps_stacksize = KMP_DEFAULT_STKSIZE;
 
-void __kmps_set_stacksize(size_t arg) {
+void __kmps_set_stacksize(int arg) {
   i;
   __kmps_stacksize = arg;
 } // __kmps_set_stacksize
 
-size_t __kmps_get_stacksize(void) {
+int __kmps_get_stacksize(void) {
   i;
   return __kmps_stacksize;
 } // __kmps_get_stacksize
@@ -277,7 +277,7 @@ void __kmps_get_schedule(kmp_sched_t *kind, int *modifier) {
 
 kmp_proc_bind_t __kmps_get_proc_bind(void) {
   i;
-  return proc_bind_false;
+  return 0;
 } // __kmps_get_proc_bind
 
 double __kmps_get_wtime(void) {
@@ -350,13 +350,6 @@ omp_allocator_handle_t const omp_pteam_mem_alloc =
     (omp_allocator_handle_t const)7;
 omp_allocator_handle_t const omp_thread_mem_alloc =
     (omp_allocator_handle_t const)8;
-// Preview of target memory support
-omp_allocator_handle_t const llvm_omp_target_host_mem_alloc =
-    (omp_allocator_handle_t const)100;
-omp_allocator_handle_t const llvm_omp_target_shared_mem_alloc =
-    (omp_allocator_handle_t const)101;
-omp_allocator_handle_t const llvm_omp_target_device_mem_alloc =
-    (omp_allocator_handle_t const)102;
 
 omp_memspace_handle_t const omp_default_mem_space =
     (omp_memspace_handle_t const)0;
@@ -368,28 +361,10 @@ omp_memspace_handle_t const omp_high_bw_mem_space =
     (omp_memspace_handle_t const)3;
 omp_memspace_handle_t const omp_low_lat_mem_space =
     (omp_memspace_handle_t const)4;
-// Preview of target memory support
-omp_memspace_handle_t const llvm_omp_target_host_mem_space =
-    (omp_memspace_handle_t const)100;
-omp_memspace_handle_t const llvm_omp_target_shared_mem_space =
-    (omp_memspace_handle_t const)101;
-omp_memspace_handle_t const llvm_omp_target_device_mem_space =
-    (omp_memspace_handle_t const)102;
 #endif /* KMP_OS_WINDOWS */
 void *omp_alloc(size_t size, const omp_allocator_handle_t allocator) {
   i;
   return malloc(size);
-}
-void *omp_calloc(size_t nmemb, size_t size,
-                 const omp_allocator_handle_t allocator) {
-  i;
-  return calloc(nmemb, size);
-}
-void *omp_realloc(void *ptr, size_t size,
-                  const omp_allocator_handle_t allocator,
-                  const omp_allocator_handle_t free_allocator) {
-  i;
-  return realloc(ptr, size);
 }
 void omp_free(void *ptr, const omp_allocator_handle_t allocator) {
   i;

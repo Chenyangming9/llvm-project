@@ -6,9 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_SYMBOLFILE_NATIVEPDB_SYMBOLFILENATIVEPDB_H
-#define LLDB_SOURCE_PLUGINS_SYMBOLFILE_NATIVEPDB_SYMBOLFILENATIVEPDB_H
+#ifndef LLDB_PLUGINS_SYMBOLFILE_NATIVEPDB_SYMBOLFILENATIVEPDB_H
+#define LLDB_PLUGINS_SYMBOLFILE_NATIVEPDB_SYMBOLFILENATIVEPDB_H
 
+#include "lldb/Symbol/ClangASTImporter.h"
 #include "lldb/Symbol/SymbolFile.h"
 
 #include "llvm/ADT/DenseMap.h"
@@ -34,6 +35,7 @@ struct UnionRecord;
 } // namespace llvm
 
 namespace lldb_private {
+class ClangASTImporter;
 
 namespace npdb {
 class PdbAstBuilder;
@@ -41,18 +43,7 @@ class PdbAstBuilder;
 class SymbolFileNativePDB : public SymbolFile {
   friend class UdtRecordCompleter;
 
-  /// LLVM RTTI support.
-  static char ID;
-
 public:
-  /// LLVM RTTI support.
-  /// \{
-  bool isA(const void *ClassID) const override {
-    return ClassID == &ID || SymbolFile::isA(ClassID);
-  }
-  static bool classof(const SymbolFile *obj) { return obj->isA(&ID); }
-  /// \}
-
   // Static Functions
   static void Initialize();
 
@@ -64,10 +55,10 @@ public:
 
   static const char *GetPluginDescriptionStatic();
 
-  static SymbolFile *CreateInstance(lldb::ObjectFileSP objfile_sp);
+  static SymbolFile *CreateInstance(ObjectFile *obj_file);
 
   // Constructors and Destructors
-  SymbolFileNativePDB(lldb::ObjectFileSP objfile_sp);
+  SymbolFileNativePDB(ObjectFile *ofile);
 
   ~SymbolFileNativePDB() override;
 
@@ -77,8 +68,12 @@ public:
 
   // Compile Unit function calls
 
+  uint32_t GetNumCompileUnits() override;
+
   void
   ParseDeclsForContext(lldb_private::CompilerDeclContext decl_ctx) override;
+
+  lldb::CompUnitSP ParseCompileUnitAtIndex(uint32_t index) override;
 
   lldb::LanguageType
   ParseLanguage(lldb_private::CompileUnit &comp_unit) override;
@@ -99,10 +94,10 @@ public:
 
   size_t ParseBlocksRecursive(Function &func) override;
 
-  void FindGlobalVariables(ConstString name,
-                           const CompilerDeclContext &parent_decl_ctx,
-                           uint32_t max_matches,
-                           VariableList &variables) override;
+  uint32_t FindGlobalVariables(ConstString name,
+                               const CompilerDeclContext *parent_decl_ctx,
+                               uint32_t max_matches,
+                               VariableList &variables) override;
 
   size_t ParseVariablesForContext(const SymbolContext &sc) override;
 
@@ -120,36 +115,37 @@ public:
   uint32_t ResolveSymbolContext(const Address &so_addr,
                                 lldb::SymbolContextItem resolve_scope,
                                 SymbolContext &sc) override;
-  uint32_t ResolveSymbolContext(const SourceLocationSpec &src_location_spec,
+  uint32_t ResolveSymbolContext(const FileSpec &file_spec, uint32_t line,
+                                bool check_inlines,
                                 lldb::SymbolContextItem resolve_scope,
                                 SymbolContextList &sc_list) override;
 
-  void GetTypes(SymbolContextScope *sc_scope, lldb::TypeClass type_mask,
-                TypeList &type_list) override;
+  size_t GetTypes(SymbolContextScope *sc_scope, lldb::TypeClass type_mask,
+                  TypeList &type_list) override;
 
-  void FindFunctions(ConstString name,
-                     const CompilerDeclContext &parent_decl_ctx,
-                     lldb::FunctionNameType name_type_mask,
-                     bool include_inlines, SymbolContextList &sc_list) override;
+  uint32_t FindFunctions(ConstString name,
+                         const CompilerDeclContext *parent_decl_ctx,
+                         lldb::FunctionNameType name_type_mask,
+                         bool include_inlines, bool append,
+                         SymbolContextList &sc_list) override;
 
-  void FindFunctions(const RegularExpression &regex, bool include_inlines,
-                     SymbolContextList &sc_list) override;
+  uint32_t FindFunctions(const RegularExpression &regex, bool include_inlines,
+                         bool append, SymbolContextList &sc_list) override;
 
-  void FindTypes(ConstString name, const CompilerDeclContext &parent_decl_ctx,
-                 uint32_t max_matches,
-                 llvm::DenseSet<SymbolFile *> &searched_symbol_files,
-                 TypeMap &types) override;
+  uint32_t FindTypes(ConstString name,
+                     const CompilerDeclContext *parent_decl_ctx, bool append,
+                     uint32_t max_matches,
+                     llvm::DenseSet<SymbolFile *> &searched_symbol_files,
+                     TypeMap &types) override;
 
-  void FindTypes(llvm::ArrayRef<CompilerContext> pattern, LanguageSet languages,
-                 llvm::DenseSet<SymbolFile *> &searched_symbol_files,
-                 TypeMap &types) override;
+  size_t FindTypes(const std::vector<CompilerContext> &context, bool append,
+                   TypeMap &types) override;
 
-  llvm::Expected<TypeSystem &>
-  GetTypeSystemForLanguage(lldb::LanguageType language) override;
+  TypeSystem *GetTypeSystemForLanguage(lldb::LanguageType language) override;
 
   CompilerDeclContext
   FindNamespace(ConstString name,
-                const CompilerDeclContext &parent_decl_ctx) override;
+                const CompilerDeclContext *parent_decl_ctx) override;
 
   ConstString GetPluginName() override;
 
@@ -161,12 +157,9 @@ public:
   void DumpClangAST(Stream &s) override;
 
 private:
-  uint32_t CalculateNumCompileUnits() override;
 
-  lldb::CompUnitSP ParseCompileUnitAtIndex(uint32_t index) override;
-
-  void FindTypesByName(llvm::StringRef name, uint32_t max_matches,
-                       TypeMap &types);
+  size_t FindTypesByName(llvm::StringRef name, uint32_t max_matches,
+                         TypeMap &types);
 
   lldb::TypeSP CreateModifierType(PdbTypeSymId type_id,
                                   const llvm::codeview::ModifierRecord &mr,
@@ -230,7 +223,6 @@ private:
   lldb::addr_t m_obj_load_address = 0;
   bool m_done_full_type_scan = false;
 
-  std::unique_ptr<llvm::pdb::PDBFile> m_file_up;
   std::unique_ptr<PdbIndex> m_index;
 
   std::unique_ptr<PdbAstBuilder> m_ast;
@@ -246,4 +238,4 @@ private:
 } // namespace npdb
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_SYMBOLFILE_NATIVEPDB_SYMBOLFILENATIVEPDB_H
+#endif // lldb_Plugins_SymbolFile_PDB_SymbolFilePDB_h_

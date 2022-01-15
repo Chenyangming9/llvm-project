@@ -162,5 +162,5 @@ Options
 
 .. option:: ValuesOnly
 
-   When `true`, the check only warns about copied parameters that are already
-   passed by value. Default is `false`.
+   When non-zero, the check only warns about copied parameters that are already
+   passed by value. Default is `0`.

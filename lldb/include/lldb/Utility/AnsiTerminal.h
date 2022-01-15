@@ -1,7 +1,3 @@
-#ifndef LLDB_UTILITY_ANSITERMINAL_H
-
-#define LLDB_UTILITY_ANSITERMINAL_H
-
 //===---------------------AnsiTerminal.h ------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -59,7 +55,7 @@
 
 #include <string>
 
-namespace lldb_private {
+namespace lldb_utility {
 
 namespace ansi {
 
@@ -115,7 +111,7 @@ inline std::string FormatAnsiTerminalCodes(llvm::StringRef format,
     llvm::StringRef left, right;
     std::tie(left, right) = format.split(tok_hdr);
 
-    fmt += left;
+    fmt.append(left);
 
     if (left == format && right.empty()) {
       // The header was not found.  Just exit.
@@ -141,6 +137,4 @@ inline std::string FormatAnsiTerminalCodes(llvm::StringRef format,
   return fmt;
 }
 }
-} // namespace lldb_private
-
-#endif
+}

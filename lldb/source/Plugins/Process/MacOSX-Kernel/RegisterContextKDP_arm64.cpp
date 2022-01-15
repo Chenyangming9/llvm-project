@@ -1,4 +1,5 @@
-//===-- RegisterContextKDP_arm64.cpp --------------------------------------===//
+//===-- RegisterContextKDP_arm64.cpp ------------------------------*- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -19,7 +20,7 @@ RegisterContextKDP_arm64::RegisterContextKDP_arm64(ThreadKDP &thread,
     : RegisterContextDarwin_arm64(thread, concrete_frame_idx),
       m_kdp_thread(thread) {}
 
-RegisterContextKDP_arm64::~RegisterContextKDP_arm64() = default;
+RegisterContextKDP_arm64::~RegisterContextKDP_arm64() {}
 
 int RegisterContextKDP_arm64::DoReadGPR(lldb::tid_t tid, int flavor, GPR &gpr) {
   ProcessSP process_sp(CalculateProcess());

@@ -6,25 +6,26 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONVALUEARGS_H
-#define LLDB_INTERPRETER_OPTIONVALUEARGS_H
+#ifndef liblldb_OptionValueArgs_h_
+#define liblldb_OptionValueArgs_h_
 
 #include "lldb/Interpreter/OptionValueArray.h"
 
 namespace lldb_private {
 
-class OptionValueArgs : public Cloneable<OptionValueArgs, OptionValueArray> {
+class OptionValueArgs : public OptionValueArray {
 public:
   OptionValueArgs()
-      : Cloneable(OptionValue::ConvertTypeToMask(OptionValue::eTypeString)) {}
+      : OptionValueArray(
+            OptionValue::ConvertTypeToMask(OptionValue::eTypeString)) {}
 
-  ~OptionValueArgs() override = default;
+  ~OptionValueArgs() override {}
 
-  size_t GetArgs(Args &args) const;
+  size_t GetArgs(Args &args);
 
   Type GetType() const override { return eTypeArgs; }
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONVALUEARGS_H
+#endif // liblldb_OptionValueArgs_h_

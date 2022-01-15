@@ -1,7 +1,5 @@
 // To generate the corresponding EXE/PDB, run:
 // cl /Zi test.cpp
-// To generate the PDB with column numbers, run:
-// clang-cl /Zi -gcolumn-info test.cpp
 
 namespace NS {
 struct Foo {

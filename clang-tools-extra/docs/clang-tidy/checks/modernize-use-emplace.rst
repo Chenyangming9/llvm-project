@@ -104,15 +104,15 @@ Options
 
 .. option:: IgnoreImplicitConstructors
 
-    When `true`, the check will ignore implicitly constructed arguments of
+    When non-zero, the check will ignore implicitly constructed arguments of
     ``push_back``, e.g.
 
     .. code-block:: c++
 
         std::vector<std::string> v;
-        v.push_back("a"); // Ignored when IgnoreImplicitConstructors is `true`.
+        v.push_back("a"); // Ignored when IgnoreImplicitConstructors is ``1``.
 
-    Default is `false`.
+    Default is ``0``.
 
 .. option:: SmartPointers
 

@@ -1,4 +1,4 @@
-//===-- RegisterContextWindows_x64.cpp ------------------------------------===//
+//===-- RegisterContextWindows_x64.cpp --------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if defined(__x86_64__) || defined(_M_X64)
+#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64)
 
 #include "lldb/Host/windows/HostThreadWindows.h"
 #include "lldb/Host/windows/windows.h"
@@ -532,7 +532,9 @@ bool RegisterContextWindows_x64::WriteRegister(const RegisterInfo *reg_info,
   }
 
   // Physically update the registers in the target process.
-  return ApplyAllRegisterValues();
+  TargetThreadWindows &wthread = static_cast<TargetThreadWindows &>(m_thread);
+  return ::SetThreadContext(
+      wthread.GetHostThread().GetNativeThread().GetSystemHandle(), &m_context);
 }
 
-#endif // defined(__x86_64__) || defined(_M_X64)
+#endif // defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(_M_AMD64)

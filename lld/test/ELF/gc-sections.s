@@ -12,8 +12,6 @@
 # NOGC: Name: .text
 # NOGC: Name: .init
 # NOGC: Name: .fini
-# NOGC: Name: .tdata
-# NOGC: Name: .tbss
 # NOGC: Name: .ctors
 # NOGC: Name: .dtors
 # NOGC: Name: .debug_pubtypes
@@ -21,10 +19,6 @@
 # NOGC: Name: a
 # NOGC: Name: b
 # NOGC: Name: c
-# NOGC: Name: e
-# NOGC: Name: f
-# NOGC: Name: g
-# NOGC: Name: h
 # NOGC: Name: x
 # NOGC: Name: y
 # NOGC: Name: d
@@ -33,8 +27,6 @@
 # GC1:     Name: .text
 # GC1:     Name: .init
 # GC1:     Name: .fini
-# GC1:     Name: .tdata
-# GC1:     Name: .tbss
 # GC1:     Name: .ctors
 # GC1:     Name: .dtors
 # GC1:     Name: .debug_pubtypes
@@ -42,10 +34,6 @@
 # GC1:     Name: a
 # GC1:     Name: b
 # GC1:     Name: c
-# GC1:     Name: e
-# GC1-NOT: Name: f
-# GC1:     Name: g
-# GC1-NOT: Name: h
 # GC1-NOT: Name: x
 # GC1-NOT: Name: y
 # GC1-NOT: Name: d
@@ -54,8 +42,6 @@
 # GC2:     Name: .text
 # GC2:     Name: .init
 # GC2:     Name: .fini
-# GC2:     Name: .tdata
-# GC2:     Name: .tbss
 # GC2:     Name: .ctors
 # GC2:     Name: .dtors
 # GC2:     Name: .debug_pubtypes
@@ -63,16 +49,12 @@
 # GC2:     Name: a
 # GC2:     Name: b
 # GC2:     Name: c
-# GC2:     Name: e
-# GC2-NOT: Name: f
-# GC2:     Name: g
-# GC2-NOT: Name: h
 # GC2-NOT: Name: x
 # GC2-NOT: Name: y
 # GC2:     Name: d
 
 .globl _start, d
-.protected a, b, c, e, f, g, h, x, y
+.protected a, b, c, x, y
 _start:
   call a
 
@@ -83,12 +65,11 @@ a:
 
 .section .text.b,"ax",@progbits
 b:
-  leaq e@tpoff(%rax),%rdx
   call c
 
 .section .text.c,"ax",@progbits
 c:
-  leaq g@tpoff(%rax),%rdx
+  nop
 
 .section .text.d,"ax",@progbits
 d:
@@ -101,22 +82,6 @@ x:
 .section .text.y,"ax",@progbits
 y:
   call x
-
-.section .tbss.e,"awT",@nobits
-e:
-  .quad 0
-
-.section .tbss.f,"awT",@nobits
-f:
-  .quad 0
-
-.section .tdata.g,"awT",@progbits
-g:
-  .quad 0
-
-.section .tdata.h,"awT",@progbits
-h:
-  .quad 0
 
 .section .ctors,"aw",@progbits
   .quad 0

@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "Hexagon.h"
-#include "MCTargetDesc/HexagonMCTargetDesc.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"

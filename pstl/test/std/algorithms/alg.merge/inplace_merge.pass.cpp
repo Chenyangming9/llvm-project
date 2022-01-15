@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 #include "support/pstl_test_config.h"
 
@@ -20,8 +20,8 @@ using namespace TestUtils;
 
 struct test_one_policy
 {
-#if defined(_PSTL_ICC_17_VC141_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN) ||                                                             \
-    defined(_PSTL_ICC_16_VC14_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN) // dummy specialization by policy type, in case of broken configuration
+#if _PSTL_ICC_17_VC141_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN ||                                                            \
+    _PSTL_ICC_16_VC14_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN // dummy specialization by policy type, in case of broken configuration
     template <typename BiDirIt1, typename Size, typename Generator1, typename Generator2, typename Compare>
     void
     operator()(pstl::execution::unsequenced_policy, BiDirIt1 first1, BiDirIt1 last1, BiDirIt1 first2, BiDirIt1 last2,
@@ -60,7 +60,8 @@ struct test_one_policy
     template <typename Policy, typename BiDirIt1, typename Size, typename Generator1, typename Generator2,
               typename Compare>
     typename std::enable_if<is_same_iterator_category<BiDirIt1, std::forward_iterator_tag>::value, void>::type
-    operator()(Policy&&, BiDirIt1, BiDirIt1, BiDirIt1, BiDirIt1, Size, Size, Generator1, Generator2, Compare)
+    operator()(Policy&&, BiDirIt1, BiDirIt1, BiDirIt1, BiDirIt1, Size, Size,
+               Generator1, Generator2, Compare)
     {
     }
 };
@@ -133,7 +134,7 @@ struct test_non_const
     }
 };
 
-int
+int32_t
 main()
 {
     test_by_type<float64_t>([](int32_t i) { return -2 * i; }, [](int32_t i) { return -(2 * i + 1); },
@@ -146,13 +147,6 @@ main()
                                           std::less<LocalWrapper<float32_t>>());
 
     test_algo_basic_single<int32_t>(run_for_rnd_bi<test_non_const<int32_t>>());
-
-    test_by_type<MemoryChecker>(
-        [](std::size_t idx){ return MemoryChecker{std::int32_t(idx * 2)}; },
-        [](std::size_t idx){ return MemoryChecker{std::int32_t(idx * 2 + 1)}; },
-        [](const MemoryChecker& val1, const MemoryChecker& val2){ return val1.value() == val2.value(); });
-    EXPECT_FALSE(MemoryChecker::alive_objects() < 0, "wrong effect from inplace_merge: number of ctors calls < num of dtors calls");
-    EXPECT_FALSE(MemoryChecker::alive_objects() > 0, "wrong effect from inplace_merge: number of ctors calls > num of dtors calls");
 
     std::cout << done() << std::endl;
     return 0;

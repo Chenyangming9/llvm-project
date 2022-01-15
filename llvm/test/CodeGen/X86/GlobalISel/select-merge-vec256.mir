@@ -9,7 +9,7 @@
 ---
 name:            test_merge
 #
-alignment:       16
+alignment:       4
 legalized:       true
 regBankSelected: true
 #

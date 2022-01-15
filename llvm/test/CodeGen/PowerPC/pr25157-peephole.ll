@@ -58,11 +58,12 @@ L.LB38_2452:
 
 ; CHECK-LABEL: @aercalc_
 ; CHECK: lfs
-; CHECK: xxswapd
+; CHECK: xxspltd
 ; CHECK: stxvd2x
 ; CHECK-NOT: xxswapd
 
 ; CHECK-P9-LABEL: @aercalc_
 ; CHECK-P9: lfs
+; CHECK-P9: xxspltd
 ; CHECK-P9: stxv
 ; CHECK-P9-NOT: xxswapd

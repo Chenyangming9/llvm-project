@@ -6,5 +6,7 @@ executable("llvm-extract") {
     "//llvm/lib/Support",
     "//llvm/lib/Transforms/IPO",
   ]
-  sources = [ "llvm-extract.cpp" ]
+  sources = [
+    "llvm-extract.cpp",
+  ]
 }

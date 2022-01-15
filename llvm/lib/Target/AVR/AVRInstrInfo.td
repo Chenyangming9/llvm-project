@@ -59,12 +59,6 @@ def AVRlsr : SDNode<"AVRISD::LSR", SDTIntUnaryOp>;
 def AVRrol : SDNode<"AVRISD::ROL", SDTIntUnaryOp>;
 def AVRror : SDNode<"AVRISD::ROR", SDTIntUnaryOp>;
 def AVRasr : SDNode<"AVRISD::ASR", SDTIntUnaryOp>;
-def AVRlslbn : SDNode<"AVRISD::LSLBN", SDTIntBinOp>;
-def AVRlsrbn : SDNode<"AVRISD::LSRBN", SDTIntBinOp>;
-def AVRasrbn : SDNode<"AVRISD::ASRBN", SDTIntBinOp>;
-def AVRlslwn : SDNode<"AVRISD::LSLWN", SDTIntBinOp>;
-def AVRlsrwn : SDNode<"AVRISD::LSRWN", SDTIntBinOp>;
-def AVRasrwn : SDNode<"AVRISD::ASRWN", SDTIntBinOp>;
 
 // Pseudo shift nodes for non-constant shift amounts.
 def AVRlslLoop : SDNode<"AVRISD::LSLLOOP", SDTIntShiftOp>;
@@ -72,9 +66,6 @@ def AVRlsrLoop : SDNode<"AVRISD::LSRLOOP", SDTIntShiftOp>;
 def AVRrolLoop : SDNode<"AVRISD::ROLLOOP", SDTIntShiftOp>;
 def AVRrorLoop : SDNode<"AVRISD::RORLOOP", SDTIntShiftOp>;
 def AVRasrLoop : SDNode<"AVRISD::ASRLOOP", SDTIntShiftOp>;
-
-// SWAP node.
-def AVRSwap : SDNode<"AVRISD::SWAP", SDTIntUnaryOp>;
 
 //===----------------------------------------------------------------------===//
 // AVR Operands, Complex Patterns and Transformations Definitions.
@@ -116,9 +107,7 @@ def imm_com8 : Operand<i8> {
 
 def ioaddr_XFORM : SDNodeXForm<imm,
 [{
-  uint8_t offset = Subtarget->getIORegisterOffset();
-  return CurDAG->getTargetConstant(uint8_t(N->getZExtValue()) - offset,
-                                   SDLoc(N), MVT::i8);
+  return CurDAG->getTargetConstant(uint8_t(N->getZExtValue()) - 0x20, SDLoc(N), MVT::i8);
 }]>;
 
 def iobitpos8_XFORM : SDNodeXForm<imm,
@@ -135,23 +124,20 @@ def iobitposn8_XFORM : SDNodeXForm<imm,
 
 def ioaddr8 : PatLeaf<(imm),
 [{
-  uint8_t offset = Subtarget->getIORegisterOffset();
-  uint64_t val = N->getZExtValue() - offset;
-  return val < 0x40;
+  uint64_t val = N->getZExtValue();
+  return val >= 0x20 && val < 0x60;
 }], ioaddr_XFORM>;
 
 def lowioaddr8 : PatLeaf<(imm),
 [{
-  uint8_t offset = Subtarget->getIORegisterOffset();
-  uint64_t val = N->getZExtValue() - offset;
-  return val < 0x20;
+  uint64_t val = N->getZExtValue();
+  return val >= 0x20 && val < 0x40;
 }], ioaddr_XFORM>;
 
 def ioaddr16 : PatLeaf<(imm),
 [{
-  uint8_t offset = Subtarget->getIORegisterOffset();
-  uint64_t val = N->getZExtValue() - offset;
-  return val < 0x3f;
+  uint64_t val = N->getZExtValue();
+  return val >= 0x20 && val < 0x5f;
 }], ioaddr_XFORM>;
 
 def iobitpos8 : PatLeaf<(imm),
@@ -202,7 +188,6 @@ def brtarget_13 : Operand<OtherVT>
 def call_target : Operand<iPTR>
 {
     let EncoderMethod = "encodeCallTarget";
-    let DecoderMethod = "decodeCallTarget";
 }
 
 // A 16-bit address (which can lead to an R_AVR_16 relocation).
@@ -275,58 +260,58 @@ def LDDSTDPtrReg : Operand<i16>
 //===----------------------------------------------------------------------===//
 
 def HasSRAM       :    Predicate<"Subtarget->hasSRAM()">,
-                         AssemblerPredicate<(all_of FeatureSRAM)>;
+                         AssemblerPredicate<"FeatureSRAM">;
 
 def HasJMPCALL    :    Predicate<"Subtarget->hasJMPCALL()">,
-                         AssemblerPredicate<(all_of FeatureJMPCALL)>;
+                         AssemblerPredicate<"FeatureJMPCALL">;
 
 def HasIJMPCALL   :    Predicate<"Subtarget->hasIJMPCALL()">,
-                         AssemblerPredicate<(all_of FeatureIJMPCALL)>;
+                         AssemblerPredicate<"FeatureIJMPCALL">;
 
 def HasEIJMPCALL  :    Predicate<"Subtarget->hasEIJMPCALL()">,
-                         AssemblerPredicate<(all_of FeatureEIJMPCALL)>;
+                         AssemblerPredicate<"FeatureEIJMPCALL">;
 
 def HasADDSUBIW   :    Predicate<"Subtarget->hasADDSUBIW()">,
-                         AssemblerPredicate<(all_of FeatureADDSUBIW)>;
+                         AssemblerPredicate<"FeatureADDSUBIW">;
 
 def HasSmallStack :    Predicate<"Subtarget->HasSmallStack()">,
-                         AssemblerPredicate<(all_of FeatureSmallStack)>;
+                         AssemblerPredicate<"FeatureSmallStack">;
 
 def HasMOVW       :    Predicate<"Subtarget->hasMOVW()">,
-                         AssemblerPredicate<(all_of FeatureMOVW)>;
+                         AssemblerPredicate<"FeatureMOVW">;
 
 def HasLPM        :    Predicate<"Subtarget->hasLPM()">,
-                         AssemblerPredicate<(all_of FeatureLPM)>;
+                         AssemblerPredicate<"FeatureLPM">;
 
 def HasLPMX       :    Predicate<"Subtarget->hasLPMX()">,
-                         AssemblerPredicate<(all_of FeatureLPMX)>;
+                         AssemblerPredicate<"FeatureLPMX">;
 
 def HasELPM       :    Predicate<"Subtarget->hasELPM()">,
-                         AssemblerPredicate<(all_of FeatureELPM)>;
+                         AssemblerPredicate<"FeatureELPM">;
 
 def HasELPMX      :    Predicate<"Subtarget->hasELPMX()">,
-                         AssemblerPredicate<(all_of FeatureELPMX)>;
+                         AssemblerPredicate<"FeatureELPMX">;
 
 def HasSPM        :    Predicate<"Subtarget->hasSPM()">,
-                         AssemblerPredicate<(all_of FeatureSPM)>;
+                         AssemblerPredicate<"FeatureSPM">;
 
 def HasSPMX       :    Predicate<"Subtarget->hasSPMX()">,
-                         AssemblerPredicate<(all_of FeatureSPMX)>;
+                         AssemblerPredicate<"FeatureSPMX">;
 
 def HasDES        :    Predicate<"Subtarget->hasDES()">,
-                         AssemblerPredicate<(all_of FeatureDES)>;
+                         AssemblerPredicate<"FeatureDES">;
 
 def SupportsRMW   :    Predicate<"Subtarget->supportsRMW()">,
-                         AssemblerPredicate<(all_of FeatureRMW)>;
+                         AssemblerPredicate<"FeatureRMW">;
 
 def SupportsMultiplication : Predicate<"Subtarget->supportsMultiplication()">,
-                               AssemblerPredicate<(all_of FeatureMultiplication)>;
+                               AssemblerPredicate<"FeatureMultiplication">;
 
 def HasBREAK      :    Predicate<"Subtarget->hasBREAK()">,
-                         AssemblerPredicate<(all_of FeatureBREAK)>;
+                         AssemblerPredicate<"FeatureBREAK">;
 
 def HasTinyEncoding : Predicate<"Subtarget->hasTinyEncoding()">,
-                        AssemblerPredicate<(all_of FeatureTinyEncoding)>;
+                        AssemblerPredicate<"FeatureTinyEncoding">;
 
 
 // AVR specific condition code. These correspond to AVR_*_COND in
@@ -360,13 +345,11 @@ Uses = [SP] in
                                 "#ADJCALLSTACKDOWN",
                                 [(AVRcallseq_start timm:$amt, timm:$amt2)]>;
 
-  // R31R30 is used to update SP. It is normally free because it is a
-  // call-clobbered register but it is necessary to set it as a def as the
-  // register allocator might use it in rare cases (for rematerialization, it
-  // seems). hasSideEffects needs to be set to true so this instruction isn't
-  // considered dead.
-  let Defs = [R31R30],
-  hasSideEffects=1 in
+  // R31R30 is used to update SP, since it is a scratch reg and this instruction
+  // is placed after the function call then R31R30 should be always free.
+  //let Defs = [R31R30],
+  //Uses = [R31R30] in
+  //:TODO: if we enable this, the pseudo is killed because it looks dead
   def ADJCALLSTACKUP : Pseudo<(outs),
                               (ins i16imm:$amt1, i16imm:$amt2),
                               "#ADJCALLSTACKUP",
@@ -572,7 +555,7 @@ Defs = [R1, R0, SREG] in
 
     def MULSRdRr : FMUL2RdRr<0,
                              (outs),
-                             (ins LD8:$lhs, LD8:$rhs),
+                             (ins GPR8:$lhs, GPR8:$rhs),
                              "muls\t$lhs, $rhs",
                              []>,
                    Requires<[SupportsMultiplication]>;
@@ -580,28 +563,28 @@ Defs = [R1, R0, SREG] in
 
   def MULSURdRr : FMUL2RdRr<1,
                             (outs),
-                            (ins LD8lo:$lhs, LD8lo:$rhs),
+                            (ins GPR8:$lhs, GPR8:$rhs),
                             "mulsu\t$lhs, $rhs",
                             []>,
                   Requires<[SupportsMultiplication]>;
 
   def FMUL : FFMULRdRr<0b01,
                        (outs),
-                       (ins LD8lo:$lhs, LD8lo:$rhs),
+                       (ins GPR8:$lhs, GPR8:$rhs),
                        "fmul\t$lhs, $rhs",
                        []>,
              Requires<[SupportsMultiplication]>;
 
   def FMULS : FFMULRdRr<0b10,
                         (outs),
-                        (ins LD8lo:$lhs, LD8lo:$rhs),
+                        (ins GPR8:$lhs, GPR8:$rhs),
                         "fmuls\t$lhs, $rhs",
                         []>,
               Requires<[SupportsMultiplication]>;
 
   def FMULSU : FFMULRdRr<0b11,
                          (outs),
-                         (ins LD8lo:$lhs, LD8lo:$rhs),
+                         (ins GPR8:$lhs, GPR8:$rhs),
                          "fmulsu\t$lhs, $rhs",
                          []>,
                Requires<[SupportsMultiplication]>;
@@ -743,23 +726,13 @@ Defs = [SREG] in
                       "comw\t$rd",
                       [(set i16:$rd, (not i16:$src)), (implicit SREG)]>;
 
+  //:TODO: optimize NEG for wider types
   def NEGRd : FRd<0b1001,
                   0b0100001,
                   (outs GPR8:$rd),
                   (ins GPR8:$src),
                   "neg\t$rd",
                   [(set i8:$rd, (ineg i8:$src)), (implicit SREG)]>;
-
-  // NEGW Rd+1:Rd
-  //
-  // Expands to:
-  // neg Rd+1
-  // neg Rd
-  // sbc Rd+1, r1
-  def NEGWRd : Pseudo<(outs DREGS:$rd),
-                      (ins DREGS:$src),
-                      "negw\t$rd",
-                      [(set i16:$rd, (ineg i16:$src)), (implicit SREG)]>;
 }
 
 // TST Rd
@@ -867,7 +840,7 @@ let isCall = 1 in
 //===----------------------------------------------------------------------===//
 let isTerminator = 1,
 isReturn = 1,
-isBarrier = 1 in
+isBarrier = 1 in 
 {
   def RET : F16<0b1001010100001000,
                 (outs),
@@ -1297,7 +1270,6 @@ class AtomicStore<PatFrag Op, RegisterClass DRC,
   Pseudo<(outs), (ins PTRRC:$rd, DRC:$rr), "atomic_op",
          [(Op i16:$rd, DRC:$rr)]>;
 
-let Constraints = "@earlyclobber $rd" in
 class AtomicLoadOp<PatFrag Op, RegisterClass DRC,
                    RegisterClass PTRRC> :
   Pseudo<(outs DRC:$rd), (ins PTRRC:$rr, DRC:$operand),
@@ -1338,7 +1310,7 @@ def AtomicLoadOr16  : AtomicLoadOp16<atomic_load_or_16>;
 def AtomicLoadXor8  : AtomicLoadOp8<atomic_load_xor_8>;
 def AtomicLoadXor16 : AtomicLoadOp16<atomic_load_xor_16>;
 def AtomicFence     : Pseudo<(outs), (ins), "atomic_fence",
-                             [(atomic_fence timm, timm)]>;
+                             [(atomic_fence imm, imm)]>;
 
 // Indirect store from register to data space.
 def STSKRr : F32DM<0b1,
@@ -1675,18 +1647,6 @@ Defs = [SREG] in
                       "lslw\t$rd",
                       [(set i16:$rd, (AVRlsl i16:$src)), (implicit SREG)]>;
 
-  def LSLWNRd : Pseudo<(outs DLDREGS:$rd),
-                       (ins DREGS:$src, imm16:$bits),
-                       "lslwn\t$rd, $bits",
-                       [(set i16:$rd, (AVRlslwn i16:$src, imm:$bits)),
-                        (implicit SREG)]>;
-
-  def LSLBNRd : Pseudo<(outs LD8:$rd),
-                       (ins GPR8:$src, imm_ldi8:$bits),
-                       "lslbn\t$rd, $bits",
-                       [(set i8:$rd, (AVRlslbn i8:$src, imm:$bits)),
-                        (implicit SREG)]>;
-
   def LSRRd : FRd<0b1001,
                   0b0100110,
                   (outs GPR8:$rd),
@@ -1699,18 +1659,6 @@ Defs = [SREG] in
                       "lsrw\t$rd",
                       [(set i16:$rd, (AVRlsr i16:$src)), (implicit SREG)]>;
 
-  def LSRWNRd : Pseudo<(outs DLDREGS:$rd),
-                       (ins DREGS:$src, imm16:$bits),
-                       "lsrwn\t$rd, $bits",
-                       [(set i16:$rd, (AVRlsrwn i16:$src, imm:$bits)),
-                        (implicit SREG)]>;
-
-  def LSRBNRd : Pseudo<(outs LD8:$rd),
-                       (ins GPR8:$src, imm_ldi8:$bits),
-                       "lsrbn\t$rd, $bits",
-                       [(set i8:$rd, (AVRlsrbn i8:$src, imm:$bits)),
-                        (implicit SREG)]>;
-
   def ASRRd : FRd<0b1001,
                   0b0100101,
                   (outs GPR8:$rd),
@@ -1718,36 +1666,15 @@ Defs = [SREG] in
                   "asr\t$rd",
                   [(set i8:$rd, (AVRasr i8:$src)), (implicit SREG)]>;
 
-  def ASRWNRd : Pseudo<(outs DLDREGS:$rd),
-                       (ins DREGS:$src, imm16:$bits),
-                       "asrwn\t$rd, $bits",
-                       [(set i16:$rd, (AVRasrwn i16:$src, imm:$bits)),
-                        (implicit SREG)]>;
-
-  def ASRBNRd : Pseudo<(outs LD8:$rd),
-                       (ins GPR8:$src, imm_ldi8:$bits),
-                       "asrbn\t$rd, $bits",
-                       [(set i8:$rd, (AVRasrbn i8:$src, imm:$bits)),
-                        (implicit SREG)]>;
-
   def ASRWRd : Pseudo<(outs DREGS:$rd),
                       (ins DREGS:$src),
                       "asrw\t$rd",
                       [(set i16:$rd, (AVRasr i16:$src)), (implicit SREG)]>;
 
-  def ROLBRd : Pseudo<(outs GPR8:$rd),
-                      (ins GPR8:$src),
-                      "rolb\t$rd",
-                      [(set i8:$rd, (AVRrol i8:$src)), (implicit SREG)]>;
-
-  def RORBRd : Pseudo<(outs GPR8:$rd),
-                      (ins GPR8:$src),
-                      "rorb\t$rd",
-                      [(set i8:$rd, (AVRror i8:$src)), (implicit SREG)]>;
-
   // Bit rotate operations.
   let Uses = [SREG] in
   {
+    // 8-bit ROL is an alias of ADC Rd, Rd
 
     def ROLWRd : Pseudo<(outs DREGS:$rd),
                         (ins DREGS:$src),
@@ -1759,7 +1686,7 @@ Defs = [SREG] in
                     (outs GPR8:$rd),
                     (ins GPR8:$src),
                     "ror\t$rd",
-                    []>;
+                    [(set i8:$rd, (AVRror i8:$src)), (implicit SREG)]>;
 
     def RORWRd : Pseudo<(outs DREGS:$rd),
                         (ins DREGS:$src),
@@ -1776,7 +1703,7 @@ def SWAPRd : FRd<0b1001,
                  (outs GPR8:$rd),
                  (ins GPR8:$src),
                  "swap\t$rd",
-                 [(set i8:$rd, (AVRSwap i8:$src))]>;
+                 [(set i8:$rd, (bswap i8:$src))]>;
 
 // IO register bit set/clear operations.
 //:TODO: add patterns when popcount(imm)==2 to be expanded with 2 sbi/cbi
@@ -1803,11 +1730,10 @@ def BST : FRdB<0b01,
                "bst\t$rd, $b",
                []>;
 
-let Constraints = "$src = $rd",
-Uses = [SREG] in
+let Uses = [SREG] in
 def BLD : FRdB<0b00,
-               (outs GPR8:$rd),
-               (ins GPR8:$src, i8imm:$b),
+               (outs),
+               (ins GPR8:$rd, i8imm:$b),
                "bld\t$rd, $b",
                []>;
 
@@ -2106,6 +2032,8 @@ def : Pat<(add i16:$src1, imm:$src2),
           (SUBIWRdK i16:$src1, (imm16_neg_XFORM imm:$src2))>;
 def : Pat<(addc i16:$src1, imm:$src2),
           (SUBIWRdK i16:$src1, (imm16_neg_XFORM imm:$src2))>;
+def : Pat<(adde i16:$src1, imm:$src2),
+          (SBCIWRdK i16:$src1, (imm16_neg_XFORM imm:$src2))>;
 
 def : Pat<(add i8:$src1, imm:$src2),
           (SUBIRdK i8:$src1, (imm8_neg_XFORM imm:$src2))>;
@@ -2150,7 +2078,12 @@ def : Pat<(store i16:$src, (i16 (AVRWrapper tglobaladdr:$dst))),
 def : Pat<(i16 (AVRWrapper tblockaddress:$dst)),
           (LDIWRdK tblockaddress:$dst)>;
 
-def : Pat<(i8 (trunc (AVRlsrwn DLDREGS:$src, (i16 8)))),
+// hi-reg truncation : trunc(int16 >> 8)
+//:FIXME: i think it's better to emit an extract subreg node in the DAG than
+// all this mess once we get optimal shift code
+// lol... I think so, too. [@agnat]
+def : Pat<(i8 (trunc (AVRlsr (AVRlsr (AVRlsr (AVRlsr (AVRlsr (AVRlsr (AVRlsr
+                     (AVRlsr DREGS:$src)))))))))),
           (EXTRACT_SUBREG DREGS:$src, sub_hi)>;
 
 // :FIXME: DAGCombiner produces an shl node after legalization from these seq:

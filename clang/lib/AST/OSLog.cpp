@@ -55,9 +55,9 @@ public:
     ArgsData.reserve(Args.size());
   }
 
-  bool HandlePrintfSpecifier(const analyze_printf::PrintfSpecifier &FS,
-                             const char *StartSpecifier,
-                             unsigned SpecifierLen) override {
+  virtual bool HandlePrintfSpecifier(const analyze_printf::PrintfSpecifier &FS,
+                                     const char *StartSpecifier,
+                                     unsigned SpecifierLen) {
     if (!FS.consumesDataArgument() &&
         FS.getConversionSpecifier().getKind() !=
             clang::analyze_format_string::ConversionSpecifier::PrintErrno)

@@ -1,8 +1,4 @@
-; RUN: opt -O2 %s | llvm-dis > %t1
-; RUN: llc -filetype=asm -o - %t1 | FileCheck %s
-; RUN: llc -mattr=+alu32 -filetype=asm -o - %t1 | FileCheck %s
-; RUN: llc -filetype=asm -force-opaque-pointers -o - %t1 | FileCheck %s
-; RUN: llc -mattr=+alu32 -filetype=asm -force-opaque-pointers -o - %t1 | FileCheck %s
+; RUN: llc -march=bpfel -filetype=asm -o - %s | FileCheck %s
 ;
 ; Source code:
 ;   #define _(x) (__builtin_preserve_access_index(x))
@@ -10,9 +6,7 @@
 ;   int get_value(const void *addr);
 ;   int test(struct s *arg) { return get_value(_(&arg[2].b)); }
 ; Compiler flag to generate IR:
-;   clang -target bpf -S -O2 -g -emit-llvm -Xclang -disable-llvm-passes test.c
-
-target triple = "bpf"
+;   clang -target bpf -S -O2 -g -emit-llvm test.c
 
 %struct.s = type { i32, i32 }
 
@@ -20,8 +14,8 @@ target triple = "bpf"
 define dso_local i32 @test(%struct.s* %arg) local_unnamed_addr #0 !dbg !7 {
 entry:
   call void @llvm.dbg.value(metadata %struct.s* %arg, metadata !17, metadata !DIExpression()), !dbg !18
-  %0 = tail call %struct.s* @llvm.preserve.array.access.index.p0s_struct.ss.p0s_struct.ss(%struct.s* elementtype(%struct.s) %arg, i32 0, i32 2), !dbg !19, !llvm.preserve.access.index !11
-  %1 = tail call i32* @llvm.preserve.struct.access.index.p0i32.p0s_struct.ss(%struct.s* elementtype(%struct.s) %0, i32 1, i32 1), !dbg !19, !llvm.preserve.access.index !12
+  %0 = tail call %struct.s* @llvm.preserve.array.access.index.p0s_struct.ss.p0s_struct.ss(%struct.s* %arg, i32 0, i32 2), !dbg !19
+  %1 = tail call i32* @llvm.preserve.struct.access.index.p0i32.p0s_struct.ss(%struct.s* %0, i32 1, i32 1), !dbg !19, !llvm.preserve.access.index !12
   %2 = bitcast i32* %1 to i8*, !dbg !19
   %call = tail call i32 @get_value(i8* %2) #4, !dbg !20
   ret i32 %call, !dbg !21
@@ -34,13 +28,12 @@ entry:
 ; CHECK:       exit
 ;
 ; CHECK:      .section        .BTF.ext,"",@progbits
-; CHECK:      .long   16                      # FieldReloc
-; CHECK-NEXT: .long   20                      # Field reloc section string offset=20
+; CHECK:      .long   12                      # OffsetReloc
+; CHECK-NEXT: .long   20                      # Offset reloc section string offset=20
 ; CHECK-NEXT: .long   1
 ; CHECK-NEXT: .long   [[RELOC]]
 ; CHECK-NEXT: .long   2
 ; CHECK-NEXT: .long   26
-; CHECK-NEXT: .long   0
 
 declare dso_local i32 @get_value(i8*) local_unnamed_addr #1
 
@@ -53,8 +46,8 @@ declare i32* @llvm.preserve.struct.access.index.p0i32.p0s_struct.ss(%struct.s*, 
 ; Function Attrs: nounwind readnone speculatable
 declare void @llvm.dbg.value(metadata, metadata, metadata) #3
 
-attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "frame-pointer"="all" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #1 = { "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #2 = { nounwind readnone }
 attributes #3 = { nounwind readnone speculatable }
 attributes #4 = { nounwind }

@@ -6,10 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TOOLS_DEBUGSERVER_SOURCE_STDSTRINGEXTRACTOR_H
-#define LLDB_TOOLS_DEBUGSERVER_SOURCE_STDSTRINGEXTRACTOR_H
+#ifndef utility_StdStringExtractor_h_
+#define utility_StdStringExtractor_h_
 
-#include <cstdint>
+#include <stdint.h>
 #include <string>
 
 
@@ -37,6 +37,8 @@ public:
   }
 
   void SkipSpaces();
+
+  std::string &GetStringRef() { return m_packet; }
 
   const std::string &GetStringRef() const { return m_packet; }
 
@@ -81,6 +83,9 @@ public:
 
   size_t GetHexBytesAvail(void *dst, size_t dst_len);
 
+  uint64_t GetHexWithFixedSize(uint32_t byte_size, bool little_endian,
+                               uint64_t fail_value);
+
   size_t GetHexByteString(std::string &str);
 
   size_t GetHexByteStringFixedLength(std::string &str, uint32_t nibble_length);
@@ -102,4 +107,4 @@ protected:
                         // reached when decoding information
 };
 
-#endif // LLDB_TOOLS_DEBUGSERVER_SOURCE_STDSTRINGEXTRACTOR_H
+#endif // utility_StringExtractor_h_

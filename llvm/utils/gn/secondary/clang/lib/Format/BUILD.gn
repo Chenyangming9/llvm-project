@@ -15,7 +15,6 @@ static_library("Format") {
     "Format.cpp",
     "FormatToken.cpp",
     "FormatTokenLexer.cpp",
-    "MacroExpander.cpp",
     "NamespaceEndCommentsFixer.cpp",
     "SortJavaScriptImports.cpp",
     "TokenAnalyzer.cpp",

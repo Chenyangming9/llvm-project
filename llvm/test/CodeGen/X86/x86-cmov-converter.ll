@@ -57,7 +57,7 @@
 ;;    if (a[i] > a[t])
 ;;      t = i;
 ;;  }
-;;  return t;
+;;  return a[t];
 ;;}
 ;;
 ;;
@@ -177,24 +177,30 @@ for.body.preheader:                               ; preds = %entry
   %wide.trip.count = zext i32 %n to i64
   br label %for.body
 
-for.cond.cleanup:                                 ; preds = %for.body, %entry
-  %t.0.lcssa = phi i32 [ 0, %entry ], [ %i.0.t.0, %for.body ]
-  ret i32 %t.0.lcssa
+for.cond.cleanup.loopexit:                        ; preds = %for.body
+  %phitmp = sext i32 %i.0.t.0 to i64
+  br label %for.cond.cleanup
+
+for.cond.cleanup:                                 ; preds = %for.cond.cleanup.loopexit, %entry
+  %t.0.lcssa = phi i64 [ 0, %entry ], [ %phitmp, %for.cond.cleanup.loopexit ]
+  %arrayidx5 = getelementptr inbounds i32, i32* %a, i64 %t.0.lcssa
+  %0 = load i32, i32* %arrayidx5, align 4
+  ret i32 %0
 
 for.body:                                         ; preds = %for.body.preheader, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 1, %for.body.preheader ]
   %t.015 = phi i32 [ %i.0.t.0, %for.body ], [ 0, %for.body.preheader ]
   %arrayidx = getelementptr inbounds i32, i32* %a, i64 %indvars.iv
-  %0 = load i32, i32* %arrayidx, align 4
+  %1 = load i32, i32* %arrayidx, align 4
   %idxprom1 = sext i32 %t.015 to i64
   %arrayidx2 = getelementptr inbounds i32, i32* %a, i64 %idxprom1
-  %1 = load i32, i32* %arrayidx2, align 4
-  %cmp3 = icmp sgt i32 %0, %1
-  %2 = trunc i64 %indvars.iv to i32
-  %i.0.t.0 = select i1 %cmp3, i32 %2, i32 %t.015
+  %2 = load i32, i32* %arrayidx2, align 4
+  %cmp3 = icmp sgt i32 %1, %2
+  %3 = trunc i64 %indvars.iv to i32
+  %i.0.t.0 = select i1 %cmp3, i32 %3, i32 %t.015
   %indvars.iv.next = add nuw nsw i64 %indvars.iv, 1
   %exitcond = icmp eq i64 %indvars.iv.next, %wide.trip.count
-  br i1 %exitcond, label %for.cond.cleanup, label %for.body
+  br i1 %exitcond, label %for.cond.cleanup.loopexit, label %for.body
 }
 
 ; CHECK-LABEL: MaxValue
@@ -481,68 +487,6 @@ entry:
 ; CHECK:       [[FALSE_BB]]:
 ; CHECK:         retq
   ret i32 %r
-}
-
-@begin = external global i32*
-@end = external global i32*
-
-define void @test_memoperand_loop(i32 %data) #0 {
-; CHECK-LABEL: test_memoperand_loop:
-; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    movq begin@GOTPCREL(%rip), %r8
-; CHECK-NEXT:    movq (%r8), %rax
-; CHECK-NEXT:    movq end@GOTPCREL(%rip), %rcx
-; CHECK-NEXT:    movq (%rcx), %rdx
-; CHECK-NEXT:    xorl %esi, %esi
-; CHECK-NEXT:    movq %rax, %rcx
-entry:
-  %begin = load i32*, i32** @begin, align 8
-  %end = load i32*, i32** @end, align 8
-  br label %loop.body
-
-; CHECK-NEXT:  .LBB13_1: # %loop.body
-; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    addq $8, %rcx
-; CHECK-NEXT:    cmpq %rdx, %rcx
-; CHECK-NEXT:    ja .LBB13_3
-; CHECK-NEXT:  # %bb.2: # %loop.body
-; CHECK-NEXT:    # in Loop: Header=BB13_1 Depth=1
-; CHECK-NEXT:    movq (%r8), %rcx
-; CHECK-NEXT:  .LBB13_3: # %loop.body
-; CHECK-NEXT:    # in Loop: Header=BB13_1 Depth=1
-; CHECK-NEXT:    movl %edi, (%rcx)
-; CHECK-NEXT:    addq $8, %rcx
-; CHECK-NEXT:    cmpq %rdx, %rcx
-; CHECK-NEXT:    ja .LBB13_5
-; CHECK-NEXT:  # %bb.4: # %loop.body
-; CHECK-NEXT:    # in Loop: Header=BB13_1 Depth=1
-; CHECK-NEXT:    movq %rax, %rcx
-; CHECK-NEXT:  .LBB13_5: # %loop.body
-; CHECK-NEXT:    # in Loop: Header=BB13_1 Depth=1
-; CHECK-NEXT:    movl %edi, (%rcx)
-; CHECK-NEXT:    addl $1, %esi
-; CHECK-NEXT:    cmpl $1024, %esi # imm = 0x400
-; CHECK-NEXT:    jl .LBB13_1
-loop.body:
-  %phi.iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.body ]
-  %phi.ptr = phi i32* [ %begin, %entry ], [ %dst2, %loop.body ]
-  %gep1 = getelementptr inbounds i32, i32 *%phi.ptr, i64 2
-  %cmp1 = icmp ugt i32* %gep1, %end
-  %begin_dup = load i32*, i32** @begin, align 8
-  %dst1 = select i1 %cmp1, i32* %gep1, i32* %begin_dup
-  store i32 %data, i32 *%dst1, align 4
-  %gep2 = getelementptr inbounds i32, i32 *%dst1, i64 2
-  %cmp2 = icmp ugt i32* %gep2, %end
-  %dst2 = select i1 %cmp2, i32* %gep2, i32* %begin
-  store i32 %data, i32 *%dst2, align 4
-  %iv.next = add i32 %phi.iv, 1
-  %cond = icmp slt i32 %iv.next, 1024
-  br i1 %cond, label %loop.body, label %exit
-
-; CHECK-NEXT:  # %bb.6: # %exit
-; CHECK-NEXT:    retq
-exit:
-  ret void
 }
 
 attributes #0 = {"target-cpu"="x86-64"}

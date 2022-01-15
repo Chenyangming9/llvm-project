@@ -114,15 +114,21 @@ public:
     return *Summaries;
   }
 
-  ObjCMigrateASTConsumer(StringRef migrateDir, unsigned astMigrateActions,
-                         FileRemapper &remapper, FileManager &fileMgr,
+  ObjCMigrateASTConsumer(StringRef migrateDir,
+                         unsigned astMigrateActions,
+                         FileRemapper &remapper,
+                         FileManager &fileMgr,
                          const PPConditionalDirectiveRecord *PPRec,
-                         Preprocessor &PP, bool isOutputFile,
+                         Preprocessor &PP,
+                         bool isOutputFile,
                          ArrayRef<std::string> WhiteList)
-      : MigrateDir(migrateDir), ASTMigrateActions(astMigrateActions),
-        NSIntegerTypedefed(nullptr), NSUIntegerTypedefed(nullptr),
-        Remapper(remapper), FileMgr(fileMgr), PPRec(PPRec), PP(PP),
-        IsOutputFile(isOutputFile), FoundationIncluded(false) {
+  : MigrateDir(migrateDir),
+    ASTMigrateActions(astMigrateActions),
+    NSIntegerTypedefed(nullptr), NSUIntegerTypedefed(nullptr),
+    Remapper(remapper), FileMgr(fileMgr), PPRec(PPRec), PP(PP),
+    IsOutputFile(isOutputFile),
+    FoundationIncluded(false){
+
     // FIXME: StringSet should have insert(iter, iter) to use here.
     for (const std::string &Val : WhiteList)
       WhiteListFilenames.insert(Val);
@@ -156,7 +162,7 @@ protected:
     return WhiteListFilenames.find(llvm::sys::path::filename(Path))
         != WhiteListFilenames.end();
   }
-  bool canModifyFile(Optional<FileEntryRef> FE) {
+  bool canModifyFile(const FileEntry *FE) {
     if (!FE)
       return false;
     return canModifyFile(FE->getName());
@@ -164,7 +170,7 @@ protected:
   bool canModifyFile(FileID FID) {
     if (FID.isInvalid())
       return false;
-    return canModifyFile(PP.getSourceManager().getFileEntryRefForID(FID));
+    return canModifyFile(PP.getSourceManager().getFileEntryForID(FID));
   }
 
   bool canModify(const Decl *D) {
@@ -185,10 +191,12 @@ protected:
 } // end anonymous namespace
 
 ObjCMigrateAction::ObjCMigrateAction(
-    std::unique_ptr<FrontendAction> WrappedAction, StringRef migrateDir,
-    unsigned migrateAction)
-    : WrapperFrontendAction(std::move(WrappedAction)), MigrateDir(migrateDir),
-      ObjCMigAction(migrateAction), CompInst(nullptr) {
+                                  std::unique_ptr<FrontendAction> WrappedAction,
+                                     StringRef migrateDir,
+                                     unsigned migrateAction)
+  : WrapperFrontendAction(std::move(WrappedAction)), MigrateDir(migrateDir),
+    ObjCMigAction(migrateAction),
+    CompInst(nullptr) {
   if (MigrateDir.empty())
     MigrateDir = "."; // user current directory if none is given.
 }
@@ -200,10 +208,10 @@ ObjCMigrateAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
   CI.getPreprocessor().addPPCallbacks(std::unique_ptr<PPCallbacks>(PPRec));
   std::vector<std::unique_ptr<ASTConsumer>> Consumers;
   Consumers.push_back(WrapperFrontendAction::CreateASTConsumer(CI, InFile));
-  Consumers.push_back(std::make_unique<ObjCMigrateASTConsumer>(
+  Consumers.push_back(llvm::make_unique<ObjCMigrateASTConsumer>(
       MigrateDir, ObjCMigAction, Remapper, CompInst->getFileManager(), PPRec,
       CompInst->getPreprocessor(), false, None));
-  return std::make_unique<MultiplexConsumer>(std::move(Consumers));
+  return llvm::make_unique<MultiplexConsumer>(std::move(Consumers));
 }
 
 bool ObjCMigrateAction::BeginInvocation(CompilerInstance &CI) {
@@ -525,7 +533,7 @@ static void rewriteToObjCProperty(const ObjCMethodDecl *Getter,
     // after that; e.g. isContinuous will become continuous.
     StringRef PropertyNameStringRef(PropertyNameString);
     PropertyNameStringRef = PropertyNameStringRef.drop_front(LengthOfPrefix);
-    PropertyNameString = std::string(PropertyNameStringRef);
+    PropertyNameString = PropertyNameStringRef;
     bool NoLowering = (isUppercase(PropertyNameString[0]) &&
                        PropertyNameString.size() > 1 &&
                        isUppercase(PropertyNameString[1]));
@@ -613,7 +621,7 @@ ClassImplementsAllMethodsAndProperties(ASTContext &Ctx,
         continue;
       HasAtleastOneRequiredProperty = true;
       DeclContext::lookup_result R = IDecl->lookup(Property->getDeclName());
-      if (R.empty()) {
+      if (R.size() == 0) {
         // Relax the rule and look into class's implementation for a synthesize
         // or dynamic declaration. Class is implementing a property coming from
         // another protocol. This still makes the target protocol as conforming.
@@ -621,12 +629,14 @@ ClassImplementsAllMethodsAndProperties(ASTContext &Ctx,
                                   Property->getDeclName().getAsIdentifierInfo(),
                                   Property->getQueryKind()))
           return false;
-      } else if (auto *ClassProperty = R.find_first<ObjCPropertyDecl>()) {
-        if ((ClassProperty->getPropertyAttributes() !=
-             Property->getPropertyAttributes()) ||
-            !Ctx.hasSameType(ClassProperty->getType(), Property->getType()))
-          return false;
-      } else
+      }
+      else if (ObjCPropertyDecl *ClassProperty = dyn_cast<ObjCPropertyDecl>(R[0])) {
+          if ((ClassProperty->getPropertyAttributes()
+              != Property->getPropertyAttributes()) ||
+              !Ctx.hasSameType(ClassProperty->getType(), Property->getType()))
+            return false;
+      }
+      else
         return false;
     }
 
@@ -643,12 +653,12 @@ ClassImplementsAllMethodsAndProperties(ASTContext &Ctx,
       if (MD->getImplementationControl() == ObjCMethodDecl::Optional)
         continue;
       DeclContext::lookup_result R = ImpDecl->lookup(MD->getDeclName());
-      if (R.empty())
+      if (R.size() == 0)
         return false;
       bool match = false;
       HasAtleastOneRequiredMethod = true;
-      for (NamedDecl *ND : R)
-        if (ObjCMethodDecl *ImpMD = dyn_cast<ObjCMethodDecl>(ND))
+      for (unsigned I = 0, N = R.size(); I != N; ++I)
+        if (ObjCMethodDecl *ImpMD = dyn_cast<ObjCMethodDecl>(R[0]))
           if (Ctx.ObjCMethodsAreEqual(MD, ImpMD)) {
             match = true;
             break;
@@ -984,7 +994,7 @@ static void ReplaceWithClasstype(const ObjCMigrateASTConsumer &ASTC,
   if (TypeSourceInfo *TSInfo = OM->getReturnTypeSourceInfo()) {
     TypeLoc TL = TSInfo->getTypeLoc();
     R = SourceRange(TL.getBeginLoc(), TL.getEndLoc()); {
-      ClassString = std::string(IDecl->getName());
+      ClassString  = IDecl->getName();
       ClassString += "*";
     }
   }
@@ -1082,7 +1092,7 @@ static bool AvailabilityAttrsMatch(Attr *At1, Attr *At2) {
   const AvailabilityAttr *AA1 = dyn_cast<AvailabilityAttr>(At1);
   if (!AA1)
     return true;
-  const AvailabilityAttr *AA2 = cast<AvailabilityAttr>(At2);
+  const AvailabilityAttr *AA2 = dyn_cast<AvailabilityAttr>(At2);
 
   VersionTuple Introduced1 = AA1->getIntroduced();
   VersionTuple Deprecated1 = AA1->getDeprecated();
@@ -1310,7 +1320,7 @@ void ObjCMigrateASTConsumer::migrateFactoryMethod(ASTContext &Ctx,
   if (!IDecl)
     return;
 
-  std::string StringClassName = std::string(IDecl->getName());
+  std::string StringClassName = IDecl->getName();
   StringRef LoweredClassName(StringClassName);
   std::string StringLoweredClassName = LoweredClassName.lower();
   LoweredClassName = StringLoweredClassName;
@@ -1320,7 +1330,7 @@ void ObjCMigrateASTConsumer::migrateFactoryMethod(ASTContext &Ctx,
   if (!MethodIdName)
     return;
 
-  std::string MethodName = std::string(MethodIdName->getName());
+  std::string MethodName = MethodIdName->getName();
   if (OIT_Family == OIT_Singleton || OIT_Family == OIT_ReturnsSelf) {
     StringRef STRefMethodName(MethodName);
     size_t len = 0;
@@ -1332,7 +1342,7 @@ void ObjCMigrateASTConsumer::migrateFactoryMethod(ASTContext &Ctx,
       len = strlen("default");
     else
       return;
-    MethodName = std::string(STRefMethodName.substr(len));
+    MethodName = STRefMethodName.substr(len);
   }
   std::string MethodNameSubStr = MethodName.substr(0, 3);
   StringRef MethodNamePrefix(MethodNameSubStr);
@@ -1341,7 +1351,7 @@ void ObjCMigrateASTConsumer::migrateFactoryMethod(ASTContext &Ctx,
   size_t Ix = LoweredClassName.rfind(MethodNamePrefix);
   if (Ix == StringRef::npos)
     return;
-  std::string ClassNamePostfix = std::string(LoweredClassName.substr(Ix));
+  std::string ClassNamePostfix = LoweredClassName.substr(Ix);
   StringRef LoweredMethodName(MethodName);
   std::string StringLoweredMethodName = LoweredMethodName.lower();
   LoweredMethodName = StringLoweredMethodName;
@@ -1361,7 +1371,7 @@ static bool IsVoidStarType(QualType Ty) {
     Ty = TD->getDecl()->getUnderlyingType();
 
   // Is the type void*?
-  const PointerType* PT = Ty->castAs<PointerType>();
+  const PointerType* PT = Ty->getAs<PointerType>();
   if (PT->getPointeeType().getUnqualifiedType()->isVoidType())
     return true;
   return IsVoidStarType(PT->getPointeeType());
@@ -1941,7 +1951,7 @@ void ObjCMigrateASTConsumer::HandleTranslationUnit(ASTContext &Ctx) {
 
  if (IsOutputFile) {
    std::error_code EC;
-   llvm::raw_fd_ostream OS(MigrateDir, EC, llvm::sys::fs::OF_None);
+   llvm::raw_fd_ostream OS(MigrateDir, EC, llvm::sys::fs::F_None);
    if (EC) {
       DiagnosticsEngine &Diags = Ctx.getDiagnostics();
       Diags.Report(Diags.getCustomDiagID(DiagnosticsEngine::Error, "%0"))
@@ -1962,7 +1972,7 @@ void ObjCMigrateASTConsumer::HandleTranslationUnit(ASTContext &Ctx) {
         I = rewriter.buffer_begin(), E = rewriter.buffer_end(); I != E; ++I) {
     FileID FID = I->first;
     RewriteBuffer &buf = I->second;
-    Optional<FileEntryRef> file = Ctx.getSourceManager().getFileEntryRefForID(FID);
+    const FileEntry *file = Ctx.getSourceManager().getFileEntryForID(FID);
     assert(file);
     SmallString<512> newText;
     llvm::raw_svector_ostream vecOS(newText);
@@ -2000,7 +2010,7 @@ static std::vector<std::string> getWhiteListFilenames(StringRef DirPath) {
   directory_iterator DE;
   for (; !EC && DI != DE; DI = DI.increment(EC)) {
     if (is_regular_file(DI->path()))
-      Filenames.push_back(std::string(filename(DI->path())));
+      Filenames.push_back(filename(DI->path()));
   }
 
   return Filenames;
@@ -2024,7 +2034,7 @@ MigrateSourceAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
   CI.getPreprocessor().addPPCallbacks(std::unique_ptr<PPCallbacks>(PPRec));
   std::vector<std::string> WhiteList =
     getWhiteListFilenames(CI.getFrontendOpts().ObjCMTWhiteListPath);
-  return std::make_unique<ObjCMigrateASTConsumer>(
+  return llvm::make_unique<ObjCMigrateASTConsumer>(
       CI.getFrontendOpts().OutputFile, ObjCMTAction, Remapper,
       CI.getFileManager(), PPRec, CI.getPreprocessor(),
       /*isOutputFile=*/true, WhiteList);
@@ -2032,10 +2042,12 @@ MigrateSourceAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 
 namespace {
 struct EditEntry {
-  Optional<FileEntryRef> File;
-  unsigned Offset = 0;
-  unsigned RemoveLen = 0;
+  const FileEntry *File;
+  unsigned Offset;
+  unsigned RemoveLen;
   std::string Text;
+
+  EditEntry() : File(), Offset(), RemoveLen() {}
 };
 } // end anonymous namespace
 
@@ -2052,8 +2064,12 @@ template<> struct DenseMapInfo<EditEntry> {
     return Entry;
   }
   static unsigned getHashValue(const EditEntry& Val) {
-    return (unsigned)llvm::hash_combine(Val.File, Val.Offset, Val.RemoveLen,
-                                        Val.Text);
+    llvm::FoldingSetNodeID ID;
+    ID.AddPointer(Val.File);
+    ID.AddInteger(Val.Offset);
+    ID.AddInteger(Val.RemoveLen);
+    ID.AddString(Val.Text);
+    return ID.ComputeHash();
   }
   static bool isEqual(const EditEntry &LHS, const EditEntry &RHS) {
     return LHS.File == RHS.File &&
@@ -2125,10 +2141,10 @@ private:
       StringRef Val = ValueString->getValue(ValueStorage);
 
       if (Key == "file") {
-        if (auto File = FileMgr.getOptionalFileRef(Val))
-          Entry.File = File;
-        else
+        const FileEntry *FE = FileMgr.getFile(Val);
+        if (!FE)
           Ignore = true;
+        Entry.File = FE;
       } else if (Key == "offset") {
         if (Val.getAsInteger(10, Entry.Offset))
           Ignore = true;
@@ -2136,7 +2152,7 @@ private:
         if (Val.getAsInteger(10, Entry.RemoveLen))
           Ignore = true;
       } else if (Key == "text") {
-        Entry.Text = std::string(Val);
+        Entry.Text = Val;
       }
     }
 
@@ -2152,7 +2168,7 @@ static bool reportDiag(const Twine &Err, DiagnosticsEngine &Diag) {
   return true;
 }
 
-static std::string applyEditsToTemp(FileEntryRef FE,
+static std::string applyEditsToTemp(const FileEntry *FE,
                                     ArrayRef<EditEntry> Edits,
                                     FileManager &FileMgr,
                                     DiagnosticsEngine &Diag) {
@@ -2196,8 +2212,8 @@ static std::string applyEditsToTemp(FileEntryRef FE,
 
   SmallString<64> TempPath;
   int FD;
-  if (fs::createTemporaryFile(path::filename(FE.getName()),
-                              path::extension(FE.getName()).drop_front(), FD,
+  if (fs::createTemporaryFile(path::filename(FE->getName()),
+                              path::extension(FE->getName()).drop_front(), FD,
                               TempPath)) {
     reportDiag("Could not create file: " + TempPath.str(), Diag);
     return std::string();
@@ -2207,7 +2223,7 @@ static std::string applyEditsToTemp(FileEntryRef FE,
   TmpOut.write(NewText.data(), NewText.size());
   TmpOut.close();
 
-  return std::string(TempPath.str());
+  return TempPath.str();
 }
 
 bool arcmt::getFileRemappingsFromFileList(
@@ -2225,7 +2241,7 @@ bool arcmt::getFileRemappingsFromFileList(
       new DiagnosticsEngine(DiagID, new DiagnosticOptions,
                             DiagClient, /*ShouldOwnClient=*/false));
 
-  typedef llvm::DenseMap<FileEntryRef, std::vector<EditEntry> >
+  typedef llvm::DenseMap<const FileEntry *, std::vector<EditEntry> >
       FileEditEntriesTy;
   FileEditEntriesTy FileEditEntries;
 
@@ -2247,7 +2263,7 @@ bool arcmt::getFileRemappingsFromFileList(
       if (!Insert.second)
         continue;
 
-      FileEditEntries[*Entry.File].push_back(Entry);
+      FileEditEntries[Entry.File].push_back(Entry);
     }
   }
 
@@ -2260,7 +2276,7 @@ bool arcmt::getFileRemappingsFromFileList(
       continue;
     }
 
-    remap.emplace_back(std::string(I->first.getName()), TempFile);
+    remap.emplace_back(I->first->getName(), TempFile);
   }
 
   return hasErrorOccurred;

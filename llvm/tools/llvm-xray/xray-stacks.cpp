@@ -42,7 +42,8 @@ static cl::opt<bool>
     StackKeepGoing("keep-going", cl::desc("Keep going on errors encountered"),
                    cl::sub(Stack), cl::init(false));
 static cl::alias StackKeepGoing2("k", cl::aliasopt(StackKeepGoing),
-                                 cl::desc("Alias for -keep-going"));
+                                 cl::desc("Alias for -keep-going"),
+                                 cl::sub(Stack));
 
 // TODO: Does there need to be an option to deduce tail or sibling calls?
 
@@ -52,7 +53,8 @@ static cl::opt<std::string> StacksInstrMap(
              "Currently supports elf file instrumentation maps."),
     cl::sub(Stack), cl::init(""));
 static cl::alias StacksInstrMap2("m", cl::aliasopt(StacksInstrMap),
-                                 cl::desc("Alias for -instr_map"));
+                                 cl::desc("Alias for -instr_map"),
+                                 cl::sub(Stack));
 
 static cl::opt<bool>
     SeparateThreadStacks("per-thread-stacks",
@@ -70,7 +72,8 @@ static cl::opt<bool>
                            "By default separates stacks per-thread."),
                   cl::sub(Stack), cl::init(false));
 static cl::alias DumpAllStacksShort("all", cl::aliasopt(DumpAllStacks),
-                                    cl::desc("Alias for -all-stacks"));
+                                    cl::desc("Alias for -all-stacks"),
+                                    cl::sub(Stack));
 
 // TODO(kpw): Add other interesting formats. Perhaps chrome trace viewer format
 // possibly with aggregations or just a linear trace of timings.
@@ -252,15 +255,13 @@ private:
 /// maintain an index of unique functions, and provide a means of iterating
 /// through all the instrumented call stacks which we know about.
 
-namespace {
 struct StackDuration {
   llvm::SmallVector<int64_t, 4> TerminalDurations;
   llvm::SmallVector<int64_t, 4> IntermediateDurations;
 };
-} // namespace
 
-static StackDuration mergeStackDuration(const StackDuration &Left,
-                                        const StackDuration &Right) {
+StackDuration mergeStackDuration(const StackDuration &Left,
+                                 const StackDuration &Right) {
   StackDuration Data{};
   Data.TerminalDurations.reserve(Left.TerminalDurations.size() +
                                  Right.TerminalDurations.size());
@@ -282,7 +283,7 @@ static StackDuration mergeStackDuration(const StackDuration &Left,
 using StackTrieNode = TrieNode<StackDuration>;
 
 template <AggregationType AggType>
-static std::size_t GetValueForStack(const StackTrieNode *Node);
+std::size_t GetValueForStack(const StackTrieNode *Node);
 
 // When computing total time spent in a stack, we're adding the timings from
 // its callees and the timings from when it was a leaf.
@@ -456,7 +457,8 @@ public:
     int Level = 0;
     OS << formatv("{0,-5} {1,-60} {2,+12} {3,+16}\n", "lvl", "function",
                   "count", "sum");
-    for (auto *F : reverse(drop_begin(CurrentStack))) {
+    for (auto *F :
+         reverse(make_range(CurrentStack.begin() + 1, CurrentStack.end()))) {
       auto Sum = std::accumulate(F->ExtraData.IntermediateDurations.begin(),
                                  F->ExtraData.IntermediateDurations.end(), 0LL);
       auto FuncId = FN.SymbolOrNumber(F->FuncId);
@@ -639,8 +641,10 @@ public:
           {
             auto E =
                 std::make_pair(Top, Top->ExtraData.TerminalDurations.size());
-            TopStacksByCount.insert(
-                llvm::lower_bound(TopStacksByCount, E, greater_second), E);
+            TopStacksByCount.insert(std::lower_bound(TopStacksByCount.begin(),
+                                                     TopStacksByCount.end(), E,
+                                                     greater_second),
+                                    E);
             if (TopStacksByCount.size() == 11)
               TopStacksByCount.pop_back();
           }
@@ -668,17 +672,16 @@ public:
   }
 };
 
-static std::string CreateErrorMessage(StackTrie::AccountRecordStatus Error,
-                                      const XRayRecord &Record,
-                                      const FuncIdConversionHelper &Converter) {
+std::string CreateErrorMessage(StackTrie::AccountRecordStatus Error,
+                               const XRayRecord &Record,
+                               const FuncIdConversionHelper &Converter) {
   switch (Error) {
   case StackTrie::AccountRecordStatus::ENTRY_NOT_FOUND:
-    return std::string(
-        formatv("Found record {0} with no matching function entry\n",
-                format_xray_record(Record, Converter)));
+    return formatv("Found record {0} with no matching function entry\n",
+                   format_xray_record(Record, Converter));
   default:
-    return std::string(formatv("Unknown error type for record {0}\n",
-                               format_xray_record(Record, Converter)));
+    return formatv("Unknown error type for record {0}\n",
+                   format_xray_record(Record, Converter));
   }
 }
 

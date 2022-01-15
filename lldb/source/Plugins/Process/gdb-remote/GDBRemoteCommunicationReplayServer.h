@@ -6,12 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_GDB_REMOTE_GDBREMOTECOMMUNICATIONREPLAYSERVER_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_GDB_REMOTE_GDBREMOTECOMMUNICATIONREPLAYSERVER_H
+#ifndef liblldb_GDBRemoteCommunicationReplayServer_h_
+#define liblldb_GDBRemoteCommunicationReplayServer_h_
 
 // Other libraries and framework includes
 #include "GDBRemoteCommunication.h"
-#include "GDBRemoteCommunicationClient.h"
 #include "GDBRemoteCommunicationHistory.h"
 
 // Project includes
@@ -52,8 +51,6 @@ public:
   bool StartAsyncThread();
   void StopAsyncThread();
 
-  Status Connect(process_gdb_remote::GDBRemoteCommunicationClient &client);
-
 protected:
   enum {
     eBroadcastBitAsyncContinue = (1 << 0),
@@ -65,7 +62,7 @@ protected:
   static lldb::thread_result_t AsyncThread(void *arg);
 
   /// Replay history with the oldest packet at the end.
-  std::vector<GDBRemotePacket> m_packet_history;
+  std::vector<GDBRemoteCommunicationHistory::Entry> m_packet_history;
 
   /// Server thread.
   Broadcaster m_async_broadcaster;
@@ -73,16 +70,13 @@ protected:
   HostThread m_async_thread;
   std::recursive_mutex m_async_thread_state_mutex;
 
-  bool m_skip_acks = false;
+  bool m_skip_acks;
 
 private:
-  GDBRemoteCommunicationReplayServer(
-      const GDBRemoteCommunicationReplayServer &) = delete;
-  const GDBRemoteCommunicationReplayServer &
-  operator=(const GDBRemoteCommunicationReplayServer &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(GDBRemoteCommunicationReplayServer);
 };
 
 } // namespace process_gdb_remote
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_GDB_REMOTE_GDBREMOTECOMMUNICATIONREPLAYSERVER_H
+#endif // liblldb_GDBRemoteCommunicationReplayServer_h_

@@ -6,9 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: clang-8
-// UNSUPPORTED: LIBCXX-DEBUG-FIXME
-
 // <string>
 
 // template<> struct char_traits<wchar_t>
@@ -20,7 +17,7 @@
 
 #include "test_macros.h"
 
-TEST_CONSTEXPR_CXX20 bool test()
+int main(int, char**)
 {
     wchar_t s1[] = {1, 2, 3};
     wchar_t s2[3] = {0};
@@ -30,17 +27,6 @@ TEST_CONSTEXPR_CXX20 bool test()
     assert(s2[2] == wchar_t(3));
     assert(std::char_traits<wchar_t>::copy(NULL, s1, 0) == NULL);
     assert(std::char_traits<wchar_t>::copy(s1, NULL, 0) == s1);
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-
-#if TEST_STD_VER > 17
-  static_assert(test());
-#endif
 
   return 0;
 }

@@ -1,4 +1,3 @@
-; RUN: llc -verify-machineinstrs < %s | FileCheck %s -check-prefix=STATIC
 ; RUN: llc -verify-machineinstrs < %s -relocation-model=static | FileCheck %s -check-prefix=STATIC
 ; RUN: llc -verify-machineinstrs < %s -relocation-model=pic -mtriple=powerpc-unknown-linux-gnu | FileCheck %s -check-prefix=PIC
 ; RUN: llc -verify-machineinstrs < %s -relocation-model=pic -mtriple=powerpc-unknown-linux | FileCheck %s -check-prefix=PICELF
@@ -15,7 +14,7 @@ target triple = "powerpc-unknown-linux-gnu"
 define i32 @foo(i64 %x) nounwind {
 entry:
 ; STATIC: foo:
-; STATIC: bl exact_log2
+; STATIC: bl exact_log2@PLT
 ; STATIC: blr
 
 ; PIC: foo:

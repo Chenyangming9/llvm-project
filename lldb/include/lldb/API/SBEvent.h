@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_API_SBEVENT_H
-#define LLDB_API_SBEVENT_H
+#ifndef LLDB_SBEvent_h_
+#define LLDB_SBEvent_h_
 
 #include "lldb/API/SBDefines.h"
 
-#include <cstdio>
+#include <stdio.h>
 #include <vector>
 
 namespace lldb {
@@ -79,9 +79,9 @@ protected:
 
 private:
   mutable lldb::EventSP m_event_sp;
-  mutable lldb_private::Event *m_opaque_ptr = nullptr;
+  mutable lldb_private::Event *m_opaque_ptr;
 };
 
 } // namespace lldb
 
-#endif // LLDB_API_SBEVENT_H
+#endif // LLDB_SBEvent_h_

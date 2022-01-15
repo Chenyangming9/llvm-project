@@ -1,7 +1,4 @@
-// RUN: %clang_cc1 %s -verify -fsyntax-only -Werror=implicit-function-declaration
-
-/// -Werror-implicit-function-declaration is a deprecated alias used by many projects.
-// RUN: %clang_cc1 %s -verify -fsyntax-only -Werror-implicit-function-declaration
+// RUN: %clang_cc1 %s -verify -fsyntax-only -Werror
 
 typedef int int32_t;
 typedef unsigned char Boolean;

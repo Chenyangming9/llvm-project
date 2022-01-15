@@ -19,25 +19,18 @@ static bool isItaniumEncoding(const std::string &MangledName) {
   return Pos > 0 && Pos <= 4 && MangledName[Pos] == 'Z';
 }
 
-static bool isRustEncoding(const std::string &MangledName) {
-  return MangledName.size() >= 2 && MangledName[0] == '_' &&
-         MangledName[1] == 'R';
-}
-
 std::string llvm::demangle(const std::string &MangledName) {
   char *Demangled;
   if (isItaniumEncoding(MangledName))
     Demangled = itaniumDemangle(MangledName.c_str(), nullptr, nullptr, nullptr);
-  else if (isRustEncoding(MangledName))
-    Demangled = rustDemangle(MangledName.c_str(), nullptr, nullptr, nullptr);
   else
-    Demangled = microsoftDemangle(MangledName.c_str(), nullptr, nullptr,
-                                  nullptr, nullptr);
+    Demangled =
+        microsoftDemangle(MangledName.c_str(), nullptr, nullptr, nullptr);
 
   if (!Demangled)
     return MangledName;
 
   std::string Ret = Demangled;
-  std::free(Demangled);
+  free(Demangled);
   return Ret;
 }

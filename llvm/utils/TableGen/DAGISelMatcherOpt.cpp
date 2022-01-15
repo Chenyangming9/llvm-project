@@ -409,14 +409,13 @@ static void FactorNodes(std::unique_ptr<Matcher> &InputMatcherPtr) {
     DenseMap<unsigned, unsigned> TypeEntry;
     SmallVector<std::pair<MVT::SimpleValueType, Matcher*>, 8> Cases;
     for (unsigned i = 0, e = NewOptionsToMatch.size(); i != e; ++i) {
-      Matcher* M = FindNodeWithKind(NewOptionsToMatch[i], Matcher::CheckType);
-      assert(M && isa<CheckTypeMatcher>(M) && "Unknown Matcher type");
-
-      auto *CTM = cast<CheckTypeMatcher>(M);
+      CheckTypeMatcher *CTM =
+        cast_or_null<CheckTypeMatcher>(FindNodeWithKind(NewOptionsToMatch[i],
+                                                        Matcher::CheckType));
       Matcher *MatcherWithoutCTM = NewOptionsToMatch[i]->unlinkNode(CTM);
       MVT::SimpleValueType CTMTy = CTM->getType();
       delete CTM;
-
+      
       unsigned &Entry = TypeEntry[CTMTy];
       if (Entry != 0) {
         // If we have unfactored duplicate types, then we should factor them.

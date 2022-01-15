@@ -22,7 +22,9 @@
 namespace llvm {
 
 class MCAssembler;
-class MCContext;
+class MCObjectWriter;
+class Target;
+
 struct MCFixupKindInfo;
 
 /// Utilities for manipulating generated AVR machine code.
@@ -48,12 +50,20 @@ public:
     return AVR::NumTargetFixupKinds;
   }
 
+  bool mayNeedRelaxation(const MCInst &Inst,
+                         const MCSubtargetInfo &STI) const override {
+    return false;
+  }
+
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                             const MCRelaxableFragment *DF,
                             const MCAsmLayout &Layout) const override {
     llvm_unreachable("RelaxInstruction() unimplemented");
     return false;
   }
+
+  void relaxInstruction(const MCInst &Inst, const MCSubtargetInfo &STI,
+                        MCInst &Res) const override {}
 
   bool writeNopData(raw_ostream &OS, uint64_t Count) const override;
 

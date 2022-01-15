@@ -15,10 +15,11 @@
 #define LLVM_C_SUPPORT_H
 
 #include "llvm-c/DataTypes.h"
-#include "llvm-c/ExternC.h"
 #include "llvm-c/Types.h"
 
-LLVM_C_EXTERN_C_BEGIN
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * This function permanently loads the dynamic library at the given path.
@@ -57,6 +58,8 @@ void *LLVMSearchForAddressOfSymbol(const char *symbolName);
  */
 void LLVMAddSymbol(const char *symbolName, void *symbolValue);
 
-LLVM_C_EXTERN_C_END
+#ifdef __cplusplus
+}
+#endif
 
 #endif

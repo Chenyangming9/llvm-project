@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # OpenCL built-in library: type conversion functions
 #
 # Copyright (c) 2013 Victor Oliveira <victormatheus@gmail.com>

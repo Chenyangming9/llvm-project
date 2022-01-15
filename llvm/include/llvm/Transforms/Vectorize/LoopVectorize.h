@@ -56,13 +56,12 @@
 #ifndef LLVM_TRANSFORMS_VECTORIZE_LOOPVECTORIZE_H
 #define LLVM_TRANSFORMS_VECTORIZE_LOOPVECTORIZE_H
 
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/IR/PassManager.h"
-#include "llvm/Support/CommandLine.h"
 #include <functional>
 
 namespace llvm {
 
-class AAResults;
 class AssumptionCache;
 class BlockFrequencyInfo;
 class DemandedBits;
@@ -116,18 +115,8 @@ struct LoopVectorizeOptions {
   }
 };
 
-/// Storage for information about made changes.
-struct LoopVectorizeResult {
-  bool MadeAnyChange;
-  bool MadeCFGChange;
-
-  LoopVectorizeResult(bool MadeAnyChange, bool MadeCFGChange)
-      : MadeAnyChange(MadeAnyChange), MadeCFGChange(MadeCFGChange) {}
-};
-
 /// The LoopVectorize Pass.
 struct LoopVectorizePass : public PassInfoMixin<LoopVectorizePass> {
-private:
   /// If false, consider all loops for interleaving.
   /// If true, only loops that explicitly request interleaving are considered.
   bool InterleaveOnlyWhenForced;
@@ -136,8 +125,9 @@ private:
   /// If true, only loops that explicitly request vectorization are considered.
   bool VectorizeOnlyWhenForced;
 
-public:
-  LoopVectorizePass(LoopVectorizeOptions Opts = {});
+  LoopVectorizePass(LoopVectorizeOptions Opts = {})
+      : InterleaveOnlyWhenForced(Opts.InterleaveOnlyWhenForced),
+        VectorizeOnlyWhenForced(Opts.VectorizeOnlyWhenForced) {}
 
   ScalarEvolution *SE;
   LoopInfo *LI;
@@ -146,7 +136,7 @@ public:
   BlockFrequencyInfo *BFI;
   TargetLibraryInfo *TLI;
   DemandedBits *DB;
-  AAResults *AA;
+  AliasAnalysis *AA;
   AssumptionCache *AC;
   std::function<const LoopAccessInfo &(Loop &)> *GetLAA;
   OptimizationRemarkEmitter *ORE;
@@ -155,31 +145,15 @@ public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
   // Shim for old PM.
-  LoopVectorizeResult
-  runImpl(Function &F, ScalarEvolution &SE_, LoopInfo &LI_,
-          TargetTransformInfo &TTI_, DominatorTree &DT_,
-          BlockFrequencyInfo &BFI_, TargetLibraryInfo *TLI_, DemandedBits &DB_,
-          AAResults &AA_, AssumptionCache &AC_,
-          std::function<const LoopAccessInfo &(Loop &)> &GetLAA_,
-          OptimizationRemarkEmitter &ORE_, ProfileSummaryInfo *PSI_);
+  bool runImpl(Function &F, ScalarEvolution &SE_, LoopInfo &LI_,
+               TargetTransformInfo &TTI_, DominatorTree &DT_,
+               BlockFrequencyInfo &BFI_, TargetLibraryInfo *TLI_,
+               DemandedBits &DB_, AliasAnalysis &AA_, AssumptionCache &AC_,
+               std::function<const LoopAccessInfo &(Loop &)> &GetLAA_,
+               OptimizationRemarkEmitter &ORE_, ProfileSummaryInfo *PSI_);
 
   bool processLoop(Loop *L);
 };
-
-/// Reports a vectorization failure: print \p DebugMsg for debugging
-/// purposes along with the corresponding optimization remark \p RemarkName.
-/// If \p I is passed, it is an instruction that prevents vectorization.
-/// Otherwise, the loop \p TheLoop is used for the location of the remark.
-void reportVectorizationFailure(const StringRef DebugMsg,
-    const StringRef OREMsg, const StringRef ORETag,
-    OptimizationRemarkEmitter *ORE, Loop *TheLoop, Instruction *I = nullptr);
-
-/// Reports an informative message: print \p Msg for debugging purposes as well
-/// as an optimization remark. Uses either \p I as location of the remark, or
-/// otherwise \p TheLoop.
-void reportVectorizationInfo(const StringRef OREMsg, const StringRef ORETag,
-                             OptimizationRemarkEmitter *ORE, Loop *TheLoop,
-                             Instruction *I = nullptr);
 
 } // end namespace llvm
 

@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TOOLS_LLDB_VSCODE_SOURCEBREAKPOINT_H
-#define LLDB_TOOLS_LLDB_VSCODE_SOURCEBREAKPOINT_H
+#ifndef LLDBVSCODE_SOURCEBREAKPOINT_H_
+#define LLDBVSCODE_SOURCEBREAKPOINT_H_
 
-#include "BreakpointBase.h"
 #include "llvm/ADT/StringRef.h"
+#include "BreakpointBase.h"
 
 namespace lldb_vscode {
 

@@ -34,7 +34,7 @@ public:
                   LS, LE, IsDWO, UnitVector) {}
 
   uint64_t getTypeHash() const { return getHeader().getTypeHash(); }
-  uint64_t getTypeOffset() const { return getHeader().getTypeOffset(); }
+  uint32_t getTypeOffset() const { return getHeader().getTypeOffset(); }
 
   void dump(raw_ostream &OS, DIDumpOptions DumpOpts = {}) override;
   // Enable LLVM-style RTTI.

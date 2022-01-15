@@ -9,18 +9,16 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_BACKGROUND_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_BACKGROUND_H
 
+#include "Context.h"
+#include "FSProvider.h"
 #include "GlobalCompilationDatabase.h"
+#include "Path.h"
 #include "SourceCode.h"
+#include "Threading.h"
 #include "index/BackgroundRebuild.h"
 #include "index/FileIndex.h"
 #include "index/Index.h"
 #include "index/Serialization.h"
-#include "support/Context.h"
-#include "support/MemoryTree.h"
-#include "support/Path.h"
-#include "support/Threading.h"
-#include "support/ThreadsafeFS.h"
-#include "support/Trace.h"
 #include "clang/Tooling/CompilationDatabase.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/Threading.h"
@@ -58,9 +56,9 @@ public:
   using Factory = llvm::unique_function<BackgroundIndexStorage *(PathRef)>;
 
   // Creates an Index Storage that saves shards into disk. Index storage uses
-  // CDBDirectory + ".cache/clangd/index/" as the folder to save shards.
-  // CDBDirectory is the first directory containing a CDB in parent directories
-  // of a file, or user cache directory if none was found, e.g. stdlib headers.
+  // CDBDirectory + ".clangd/index/" as the folder to save shards. CDBDirectory
+  // is the first directory containing a CDB in parent directories of a file, or
+  // user's home directory if none was found, e.g. standard library headers.
   static Factory createDiskBackedStorageFactory(
       std::function<llvm::Optional<ProjectInfo>(PathRef)> GetProjectInfo);
 };
@@ -76,22 +74,9 @@ public:
     llvm::ThreadPriority ThreadPri = llvm::ThreadPriority::Background;
     unsigned QueuePri = 0; // Higher-priority tasks will run first.
     std::string Tag;       // Allows priority to be boosted later.
-    uint64_t Key = 0;      // If the key matches a previous task, drop this one.
-                           // (in practice this means we never reindex a file).
 
     bool operator<(const Task &O) const { return QueuePri < O.QueuePri; }
   };
-
-  // Describes the number of tasks processed by the queue.
-  struct Stats {
-    unsigned Enqueued = 0;  // Total number of tasks ever enqueued.
-    unsigned Active = 0;    // Tasks being currently processed by a worker.
-    unsigned Completed = 0; // Tasks that have been finished.
-    unsigned LastIdle = 0;  // Number of completed tasks when last empty.
-  };
-
-  BackgroundQueue(std::function<void(Stats)> OnProgress = nullptr)
-      : OnProgress(OnProgress) {}
 
   // Add tasks to the queue.
   void push(Task);
@@ -115,41 +100,28 @@ public:
   blockUntilIdleForTest(llvm::Optional<double> TimeoutSeconds);
 
 private:
-  void notifyProgress() const; // Requires lock Mu
-  bool adjust(Task &T);
-
   std::mutex Mu;
-  Stats Stat;
+  unsigned NumActiveTasks = 0; // Only idle when queue is empty *and* no tasks.
   std::condition_variable CV;
   bool ShouldStop = false;
   std::vector<Task> Queue; // max-heap
   llvm::StringMap<unsigned> Boosts;
-  std::function<void(Stats)> OnProgress;
-  llvm::DenseSet<uint64_t> SeenKeys;
 };
 
 // Builds an in-memory index by by running the static indexer action over
 // all commands in a compilation database. Indexing happens in the background.
+// FIXME: it should also persist its state on disk for fast start.
 // FIXME: it should watch for changes to files on disk.
 class BackgroundIndex : public SwapIndex {
 public:
-  struct Options {
-    // Arbitrary value to ensure some concurrency in tests.
-    // In production an explicit value is specified.
-    size_t ThreadPoolSize = 4;
-    // Callback that provides notifications as indexing makes progress.
-    std::function<void(BackgroundQueue::Stats)> OnProgress = nullptr;
-    // Function called to obtain the Context to use while indexing the specified
-    // file. Called with the empty string for other tasks.
-    // (When called, the context from BackgroundIndex construction is active).
-    std::function<Context(PathRef)> ContextProvider = nullptr;
-  };
-
-  /// Creates a new background index and starts its threads.
-  /// The current Context will be propagated to each worker thread.
-  BackgroundIndex(const ThreadsafeFS &, const GlobalCompilationDatabase &CDB,
-                  BackgroundIndexStorage::Factory IndexStorageFactory,
-                  Options Opts);
+  /// If BuildIndexPeriodMs is greater than 0, the symbol index will only be
+  /// rebuilt periodically (one per \p BuildIndexPeriodMs); otherwise, index is
+  /// rebuilt for each indexed file.
+  BackgroundIndex(
+      Context BackgroundContext, const FileSystemProvider &,
+      const GlobalCompilationDatabase &CDB,
+      BackgroundIndexStorage::Factory IndexStorageFactory,
+      size_t ThreadPoolSize = llvm::heavyweight_hardware_concurrency());
   ~BackgroundIndex(); // Blocks while the current task finishes.
 
   // Enqueue translation units for indexing.
@@ -176,8 +148,6 @@ public:
     return Queue.blockUntilIdleForTest(TimeoutSeconds);
   }
 
-  void profile(MemoryTree &MT) const;
-
 private:
   /// Represents the state of a single file when indexing was performed.
   struct ShardVersion {
@@ -193,9 +163,9 @@ private:
               bool HadErrors);
 
   // configuration
-  const ThreadsafeFS &TFS;
+  const FileSystemProvider &FSProvider;
   const GlobalCompilationDatabase &CDB;
-  std::function<Context(PathRef)> ContextProvider;
+  Context BackgroundContext;
 
   llvm::Error index(tooling::CompileCommand);
 
@@ -206,11 +176,12 @@ private:
 
   BackgroundIndexStorage::Factory IndexStorageFactory;
   // Tries to load shards for the MainFiles and their dependencies.
-  std::vector<std::string> loadProject(std::vector<std::string> MainFiles);
+  std::vector<tooling::CompileCommand>
+  loadProject(std::vector<std::string> MainFiles);
 
   BackgroundQueue::Task
   changedFilesTask(const std::vector<std::string> &ChangedFiles);
-  BackgroundQueue::Task indexFileTask(std::string Path);
+  BackgroundQueue::Task indexFileTask(tooling::CompileCommand Cmd);
 
   // from lowest to highest priority
   enum QueuePriority {

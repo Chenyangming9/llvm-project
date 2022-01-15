@@ -19,11 +19,12 @@
 namespace llvm {
 
 struct MemorySanitizerOptions {
-  MemorySanitizerOptions() : MemorySanitizerOptions(0, false, false){};
-  MemorySanitizerOptions(int TrackOrigins, bool Recover, bool Kernel);
-  bool Kernel;
-  int TrackOrigins;
-  bool Recover;
+  MemorySanitizerOptions() = default;
+  MemorySanitizerOptions(int TrackOrigins, bool Recover, bool Kernel)
+      : TrackOrigins(TrackOrigins), Recover(Recover), Kernel(Kernel) {}
+  int TrackOrigins = 0;
+  bool Recover = false;
+  bool Kernel = false;
 };
 
 // Insert MemorySanitizer instrumentation (detection of uninitialized reads)
@@ -40,8 +41,6 @@ struct MemorySanitizerPass : public PassInfoMixin<MemorySanitizerPass> {
   MemorySanitizerPass(MemorySanitizerOptions Options) : Options(Options) {}
 
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
-  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
-  static bool isRequired() { return true; }
 
 private:
   MemorySanitizerOptions Options;

@@ -23,10 +23,8 @@
 #include "polly/ScopDetection.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Analysis/CaptureTracking.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
-using namespace llvm;
 using namespace polly;
 
 static cl::opt<bool> RewriteAllocas(
@@ -213,14 +211,14 @@ replaceGlobalArray(Module &M, const DataLayout &DL, GlobalVariable &Array,
   // At this point, we have committed to replacing this array.
   ReplacedGlobals.insert(&Array);
 
-  std::string NewName = Array.getName().str();
+  std::string NewName = Array.getName();
   NewName += ".toptr";
   GlobalVariable *ReplacementToArr =
       cast<GlobalVariable>(M.getOrInsertGlobal(NewName, ElemPtrTy));
   ReplacementToArr->setInitializer(ConstantPointerNull::get(ElemPtrTy));
 
   Function *PollyMallocManaged = getOrCreatePollyMallocManaged(M);
-  std::string FnName = Array.getName().str();
+  std::string FnName = Array.getName();
   FnName += ".constructor";
   PollyIRBuilder Builder(M.getContext());
   FunctionType *Ty = FunctionType::get(Builder.getVoidTy(), false);
@@ -256,8 +254,7 @@ replaceGlobalArray(Module &M, const DataLayout &DL, GlobalVariable &Array,
 
     Builder.SetInsertPoint(UserOfArrayInst);
     // <ty>** -> <ty>*
-    Value *ArrPtrLoaded =
-        Builder.CreateLoad(ElemPtrTy, ReplacementToArr, "arrptr.load");
+    Value *ArrPtrLoaded = Builder.CreateLoad(ReplacementToArr, "arrptr.load");
     // <ty>* -> [ty]*
     Value *ArrPtrLoadedBitcasted = Builder.CreateBitCast(
         ArrPtrLoaded, ArrayTy->getPointerTo(), "arrptr.bitcast");
@@ -356,7 +353,7 @@ public:
   GPURuntime Runtime;
 
   ManagedMemoryRewritePass() : ModulePass(ID) {}
-  bool runOnModule(Module &M) override {
+  virtual bool runOnModule(Module &M) {
     const DataLayout &DL = M.getDataLayout();
 
     Function *Malloc = M.getFunction("malloc");

@@ -67,17 +67,17 @@ void DIEAbbrev::Profile(FoldingSetNodeID &ID) const {
 ///
 void DIEAbbrev::Emit(const AsmPrinter *AP) const {
   // Emit its Dwarf tag type.
-  AP->emitULEB128(Tag, dwarf::TagString(Tag).data());
+  AP->EmitULEB128(Tag, dwarf::TagString(Tag).data());
 
   // Emit whether it has children DIEs.
-  AP->emitULEB128((unsigned)Children, dwarf::ChildrenString(Children).data());
+  AP->EmitULEB128((unsigned)Children, dwarf::ChildrenString(Children).data());
 
   // For each attribute description.
   for (unsigned i = 0, N = Data.size(); i < N; ++i) {
     const DIEAbbrevData &AttrData = Data[i];
 
     // Emit attribute type.
-    AP->emitULEB128(AttrData.getAttribute(),
+    AP->EmitULEB128(AttrData.getAttribute(),
                     dwarf::AttributeString(AttrData.getAttribute()).data());
 
     // Emit form type.
@@ -92,17 +92,17 @@ void DIEAbbrev::Emit(const AsmPrinter *AP) const {
       llvm_unreachable("Invalid form for specified DWARF version");
     }
 #endif
-    AP->emitULEB128(AttrData.getForm(),
+    AP->EmitULEB128(AttrData.getForm(),
                     dwarf::FormEncodingString(AttrData.getForm()).data());
 
     // Emit value for DW_FORM_implicit_const.
     if (AttrData.getForm() == dwarf::DW_FORM_implicit_const)
-      AP->emitSLEB128(AttrData.getValue());
+      AP->EmitSLEB128(AttrData.getValue());
   }
 
   // Mark end of abbreviation.
-  AP->emitULEB128(0, "EOM(1)");
-  AP->emitULEB128(0, "EOM(2)");
+  AP->EmitULEB128(0, "EOM(1)");
+  AP->EmitULEB128(0, "EOM(2)");
 }
 
 LLVM_DUMP_METHOD
@@ -194,7 +194,7 @@ DIEAbbrev DIE::generateAbbrev() const {
   return Abbrev;
 }
 
-uint64_t DIE::getDebugSectionOffset() const {
+unsigned DIE::getDebugSectionOffset() const {
   const DIEUnit *Unit = getUnit();
   assert(Unit && "DIE must be owned by a DIEUnit to get its absolute offset");
   return Unit->getDebugSectionOffset() + getOffset();
@@ -313,23 +313,23 @@ unsigned DIE::computeOffsetsAndAbbrevs(const AsmPrinter *AP,
 //===----------------------------------------------------------------------===//
 // DIEUnit Implementation
 //===----------------------------------------------------------------------===//
-DIEUnit::DIEUnit(dwarf::Tag UnitTag)
-    : Die(UnitTag), Section(nullptr), Offset(0) {
+DIEUnit::DIEUnit(uint16_t V, uint8_t A, dwarf::Tag UnitTag)
+    : Die(UnitTag), Section(nullptr), Offset(0), Length(0), Version(V),
+      AddrSize(A)
+{
   Die.Owner = this;
   assert((UnitTag == dwarf::DW_TAG_compile_unit ||
-          UnitTag == dwarf::DW_TAG_skeleton_unit ||
           UnitTag == dwarf::DW_TAG_type_unit ||
-          UnitTag == dwarf::DW_TAG_partial_unit) &&
-         "expected a unit TAG");
+          UnitTag == dwarf::DW_TAG_partial_unit) && "expected a unit TAG");
 }
 
-void DIEValue::emitValue(const AsmPrinter *AP) const {
+void DIEValue::EmitValue(const AsmPrinter *AP) const {
   switch (Ty) {
   case isNone:
     llvm_unreachable("Expected valid DIEValue");
 #define HANDLE_DIEVALUE(T)                                                     \
   case is##T:                                                                  \
-    getDIE##T().emitValue(AP, Form);                                           \
+    getDIE##T().EmitValue(AP, Form);                                           \
     break;
 #include "llvm/CodeGen/DIEValue.def"
   }
@@ -372,7 +372,7 @@ LLVM_DUMP_METHOD void DIEValue::dump() const {
 
 /// EmitValue - Emit integer of appropriate size.
 ///
-void DIEInteger::emitValue(const AsmPrinter *Asm, dwarf::Form Form) const {
+void DIEInteger::EmitValue(const AsmPrinter *Asm, dwarf::Form Form) const {
   switch (Form) {
   case dwarf::DW_FORM_implicit_const:
   case dwarf::DW_FORM_flag_present:
@@ -407,7 +407,7 @@ void DIEInteger::emitValue(const AsmPrinter *Asm, dwarf::Form Form) const {
   case dwarf::DW_FORM_strp_sup:
   case dwarf::DW_FORM_addr:
   case dwarf::DW_FORM_ref_addr:
-    Asm->OutStreamer->emitIntValue(Integer, SizeOf(Asm, Form));
+    Asm->OutStreamer->EmitIntValue(Integer, SizeOf(Asm, Form));
     return;
   case dwarf::DW_FORM_GNU_str_index:
   case dwarf::DW_FORM_GNU_addr_index:
@@ -416,10 +416,10 @@ void DIEInteger::emitValue(const AsmPrinter *Asm, dwarf::Form Form) const {
   case dwarf::DW_FORM_addrx:
   case dwarf::DW_FORM_rnglistx:
   case dwarf::DW_FORM_udata:
-    Asm->emitULEB128(Integer);
+    Asm->EmitULEB128(Integer);
     return;
   case dwarf::DW_FORM_sdata:
-    Asm->emitSLEB128(Integer);
+    Asm->EmitSLEB128(Integer);
     return;
   default: llvm_unreachable("DIE Value form not supported yet");
   }
@@ -428,10 +428,10 @@ void DIEInteger::emitValue(const AsmPrinter *Asm, dwarf::Form Form) const {
 /// SizeOf - Determine size of integer value in bytes.
 ///
 unsigned DIEInteger::SizeOf(const AsmPrinter *AP, dwarf::Form Form) const {
-  assert(AP && "AsmPrinter is required to set FormParams");
-  dwarf::FormParams Params = {AP->getDwarfVersion(),
-                              uint8_t(AP->getPointerSize()),
-                              AP->OutStreamer->getContext().getDwarfFormat()};
+  dwarf::FormParams Params = {0, 0, dwarf::DWARF32};
+  if (AP)
+    Params = {AP->getDwarfVersion(), uint8_t(AP->getPointerSize()),
+              AP->OutStreamer->getContext().getDwarfFormat()};
 
   if (Optional<uint8_t> FixedSize = dwarf::getFixedFormByteSize(Form, Params))
     return *FixedSize;
@@ -463,23 +463,17 @@ void DIEInteger::print(raw_ostream &O) const {
 
 /// EmitValue - Emit expression value.
 ///
-void DIEExpr::emitValue(const AsmPrinter *AP, dwarf::Form Form) const {
-  AP->emitDebugValue(Expr, SizeOf(AP, Form));
+void DIEExpr::EmitValue(const AsmPrinter *AP, dwarf::Form Form) const {
+  AP->EmitDebugValue(Expr, SizeOf(AP, Form));
 }
 
 /// SizeOf - Determine size of expression value in bytes.
 ///
 unsigned DIEExpr::SizeOf(const AsmPrinter *AP, dwarf::Form Form) const {
-  switch (Form) {
-  case dwarf::DW_FORM_data4:
-    return 4;
-  case dwarf::DW_FORM_data8:
-    return 8;
-  case dwarf::DW_FORM_sec_offset:
-    return AP->getDwarfOffsetByteSize();
-  default:
-    llvm_unreachable("DIE Value form not supported yet");
-  }
+  if (Form == dwarf::DW_FORM_data4) return 4;
+  if (Form == dwarf::DW_FORM_sec_offset) return 4;
+  if (Form == dwarf::DW_FORM_strp) return 4;
+  return AP->getPointerSize();
 }
 
 LLVM_DUMP_METHOD
@@ -491,27 +485,21 @@ void DIEExpr::print(raw_ostream &O) const { O << "Expr: " << *Expr; }
 
 /// EmitValue - Emit label value.
 ///
-void DIELabel::emitValue(const AsmPrinter *AP, dwarf::Form Form) const {
-  bool IsSectionRelative = Form != dwarf::DW_FORM_addr;
-  AP->emitLabelReference(Label, SizeOf(AP, Form), IsSectionRelative);
+void DIELabel::EmitValue(const AsmPrinter *AP, dwarf::Form Form) const {
+  AP->EmitLabelReference(Label, SizeOf(AP, Form),
+                         Form == dwarf::DW_FORM_strp ||
+                             Form == dwarf::DW_FORM_sec_offset ||
+                             Form == dwarf::DW_FORM_ref_addr ||
+                             Form == dwarf::DW_FORM_data4);
 }
 
 /// SizeOf - Determine size of label value in bytes.
 ///
 unsigned DIELabel::SizeOf(const AsmPrinter *AP, dwarf::Form Form) const {
-  switch (Form) {
-  case dwarf::DW_FORM_data4:
-    return 4;
-  case dwarf::DW_FORM_data8:
-    return 8;
-  case dwarf::DW_FORM_sec_offset:
-  case dwarf::DW_FORM_strp:
-    return AP->getDwarfOffsetByteSize();
-  case dwarf::DW_FORM_addr:
-    return AP->MAI->getCodePointerSize();
-  default:
-    llvm_unreachable("DIE Value form not supported yet");
-  }
+  if (Form == dwarf::DW_FORM_data4) return 4;
+  if (Form == dwarf::DW_FORM_sec_offset) return 4;
+  if (Form == dwarf::DW_FORM_strp) return 4;
+  return AP->MAI->getCodePointerSize();
 }
 
 LLVM_DUMP_METHOD
@@ -521,10 +509,10 @@ void DIELabel::print(raw_ostream &O) const { O << "Lbl: " << Label->getName(); }
 // DIEBaseTypeRef Implementation
 //===----------------------------------------------------------------------===//
 
-void DIEBaseTypeRef::emitValue(const AsmPrinter *AP, dwarf::Form Form) const {
+void DIEBaseTypeRef::EmitValue(const AsmPrinter *AP, dwarf::Form Form) const {
   uint64_t Offset = CU->ExprRefedBaseTypes[Index].Die->getOffset();
   assert(Offset < (1ULL << (ULEB128PadSize * 7)) && "Offset wont fit");
-  AP->emitULEB128(Offset, nullptr, ULEB128PadSize);
+  AP->EmitULEB128(Offset, nullptr, ULEB128PadSize);
 }
 
 unsigned DIEBaseTypeRef::SizeOf(const AsmPrinter *AP, dwarf::Form Form) const {
@@ -540,23 +528,17 @@ void DIEBaseTypeRef::print(raw_ostream &O) const { O << "BaseTypeRef: " << Index
 
 /// EmitValue - Emit delta value.
 ///
-void DIEDelta::emitValue(const AsmPrinter *AP, dwarf::Form Form) const {
-  AP->emitLabelDifference(LabelHi, LabelLo, SizeOf(AP, Form));
+void DIEDelta::EmitValue(const AsmPrinter *AP, dwarf::Form Form) const {
+  AP->EmitLabelDifference(LabelHi, LabelLo, SizeOf(AP, Form));
 }
 
 /// SizeOf - Determine size of delta value in bytes.
 ///
 unsigned DIEDelta::SizeOf(const AsmPrinter *AP, dwarf::Form Form) const {
-  switch (Form) {
-  case dwarf::DW_FORM_data4:
-    return 4;
-  case dwarf::DW_FORM_data8:
-    return 8;
-  case dwarf::DW_FORM_sec_offset:
-    return AP->getDwarfOffsetByteSize();
-  default:
-    llvm_unreachable("DIE Value form not supported yet");
-  }
+  if (Form == dwarf::DW_FORM_data4) return 4;
+  if (Form == dwarf::DW_FORM_sec_offset) return 4;
+  if (Form == dwarf::DW_FORM_strp) return 4;
+  return AP->MAI->getCodePointerSize();
 }
 
 LLVM_DUMP_METHOD
@@ -570,7 +552,7 @@ void DIEDelta::print(raw_ostream &O) const {
 
 /// EmitValue - Emit string value.
 ///
-void DIEString::emitValue(const AsmPrinter *AP, dwarf::Form Form) const {
+void DIEString::EmitValue(const AsmPrinter *AP, dwarf::Form Form) const {
   // Index of string in symbol table.
   switch (Form) {
   case dwarf::DW_FORM_GNU_str_index:
@@ -579,13 +561,13 @@ void DIEString::emitValue(const AsmPrinter *AP, dwarf::Form Form) const {
   case dwarf::DW_FORM_strx2:
   case dwarf::DW_FORM_strx3:
   case dwarf::DW_FORM_strx4:
-    DIEInteger(S.getIndex()).emitValue(AP, Form);
+    DIEInteger(S.getIndex()).EmitValue(AP, Form);
     return;
   case dwarf::DW_FORM_strp:
     if (AP->MAI->doesDwarfUseRelocationsAcrossSections())
-      DIELabel(S.getSymbol()).emitValue(AP, Form);
+      DIELabel(S.getSymbol()).EmitValue(AP, Form);
     else
-      DIEInteger(S.getOffset()).emitValue(AP, Form);
+      DIEInteger(S.getOffset()).EmitValue(AP, Form);
     return;
   default:
     llvm_unreachable("Expected valid string form");
@@ -621,9 +603,9 @@ void DIEString::print(raw_ostream &O) const {
 //===----------------------------------------------------------------------===//
 // DIEInlineString Implementation
 //===----------------------------------------------------------------------===//
-void DIEInlineString::emitValue(const AsmPrinter *AP, dwarf::Form Form) const {
+void DIEInlineString::EmitValue(const AsmPrinter *AP, dwarf::Form Form) const {
   if (Form == dwarf::DW_FORM_string) {
-    AP->OutStreamer->emitBytes(S);
+    AP->OutStreamer->EmitBytes(S);
     AP->emitInt8(0);
     return;
   }
@@ -646,30 +628,30 @@ void DIEInlineString::print(raw_ostream &O) const {
 
 /// EmitValue - Emit debug information entry offset.
 ///
-void DIEEntry::emitValue(const AsmPrinter *AP, dwarf::Form Form) const {
+void DIEEntry::EmitValue(const AsmPrinter *AP, dwarf::Form Form) const {
 
   switch (Form) {
   case dwarf::DW_FORM_ref1:
   case dwarf::DW_FORM_ref2:
   case dwarf::DW_FORM_ref4:
   case dwarf::DW_FORM_ref8:
-    AP->OutStreamer->emitIntValue(Entry->getOffset(), SizeOf(AP, Form));
+    AP->OutStreamer->EmitIntValue(Entry->getOffset(), SizeOf(AP, Form));
     return;
 
   case dwarf::DW_FORM_ref_udata:
-    AP->emitULEB128(Entry->getOffset());
+    AP->EmitULEB128(Entry->getOffset());
     return;
 
   case dwarf::DW_FORM_ref_addr: {
     // Get the absolute offset for this DIE within the debug info/types section.
-    uint64_t Addr = Entry->getDebugSectionOffset();
+    unsigned Addr = Entry->getDebugSectionOffset();
     if (const MCSymbol *SectionSym =
             Entry->getUnit()->getCrossSectionRelativeBaseAddress()) {
-      AP->emitLabelPlusOffset(SectionSym, Addr, SizeOf(AP, Form), true);
+      AP->EmitLabelPlusOffset(SectionSym, Addr, SizeOf(AP, Form), true);
       return;
     }
 
-    AP->OutStreamer->emitIntValue(Addr, SizeOf(AP, Form));
+    AP->OutStreamer->EmitIntValue(Addr, SizeOf(AP, Form));
     return;
   }
   default:
@@ -727,7 +709,7 @@ unsigned DIELoc::ComputeSize(const AsmPrinter *AP) const {
 
 /// EmitValue - Emit location data.
 ///
-void DIELoc::emitValue(const AsmPrinter *Asm, dwarf::Form Form) const {
+void DIELoc::EmitValue(const AsmPrinter *Asm, dwarf::Form Form) const {
   switch (Form) {
   default: llvm_unreachable("Improper form for block");
   case dwarf::DW_FORM_block1: Asm->emitInt8(Size);    break;
@@ -735,12 +717,11 @@ void DIELoc::emitValue(const AsmPrinter *Asm, dwarf::Form Form) const {
   case dwarf::DW_FORM_block4: Asm->emitInt32(Size);   break;
   case dwarf::DW_FORM_block:
   case dwarf::DW_FORM_exprloc:
-    Asm->emitULEB128(Size);
-    break;
+    Asm->EmitULEB128(Size); break;
   }
 
   for (const auto &V : values())
-    V.emitValue(Asm);
+    V.EmitValue(Asm);
 }
 
 /// SizeOf - Determine size of location data in bytes.
@@ -779,22 +760,19 @@ unsigned DIEBlock::ComputeSize(const AsmPrinter *AP) const {
 
 /// EmitValue - Emit block data.
 ///
-void DIEBlock::emitValue(const AsmPrinter *Asm, dwarf::Form Form) const {
+void DIEBlock::EmitValue(const AsmPrinter *Asm, dwarf::Form Form) const {
   switch (Form) {
   default: llvm_unreachable("Improper form for block");
   case dwarf::DW_FORM_block1: Asm->emitInt8(Size);    break;
   case dwarf::DW_FORM_block2: Asm->emitInt16(Size);   break;
   case dwarf::DW_FORM_block4: Asm->emitInt32(Size);   break;
-  case dwarf::DW_FORM_exprloc:
-  case dwarf::DW_FORM_block:
-    Asm->emitULEB128(Size);
-    break;
+  case dwarf::DW_FORM_block:  Asm->EmitULEB128(Size); break;
   case dwarf::DW_FORM_string: break;
   case dwarf::DW_FORM_data16: break;
   }
 
   for (const auto &V : values())
-    V.emitValue(Asm);
+    V.EmitValue(Asm);
 }
 
 /// SizeOf - Determine size of block data in bytes.
@@ -804,7 +782,6 @@ unsigned DIEBlock::SizeOf(const AsmPrinter *AP, dwarf::Form Form) const {
   case dwarf::DW_FORM_block1: return Size + sizeof(int8_t);
   case dwarf::DW_FORM_block2: return Size + sizeof(int16_t);
   case dwarf::DW_FORM_block4: return Size + sizeof(int32_t);
-  case dwarf::DW_FORM_exprloc:
   case dwarf::DW_FORM_block:  return Size + getULEB128Size(Size);
   case dwarf::DW_FORM_data16: return 16;
   default: llvm_unreachable("Improper form for block");
@@ -821,33 +798,16 @@ void DIEBlock::print(raw_ostream &O) const {
 //===----------------------------------------------------------------------===//
 
 unsigned DIELocList::SizeOf(const AsmPrinter *AP, dwarf::Form Form) const {
-  switch (Form) {
-  case dwarf::DW_FORM_loclistx:
-    return getULEB128Size(Index);
-  case dwarf::DW_FORM_data4:
-    assert(!AP->isDwarf64() &&
-           "DW_FORM_data4 is not suitable to emit a pointer to a location list "
-           "in the 64-bit DWARF format");
+  if (Form == dwarf::DW_FORM_data4)
     return 4;
-  case dwarf::DW_FORM_data8:
-    assert(AP->isDwarf64() &&
-           "DW_FORM_data8 is not suitable to emit a pointer to a location list "
-           "in the 32-bit DWARF format");
-    return 8;
-  case dwarf::DW_FORM_sec_offset:
-    return AP->getDwarfOffsetByteSize();
-  default:
-    llvm_unreachable("DIE Value form not supported yet");
-  }
+  if (Form == dwarf::DW_FORM_sec_offset)
+    return 4;
+  return AP->MAI->getCodePointerSize();
 }
 
 /// EmitValue - Emit label value.
 ///
-void DIELocList::emitValue(const AsmPrinter *AP, dwarf::Form Form) const {
-  if (Form == dwarf::DW_FORM_loclistx) {
-    AP->emitULEB128(Index);
-    return;
-  }
+void DIELocList::EmitValue(const AsmPrinter *AP, dwarf::Form Form) const {
   DwarfDebug *DD = AP->getDwarfDebug();
   MCSymbol *Label = DD->getDebugLocs().getList(Index).Label;
   AP->emitDwarfSymbolReference(Label, /*ForceOffset*/ DD->useSplitDwarf());
@@ -855,27 +815,3 @@ void DIELocList::emitValue(const AsmPrinter *AP, dwarf::Form Form) const {
 
 LLVM_DUMP_METHOD
 void DIELocList::print(raw_ostream &O) const { O << "LocList: " << Index; }
-
-//===----------------------------------------------------------------------===//
-// DIEAddrOffset Implementation
-//===----------------------------------------------------------------------===//
-
-unsigned DIEAddrOffset::SizeOf(const AsmPrinter *AP, dwarf::Form Form) const {
-  return Addr.SizeOf(AP, dwarf::DW_FORM_addrx) +
-         Offset.SizeOf(AP, dwarf::DW_FORM_data4);
-}
-
-/// EmitValue - Emit label value.
-///
-void DIEAddrOffset::emitValue(const AsmPrinter *AP, dwarf::Form Form) const {
-  Addr.emitValue(AP, dwarf::DW_FORM_addrx);
-  Offset.emitValue(AP, dwarf::DW_FORM_data4);
-}
-
-LLVM_DUMP_METHOD
-void DIEAddrOffset::print(raw_ostream &O) const {
-  O << "AddrOffset: ";
-  Addr.print(O);
-  O << " + ";
-  Offset.print(O);
-}

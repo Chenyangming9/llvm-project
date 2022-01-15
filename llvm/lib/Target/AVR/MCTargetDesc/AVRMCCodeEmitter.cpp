@@ -25,7 +25,6 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/EndianStream.h"
 #include "llvm/Support/raw_ostream.h"
 
 #define DEBUG_TYPE "mccodeemitter"
@@ -254,8 +253,11 @@ unsigned AVRMCCodeEmitter::getMachineOpValue(const MCInst &MI,
   if (MO.isReg()) return Ctx.getRegisterInfo()->getEncodingValue(MO.getReg());
   if (MO.isImm()) return static_cast<unsigned>(MO.getImm());
 
-  if (MO.isDFPImm())
-    return static_cast<unsigned>(bit_cast<double>(MO.getDFPImm()));
+  if (MO.isFPImm())
+    return static_cast<unsigned>(APFloat(MO.getFPImm())
+                                     .bitcastToAPInt()
+                                     .getHiBits(32)
+                                     .getLimitedValue());
 
   // MO must be an Expr.
   assert(MO.isExpr());
@@ -266,11 +268,14 @@ unsigned AVRMCCodeEmitter::getMachineOpValue(const MCInst &MI,
 void AVRMCCodeEmitter::emitInstruction(uint64_t Val, unsigned Size,
                                        const MCSubtargetInfo &STI,
                                        raw_ostream &OS) const {
+  const uint16_t *Words = reinterpret_cast<uint16_t const *>(&Val);
   size_t WordCount = Size / 2;
 
   for (int64_t i = WordCount - 1; i >= 0; --i) {
-    uint16_t Word = (Val >> (i * 16)) & 0xFFFF;
-    support::endian::write(OS, Word, support::endianness::little);
+    uint16_t Word = Words[i];
+
+    OS << (uint8_t) ((Word & 0x00ff) >> 0);
+    OS << (uint8_t) ((Word & 0xff00) >> 8);
   }
 }
 

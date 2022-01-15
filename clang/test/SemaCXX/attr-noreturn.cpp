@@ -10,7 +10,7 @@ namespace test5 {
 
   int &test1() {
     a.nofail();
-  } // expected-warning {{non-void function does not return a value}}
+  } // expected-warning {{control reaches end of non-void function}}
 
   int &test2() {
     a.fail();

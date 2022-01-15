@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_GDB_REMOTE_GDBREMOTECLIENTBASE_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_GDB_REMOTE_GDBREMOTECLIENTBASE_H
+#ifndef liblldb_GDBRemoteClientBase_h_
+#define liblldb_GDBRemoteClientBase_h_
 
 #include "GDBRemoteCommunication.h"
 
@@ -24,55 +24,40 @@ public:
     virtual void HandleAsyncMisc(llvm::StringRef data) = 0;
     virtual void HandleStopReply() = 0;
 
+    // =========================================================================
     /// Process asynchronously-received structured data.
     ///
     /// \param[in] data
     ///   The complete data packet, expected to start with JSON-async.
+    // =========================================================================
     virtual void HandleAsyncStructuredDataPacket(llvm::StringRef data) = 0;
   };
 
   GDBRemoteClientBase(const char *comm_name, const char *listener_name);
 
-  bool SendAsyncSignal(int signo, std::chrono::seconds interrupt_timeout);
+  bool SendAsyncSignal(int signo);
 
-  bool Interrupt(std::chrono::seconds interrupt_timeout);
+  bool Interrupt();
 
   lldb::StateType SendContinuePacketAndWaitForResponse(
       ContinueDelegate &delegate, const UnixSignals &signals,
-      llvm::StringRef payload, std::chrono::seconds interrupt_timeout,
-      StringExtractorGDBRemote &response);
+      llvm::StringRef payload, StringExtractorGDBRemote &response);
 
-  // If interrupt_timeout == 0 seconds, don't interrupt the target.
-  // Only send the packet if the target is stopped.
-  // If you want to use this mode, use the fact that the timeout is defaulted
-  // so it's clear from the call-site that you are using no-interrupt.
-  // If it is non-zero, interrupt the target if it is running, and
-  // send the packet.
-  // It the target doesn't respond within the given timeout, it returns
-  // ErrorReplyTimeout.
-  PacketResult SendPacketAndWaitForResponse(
-      llvm::StringRef payload, StringExtractorGDBRemote &response,
-      std::chrono::seconds interrupt_timeout = std::chrono::seconds(0));
+  PacketResult SendPacketAndWaitForResponse(llvm::StringRef payload,
+                                            StringExtractorGDBRemote &response,
+                                            bool send_async);
 
   PacketResult SendPacketAndReceiveResponseWithOutputSupport(
       llvm::StringRef payload, StringExtractorGDBRemote &response,
-      std::chrono::seconds interrupt_timeout,
+      bool send_async,
       llvm::function_ref<void(llvm::StringRef)> output_callback);
 
   bool SendvContPacket(llvm::StringRef payload,
-                       std::chrono::seconds interrupt_timeout,
                        StringExtractorGDBRemote &response);
 
   class Lock {
   public:
-    // If interrupt_timeout == 0 seconds, only take the lock if the target is
-    // not running. If using this option, use the fact that the
-    // interrupt_timeout is defaulted so it will be obvious at the call site
-    // that you are choosing this mode. If it is non-zero, interrupt the target
-    // if it is running, waiting for the given timeout for the interrupt to
-    // succeed.
-    Lock(GDBRemoteClientBase &comm,
-         std::chrono::seconds interrupt_timeout = std::chrono::seconds(0));
+    Lock(GDBRemoteClientBase &comm, bool interrupt);
     ~Lock();
 
     explicit operator bool() { return m_acquired; }
@@ -84,11 +69,10 @@ public:
   private:
     std::unique_lock<std::recursive_mutex> m_async_lock;
     GDBRemoteClientBase &m_comm;
-    std::chrono::seconds m_interrupt_timeout;
     bool m_acquired;
     bool m_did_interrupt;
 
-    void SyncWithContinueThread();
+    void SyncWithContinueThread(bool interrupt);
   };
 
 protected:
@@ -99,48 +83,42 @@ protected:
   virtual void OnRunPacketSent(bool first);
 
 private:
-  /// Variables handling synchronization between the Continue thread and any
-  /// other threads wishing to send packets over the connection. Either the
-  /// continue thread has control over the connection (m_is_running == true) or
-  /// the connection is free for an arbitrary number of other senders to take
-  /// which indicate their interest by incrementing m_async_count.
-  ///
-  /// Semantics of individual states:
-  ///
-  /// - m_continue_packet == false, m_async_count == 0:
-  ///   connection is free
-  /// - m_continue_packet == true, m_async_count == 0:
-  ///   only continue thread is present
-  /// - m_continue_packet == true, m_async_count > 0:
-  ///   continue thread has control, async threads should interrupt it and wait
-  ///   for it to set m_continue_packet to false
-  /// - m_continue_packet == false, m_async_count > 0:
-  ///   async threads have control, continue thread needs to wait for them to
-  ///   finish (m_async_count goes down to 0).
-  /// @{
+  // Variables handling synchronization between the Continue thread and any
+  // other threads
+  // wishing to send packets over the connection. Either the continue thread has
+  // control over
+  // the connection (m_is_running == true) or the connection is free for an
+  // arbitrary number of
+  // other senders to take which indicate their interest by incrementing
+  // m_async_count.
+  // Semantics of individual states:
+  // - m_continue_packet == false, m_async_count == 0: connection is free
+  // - m_continue_packet == true, m_async_count == 0: only continue thread is
+  // present
+  // - m_continue_packet == true, m_async_count > 0: continue thread has
+  // control, async threads
+  //   should interrupt it and wait for it to set m_continue_packet to false
+  // - m_continue_packet == false, m_async_count > 0: async threads have
+  // control, continue
+  //   thread needs to wait for them to finish (m_async_count goes down to 0).
   std::mutex m_mutex;
   std::condition_variable m_cv;
-
-  /// Packet with which to resume after an async interrupt. Can be changed by
-  /// an async thread e.g. to inject a signal.
+  // Packet with which to resume after an async interrupt. Can be changed by an
+  // async thread
+  // e.g. to inject a signal.
   std::string m_continue_packet;
-
-  /// When was the interrupt packet sent. Used to make sure we time out if the
-  /// stub does not respond to interrupt requests.
-  std::chrono::time_point<std::chrono::steady_clock> m_interrupt_endpoint;
-
-  /// Number of threads interested in sending.
+  // When was the interrupt packet sent. Used to make sure we time out if the
+  // stub does not
+  // respond to interrupt requests.
+  std::chrono::time_point<std::chrono::steady_clock> m_interrupt_time;
   uint32_t m_async_count;
-
-  /// Whether the continue thread has control.
   bool m_is_running;
+  bool m_should_stop; // Whether we should resume after a stop.
+  // end of continue thread synchronization block
 
-  /// Whether we should resume after a stop.
-  bool m_should_stop;
-  /// @}
-
-  /// This handles the synchronization between individual async threads. For
-  /// now they just use a simple mutex.
+  // This handles the synchronization between individual async threads. For now
+  // they just use a
+  // simple mutex.
   std::recursive_mutex m_async_mutex;
 
   bool ShouldStop(const UnixSignals &signals,
@@ -167,4 +145,4 @@ private:
 } // namespace process_gdb_remote
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_GDB_REMOTE_GDBREMOTECLIENTBASE_H
+#endif // liblldb_GDBRemoteCommunicationClient_h_

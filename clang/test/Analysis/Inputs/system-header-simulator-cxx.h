@@ -46,7 +46,7 @@ template <typename T, typename Ptr, typename Ref> struct __vector_iterator {
 
   __vector_iterator(const Ptr p = 0) : ptr(p) {}
   __vector_iterator(const iterator &rhs): ptr(rhs.base()) {}
-  __vector_iterator<T, Ptr, Ref>& operator++() { ++ ptr; return *this; }
+  __vector_iterator<T, Ptr, Ref> operator++() { ++ ptr; return *this; }
   __vector_iterator<T, Ptr, Ref> operator++(int) {
     auto tmp = *this;
     ++ ptr;
@@ -59,11 +59,6 @@ template <typename T, typename Ptr, typename Ref> struct __vector_iterator {
   }
   __vector_iterator<T, Ptr, Ref> operator+(difference_type n) {
     return ptr + n;
-  }
-  friend __vector_iterator<T, Ptr, Ref> operator+(
-      difference_type n,
-      const __vector_iterator<T, Ptr, Ref> &iter) {
-    return n + iter.ptr;
   }
   __vector_iterator<T, Ptr, Ref> operator-(difference_type n) {
     return ptr - n;
@@ -79,12 +74,8 @@ template <typename T, typename Ptr, typename Ref> struct __vector_iterator {
   difference_type operator-(const __vector_iterator<U, Ptr2, Ref2> &rhs);
 
   Ref operator*() const { return *ptr; }
-  Ptr operator->() const { return ptr; }
+  Ptr operator->() const { return *ptr; }
 
-  Ref operator[](difference_type n) {
-    return *(ptr+n);
-  }
-  
   bool operator==(const iterator &rhs) const { return ptr == rhs.ptr; }
   bool operator==(const const_iterator &rhs) const { return ptr == rhs.ptr; }
 
@@ -109,7 +100,7 @@ template <typename T, typename Ptr, typename Ref> struct __deque_iterator {
 
   __deque_iterator(const Ptr p = 0) : ptr(p) {}
   __deque_iterator(const iterator &rhs): ptr(rhs.base()) {}
-  __deque_iterator<T, Ptr, Ref>& operator++() { ++ ptr; return *this; }
+  __deque_iterator<T, Ptr, Ref> operator++() { ++ ptr; return *this; }
   __deque_iterator<T, Ptr, Ref> operator++(int) {
     auto tmp = *this;
     ++ ptr;
@@ -123,11 +114,6 @@ template <typename T, typename Ptr, typename Ref> struct __deque_iterator {
   __deque_iterator<T, Ptr, Ref> operator+(difference_type n) {
     return ptr + n;
   }
-  friend __deque_iterator<T, Ptr, Ref> operator+(
-      difference_type n,
-      const __deque_iterator<T, Ptr, Ref> &iter) {
-    return n + iter.ptr;
-  }
   __deque_iterator<T, Ptr, Ref> operator-(difference_type n) {
     return ptr - n;
   }
@@ -139,12 +125,8 @@ template <typename T, typename Ptr, typename Ref> struct __deque_iterator {
   }
 
   Ref operator*() const { return *ptr; }
-  Ptr operator->() const { return ptr; }
+  Ptr operator->() const { return *ptr; }
 
-  Ref operator[](difference_type n) {
-    return *(ptr+n);
-  }
-  
   bool operator==(const iterator &rhs) const { return ptr == rhs.ptr; }
   bool operator==(const const_iterator &rhs) const { return ptr == rhs.ptr; }
 
@@ -168,8 +150,8 @@ template <typename T, typename Ptr, typename Ref> struct __list_iterator {
   typedef std::bidirectional_iterator_tag iterator_category;
 
   __list_iterator(T* it = 0) : item(it) {}
-  __list_iterator(const iterator &rhs): item(rhs.item) {}
-  __list_iterator<T, Ptr, Ref>& operator++() { item = item->next; return *this; }
+  __list_iterator(const iterator &rhs): item(rhs.base()) {}
+  __list_iterator<T, Ptr, Ref> operator++() { item = item->next; return *this; }
   __list_iterator<T, Ptr, Ref> operator++(int) {
     auto tmp = *this;
     item = item->next;
@@ -183,7 +165,7 @@ template <typename T, typename Ptr, typename Ref> struct __list_iterator {
   }
 
   Ref operator*() const { return item->data; }
-  Ptr operator->() const { return &item->data; }
+  Ptr operator->() const { return item->data; }
 
   bool operator==(const iterator &rhs) const { return item == rhs->item; }
   bool operator==(const const_iterator &rhs) const { return item == rhs->item; }
@@ -192,9 +174,6 @@ template <typename T, typename Ptr, typename Ref> struct __list_iterator {
   bool operator!=(const const_iterator &rhs) const { return item != rhs->item; }
 
   const T* &base() const { return item; }
-
-  template <typename UT, typename UPtr, typename URef>
-  friend struct __list_iterator;
 
 private:
   T* item;
@@ -211,15 +190,15 @@ template <typename T, typename Ptr, typename Ref> struct __fwdl_iterator {
   typedef std::forward_iterator_tag iterator_category;
 
   __fwdl_iterator(T* it = 0) : item(it) {}
-  __fwdl_iterator(const iterator &rhs): item(rhs.item) {}
-  __fwdl_iterator<T, Ptr, Ref>& operator++() { item = item->next; return *this; }
+  __fwdl_iterator(const iterator &rhs): item(rhs.base()) {}
+  __fwdl_iterator<T, Ptr, Ref> operator++() { item = item->next; return *this; }
   __fwdl_iterator<T, Ptr, Ref> operator++(int) {
     auto tmp = *this;
     item = item->next;
     return tmp;
   }
   Ref operator*() const { return item->data; }
-  Ptr operator->() const { return &item->data; }
+  Ptr operator->() const { return item->data; }
 
   bool operator==(const iterator &rhs) const { return item == rhs->item; }
   bool operator==(const const_iterator &rhs) const { return item == rhs->item; }
@@ -228,9 +207,6 @@ template <typename T, typename Ptr, typename Ref> struct __fwdl_iterator {
   bool operator!=(const const_iterator &rhs) const { return item != rhs->item; }
 
   const T* &base() const { return item; }
-
-  template <typename UT, typename UPtr, typename URef>
-  friend struct __fwdl_iterator;
 
 private:
   T* item;
@@ -273,16 +249,15 @@ namespace std {
 
   template<typename T>
   class vector {
-    T *_start;
-    T *_finish;
-    T *_end_of_storage;
-
-  public:
     typedef T value_type;
     typedef size_t size_type;
     typedef __vector_iterator<T, T *, T &> iterator;
     typedef __vector_iterator<T, const T *, const T &> const_iterator;
 
+    T *_start;
+    T *_finish;
+    T *_end_of_storage;
+  public:
     vector() : _start(0), _finish(0), _end_of_storage(0) {}
     template <typename InputIterator>
     vector(InputIterator first, InputIterator last);
@@ -352,7 +327,6 @@ namespace std {
       T data;
       __item *prev, *next;
     } *_start, *_finish;
-
   public:
     typedef T value_type;
     typedef size_t size_type;
@@ -419,16 +393,15 @@ namespace std {
 
   template<typename T>
   class deque {
-    T *_start;
-    T *_finish;
-    T *_end_of_storage;
-
-  public:
     typedef T value_type;
     typedef size_t size_type;
     typedef __deque_iterator<T, T *, T &> iterator;
     typedef __deque_iterator<T, const T *, const T &> const_iterator;
 
+    T *_start;
+    T *_finish;
+    T *_end_of_storage;
+  public:
     deque() : _start(0), _finish(0), _end_of_storage(0) {}
     template <typename InputIterator>
     deque(InputIterator first, InputIterator last);
@@ -504,7 +477,6 @@ namespace std {
       T data;
       __item *next;
     } *_start;
-
   public:
     typedef T value_type;
     typedef size_t size_type;
@@ -618,9 +590,8 @@ namespace std {
   };
 
   struct nothrow_t {};
-  extern const nothrow_t nothrow;
 
-  enum class align_val_t : size_t {};
+  extern const nothrow_t nothrow;
 
   // libc++'s implementation
   template <class _E>
@@ -768,182 +739,40 @@ namespace std {
 }
 
 template <class BidirectionalIterator, class Distance>
-void __advance(BidirectionalIterator& it, Distance n,
-               std::bidirectional_iterator_tag)
-#if !defined(STD_ADVANCE_INLINE_LEVEL) || STD_ADVANCE_INLINE_LEVEL > 2
-{
+void __advance (BidirectionalIterator& it, Distance n,
+                std::bidirectional_iterator_tag) {
   if (n >= 0) while(n-- > 0) ++it; else while (n++<0) --it;
 }
-#else
-    ;
-#endif
 
 template <class RandomAccessIterator, class Distance>
-void __advance(RandomAccessIterator& it, Distance n,
-               std::random_access_iterator_tag)
-#if !defined(STD_ADVANCE_INLINE_LEVEL) || STD_ADVANCE_INLINE_LEVEL > 2
-{
+void __advance (RandomAccessIterator& it, Distance n,
+                std::random_access_iterator_tag) {
   it += n;
 }
-#else
-    ;
-#endif
 
 namespace std {
+  template <class InputIterator, class Distance>
+  void advance (InputIterator& it, Distance n) {
+    __advance(it, n, typename InputIterator::iterator_category());
+  }
 
-template <class InputIterator, class Distance>
-void advance(InputIterator& it, Distance n)
-#if !defined(STD_ADVANCE_INLINE_LEVEL) || STD_ADVANCE_INLINE_LEVEL > 1
-{
-  __advance(it, n, typename InputIterator::iterator_category());
-}
-#else
-    ;
-#endif
+  template <class BidirectionalIterator>
+  BidirectionalIterator
+  prev (BidirectionalIterator it,
+        typename iterator_traits<BidirectionalIterator>::difference_type n =
+        1) {
+    advance(it, -n);
+    return it;
+  }
 
-template <class BidirectionalIterator>
-BidirectionalIterator
-prev(BidirectionalIterator it,
-     typename iterator_traits<BidirectionalIterator>::difference_type n =
-         1)
-#if !defined(STD_ADVANCE_INLINE_LEVEL) || STD_ADVANCE_INLINE_LEVEL > 0
-{
-  advance(it, -n);
-  return it;
-}
-#else
-    ;
-#endif
+  template <class InputIterator, class T>
+  InputIterator find(InputIterator first, InputIterator last, const T &val);
 
-template <class ForwardIterator>
-ForwardIterator
-next(ForwardIterator it,
-     typename iterator_traits<ForwardIterator>::difference_type n =
-         1)
-#if !defined(STD_ADVANCE_INLINE_LEVEL) || STD_ADVANCE_INLINE_LEVEL > 0
-{
-  advance(it, n);
-  return it;
-}
-#else
-    ;
-#endif
-
-  template <class InputIt, class T>
-  InputIt find(InputIt first, InputIt last, const T& value);
-
-  template <class ExecutionPolicy, class ForwardIt, class T>
-  ForwardIt find(ExecutionPolicy&& policy, ForwardIt first, ForwardIt last,
-                 const T& value);
-
-  template <class InputIt, class UnaryPredicate>
-  InputIt find_if (InputIt first, InputIt last, UnaryPredicate p);
-
-  template <class ExecutionPolicy, class ForwardIt, class UnaryPredicate>
-  ForwardIt find_if (ExecutionPolicy&& policy, ForwardIt first, ForwardIt last,
-                     UnaryPredicate p);
-
-  template <class InputIt, class UnaryPredicate>
-  InputIt find_if_not (InputIt first, InputIt last, UnaryPredicate q);
-
-  template <class ExecutionPolicy, class ForwardIt, class UnaryPredicate>
-  ForwardIt find_if_not (ExecutionPolicy&& policy, ForwardIt first,
-                         ForwardIt last, UnaryPredicate q);
-
-  template <class InputIt, class ForwardIt>
-  InputIt find_first_of(InputIt first, InputIt last,
-                         ForwardIt s_first, ForwardIt s_last);
-
-  template <class ExecutionPolicy, class ForwardIt1, class ForwardIt2>
-  ForwardIt1 find_first_of (ExecutionPolicy&& policy,
-                            ForwardIt1 first, ForwardIt1 last,
-                            ForwardIt2 s_first, ForwardIt2 s_last);
-
-  template <class InputIt, class ForwardIt, class BinaryPredicate>
-  InputIt find_first_of (InputIt first, InputIt last,
-                         ForwardIt s_first, ForwardIt s_last,
-                         BinaryPredicate p );
-
-  template <class ExecutionPolicy, class ForwardIt1, class ForwardIt2,
-            class BinaryPredicate>
-  ForwardIt1 find_first_of (ExecutionPolicy&& policy,
-                            ForwardIt1 first, ForwardIt1 last,
-                            ForwardIt2 s_first, ForwardIt2 s_last,
-                            BinaryPredicate p );
-
-  template <class InputIt, class ForwardIt>
-  InputIt find_end(InputIt first, InputIt last,
-                   ForwardIt s_first, ForwardIt s_last);
-
-  template <class ExecutionPolicy, class ForwardIt1, class ForwardIt2>
-  ForwardIt1 find_end (ExecutionPolicy&& policy,
-                       ForwardIt1 first, ForwardIt1 last,
-                       ForwardIt2 s_first, ForwardIt2 s_last);
-
-  template <class InputIt, class ForwardIt, class BinaryPredicate>
-  InputIt find_end (InputIt first, InputIt last,
-                    ForwardIt s_first, ForwardIt s_last,
-                    BinaryPredicate p );
-
-  template <class ExecutionPolicy, class ForwardIt1, class ForwardIt2,
-            class BinaryPredicate>
-  ForwardIt1 find_end (ExecutionPolicy&& policy,
-                       ForwardIt1 first, ForwardIt1 last,
-                       ForwardIt2 s_first, ForwardIt2 s_last,
-                       BinaryPredicate p );
-
-  template <class ForwardIt, class T>
-  ForwardIt lower_bound (ForwardIt first, ForwardIt last, const T& value);
-
-  template <class ForwardIt, class T, class Compare>
-  ForwardIt lower_bound (ForwardIt first, ForwardIt last, const T& value,
-                         Compare comp);
-
-  template <class ForwardIt, class T>
-  ForwardIt upper_bound (ForwardIt first, ForwardIt last, const T& value);
-
-  template <class ForwardIt, class T, class Compare>
-  ForwardIt upper_bound (ForwardIt first, ForwardIt last, const T& value,
-                         Compare comp);
-
-  template <class ForwardIt1, class ForwardIt2>
-  ForwardIt1 search (ForwardIt1 first, ForwardIt1 last,
-                     ForwardIt2 s_first, ForwardIt2 s_last);
-
-  template <class ExecutionPolicy, class ForwardIt1, class ForwardIt2>
-  ForwardIt1 search (ExecutionPolicy&& policy,
-                     ForwardIt1 first, ForwardIt1 last,
-                     ForwardIt2 s_first, ForwardIt2 s_last);
-
-  template <class ForwardIt1, class ForwardIt2, class BinaryPredicate>
-  ForwardIt1 search (ForwardIt1 first, ForwardIt1 last,
-                     ForwardIt2 s_first, ForwardIt2 s_last, BinaryPredicate p);
-
-  template <class ExecutionPolicy, class ForwardIt1, class ForwardIt2,
-            class BinaryPredicate >
-  ForwardIt1 search (ExecutionPolicy&& policy,
-                     ForwardIt1 first, ForwardIt1 last,
-                     ForwardIt2 s_first, ForwardIt2 s_last, BinaryPredicate p);
-
-  template <class ForwardIt, class Searcher>
-  ForwardIt search (ForwardIt first, ForwardIt last, const Searcher& searcher);
-
-  template <class ForwardIt, class Size, class T>
-  ForwardIt search_n (ForwardIt first, ForwardIt last, Size count,
-                      const T& value);
-
-  template <class ExecutionPolicy, class ForwardIt, class Size, class T>
-  ForwardIt search_n (ExecutionPolicy&& policy, ForwardIt first, ForwardIt last,
-                      Size count, const T& value);
-
-  template <class ForwardIt, class Size, class T, class BinaryPredicate>
-  ForwardIt search_n (ForwardIt first, ForwardIt last, Size count,
-                      const T& value, BinaryPredicate p);
-
-  template <class ExecutionPolicy, class ForwardIt, class Size, class T,
-            class BinaryPredicate>
-  ForwardIt search_n (ExecutionPolicy&& policy, ForwardIt first, ForwardIt last,
-                      Size count, const T& value, BinaryPredicate p);
+  template <class ForwardIterator1, class ForwardIterator2>
+  ForwardIterator1 find_first_of(ForwardIterator1 first1,
+                                 ForwardIterator1 last1,
+                                 ForwardIterator2 first2,
+                                 ForwardIterator2 last2);
 
   template <class InputIterator, class OutputIterator>
   OutputIterator copy(InputIterator first, InputIterator last,
@@ -953,114 +782,20 @@ next(ForwardIterator it,
 
 #if __cplusplus >= 201103L
 namespace std {
-template <typename T> // TODO: Implement the stub for deleter.
-class unique_ptr {
-public:
-  unique_ptr() noexcept {}
-  unique_ptr(T *) noexcept {}
-  unique_ptr(const unique_ptr &) noexcept = delete;
-  unique_ptr(unique_ptr &&) noexcept;
+  template <typename T> // TODO: Implement the stub for deleter.
+  class unique_ptr {
+  public:
+    unique_ptr(const unique_ptr &) = delete;
+    unique_ptr(unique_ptr &&);
 
-  T *get() const noexcept;
-  T *release() noexcept;
-  void reset(T *p = nullptr) noexcept;
-  void swap(unique_ptr<T> &p) noexcept;
+    T *get() const;
 
-  typename std::add_lvalue_reference<T>::type operator*() const;
-  T *operator->() const noexcept;
-  operator bool() const noexcept;
-  unique_ptr<T> &operator=(unique_ptr<T> &&p) noexcept;
-  unique_ptr<T> &operator=(nullptr_t) noexcept;
-};
-
-// TODO :: Once the deleter parameter is added update with additional template parameter.
-template <typename T>
-void swap(unique_ptr<T> &x, unique_ptr<T> &y) noexcept {
-  x.swap(y);
+    typename std::add_lvalue_reference<T>::type operator*() const;
+    T *operator->() const;
+    operator bool() const;
+  };
 }
-
-template <typename T1, typename T2>
-bool operator==(const unique_ptr<T1> &x, const unique_ptr<T2> &y);
-
-template <typename T1, typename T2>
-bool operator!=(const unique_ptr<T1> &x, const unique_ptr<T2> &y);
-
-template <typename T1, typename T2>
-bool operator<(const unique_ptr<T1> &x, const unique_ptr<T2> &y);
-
-template <typename T1, typename T2>
-bool operator>(const unique_ptr<T1> &x, const unique_ptr<T2> &y);
-
-template <typename T1, typename T2>
-bool operator<=(const unique_ptr<T1> &x, const unique_ptr<T2> &y);
-
-template <typename T1, typename T2>
-bool operator>=(const unique_ptr<T1> &x, const unique_ptr<T2> &y);
-
-template <typename T>
-bool operator==(const unique_ptr<T> &x, nullptr_t y);
-
-template <typename T>
-bool operator!=(const unique_ptr<T> &x, nullptr_t y);
-
-template <typename T>
-bool operator<(const unique_ptr<T> &x, nullptr_t y);
-
-template <typename T>
-bool operator>(const unique_ptr<T> &x, nullptr_t y);
-
-template <typename T>
-bool operator<=(const unique_ptr<T> &x, nullptr_t y);
-
-template <typename T>
-bool operator>=(const unique_ptr<T> &x, nullptr_t y);
-
-template <typename T>
-bool operator==(nullptr_t x, const unique_ptr<T> &y);
-
-template <typename T>
-bool operator!=(nullptr_t x, const unique_ptr<T> &y);
-
-template <typename T>
-bool operator>(nullptr_t x, const unique_ptr<T> &y);
-
-template <typename T>
-bool operator<(nullptr_t x, const unique_ptr<T> &y);
-
-template <typename T>
-bool operator>=(nullptr_t x, const unique_ptr<T> &y);
-
-template <typename T>
-bool operator<=(nullptr_t x, const unique_ptr<T> &y);
-
-template <class T, class... Args>
-unique_ptr<T> make_unique(Args &&...args);
-
-#if __cplusplus >= 202002L
-
-template <class T>
-unique_ptr<T> make_unique_for_overwrite();
-
 #endif
-
-} // namespace std
-#endif
-
-namespace std {
-template <class CharT>
-class basic_ostream;
-
-using ostream = basic_ostream<char>;
-
-extern std::ostream cout;
-
-ostream &operator<<(ostream &, const string &);
-
-#if __cplusplus >= 202002L
-template <class T>
-ostream &operator<<(ostream &, const std::unique_ptr<T> &);
-#endif
-} // namespace std
 
 #ifdef TEST_INLINABLE_ALLOCATORS
 namespace std {
@@ -1072,33 +807,10 @@ void* operator new[](std::size_t size, const std::nothrow_t&) throw() { return s
 void operator delete(void* ptr, const std::nothrow_t&) throw() { std::free(ptr); }
 void operator delete[](void* ptr, const std::nothrow_t&) throw() { std::free(ptr); }
 #else
-// C++20 standard draft 17.6.1, from "Header <new> synopsis", but with throw()
-// instead of noexcept:
-
-void *operator new(std::size_t size);
-void *operator new(std::size_t size, std::align_val_t alignment);
-void *operator new(std::size_t size, const std::nothrow_t &) throw();
-void *operator new(std::size_t size, std::align_val_t alignment,
-                   const std::nothrow_t &) throw();
-void operator delete(void *ptr) throw();
-void operator delete(void *ptr, std::size_t size) throw();
-void operator delete(void *ptr, std::align_val_t alignment) throw();
-void operator delete(void *ptr, std::size_t size, std::align_val_t alignment) throw();
-void operator delete(void *ptr, const std::nothrow_t &)throw();
-void operator delete(void *ptr, std::align_val_t alignment,
-                     const std::nothrow_t &)throw();
-void *operator new[](std::size_t size);
-void *operator new[](std::size_t size, std::align_val_t alignment);
-void *operator new[](std::size_t size, const std::nothrow_t &) throw();
-void *operator new[](std::size_t size, std::align_val_t alignment,
-                     const std::nothrow_t &) throw();
-void operator delete[](void *ptr) throw();
-void operator delete[](void *ptr, std::size_t size) throw();
-void operator delete[](void *ptr, std::align_val_t alignment) throw();
-void operator delete[](void *ptr, std::size_t size, std::align_val_t alignment) throw();
-void operator delete[](void *ptr, const std::nothrow_t &) throw();
-void operator delete[](void *ptr, std::align_val_t alignment,
-                       const std::nothrow_t &) throw();
+void* operator new(std::size_t, const std::nothrow_t&) throw();
+void* operator new[](std::size_t, const std::nothrow_t&) throw();
+void operator delete(void*, const std::nothrow_t&) throw();
+void operator delete[](void*, const std::nothrow_t&) throw();
 #endif
 
 void* operator new (std::size_t size, void* ptr) throw() { return ptr; };
@@ -1160,7 +872,7 @@ template<
     class iterator {
     public:
       iterator(Key *key): ptr(key) {}
-      iterator& operator++() { ++ptr; return *this; }
+      iterator operator++() { ++ptr; return *this; }
       bool operator!=(const iterator &other) const { return ptr != other.ptr; }
       const Key &operator*() const { return *ptr; }
     private:
@@ -1185,7 +897,7 @@ template<
     class iterator {
     public:
       iterator(Key *key): ptr(key) {}
-      iterator& operator++() { ++ptr; return *this; }
+      iterator operator++() { ++ptr; return *this; }
       bool operator!=(const iterator &other) const { return ptr != other.ptr; }
       const Key &operator*() const { return *ptr; }
     private:
@@ -1197,27 +909,4 @@ template<
     iterator begin() const { return iterator(val); }
     iterator end() const { return iterator(val + 1); }
 };
-
-namespace execution {
-class sequenced_policy {};
 }
-
-template <class T = void> struct equal_to {};
-
-template <class ForwardIt, class BinaryPredicate = std::equal_to<> >
-class default_searcher {
-public:
-  default_searcher (ForwardIt pat_first,
-                    ForwardIt pat_last,
-                    BinaryPredicate pred = BinaryPredicate());
-  template <class ForwardIt2>
-  std::pair <ForwardIt2, ForwardIt2>
-  operator()( ForwardIt2 first, ForwardIt2 last ) const;
-};
-
-template <typename> class packaged_task;
-template <typename Ret, typename... Args> class packaged_task<Ret(Args...)> {
-  // TODO: Add some actual implementation.
-};
-
-} // namespace std

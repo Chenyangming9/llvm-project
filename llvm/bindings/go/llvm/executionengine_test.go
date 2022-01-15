@@ -80,6 +80,7 @@ func TestFactorial(t *testing.T) {
 	pass := NewPassManager()
 	defer pass.Dispose()
 
+	pass.AddConstantPropagationPass()
 	pass.AddInstructionCombiningPass()
 	pass.AddPromoteMemoryToRegisterPass()
 	pass.AddGVNPass()

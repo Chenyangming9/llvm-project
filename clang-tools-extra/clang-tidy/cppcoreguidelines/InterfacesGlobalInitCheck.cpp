@@ -28,10 +28,9 @@ void InterfacesGlobalInitCheck::registerMatchers(MatchFinder *Finder) {
       varDecl(GlobalVarDecl, unless(isDefinition())).bind("referencee")));
 
   Finder->addMatcher(
-      traverse(TK_AsIs, varDecl(GlobalVarDecl, isDefinition(),
-                                hasInitializer(expr(hasDescendant(
-                                    ReferencesUndefinedGlobalVar))))
-                            .bind("var")),
+      varDecl(GlobalVarDecl, isDefinition(),
+              hasInitializer(expr(hasDescendant(ReferencesUndefinedGlobalVar))))
+          .bind("var"),
       this);
 }
 

@@ -1,8 +1,9 @@
-; RUN: not --crash llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -wasm-disable-explicit-locals -mattr=+bulk-memory 2>&1 | FileCheck %s --check-prefix=ERROR
-; RUN: not --crash llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -wasm-disable-explicit-locals -mattr=+bulk-memory -fast-isel 2>&1 | FileCheck %s --check-prefix=ERROR
+; RUN: not llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -wasm-disable-explicit-locals -mattr=+bulk-memory 2>&1 | FileCheck %s --check-prefix=ERROR
+; RUN: not llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -wasm-disable-explicit-locals -mattr=+bulk-memory -fast-isel 2>&1 | FileCheck %s --check-prefix=ERROR
 ; RUN: llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -wasm-disable-explicit-locals -mattr=+bulk-memory --mtriple wasm32-unknown-emscripten | FileCheck %s --check-prefixes=CHECK,TLS
 ; RUN: llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -wasm-disable-explicit-locals -mattr=+bulk-memory --mtriple wasm32-unknown-emscripten -fast-isel | FileCheck %s --check-prefixes=CHECK,TLS
 ; RUN: llc < %s -asm-verbose=false -disable-wasm-fallthrough-return-opt -wasm-disable-explicit-locals -mattr=-bulk-memory | FileCheck %s --check-prefixes=CHECK,NO-TLS
+target datalayout = "e-m:e-p:32:32-i64:64-n32:64-S128"
 target triple = "wasm32-unknown-unknown"
 
 ; ERROR: LLVM ERROR: only -ftls-model=local-exec is supported for now on non-Emscripten OSes: variable tls
@@ -11,7 +12,7 @@ target triple = "wasm32-unknown-unknown"
 ; CHECK-NEXT: .functype  address_of_tls () -> (i32)
 define i32 @address_of_tls() {
   ; TLS-DAG: global.get __tls_base
-  ; TLS-DAG: i32.const tls@TLSREL
+  ; TLS-DAG: i32.const tls
   ; TLS-NEXT: i32.add
   ; TLS-NEXT: return
 
@@ -24,7 +25,7 @@ define i32 @address_of_tls() {
 ; CHECK-NEXT: .functype ptr_to_tls () -> (i32)
 define i32* @ptr_to_tls() {
   ; TLS-DAG: global.get __tls_base
-  ; TLS-DAG: i32.const tls@TLSREL
+  ; TLS-DAG: i32.const tls
   ; TLS-NEXT: i32.add
   ; TLS-NEXT: return
 
@@ -37,7 +38,7 @@ define i32* @ptr_to_tls() {
 ; CHECK-NEXT: .functype tls_load () -> (i32)
 define i32 @tls_load() {
   ; TLS-DAG: global.get __tls_base
-  ; TLS-DAG: i32.const tls@TLSREL
+  ; TLS-DAG: i32.const tls
   ; TLS-NEXT: i32.add
   ; TLS-NEXT: i32.load 0
   ; TLS-NEXT: return
@@ -53,7 +54,7 @@ define i32 @tls_load() {
 ; CHECK-NEXT: .functype tls_store (i32) -> ()
 define void @tls_store(i32 %x) {
   ; TLS-DAG: global.get __tls_base
-  ; TLS-DAG: i32.const tls@TLSREL
+  ; TLS-DAG: i32.const tls
   ; TLS-NEXT: i32.add
   ; TLS-NEXT: i32.store 0
   ; TLS-NEXT: return
@@ -74,37 +75,8 @@ define i32 @tls_size() {
   ret i32 %1
 }
 
-; CHECK-LABEL: tls_align:
-; CHECK-NEXT: .functype tls_align () -> (i32)
-define i32 @tls_align() {
-; CHECK-NEXT: global.get __tls_align
-; CHECK-NEXT: return
-  %1 = call i32 @llvm.wasm.tls.align.i32()
-  ret i32 %1
-}
-
-; CHECK-LABEL: tls_base:
-; CHECK-NEXT: .functype tls_base () -> (i32)
-define i8* @tls_base() {
-; CHECK-NEXT: global.get __tls_base
-; CHECK-NEXT: return
-  %1 = call i8* @llvm.wasm.tls.base()
-  ret i8* %1
-}
-
-; CHECK-LABEL: tls_base_write:
-; CHECK-NEXT: .functype tls_base_write (i32) -> ()
-define void @tls_base_write(i8** %output) {
-; CHECK-NEXT: global.get __tls_base
-; CHECK-NEXT: i32.store 0
-; CHECK-NEXT: return
-  %1 = call i8* @llvm.wasm.tls.base()
-  store i8* %1, i8** %output
-  ret void
-}
-
 ; CHECK: .type tls,@object
-; TLS-NEXT: .section .tbss.tls,"T",@
+; TLS-NEXT: .section .tbss.tls,"",@
 ; NO-TLS-NEXT: .section .bss.tls,"",@
 ; CHECK-NEXT: .p2align 2
 ; CHECK-NEXT: tls:
@@ -112,5 +84,3 @@ define void @tls_base_write(i8** %output) {
 @tls = internal thread_local global i32 0
 
 declare i32 @llvm.wasm.tls.size.i32()
-declare i32 @llvm.wasm.tls.align.i32()
-declare i8* @llvm.wasm.tls.base()

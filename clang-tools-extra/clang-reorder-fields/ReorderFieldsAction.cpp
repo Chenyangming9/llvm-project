@@ -30,7 +30,7 @@ namespace reorder_fields {
 using namespace clang::ast_matchers;
 using llvm::SmallSetVector;
 
-/// Finds the definition of a record by name.
+/// \brief Finds the definition of a record by name.
 ///
 /// \returns nullptr if the name is ambiguous or not found.
 static const RecordDecl *findDefinition(StringRef RecordName,
@@ -50,7 +50,7 @@ static const RecordDecl *findDefinition(StringRef RecordName,
   return selectFirst<RecordDecl>("recordDecl", Results);
 }
 
-/// Calculates the new order of fields.
+/// \brief Calculates the new order of fields.
 ///
 /// \returns empty vector if the list of fields doesn't match the definition.
 static SmallVector<unsigned, 4>
@@ -79,7 +79,7 @@ getNewFieldsOrder(const RecordDecl *Definition,
 }
 
 // FIXME: error-handling
-/// Replaces one range of source code by another.
+/// \brief Replaces one range of source code by another.
 static void
 addReplacement(SourceRange Old, SourceRange New, const ASTContext &Context,
                std::map<std::string, tooling::Replacements> &Replacements) {
@@ -89,10 +89,10 @@ addReplacement(SourceRange Old, SourceRange New, const ASTContext &Context,
   tooling::Replacement R(Context.getSourceManager(),
                          CharSourceRange::getTokenRange(Old), NewText,
                          Context.getLangOpts());
-  consumeError(Replacements[std::string(R.getFilePath())].add(R));
+  consumeError(Replacements[R.getFilePath()].add(R));
 }
 
-/// Find all member fields used in the given init-list initializer expr
+/// \brief Find all member fields used in the given init-list initializer expr
 /// that belong to the same record
 ///
 /// \returns a set of field declarations, empty if none were present
@@ -104,11 +104,9 @@ findMembersUsedInInitExpr(const CXXCtorInitializer *Initializer,
   // for those accesses Sema::PerformObjectMemberConversion always inserts an
   // UncheckedDerivedToBase ImplicitCastExpr between the this expr and the
   // object expression
-  auto FoundExprs = match(
-      traverse(
-          TK_AsIs,
-          findAll(memberExpr(hasObjectExpression(cxxThisExpr())).bind("ME"))),
-      *Initializer->getInit(), Context);
+  auto FoundExprs =
+      match(findAll(memberExpr(hasObjectExpression(cxxThisExpr())).bind("ME")),
+            *Initializer->getInit(), Context);
   for (BoundNodes &BN : FoundExprs)
     if (auto *MemExpr = BN.getNodeAs<MemberExpr>("ME"))
       if (auto *FD = dyn_cast<FieldDecl>(MemExpr->getMemberDecl()))
@@ -116,9 +114,9 @@ findMembersUsedInInitExpr(const CXXCtorInitializer *Initializer,
   return Results;
 }
 
-/// Reorders fields in the definition of a struct/class.
+/// \brief Reorders fields in the definition of a struct/class.
 ///
-/// At the moment reordering of fields with
+/// At the moment reodering of fields with
 /// different accesses (public/protected/private) is not supported.
 /// \returns true on success.
 static bool reorderFieldsInDefinition(
@@ -135,7 +133,7 @@ static bool reorderFieldsInDefinition(
   for (const auto *Field : Definition->fields()) {
     const auto FieldIndex = Field->getFieldIndex();
     if (Field->getAccess() != Fields[NewFieldsOrder[FieldIndex]]->getAccess()) {
-      llvm::errs() << "Currently reordering of fields with different accesses "
+      llvm::errs() << "Currently reodering of fields with different accesses "
                       "is not supported\n";
       return false;
     }
@@ -152,7 +150,7 @@ static bool reorderFieldsInDefinition(
   return true;
 }
 
-/// Reorders initializers in a C++ struct/class constructor.
+/// \brief Reorders initializers in a C++ struct/class constructor.
 ///
 /// A constructor can have initializers for an arbitrary subset of the class's
 /// fields. Thus, we need to ensure that we reorder just the initializers that
@@ -217,7 +215,7 @@ static void reorderFieldsInConstructor(
                      Replacements);
 }
 
-/// Reorders initializers in the brace initialization of an aggregate.
+/// \brief Reorders initializers in the brace initialization of an aggregate.
 ///
 /// At the moment partial initialization is not supported.
 /// \returns true on success
@@ -304,7 +302,7 @@ public:
 } // end anonymous namespace
 
 std::unique_ptr<ASTConsumer> ReorderFieldsAction::newASTConsumer() {
-  return std::make_unique<ReorderingConsumer>(RecordName, DesiredFieldsOrder,
+  return llvm::make_unique<ReorderingConsumer>(RecordName, DesiredFieldsOrder,
                                                Replacements);
 }
 

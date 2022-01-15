@@ -47,8 +47,8 @@ public:
       const HeaderMapCollector::RegexHeaderMap *RegexHeaderMap = nullptr)
       : Reporter(Reporter), RegexHeaderMap(RegexHeaderMap) {}
 
-  std::unique_ptr<FrontendAction> create() override {
-    return std::make_unique<FindAllSymbolsAction>(Reporter, RegexHeaderMap);
+  clang::FrontendAction *create() override {
+    return new FindAllSymbolsAction(Reporter, RegexHeaderMap);
   }
 
 private:

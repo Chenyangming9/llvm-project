@@ -6,22 +6,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 // UNSUPPORTED: windows
-// UNSUPPORTED: libcxx-no-debug-mode
 
-// ADDITIONAL_COMPILE_FLAGS: -D_LIBCPP_DEBUG=0
+// MODULES_DEFINES: _LIBCPP_DEBUG=0
 
 // <filesystem>
 
 // class path
 
-#include "filesystem_include.h"
+#define _LIBCPP_DEBUG 0
+#include "filesystem_include.hpp"
 #include <iterator>
 #include <type_traits>
 #include <cassert>
 
 #include "test_macros.h"
+#include "filesystem_test_helper.hpp"
 #include "debug_mode_helper.h"
 
 int main(int, char**) {

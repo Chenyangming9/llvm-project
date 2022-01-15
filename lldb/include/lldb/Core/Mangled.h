@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_MANGLED_H
-#define LLDB_CORE_MANGLED_H
+#ifndef liblldb_Mangled_h_
+#define liblldb_Mangled_h_
 #if defined(__cplusplus)
 
 #include "lldb/lldb-enumerations.h"
@@ -17,8 +17,8 @@
 
 #include "llvm/ADT/StringRef.h"
 
-#include <cstddef>
 #include <memory>
+#include <stddef.h>
 
 namespace lldb_private {
 
@@ -43,14 +43,27 @@ public:
   enum ManglingScheme {
     eManglingSchemeNone = 0,
     eManglingSchemeMSVC,
-    eManglingSchemeItanium,
-    eManglingSchemeRustV0
+    eManglingSchemeItanium
   };
 
   /// Default constructor.
   ///
   /// Initialize with both mangled and demangled names empty.
-  Mangled() = default;
+  Mangled();
+
+  /// Construct with name.
+  ///
+  /// Constructor with an optional string and a boolean indicating if it is
+  /// the mangled version.
+  ///
+  /// \param[in] name
+  ///     The already const name to copy into this object.
+  ///
+  /// \param[in] is_mangled
+  ///     If \b true then \a name is a mangled name, if \b false then
+  ///     \a name is demangled.
+  Mangled(ConstString name, bool is_mangled);
+  Mangled(llvm::StringRef name, bool is_mangled);
 
   /// Construct with name.
   ///
@@ -62,6 +75,12 @@ public:
   explicit Mangled(ConstString name);
 
   explicit Mangled(llvm::StringRef name);
+
+  /// Destructor
+  ///
+  /// Releases its ref counts on the mangled and demangled strings that live
+  /// in the global string pool.
+  ~Mangled();
 
   /// Convert to pointer operator.
   ///
@@ -109,9 +128,9 @@ public:
   ///     A const reference to the Right Hand Side object to compare.
   ///
   /// \return
-  ///     -1 if \a lhs is less than \a rhs
-  ///     0 if \a lhs is equal to \a rhs
-  ///     1 if \a lhs is greater than \a rhs
+  ///     \li -1 if \a lhs is less than \a rhs
+  ///     \li 0 if \a lhs is equal to \a rhs
+  ///     \li 1 if \a lhs is greater than \a rhs
   static int Compare(const Mangled &lhs, const Mangled &rhs);
 
   /// Dump a description of this object to a Stream \a s.
@@ -133,13 +152,13 @@ public:
   ///
   /// \return
   ///     A const reference to the demangled name string object.
-  ConstString GetDemangledName() const;
+  ConstString GetDemangledName(lldb::LanguageType language) const;
 
   /// Display demangled name get accessor.
   ///
   /// \return
   ///     A const reference to the display demangled name string object.
-  ConstString GetDisplayDemangledName() const;
+  ConstString GetDisplayDemangledName(lldb::LanguageType language) const;
 
   void SetDemangledName(ConstString name) { m_demangled = name; }
 
@@ -166,7 +185,8 @@ public:
   ///     A const reference to the preferred name string object if this
   ///     object has a valid name of that kind, else a const reference to the
   ///     other name is returned.
-  ConstString GetName(NamePreference preference = ePreferDemangled) const;
+  ConstString GetName(lldb::LanguageType language,
+                      NamePreference preference = ePreferDemangled) const;
 
   /// Check if "name" matches either the mangled or demangled name.
   ///
@@ -175,12 +195,13 @@ public:
   ///
   /// \return
   ///     \b True if \a name matches either name, \b false otherwise.
-  bool NameMatches(ConstString name) const {
+  bool NameMatches(ConstString name, lldb::LanguageType language) const {
     if (m_mangled == name)
       return true;
-    return GetDemangledName() == name;
+    return GetDemangledName(language) == name;
   }
-  bool NameMatches(const RegularExpression &regex) const;
+  bool NameMatches(const RegularExpression &regex,
+                   lldb::LanguageType language) const;
 
   /// Get the memory cost of this object.
   ///
@@ -260,15 +281,6 @@ public:
   bool DemangleWithRichManglingInfo(RichManglingContext &context,
                                     SkipMangledNameFn *skip_mangled_name);
 
-  /// Try to identify the mangling scheme used.
-  /// \param[in] name
-  ///     The name we are attempting to identify the mangling scheme for.
-  ///
-  /// \return
-  ///     eManglingSchemeNone if no known mangling scheme could be identified
-  ///     for s, otherwise the enumerator for the mangling scheme detected.
-  static Mangled::ManglingScheme GetManglingScheme(llvm::StringRef const name);
-
 private:
   /// Mangled member variables.
   ConstString m_mangled;           ///< The mangled version of the name
@@ -281,4 +293,4 @@ Stream &operator<<(Stream &s, const Mangled &obj);
 } // namespace lldb_private
 
 #endif // #if defined(__cplusplus)
-#endif // LLDB_CORE_MANGLED_H
+#endif // liblldb_Mangled_h_

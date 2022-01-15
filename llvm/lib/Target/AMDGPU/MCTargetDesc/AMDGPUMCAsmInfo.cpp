@@ -14,9 +14,7 @@
 
 using namespace llvm;
 
-AMDGPUMCAsmInfo::AMDGPUMCAsmInfo(const Triple &TT,
-                                 const MCTargetOptions &Options)
-    : MCAsmInfoELF() {
+AMDGPUMCAsmInfo::AMDGPUMCAsmInfo(const Triple &TT) : MCAsmInfoELF() {
   CodePointerSize = (TT.getArch() == Triple::amdgcn) ? 8 : 4;
   StackGrowsUp = true;
   HasSingleParameterDotFile = false;
@@ -40,12 +38,9 @@ AMDGPUMCAsmInfo::AMDGPUMCAsmInfo(const Triple &TT,
   HasAggressiveSymbolFolding = true;
   COMMDirectiveAlignmentIsInBytes = false;
   HasNoDeadStrip = true;
+  WeakRefDirective = ".weakref\t";
   //===--- Dwarf Emission Directives -----------------------------------===//
   SupportsDebugInformation = true;
-  UsesCFIForDebug = true;
-  DwarfRegNumForCFI = true;
-
-  UseIntegratedAssembler = false;
 }
 
 bool AMDGPUMCAsmInfo::shouldOmitSectionDirective(StringRef SectionName) const {

@@ -6,22 +6,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_LINUXPROCMAPS_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_LINUXPROCMAPS_H
+#ifndef liblldb_LinuxProcMaps_H_
+#define liblldb_LinuxProcMaps_H_
 
 #include "lldb/lldb-forward.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Error.h"
+#include <functional>
+
 
 namespace lldb_private {
 
-typedef std::function<bool(llvm::Expected<MemoryRegionInfo>)> LinuxMapCallback;
+typedef std::function<bool(const lldb_private::MemoryRegionInfo &,
+                           const lldb_private::Status &)> LinuxMapCallback;
 
 void ParseLinuxMapRegions(llvm::StringRef linux_map,
                           LinuxMapCallback const &callback);
-void ParseLinuxSMapRegions(llvm::StringRef linux_smap,
-                           LinuxMapCallback const &callback);
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_LINUXPROCMAPS_H
+#endif // liblldb_LinuxProcMaps_H_

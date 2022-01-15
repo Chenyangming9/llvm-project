@@ -24,15 +24,12 @@ class TimerGroup;
 class raw_ostream;
 
 class TimeRecord {
-  double WallTime;               ///< Wall clock time elapsed in seconds.
-  double UserTime;               ///< User time elapsed.
-  double SystemTime;             ///< System time elapsed.
-  ssize_t MemUsed;               ///< Memory allocated (in bytes).
-  uint64_t InstructionsExecuted; ///< Number of instructions executed
+  double WallTime;       ///< Wall clock time elapsed in seconds.
+  double UserTime;       ///< User time elapsed.
+  double SystemTime;     ///< System time elapsed.
+  ssize_t MemUsed;       ///< Memory allocated (in bytes).
 public:
-  TimeRecord()
-      : WallTime(0), UserTime(0), SystemTime(0), MemUsed(0),
-        InstructionsExecuted(0) {}
+  TimeRecord() : WallTime(0), UserTime(0), SystemTime(0), MemUsed(0) {}
 
   /// Get the current time and memory usage.  If Start is true we get the memory
   /// usage before the time, otherwise we get time before memory usage.  This
@@ -45,7 +42,6 @@ public:
   double getSystemTime() const { return SystemTime; }
   double getWallTime() const { return WallTime; }
   ssize_t getMemUsed() const { return MemUsed; }
-  uint64_t getInstructionsExecuted() const { return InstructionsExecuted; }
 
   bool operator<(const TimeRecord &T) const {
     // Sort by Wall Time elapsed, as it is the only thing really accurate
@@ -53,18 +49,16 @@ public:
   }
 
   void operator+=(const TimeRecord &RHS) {
-    WallTime += RHS.WallTime;
-    UserTime += RHS.UserTime;
+    WallTime   += RHS.WallTime;
+    UserTime   += RHS.UserTime;
     SystemTime += RHS.SystemTime;
-    MemUsed += RHS.MemUsed;
-    InstructionsExecuted += RHS.InstructionsExecuted;
+    MemUsed    += RHS.MemUsed;
   }
   void operator-=(const TimeRecord &RHS) {
-    WallTime -= RHS.WallTime;
-    UserTime -= RHS.UserTime;
+    WallTime   -= RHS.WallTime;
+    UserTime   -= RHS.UserTime;
     SystemTime -= RHS.SystemTime;
-    MemUsed -= RHS.MemUsed;
-    InstructionsExecuted -= RHS.InstructionsExecuted;
+    MemUsed    -= RHS.MemUsed;
   }
 
   /// Print the current time record to \p OS, with a breakdown showing
@@ -84,18 +78,18 @@ class Timer {
   TimeRecord StartTime;     ///< The time startTimer() was last called.
   std::string Name;         ///< The name of this time variable.
   std::string Description;  ///< Description of this time variable.
-  bool Running = false;     ///< Is the timer currently running?
-  bool Triggered = false;   ///< Has the timer ever been triggered?
+  bool Running;             ///< Is the timer currently running?
+  bool Triggered;           ///< Has the timer ever been triggered?
   TimerGroup *TG = nullptr; ///< The TimerGroup this Timer is in.
 
-  Timer **Prev = nullptr;   ///< Pointer to \p Next of previous timer in group.
-  Timer *Next = nullptr;    ///< Next timer in the group.
+  Timer **Prev;             ///< Pointer to \p Next of previous timer in group.
+  Timer *Next;              ///< Next timer in the group.
 public:
-  explicit Timer(StringRef TimerName, StringRef TimerDescription) {
-    init(TimerName, TimerDescription);
+  explicit Timer(StringRef Name, StringRef Description) {
+    init(Name, Description);
   }
-  Timer(StringRef TimerName, StringRef TimerDescription, TimerGroup &tg) {
-    init(TimerName, TimerDescription, tg);
+  Timer(StringRef Name, StringRef Description, TimerGroup &tg) {
+    init(Name, Description, tg);
   }
   Timer(const Timer &RHS) {
     assert(!RHS.TG && "Can only copy uninitialized timers");
@@ -108,8 +102,8 @@ public:
 
   /// Create an uninitialized timer, client must use 'init'.
   explicit Timer() {}
-  void init(StringRef TimerName, StringRef TimerDescription);
-  void init(StringRef TimerName, StringRef TimerDescription, TimerGroup &tg);
+  void init(StringRef Name, StringRef Description);
+  void init(StringRef Name, StringRef Description, TimerGroup &tg);
 
   const std::string &getName() const { return Name; }
   const std::string &getDescription() const { return Description; }
@@ -180,7 +174,6 @@ class TimerGroup {
     std::string Description;
 
     PrintRecord(const PrintRecord &Other) = default;
-    PrintRecord &operator=(const PrintRecord &Other) = default;
     PrintRecord(const TimeRecord &Time, const std::string &Name,
                 const std::string &Description)
       : Time(Time), Name(Name), Description(Description) {}
@@ -236,11 +229,6 @@ public:
   /// used by the Statistic code to influence the construction and destruction
   /// order of the global timer lists.
   static void ConstructTimerLists();
-
-  /// This makes the default group unmanaged, and lets the user manage the
-  /// group's lifetime.
-  static std::unique_ptr<TimerGroup> aquireDefaultGroup();
-
 private:
   friend class Timer;
   friend void PrintStatisticsJSON(raw_ostream &OS);

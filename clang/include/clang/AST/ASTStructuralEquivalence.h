@@ -18,7 +18,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/Optional.h"
-#include <queue>
+#include <deque>
 #include <utility>
 
 namespace clang {
@@ -42,13 +42,14 @@ struct StructuralEquivalenceContext {
   /// AST contexts for which we are checking structural equivalence.
   ASTContext &FromCtx, &ToCtx;
 
-  // Queue of from-to Decl pairs that are to be checked to determine the final
-  // result of equivalence of a starting Decl pair.
-  std::queue<std::pair<Decl *, Decl *>> DeclsToCheck;
+  /// The set of "tentative" equivalences between two canonical
+  /// declarations, mapping from a declaration in the first context to the
+  /// declaration in the second context that we believe to be equivalent.
+  llvm::DenseMap<Decl *, Decl *> TentativeEquivalences;
 
-  // Set of from-to Decl pairs that are already visited during the check
-  // (are in or were once in \c DeclsToCheck) of a starting Decl pair.
-  llvm::DenseSet<std::pair<Decl *, Decl *>> VisitedDecls;
+  /// Queue of declarations in the first context whose equivalence
+  /// with a declaration in the second context still needs to be verified.
+  std::deque<Decl *> DeclsToCheck;
 
   /// Declaration (from, to) pairs that are known not to be equivalent
   /// (which we have already complained about).
@@ -87,22 +88,15 @@ struct StructuralEquivalenceContext {
   /// Implementation functions (all static functions in
   /// ASTStructuralEquivalence.cpp) must never call this function because that
   /// will wreak havoc the internal state (\c DeclsToCheck and
-  /// \c VisitedDecls members) and can cause faulty equivalent results.
+  /// \c TentativeEquivalences members) and can cause faulty equivalent results.
   bool IsEquivalent(Decl *D1, Decl *D2);
 
   /// Determine whether the two types are structurally equivalent.
   /// Implementation functions (all static functions in
   /// ASTStructuralEquivalence.cpp) must never call this function because that
   /// will wreak havoc the internal state (\c DeclsToCheck and
-  /// \c VisitedDecls members) and can cause faulty equivalent results.
+  /// \c TentativeEquivalences members) and can cause faulty equivalent results.
   bool IsEquivalent(QualType T1, QualType T2);
-
-  /// Determine whether the two statements are structurally equivalent.
-  /// Implementation functions (all static functions in
-  /// ASTStructuralEquivalence.cpp) must never call this function because that
-  /// will wreak havoc the internal state (\c DeclsToCheck and
-  /// \c VisitedDecls members) and can cause faulty equivalent results.
-  bool IsEquivalent(Stmt *S1, Stmt *S2);
 
   /// Find the index of the given anonymous struct/union within its
   /// context.

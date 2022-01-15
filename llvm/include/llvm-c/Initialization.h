@@ -16,10 +16,11 @@
 #ifndef LLVM_C_INITIALIZATION_H
 #define LLVM_C_INITIALIZATION_H
 
-#include "llvm-c/ExternC.h"
 #include "llvm-c/Types.h"
 
-LLVM_C_EXTERN_C_BEGIN
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @defgroup LLVMCInitialization Initialization Routines
@@ -48,6 +49,8 @@ void LLVMInitializeTarget(LLVMPassRegistryRef R);
  * @}
  */
 
-LLVM_C_EXTERN_C_END
+#ifdef __cplusplus
+}
+#endif
 
 #endif

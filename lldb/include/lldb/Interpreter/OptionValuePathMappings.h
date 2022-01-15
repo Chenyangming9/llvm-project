@@ -6,21 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONVALUEPATHMAPPINGS_H
-#define LLDB_INTERPRETER_OPTIONVALUEPATHMAPPINGS_H
+#ifndef liblldb_OptionValuePathMappings_h_
+#define liblldb_OptionValuePathMappings_h_
 
 #include "lldb/Interpreter/OptionValue.h"
 #include "lldb/Target/PathMappingList.h"
 
 namespace lldb_private {
 
-class OptionValuePathMappings
-    : public Cloneable<OptionValuePathMappings, OptionValue> {
+class OptionValuePathMappings : public OptionValue {
 public:
   OptionValuePathMappings(bool notify_changes)
-      : m_notify_changes(notify_changes) {}
+      : OptionValue(), m_path_mappings(), m_notify_changes(notify_changes) {}
 
-  ~OptionValuePathMappings() override = default;
+  ~OptionValuePathMappings() override {}
 
   // Virtual subclass pure virtual overrides
 
@@ -32,11 +31,17 @@ public:
   Status
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
+  Status
+  SetValueFromString(const char *,
+                     VarSetOperationType = eVarSetOperationAssign) = delete;
 
-  void Clear() override {
+  bool Clear() override {
     m_path_mappings.Clear(m_notify_changes);
     m_value_was_set = false;
+    return true;
   }
+
+  lldb::OptionValueSP DeepCopy() const override;
 
   bool IsAggregateValue() const override { return true; }
 
@@ -53,4 +58,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONVALUEPATHMAPPINGS_H
+#endif // liblldb_OptionValuePathMappings_h_

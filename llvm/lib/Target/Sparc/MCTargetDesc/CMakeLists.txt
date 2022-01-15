@@ -1,4 +1,4 @@
-add_llvm_component_library(LLVMSparcDesc
+add_llvm_library(LLVMSparcDesc
   SparcAsmBackend.cpp
   SparcELFObjectWriter.cpp
   SparcInstPrinter.cpp
@@ -7,12 +7,4 @@ add_llvm_component_library(LLVMSparcDesc
   SparcMCTargetDesc.cpp
   SparcMCExpr.cpp
   SparcTargetStreamer.cpp
-
-  LINK_COMPONENTS
-  MC
-  SparcInfo
-  Support
-
-  ADD_TO_COMPONENT
-  Sparc
   )

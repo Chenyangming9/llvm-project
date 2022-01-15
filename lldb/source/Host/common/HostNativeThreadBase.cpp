@@ -1,4 +1,4 @@
-//===-- HostNativeThreadBase.cpp ------------------------------------------===//
+//===-- HostNativeThreadBase.cpp --------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,6 +16,9 @@
 
 using namespace lldb;
 using namespace lldb_private;
+
+HostNativeThreadBase::HostNativeThreadBase()
+    : m_thread(LLDB_INVALID_HOST_THREAD), m_result(0) {}
 
 HostNativeThreadBase::HostNativeThreadBase(thread_t thread)
     : m_thread(thread), m_result(0) {}
@@ -59,7 +62,8 @@ HostNativeThreadBase::ThreadCreateTrampoline(lldb::thread_arg_t arg) {
   thread_arg_t thread_arg = info->thread_arg;
 
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_THREAD));
-  LLDB_LOGF(log, "thread created");
+  if (log)
+    log->Printf("thread created");
 
   delete info;
   return thread_fptr(thread_arg);

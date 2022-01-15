@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PLATFORM_OPENBSD_PLATFORMOPENBSD_H
-#define LLDB_SOURCE_PLUGINS_PLATFORM_OPENBSD_PLATFORMOPENBSD_H
+#ifndef liblldb_PlatformOpenBSD_h_
+#define liblldb_PlatformOpenBSD_h_
 
 #include "Plugins/Platform/POSIX/PlatformPOSIX.h"
 
@@ -17,6 +17,8 @@ namespace platform_openbsd {
 class PlatformOpenBSD : public PlatformPOSIX {
 public:
   PlatformOpenBSD(bool is_host);
+
+  ~PlatformOpenBSD() override;
 
   static void Initialize();
 
@@ -50,9 +52,12 @@ public:
                                   lldb::addr_t length, unsigned prot,
                                   unsigned flags, lldb::addr_t fd,
                                   lldb::addr_t offset) override;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(PlatformOpenBSD);
 };
 
 } // namespace platform_openbsd
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_PLATFORM_OPENBSD_PLATFORMOPENBSD_H
+#endif // liblldb_PlatformOpenBSD_h_

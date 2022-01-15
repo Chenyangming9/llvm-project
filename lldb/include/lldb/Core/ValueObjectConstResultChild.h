@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_VALUEOBJECTCONSTRESULTCHILD_H
-#define LLDB_CORE_VALUEOBJECTCONSTRESULTCHILD_H
+#ifndef liblldb_ValueObjectConstResultChild_h_
+#define liblldb_ValueObjectConstResultChild_h_
 
 #include "lldb/Core/ValueObjectChild.h"
 #include "lldb/Core/ValueObjectConstResultImpl.h"
@@ -17,8 +17,8 @@
 #include "lldb/lldb-forward.h"
 #include "lldb/lldb-types.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace lldb_private {
 class DataExtractor;
@@ -70,11 +70,9 @@ private:
   friend class ValueObjectConstResult;
   friend class ValueObjectConstResultImpl;
 
-  ValueObjectConstResultChild(const ValueObjectConstResultChild &) = delete;
-  const ValueObjectConstResultChild &
-  operator=(const ValueObjectConstResultChild &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(ValueObjectConstResultChild);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_VALUEOBJECTCONSTRESULTCHILD_H
+#endif // liblldb_ValueObjectConstResultChild_h_

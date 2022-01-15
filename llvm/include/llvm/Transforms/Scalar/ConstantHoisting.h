@@ -14,7 +14,7 @@
 // cost. If the constant can be folded into the instruction (the cost is
 // TCC_Free) or the cost is just a simple operation (TCC_BASIC), then we don't
 // consider it expensive and leave it alone. This is the default behavior and
-// the default implementation of getIntImmCostInst will always return TCC_Free.
+// the default implementation of getIntImmCost will always return TCC_Free.
 //
 // If the cost is more than TCC_BASIC, then the integer constant can't be folded
 // into the instruction and it might be beneficial to hoist the constant.
@@ -37,9 +37,7 @@
 #define LLVM_TRANSFORMS_SCALAR_CONSTANTHOISTING_H
 
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PointerUnion.h"
-#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/PassManager.h"
@@ -156,21 +154,21 @@ private:
 
   /// Keeps track of constant candidates found in the function.
   using ConstCandVecType = std::vector<consthoist::ConstantCandidate>;
-  using GVCandVecMapType = MapVector<GlobalVariable *, ConstCandVecType>;
+  using GVCandVecMapType = DenseMap<GlobalVariable *, ConstCandVecType>;
   ConstCandVecType ConstIntCandVec;
   GVCandVecMapType ConstGEPCandMap;
 
   /// These are the final constants we decided to hoist.
   using ConstInfoVecType = SmallVector<consthoist::ConstantInfo, 8>;
-  using GVInfoVecMapType = MapVector<GlobalVariable *, ConstInfoVecType>;
+  using GVInfoVecMapType = DenseMap<GlobalVariable *, ConstInfoVecType>;
   ConstInfoVecType ConstIntInfoVec;
   GVInfoVecMapType ConstGEPInfoMap;
 
   /// Keep track of cast instructions we already cloned.
-  MapVector<Instruction *, Instruction *> ClonedCastMap;
+  SmallDenseMap<Instruction *, Instruction *> ClonedCastMap;
 
   Instruction *findMatInsertPt(Instruction *Inst, unsigned Idx = ~0U) const;
-  SetVector<Instruction *>
+  SmallPtrSet<Instruction *, 8>
   findConstantInsertionPoint(const consthoist::ConstantInfo &ConstInfo) const;
   void collectConstantCandidates(ConstCandMapType &ConstCandMap,
                                  Instruction *Inst, unsigned Idx,
@@ -198,6 +196,7 @@ private:
   // constant GEP base.
   bool emitBaseConstants(GlobalVariable *BaseGV);
   void deleteDeadCastInst() const;
+  bool optimizeConstants(Function &Fn);
 };
 
 } // end namespace llvm

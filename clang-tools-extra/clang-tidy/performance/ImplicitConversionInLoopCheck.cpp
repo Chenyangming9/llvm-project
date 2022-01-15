@@ -24,10 +24,10 @@ namespace performance {
 // The subtelty is that in some cases (user defined conversions), we can
 // get to ImplicitCastExpr inside each other, with the outer one a NoOp. In this
 // case we skip the first cast expr.
-static bool isNonTrivialImplicitCast(const Stmt *ST) {
+static bool IsNonTrivialImplicitCast(const Stmt *ST) {
   if (const auto *ICE = dyn_cast<ImplicitCastExpr>(ST)) {
     return (ICE->getCastKind() != CK_NoOp) ||
-           isNonTrivialImplicitCast(ICE->getSubExpr());
+            IsNonTrivialImplicitCast(ICE->getSubExpr());
   }
   return false;
 }
@@ -47,19 +47,16 @@ void ImplicitConversionInLoopCheck::registerMatchers(MatchFinder *Finder) {
   // CXXOperatorCallExpr, so it should not get caught by the
   // cxxOperatorCallExpr() matcher.
   Finder->addMatcher(
-      traverse(
-          TK_AsIs,
-          cxxForRangeStmt(hasLoopVariable(
-              varDecl(
-                  hasType(qualType(references(qualType(isConstQualified())))),
-                  hasInitializer(
-                      expr(anyOf(
-                               hasDescendant(
-                                   cxxOperatorCallExpr().bind("operator-call")),
-                               hasDescendant(unaryOperator(hasOperatorName("*"))
-                                                 .bind("operator-call"))))
-                          .bind("init")))
-                  .bind("faulty-var")))),
+      cxxForRangeStmt(hasLoopVariable(
+          varDecl(
+              hasType(qualType(references(qualType(isConstQualified())))),
+              hasInitializer(
+                  expr(anyOf(hasDescendant(
+                                 cxxOperatorCallExpr().bind("operator-call")),
+                             hasDescendant(unaryOperator(hasOperatorName("*"))
+                                               .bind("operator-call"))))
+                      .bind("init")))
+              .bind("faulty-var"))),
       this);
 }
 
@@ -81,7 +78,7 @@ void ImplicitConversionInLoopCheck::check(
   // iterator returns a value instead of a reference, and the loop variable
   // is a reference. This situation is fine (it probably produces the same
   // code at the end).
-  if (isNonTrivialImplicitCast(Materialized->getSubExpr()))
+  if (IsNonTrivialImplicitCast(Materialized->getTemporary()))
     ReportAndFix(Result.Context, VD, OperatorCall);
 }
 

@@ -7,9 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "IncludeSorter.h"
-#include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
-#include <algorithm>
 
 namespace clang {
 namespace tidy {
@@ -17,7 +15,7 @@ namespace utils {
 
 namespace {
 
-StringRef removeFirstSuffix(StringRef Str, ArrayRef<const char *> Suffixes) {
+StringRef RemoveFirstSuffix(StringRef Str, ArrayRef<const char *> Suffixes) {
   for (StringRef Suffix : Suffixes) {
     if (Str.endswith(Suffix)) {
       return Str.substr(0, Str.size() - Suffix.size());
@@ -26,7 +24,7 @@ StringRef removeFirstSuffix(StringRef Str, ArrayRef<const char *> Suffixes) {
   return Str;
 }
 
-StringRef makeCanonicalName(StringRef Str, IncludeSorter::IncludeStyle Style) {
+StringRef MakeCanonicalName(StringRef Str, IncludeSorter::IncludeStyle Style) {
   // The list of suffixes to remove from source file names to get the
   // "canonical" file names.
   // E.g. tools/sort_includes.cc and tools/sort_includes_test.cc
@@ -34,37 +32,22 @@ StringRef makeCanonicalName(StringRef Str, IncludeSorter::IncludeStyle Style) {
   // (once canonicalized) will match as being the main include file associated
   // with the source files.
   if (Style == IncludeSorter::IS_LLVM) {
-    return removeFirstSuffix(
-        removeFirstSuffix(Str, {".cc", ".cpp", ".c", ".h", ".hpp"}), {"Test"});
+    return RemoveFirstSuffix(
+        RemoveFirstSuffix(Str, {".cc", ".cpp", ".c", ".h", ".hpp"}), {"Test"});
   }
-  if (Style == IncludeSorter::IS_Google_ObjC) {
-    StringRef Canonical =
-        removeFirstSuffix(removeFirstSuffix(Str, {".cc", ".cpp", ".c", ".h",
-                                                  ".hpp", ".mm", ".m"}),
-                          {"_unittest", "_regtest", "_test", "Test"});
-
-    // Objective-C categories have a `+suffix` format, but should be grouped
-    // with the file they are a category of.
-    size_t StartIndex = Canonical.find_last_of('/');
-    if (StartIndex == StringRef::npos) {
-      StartIndex = 0;
-    }
-    return Canonical.substr(
-        0, Canonical.find_first_of('+', StartIndex));
-  }
-  return removeFirstSuffix(
-      removeFirstSuffix(Str, {".cc", ".cpp", ".c", ".h", ".hpp"}),
+  return RemoveFirstSuffix(
+      RemoveFirstSuffix(Str, {".cc", ".cpp", ".c", ".h", ".hpp"}),
       {"_unittest", "_regtest", "_test"});
 }
 
 // Scan to the end of the line and return the offset of the next line.
-size_t findNextLine(const char *Text) {
+size_t FindNextLine(const char *Text) {
   size_t EOLIndex = std::strcspn(Text, "\n");
   return Text[EOLIndex] == '\0' ? EOLIndex : EOLIndex + 1;
 }
 
 IncludeSorter::IncludeKinds
-determineIncludeKind(StringRef CanonicalFile, StringRef IncludeFile,
+DetermineIncludeKind(StringRef CanonicalFile, StringRef IncludeFile,
                      bool IsAngled, IncludeSorter::IncludeStyle Style) {
   // Compute the two "canonical" forms of the include's filename sans extension.
   // The first form is the include's filename without ".h" or "-inl.h" at the
@@ -76,13 +59,12 @@ determineIncludeKind(StringRef CanonicalFile, StringRef IncludeFile,
     return IncludeFile.endswith(".h") ? IncludeSorter::IK_CSystemInclude
                                       : IncludeSorter::IK_CXXSystemInclude;
   }
-  StringRef CanonicalInclude = makeCanonicalName(IncludeFile, Style);
+  StringRef CanonicalInclude = MakeCanonicalName(IncludeFile, Style);
   if (CanonicalFile.endswith(CanonicalInclude)
       || CanonicalInclude.endswith(CanonicalFile)) {
     return IncludeSorter::IK_MainTUInclude;
   }
-  if ((Style == IncludeSorter::IS_Google) ||
-      (Style == IncludeSorter::IS_Google_ObjC)) {
+  if (Style == IncludeSorter::IS_Google) {
     std::pair<StringRef, StringRef> Parts = CanonicalInclude.split("/public/");
     std::string AltCanonicalInclude =
         Parts.first.str() + "/internal/" + Parts.second.str();
@@ -95,44 +77,22 @@ determineIncludeKind(StringRef CanonicalFile, StringRef IncludeFile,
       return IncludeSorter::IK_MainTUInclude;
     }
   }
-  if (Style == IncludeSorter::IS_Google_ObjC) {
-    if (IncludeFile.endswith(".generated.h") ||
-        IncludeFile.endswith(".proto.h") || IncludeFile.endswith(".pbobjc.h")) {
-      return IncludeSorter::IK_GeneratedInclude;
-    }
-  }
   return IncludeSorter::IK_NonSystemInclude;
-}
-
-int compareHeaders(StringRef LHS, StringRef RHS,
-                   IncludeSorter::IncludeStyle Style) {
-  if (Style == IncludeSorter::IncludeStyle::IS_Google_ObjC) {
-    const std::pair<const char *, const char *> &Mismatch =
-        std::mismatch(LHS.begin(), LHS.end(), RHS.begin());
-    if ((Mismatch.first != LHS.end()) && (Mismatch.second != RHS.end())) {
-      if ((*Mismatch.first == '.') && (*Mismatch.second == '+')) {
-        return -1;
-      }
-      if ((*Mismatch.first == '+') && (*Mismatch.second == '.')) {
-        return 1;
-      }
-    }
-  }
-  return LHS.compare(RHS);
 }
 
 } // namespace
 
 IncludeSorter::IncludeSorter(const SourceManager *SourceMgr,
-                             const FileID FileID, StringRef FileName,
-                             IncludeStyle Style)
-    : SourceMgr(SourceMgr), Style(Style), CurrentFileID(FileID),
-      CanonicalFile(makeCanonicalName(FileName, Style)) {}
+                             const LangOptions *LangOpts, const FileID FileID,
+                             StringRef FileName, IncludeStyle Style)
+    : SourceMgr(SourceMgr), LangOpts(LangOpts), Style(Style),
+      CurrentFileID(FileID), CanonicalFile(MakeCanonicalName(FileName, Style)) {
+}
 
 void IncludeSorter::AddInclude(StringRef FileName, bool IsAngled,
                                SourceLocation HashLocation,
                                SourceLocation EndLocation) {
-  int Offset = findNextLine(SourceMgr->getCharacterData(EndLocation));
+  int Offset = FindNextLine(SourceMgr->getCharacterData(EndLocation));
 
   // Record the relevant location information for this inclusion directive.
   IncludeLocations[FileName].push_back(
@@ -145,23 +105,16 @@ void IncludeSorter::AddInclude(StringRef FileName, bool IsAngled,
 
   // Add the included file's name to the appropriate bucket.
   IncludeKinds Kind =
-      determineIncludeKind(CanonicalFile, FileName, IsAngled, Style);
+      DetermineIncludeKind(CanonicalFile, FileName, IsAngled, Style);
   if (Kind != IK_InvalidInclude)
     IncludeBucket[Kind].push_back(FileName.str());
 }
 
 Optional<FixItHint> IncludeSorter::CreateIncludeInsertion(StringRef FileName,
                                                           bool IsAngled) {
-  std::string IncludeStmt;
-  if (Style == IncludeStyle::IS_Google_ObjC) {
-    IncludeStmt = IsAngled
-                      ? llvm::Twine("#import <" + FileName + ">\n").str()
-                      : llvm::Twine("#import \"" + FileName + "\"\n").str();
-  } else {
-    IncludeStmt = IsAngled
-                      ? llvm::Twine("#include <" + FileName + ">\n").str()
-                      : llvm::Twine("#include \"" + FileName + "\"\n").str();
-  }
+  std::string IncludeStmt =
+      IsAngled ? llvm::Twine("#include <" + FileName + ">\n").str()
+               : llvm::Twine("#include \"" + FileName + "\"\n").str();
   if (SourceLocations.empty()) {
     // If there are no includes in this file, add it in the first line.
     // FIXME: insert after the file comment or the header guard, if present.
@@ -171,15 +124,14 @@ Optional<FixItHint> IncludeSorter::CreateIncludeInsertion(StringRef FileName,
   }
 
   auto IncludeKind =
-      determineIncludeKind(CanonicalFile, FileName, IsAngled, Style);
+      DetermineIncludeKind(CanonicalFile, FileName, IsAngled, Style);
 
   if (!IncludeBucket[IncludeKind].empty()) {
     for (const std::string &IncludeEntry : IncludeBucket[IncludeKind]) {
-      if (compareHeaders(FileName, IncludeEntry, Style) < 0) {
+      if (FileName < IncludeEntry) {
         const auto &Location = IncludeLocations[IncludeEntry][0];
         return FixItHint::CreateInsertion(Location.getBegin(), IncludeStmt);
-      }
-      if (FileName == IncludeEntry) {
+      } else if (FileName == IncludeEntry) {
         return llvm::None;
       }
     }
@@ -196,9 +148,9 @@ Optional<FixItHint> IncludeSorter::CreateIncludeInsertion(StringRef FileName,
   // include bucket in the file. In that case, we'll want to sort the include
   // before that bucket.
   IncludeKinds NonEmptyKind = IK_InvalidInclude;
-  for (int I = IK_InvalidInclude - 1; I >= 0; --I) {
-    if (!IncludeBucket[I].empty()) {
-      NonEmptyKind = static_cast<IncludeKinds>(I);
+  for (int i = IK_InvalidInclude - 1; i >= 0; --i) {
+    if (!IncludeBucket[i].empty()) {
+      NonEmptyKind = static_cast<IncludeKinds>(i);
       if (NonEmptyKind < IncludeKind)
         break;
     }
@@ -223,15 +175,115 @@ Optional<FixItHint> IncludeSorter::CreateIncludeInsertion(StringRef FileName,
                                     IncludeStmt);
 }
 
-} // namespace utils
+std::vector<FixItHint> IncludeSorter::GetEdits() {
+  if (SourceLocations.empty())
+    return {};
 
-llvm::ArrayRef<std::pair<utils::IncludeSorter::IncludeStyle, StringRef>>
-OptionEnumMapping<utils::IncludeSorter::IncludeStyle>::getEnumMapping() {
-  static constexpr std::pair<utils::IncludeSorter::IncludeStyle, StringRef>
-      Mapping[] = {{utils::IncludeSorter::IS_LLVM, "llvm"},
-                   {utils::IncludeSorter::IS_Google, "google"},
-                   {utils::IncludeSorter::IS_Google_ObjC, "google-objc"}};
-  return makeArrayRef(Mapping);
+  typedef std::map<int, std::pair<SourceRange, std::string>>
+      FileLineToSourceEditMap;
+  FileLineToSourceEditMap Edits;
+  auto SourceLocationIterator = SourceLocations.begin();
+  auto SourceLocationIteratorEnd = SourceLocations.end();
+
+  // Compute the Edits that need to be done to each line to add, replace, or
+  // delete inclusions.
+  for (int IncludeKind = 0; IncludeKind < IK_InvalidInclude; ++IncludeKind) {
+    std::sort(IncludeBucket[IncludeKind].begin(),
+              IncludeBucket[IncludeKind].end());
+    for (const auto &IncludeEntry : IncludeBucket[IncludeKind]) {
+      auto &Location = IncludeLocations[IncludeEntry];
+      SourceRangeVector::iterator LocationIterator = Location.begin();
+      SourceRangeVector::iterator LocationIteratorEnd = Location.end();
+      SourceRange FirstLocation = *LocationIterator;
+
+      // If the first occurrence of a particular include is on the current
+      // source line we are examining, leave it alone.
+      if (FirstLocation == *SourceLocationIterator)
+        ++LocationIterator;
+
+      // Add the deletion Edits for any (remaining) instances of this inclusion,
+      // and remove their Locations from the source Locations to be processed.
+      for (; LocationIterator != LocationIteratorEnd; ++LocationIterator) {
+        int LineNumber =
+            SourceMgr->getSpellingLineNumber(LocationIterator->getBegin());
+        Edits[LineNumber] = std::make_pair(*LocationIterator, "");
+        SourceLocationIteratorEnd =
+            std::remove(SourceLocationIterator, SourceLocationIteratorEnd,
+                        *LocationIterator);
+      }
+
+      if (FirstLocation == *SourceLocationIterator) {
+        // Do nothing except move to the next source Location (Location of an
+        // inclusion in the original, unchanged source file).
+        ++SourceLocationIterator;
+        continue;
+      }
+
+      // Add (or append to) the replacement text for this line in source file.
+      int LineNumber =
+          SourceMgr->getSpellingLineNumber(SourceLocationIterator->getBegin());
+      if (Edits.find(LineNumber) == Edits.end()) {
+        Edits[LineNumber].first =
+            SourceRange(SourceLocationIterator->getBegin());
+      }
+      StringRef SourceText = Lexer::getSourceText(
+          CharSourceRange::getCharRange(FirstLocation), *SourceMgr, *LangOpts);
+      Edits[LineNumber].second.append(SourceText.data(), SourceText.size());
+    }
+
+    // Clear the bucket.
+    IncludeBucket[IncludeKind].clear();
+  }
+
+  // Go through the single-line Edits and combine them into blocks of Edits.
+  int CurrentEndLine = 0;
+  SourceRange CurrentRange;
+  std::string CurrentText;
+  std::vector<FixItHint> Fixes;
+  for (const auto &LineEdit : Edits) {
+    // If the current edit is on the next line after the previous edit, add it
+    // to the current block edit.
+    if (LineEdit.first == CurrentEndLine + 1 &&
+        CurrentRange.getBegin() != CurrentRange.getEnd()) {
+      SourceRange EditRange = LineEdit.second.first;
+      if (EditRange.getBegin() != EditRange.getEnd()) {
+        ++CurrentEndLine;
+        CurrentRange.setEnd(EditRange.getEnd());
+      }
+      CurrentText += LineEdit.second.second;
+      // Otherwise report the current block edit and start a new block.
+    } else {
+      if (CurrentEndLine) {
+        Fixes.push_back(FixItHint::CreateReplacement(
+            CharSourceRange::getCharRange(CurrentRange), CurrentText));
+      }
+
+      CurrentEndLine = LineEdit.first;
+      CurrentRange = LineEdit.second.first;
+      CurrentText = LineEdit.second.second;
+    }
+  }
+  // Finally, report the current block edit if there is one.
+  if (CurrentEndLine) {
+    Fixes.push_back(FixItHint::CreateReplacement(
+        CharSourceRange::getCharRange(CurrentRange), CurrentText));
+  }
+
+  // Reset the remaining internal state.
+  SourceLocations.clear();
+  IncludeLocations.clear();
+  return Fixes;
 }
+
+IncludeSorter::IncludeStyle
+IncludeSorter::parseIncludeStyle(const std::string &Value) {
+  return Value == "llvm" ? IS_LLVM : IS_Google;
+}
+
+StringRef IncludeSorter::toString(IncludeStyle Style) {
+  return Style == IS_LLVM ? "llvm" : "google";
+}
+
+} // namespace utils
 } // namespace tidy
 } // namespace clang

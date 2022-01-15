@@ -10,6 +10,8 @@
 // range conditional branches.
 //===----------------------------------------------------------------------===//
 
+#define DEBUG_TYPE "arc-branch-finalize"
+
 #include "ARCInstrInfo.h"
 #include "ARCTargetMachine.h"
 #include "MCTargetDesc/ARCInfo.h"
@@ -18,11 +20,8 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
 #include <vector>
-
-#define DEBUG_TYPE "arc-branch-finalize"
 
 using namespace llvm;
 

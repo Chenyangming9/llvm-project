@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 #include "support/pstl_test_config.h"
 
@@ -86,16 +86,16 @@ compute_and_check(Iterator1 first, Iterator1 last, Iterator2 d_first, T, Functio
 // we don't want to check equality here
 // because we can't be sure it will be strictly equal for floating point types
 template <typename Iterator1, typename Iterator2, typename T, typename Function>
-typename std::enable_if<std::is_floating_point<T>::value, bool>::type compute_and_check(Iterator1, Iterator1, Iterator2,
-                                                                                        T, Function)
+typename std::enable_if<std::is_floating_point<T>::value, bool>::type
+compute_and_check(Iterator1, Iterator1, Iterator2, T, Function)
 {
     return true;
 }
 
 struct test_one_policy
 {
-#if defined(_PSTL_ICC_17_VC141_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN) ||                                                             \
-    defined(_PSTL_ICC_16_VC14_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN) // dummy specialization by policy type, in case of broken configuration
+#if _PSTL_ICC_17_VC141_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN ||                                                            \
+    _PSTL_ICC_16_VC14_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN // dummy specialization by policy type, in case of broken configuration
     template <typename Iterator1, typename Iterator2, typename T, typename Function>
     typename std::enable_if<is_same_iterator_category<Iterator1, std::random_access_iterator_tag>::value, void>::type
     operator()(pstl::execution::unsequenced_policy, Iterator1 data_b, Iterator1 data_e, Iterator2 actual_b,
@@ -156,7 +156,7 @@ test(Pred pred)
     }
 }
 
-int
+int32_t
 main()
 {
     test<uint8_t, uint32_t>([](uint32_t a, uint32_t b) { return a - b; });

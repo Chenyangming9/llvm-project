@@ -1,4 +1,4 @@
-//===-- ConnectionFileDescriptorPosix.cpp ---------------------------------===//
+//===-- ConnectionFileDescriptorPosix.cpp -----------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -20,13 +20,13 @@
 #include "lldb/Utility/SelectHelper.h"
 #include "lldb/Utility/Timeout.h"
 
-#include <cerrno>
-#include <cstdlib>
-#include <cstring>
+#include <errno.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
-#if LLDB_ENABLE_POSIX
+#ifndef LLDB_DISABLE_POSIX
 #include <termios.h>
 #include <unistd.h>
 #endif
@@ -42,7 +42,6 @@
 #include "lldb/Host/Host.h"
 #include "lldb/Host/Socket.h"
 #include "lldb/Host/common/TCPSocket.h"
-#include "lldb/Host/common/UDPSocket.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/Timer.h"
@@ -76,26 +75,27 @@ llvm::Optional<llvm::StringRef> GetURLAddress(llvm::StringRef url,
 
 ConnectionFileDescriptor::ConnectionFileDescriptor(bool child_processes_inherit)
     : Connection(), m_pipe(), m_mutex(), m_shutting_down(false),
-
+      m_waiting_for_accept(false),
       m_child_processes_inherit(child_processes_inherit) {
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_CONNECTION |
                                                   LIBLLDB_LOG_OBJECT));
-  LLDB_LOGF(log, "%p ConnectionFileDescriptor::ConnectionFileDescriptor ()",
-            static_cast<void *>(this));
+  if (log)
+    log->Printf("%p ConnectionFileDescriptor::ConnectionFileDescriptor ()",
+                static_cast<void *>(this));
 }
 
 ConnectionFileDescriptor::ConnectionFileDescriptor(int fd, bool owns_fd)
     : Connection(), m_pipe(), m_mutex(), m_shutting_down(false),
       m_waiting_for_accept(false), m_child_processes_inherit(false) {
-  m_write_sp = std::make_shared<NativeFile>(fd, File::eOpenOptionWrite, owns_fd);
-  m_read_sp = std::make_shared<NativeFile>(fd, File::eOpenOptionRead, false);
+  m_write_sp = std::make_shared<File>(fd, owns_fd);
+  m_read_sp = std::make_shared<File>(fd, false);
 
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_CONNECTION |
                                                   LIBLLDB_LOG_OBJECT));
-  LLDB_LOGF(log,
-            "%p ConnectionFileDescriptor::ConnectionFileDescriptor (fd = "
-            "%i, owns_fd = %i)",
-            static_cast<void *>(this), fd, owns_fd);
+  if (log)
+    log->Printf("%p ConnectionFileDescriptor::ConnectionFileDescriptor (fd = "
+                "%i, owns_fd = %i)",
+                static_cast<void *>(this), fd, owns_fd);
   OpenCommandPipe();
 }
 
@@ -108,8 +108,9 @@ ConnectionFileDescriptor::ConnectionFileDescriptor(Socket *socket)
 ConnectionFileDescriptor::~ConnectionFileDescriptor() {
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_CONNECTION |
                                                   LIBLLDB_LOG_OBJECT));
-  LLDB_LOGF(log, "%p ConnectionFileDescriptor::~ConnectionFileDescriptor ()",
-            static_cast<void *>(this));
+  if (log)
+    log->Printf("%p ConnectionFileDescriptor::~ConnectionFileDescriptor ()",
+                static_cast<void *>(this));
   Disconnect(nullptr);
   CloseCommandPipe();
 }
@@ -121,23 +122,24 @@ void ConnectionFileDescriptor::OpenCommandPipe() {
   // Make the command file descriptor here:
   Status result = m_pipe.CreateNew(m_child_processes_inherit);
   if (!result.Success()) {
-    LLDB_LOGF(log,
-              "%p ConnectionFileDescriptor::OpenCommandPipe () - could not "
-              "make pipe: %s",
-              static_cast<void *>(this), result.AsCString());
+    if (log)
+      log->Printf("%p ConnectionFileDescriptor::OpenCommandPipe () - could not "
+                  "make pipe: %s",
+                  static_cast<void *>(this), result.AsCString());
   } else {
-    LLDB_LOGF(log,
-              "%p ConnectionFileDescriptor::OpenCommandPipe() - success "
-              "readfd=%d writefd=%d",
-              static_cast<void *>(this), m_pipe.GetReadFileDescriptor(),
-              m_pipe.GetWriteFileDescriptor());
+    if (log)
+      log->Printf("%p ConnectionFileDescriptor::OpenCommandPipe() - success "
+                  "readfd=%d writefd=%d",
+                  static_cast<void *>(this), m_pipe.GetReadFileDescriptor(),
+                  m_pipe.GetWriteFileDescriptor());
   }
 }
 
 void ConnectionFileDescriptor::CloseCommandPipe() {
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_CONNECTION));
-  LLDB_LOGF(log, "%p ConnectionFileDescriptor::CloseCommandPipe()",
-            static_cast<void *>(this));
+  if (log)
+    log->Printf("%p ConnectionFileDescriptor::CloseCommandPipe()",
+                static_cast<void *>(this));
 
   m_pipe.Close();
 }
@@ -151,8 +153,9 @@ ConnectionStatus ConnectionFileDescriptor::Connect(llvm::StringRef path,
                                                    Status *error_ptr) {
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_CONNECTION));
-  LLDB_LOGF(log, "%p ConnectionFileDescriptor::Connect (url = '%s')",
-            static_cast<void *>(this), path.str().c_str());
+  if (log)
+    log->Printf("%p ConnectionFileDescriptor::Connect (url = '%s')",
+                static_cast<void *>(this), path.str().c_str());
 
   OpenCommandPipe();
 
@@ -180,7 +183,7 @@ ConnectionStatus ConnectionFileDescriptor::Connect(llvm::StringRef path,
       // unix-abstract-connect://SOCKNAME
       return UnixAbstractSocketConnect(*addr, error_ptr);
     }
-#if LLDB_ENABLE_POSIX
+#ifndef LLDB_DISABLE_POSIX
     else if ((addr = GetURLAddress(path, FD_SCHEME))) {
       // Just passing a native file descriptor within this current process that
       // is already opened (possibly from a service or other source).
@@ -209,7 +212,7 @@ ConnectionStatus ConnectionFileDescriptor::Connect(llvm::StringRef path,
           // this. For now, we assume we must assume we don't own it.
 
           std::unique_ptr<TCPSocket> tcp_socket;
-          tcp_socket = std::make_unique<TCPSocket>(fd, false, false);
+          tcp_socket.reset(new TCPSocket(fd, false, false));
           // Try and get a socket option from this file descriptor to see if
           // this is a socket and set m_is_socket accordingly.
           int resuse;
@@ -219,12 +222,10 @@ ConnectionStatus ConnectionFileDescriptor::Connect(llvm::StringRef path,
             m_read_sp = std::move(tcp_socket);
             m_write_sp = m_read_sp;
           } else {
-            m_read_sp =
-                std::make_shared<NativeFile>(fd, File::eOpenOptionRead, false);
-            m_write_sp =
-                std::make_shared<NativeFile>(fd, File::eOpenOptionWrite, false);
+            m_read_sp = std::make_shared<File>(fd, false);
+            m_write_sp = std::make_shared<File>(fd, false);
           }
-          m_uri = std::string(*addr);
+          m_uri = *addr;
           return eConnectionStatusSuccess;
         }
       }
@@ -271,8 +272,8 @@ ConnectionStatus ConnectionFileDescriptor::Connect(llvm::StringRef path,
           ::fcntl(fd, F_SETFL, flags);
         }
       }
-      m_read_sp = std::make_shared<NativeFile>(fd, File::eOpenOptionRead, true);
-      m_write_sp = std::make_shared<NativeFile>(fd, File::eOpenOptionWrite, false);
+      m_read_sp = std::make_shared<File>(fd, true);
+      m_write_sp = std::make_shared<File>(fd, false);
       return eConnectionStatusSuccess;
     }
 #endif
@@ -294,15 +295,17 @@ bool ConnectionFileDescriptor::InterruptRead() {
 
 ConnectionStatus ConnectionFileDescriptor::Disconnect(Status *error_ptr) {
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_CONNECTION));
-  LLDB_LOGF(log, "%p ConnectionFileDescriptor::Disconnect ()",
-            static_cast<void *>(this));
+  if (log)
+    log->Printf("%p ConnectionFileDescriptor::Disconnect ()",
+                static_cast<void *>(this));
 
   ConnectionStatus status = eConnectionStatusSuccess;
 
   if (!IsConnected()) {
-    LLDB_LOGF(
-        log, "%p ConnectionFileDescriptor::Disconnect(): Nothing to disconnect",
-        static_cast<void *>(this));
+    if (log)
+      log->Printf(
+          "%p ConnectionFileDescriptor::Disconnect(): Nothing to disconnect",
+          static_cast<void *>(this));
     return eConnectionStatusSuccess;
   }
 
@@ -315,27 +318,26 @@ ConnectionStatus ConnectionFileDescriptor::Disconnect(Status *error_ptr) {
   // descriptor.  If that's the case, then send the "q" char to the command
   // file channel so the read will wake up and the connection will then know to
   // shut down.
+
+  m_shutting_down = true;
+
   std::unique_lock<std::recursive_mutex> locker(m_mutex, std::defer_lock);
   if (!locker.try_lock()) {
     if (m_pipe.CanWrite()) {
       size_t bytes_written = 0;
       Status result = m_pipe.Write("q", 1, bytes_written);
-      LLDB_LOGF(log,
-                "%p ConnectionFileDescriptor::Disconnect(): Couldn't get "
-                "the lock, sent 'q' to %d, error = '%s'.",
-                static_cast<void *>(this), m_pipe.GetWriteFileDescriptor(),
-                result.AsCString());
+      if (log)
+        log->Printf("%p ConnectionFileDescriptor::Disconnect(): Couldn't get "
+                    "the lock, sent 'q' to %d, error = '%s'.",
+                    static_cast<void *>(this), m_pipe.GetWriteFileDescriptor(),
+                    result.AsCString());
     } else if (log) {
-      LLDB_LOGF(log,
-                "%p ConnectionFileDescriptor::Disconnect(): Couldn't get the "
-                "lock, but no command pipe is available.",
-                static_cast<void *>(this));
+      log->Printf("%p ConnectionFileDescriptor::Disconnect(): Couldn't get the "
+                  "lock, but no command pipe is available.",
+                  static_cast<void *>(this));
     }
     locker.lock();
   }
-
-  // Prevents reads and writes during shutdown.
-  m_shutting_down = true;
 
   Status error = m_read_sp->Close();
   Status error2 = m_write_sp->Close();
@@ -360,10 +362,10 @@ size_t ConnectionFileDescriptor::Read(void *dst, size_t dst_len,
 
   std::unique_lock<std::recursive_mutex> locker(m_mutex, std::defer_lock);
   if (!locker.try_lock()) {
-    LLDB_LOGF(log,
-              "%p ConnectionFileDescriptor::Read () failed to get the "
-              "connection lock.",
-              static_cast<void *>(this));
+    if (log)
+      log->Printf("%p ConnectionFileDescriptor::Read () failed to get the "
+                  "connection lock.",
+                  static_cast<void *>(this));
     if (error_ptr)
       error_ptr->SetErrorString("failed to get the connection lock for read.");
 
@@ -372,8 +374,6 @@ size_t ConnectionFileDescriptor::Read(void *dst, size_t dst_len,
   }
 
   if (m_shutting_down) {
-    if (error_ptr)
-      error_ptr->SetErrorString("shutting down");
     status = eConnectionStatusError;
     return 0;
   }
@@ -387,13 +387,12 @@ size_t ConnectionFileDescriptor::Read(void *dst, size_t dst_len,
   error = m_read_sp->Read(dst, bytes_read);
 
   if (log) {
-    LLDB_LOGF(log,
-              "%p ConnectionFileDescriptor::Read()  fd = %" PRIu64
-              ", dst = %p, dst_len = %" PRIu64 ") => %" PRIu64 ", error = %s",
-              static_cast<void *>(this),
-              static_cast<uint64_t>(m_read_sp->GetWaitableHandle()),
-              static_cast<void *>(dst), static_cast<uint64_t>(dst_len),
-              static_cast<uint64_t>(bytes_read), error.AsCString());
+    log->Printf("%p ConnectionFileDescriptor::Read()  fd = %" PRIu64
+                ", dst = %p, dst_len = %" PRIu64 ") => %" PRIu64 ", error = %s",
+                static_cast<void *>(this),
+                static_cast<uint64_t>(m_read_sp->GetWaitableHandle()),
+                static_cast<void *>(dst), static_cast<uint64_t>(dst_len),
+                static_cast<uint64_t>(bytes_read), error.AsCString());
   }
 
   if (bytes_read == 0) {
@@ -465,23 +464,16 @@ size_t ConnectionFileDescriptor::Write(const void *src, size_t src_len,
                                        ConnectionStatus &status,
                                        Status *error_ptr) {
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_CONNECTION));
-  LLDB_LOGF(log,
-            "%p ConnectionFileDescriptor::Write (src = %p, src_len = %" PRIu64
-            ")",
-            static_cast<void *>(this), static_cast<const void *>(src),
-            static_cast<uint64_t>(src_len));
+  if (log)
+    log->Printf(
+        "%p ConnectionFileDescriptor::Write (src = %p, src_len = %" PRIu64 ")",
+        static_cast<void *>(this), static_cast<const void *>(src),
+        static_cast<uint64_t>(src_len));
 
   if (!IsConnected()) {
     if (error_ptr)
       error_ptr->SetErrorString("not connected");
     status = eConnectionStatusNoConnection;
-    return 0;
-  }
-
-  if (m_shutting_down) {
-    if (error_ptr)
-      error_ptr->SetErrorString("shutting down");
-    status = eConnectionStatusError;
     return 0;
   }
 
@@ -491,13 +483,13 @@ size_t ConnectionFileDescriptor::Write(const void *src, size_t src_len,
   error = m_write_sp->Write(src, bytes_sent);
 
   if (log) {
-    LLDB_LOGF(log,
-              "%p ConnectionFileDescriptor::Write(fd = %" PRIu64
-              ", src = %p, src_len = %" PRIu64 ") => %" PRIu64 " (error = %s)",
-              static_cast<void *>(this),
-              static_cast<uint64_t>(m_write_sp->GetWaitableHandle()),
-              static_cast<const void *>(src), static_cast<uint64_t>(src_len),
-              static_cast<uint64_t>(bytes_sent), error.AsCString());
+    log->Printf("%p ConnectionFileDescriptor::Write(fd = %" PRIu64
+                ", src = %p, src_len = %" PRIu64 ") => %" PRIu64
+                " (error = %s)",
+                static_cast<void *>(this),
+                static_cast<uint64_t>(m_write_sp->GetWaitableHandle()),
+                static_cast<const void *>(src), static_cast<uint64_t>(src_len),
+                static_cast<uint64_t>(bytes_sent), error.AsCString());
   }
 
   if (error_ptr)
@@ -567,7 +559,7 @@ ConnectionFileDescriptor::BytesAvailable(const Timeout<std::micro> &timeout,
       select_helper.SetTimeout(*timeout);
 
     select_helper.FDSetRead(handle);
-#if defined(_WIN32)
+#if defined(_MSC_VER)
     // select() won't accept pipes on Windows.  The entire Windows codepath
     // needs to be converted over to using WaitForMultipleObjects and event
     // HANDLEs, but for now at least this will allow ::select() to not return
@@ -621,10 +613,10 @@ ConnectionFileDescriptor::BytesAvailable(const Timeout<std::micro> &timeout,
           (void)bytes_read;
           switch (c) {
           case 'q':
-            LLDB_LOGF(log,
-                      "%p ConnectionFileDescriptor::BytesAvailable() "
-                      "got data: %c from the command channel.",
-                      static_cast<void *>(this), c);
+            if (log)
+              log->Printf("%p ConnectionFileDescriptor::BytesAvailable() "
+                          "got data: %c from the command channel.",
+                          static_cast<void *>(this), c);
             return eConnectionStatusEndOfFile;
           case 'i':
             // Interrupt the current read
@@ -653,7 +645,7 @@ ConnectionFileDescriptor::NamedSocketAccept(llvm::StringRef socket_name,
   if (error.Fail()) {
     return eConnectionStatusError;
   }
-  m_uri.assign(std::string(socket_name));
+  m_uri.assign(socket_name);
   return eConnectionStatusSuccess;
 }
 
@@ -670,7 +662,7 @@ ConnectionFileDescriptor::NamedSocketConnect(llvm::StringRef socket_name,
   if (error.Fail()) {
     return eConnectionStatusError;
   }
-  m_uri.assign(std::string(socket_name));
+  m_uri.assign(socket_name);
   return eConnectionStatusSuccess;
 }
 
@@ -687,79 +679,66 @@ ConnectionFileDescriptor::UnixAbstractSocketConnect(llvm::StringRef socket_name,
   if (error.Fail()) {
     return eConnectionStatusError;
   }
-  m_uri.assign(std::string(socket_name));
+  m_uri.assign(socket_name);
   return eConnectionStatusSuccess;
 }
 
 ConnectionStatus
 ConnectionFileDescriptor::SocketListenAndAccept(llvm::StringRef s,
                                                 Status *error_ptr) {
-  if (error_ptr)
-    *error_ptr = Status();
   m_port_predicate.SetValue(0, eBroadcastNever);
 
+  Socket *socket = nullptr;
   m_waiting_for_accept = true;
-  llvm::Expected<std::unique_ptr<TCPSocket>> listening_socket =
-      Socket::TcpListen(s, m_child_processes_inherit, &m_port_predicate);
-  if (!listening_socket) {
-    if (error_ptr)
-      *error_ptr = listening_socket.takeError();
-    else
-      LLDB_LOG_ERROR(GetLogIfAnyCategoriesSet(LIBLLDB_LOG_CONNECTION),
-                     listening_socket.takeError(), "tcp listen failed: {0}");
-    return eConnectionStatusError;
-  }
-
-
-  Socket *accepted_socket;
-  Status error = listening_socket.get()->Accept(accepted_socket);
+  Status error = Socket::TcpListen(s, m_child_processes_inherit, socket,
+                                   &m_port_predicate);
   if (error_ptr)
     *error_ptr = error;
   if (error.Fail())
     return eConnectionStatusError;
 
-  InitializeSocket(accepted_socket);
+  std::unique_ptr<Socket> listening_socket_up;
+
+  listening_socket_up.reset(socket);
+  socket = nullptr;
+  error = listening_socket_up->Accept(socket);
+  listening_socket_up.reset();
+  if (error_ptr)
+    *error_ptr = error;
+  if (error.Fail())
+    return eConnectionStatusError;
+
+  InitializeSocket(socket);
   return eConnectionStatusSuccess;
 }
 
 ConnectionStatus ConnectionFileDescriptor::ConnectTCP(llvm::StringRef s,
                                                       Status *error_ptr) {
+  Socket *socket = nullptr;
+  Status error = Socket::TcpConnect(s, m_child_processes_inherit, socket);
   if (error_ptr)
-    *error_ptr = Status();
-
-  llvm::Expected<std::unique_ptr<Socket>> socket =
-      Socket::TcpConnect(s, m_child_processes_inherit);
-  if (!socket) {
-    if (error_ptr)
-      *error_ptr = socket.takeError();
-    else
-      LLDB_LOG_ERROR(GetLogIfAnyCategoriesSet(LIBLLDB_LOG_CONNECTION),
-                     socket.takeError(), "tcp connect failed: {0}");
+    *error_ptr = error;
+  m_write_sp.reset(socket);
+  m_read_sp = m_write_sp;
+  if (error.Fail()) {
     return eConnectionStatusError;
   }
-  m_write_sp = std::move(*socket);
-  m_read_sp = m_write_sp;
-  m_uri.assign(std::string(s));
+  m_uri.assign(s);
   return eConnectionStatusSuccess;
 }
 
 ConnectionStatus ConnectionFileDescriptor::ConnectUDP(llvm::StringRef s,
                                                       Status *error_ptr) {
+  Socket *socket = nullptr;
+  Status error = Socket::UdpConnect(s, m_child_processes_inherit, socket);
   if (error_ptr)
-    *error_ptr = Status();
-  llvm::Expected<std::unique_ptr<UDPSocket>> socket =
-      Socket::UdpConnect(s, m_child_processes_inherit);
-  if (!socket) {
-    if (error_ptr)
-      *error_ptr = socket.takeError();
-    else
-      LLDB_LOG_ERROR(GetLogIfAnyCategoriesSet(LIBLLDB_LOG_CONNECTION),
-                     socket.takeError(), "tcp connect failed: {0}");
+    *error_ptr = error;
+  m_write_sp.reset(socket);
+  m_read_sp = m_write_sp;
+  if (error.Fail()) {
     return eConnectionStatusError;
   }
-  m_write_sp = std::move(*socket);
-  m_read_sp = m_write_sp;
-  m_uri.assign(std::string(s));
+  m_uri.assign(s);
   return eConnectionStatusSuccess;
 }
 

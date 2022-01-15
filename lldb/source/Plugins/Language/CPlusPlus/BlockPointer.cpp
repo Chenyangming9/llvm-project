@@ -1,4 +1,4 @@
-//===-- BlockPointer.cpp --------------------------------------------------===//
+//===-- BlockPointer.cpp ----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,16 +8,15 @@
 
 #include "BlockPointer.h"
 
-#include "Plugins/ExpressionParser/Clang/ClangASTImporter.h"
-#include "Plugins/ExpressionParser/Clang/ClangPersistentVariables.h"
-#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
+#include "lldb/Symbol/ClangASTContext.h"
+#include "lldb/Symbol/ClangASTImporter.h"
 #include "lldb/Symbol/CompilerType.h"
 #include "lldb/Symbol/TypeSystem.h"
 #include "lldb/Target/Target.h"
+
 #include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/Log.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -40,25 +39,22 @@ public:
       return;
     }
 
-    auto type_system_or_err = target_sp->GetScratchTypeSystemForLanguage(
-        lldb::eLanguageTypeC_plus_plus);
-    if (auto err = type_system_or_err.takeError()) {
-      LLDB_LOG_ERROR(
-          lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DATAFORMATTERS),
-          std::move(err), "Failed to get scratch TypeSystemClang");
+    Status err;
+    TypeSystem *type_system = target_sp->GetScratchTypeSystemForLanguage(
+        &err, lldb::eLanguageTypeC_plus_plus);
+
+    if (!err.Success() || !type_system) {
       return;
     }
 
-    TypeSystemClang *clang_ast_context =
-        llvm::cast<TypeSystemClang>(block_pointer_type.GetTypeSystem());
+    ClangASTContext *clang_ast_context =
+        llvm::dyn_cast<ClangASTContext>(type_system);
 
-    std::shared_ptr<ClangASTImporter> clang_ast_importer;
-    auto *state = target_sp->GetPersistentExpressionStateForLanguage(
-        lldb::eLanguageTypeC_plus_plus);
-    if (state) {
-      auto *persistent_vars = llvm::cast<ClangPersistentVariables>(state);
-      clang_ast_importer = persistent_vars->GetClangASTImporter();
+    if (!clang_ast_context) {
+      return;
     }
+
+    ClangASTImporterSP clang_ast_importer = target_sp->GetClangASTImporter();
 
     if (!clang_ast_importer) {
       return;
@@ -74,12 +70,14 @@ public:
     const CompilerType reserved_type =
         clang_ast_context->GetBasicType(lldb::eBasicTypeInt);
     const char *const FuncPtr_name("__FuncPtr");
+    const CompilerType FuncPtr_type =
+        clang_ast_importer->CopyType(*clang_ast_context, function_pointer_type);
 
     m_block_struct_type = clang_ast_context->CreateStructForIdentifier(
         ConstString(), {{isa_name, isa_type},
                         {flags_name, flags_type},
                         {reserved_name, reserved_type},
-                        {FuncPtr_name, function_pointer_type}});
+                        {FuncPtr_name, FuncPtr_type}});
   }
 
   ~BlockPointerSyntheticFrontEnd() override = default;

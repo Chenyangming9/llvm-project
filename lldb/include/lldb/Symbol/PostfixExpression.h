@@ -17,7 +17,6 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Casting.h"
-#include <vector>
 
 namespace lldb_private {
 
@@ -212,10 +211,7 @@ inline T *MakeNode(llvm::BumpPtrAllocator &alloc, Args &&... args) {
 
 /// Parse the given postfix expression. The parsed nodes are placed into the
 /// provided allocator.
-Node *ParseOneExpression(llvm::StringRef expr, llvm::BumpPtrAllocator &alloc);
-
-std::vector<std::pair<llvm::StringRef, Node *>>
-ParseFPOProgram(llvm::StringRef prog, llvm::BumpPtrAllocator &alloc);
+Node *Parse(llvm::StringRef expr, llvm::BumpPtrAllocator &alloc);
 
 /// Serialize the given expression tree as DWARF. The result is written into the
 /// given stream. The AST should not contain any SymbolNodes. If the expression

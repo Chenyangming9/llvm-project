@@ -14,7 +14,6 @@
 #ifndef LLVM_CLANG_BASIC_TOKENKINDS_H
 #define LLVM_CLANG_BASIC_TOKENKINDS_H
 
-#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/Support/Compiler.h"
 
 namespace clang {
@@ -91,30 +90,15 @@ inline bool isLiteral(TokenKind K) {
 }
 
 /// Return true if this is any of tok::annot_* kinds.
-bool isAnnotation(TokenKind K);
+inline bool isAnnotation(TokenKind K) {
+#define ANNOTATION(NAME) \
+  if (K == tok::annot_##NAME) \
+    return true;
+#include "clang/Basic/TokenKinds.def"
+  return false;
+}
 
-/// Return true if this is an annotation token representing a pragma.
-bool isPragmaAnnotation(TokenKind K);
-
-} // end namespace tok
-} // end namespace clang
-
-namespace llvm {
-template <> struct DenseMapInfo<clang::tok::PPKeywordKind> {
-  static inline clang::tok::PPKeywordKind getEmptyKey() {
-    return clang::tok::PPKeywordKind::pp_not_keyword;
-  }
-  static inline clang::tok::PPKeywordKind getTombstoneKey() {
-    return clang::tok::PPKeywordKind::NUM_PP_KEYWORDS;
-  }
-  static unsigned getHashValue(const clang::tok::PPKeywordKind &Val) {
-    return static_cast<unsigned>(Val);
-  }
-  static bool isEqual(const clang::tok::PPKeywordKind &LHS,
-                      const clang::tok::PPKeywordKind &RHS) {
-    return LHS == RHS;
-  }
-};
-} // namespace llvm
+}  // end namespace tok
+}  // end namespace clang
 
 #endif

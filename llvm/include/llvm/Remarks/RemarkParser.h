@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_REMARKS_REMARKPARSER_H
-#define LLVM_REMARKS_REMARKPARSER_H
+#ifndef LLVM_REMARKS_REMARK_PARSER_H
+#define LLVM_REMARKS_REMARK_PARSER_H
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -22,6 +22,9 @@
 
 namespace llvm {
 namespace remarks {
+
+struct ParserImpl;
+struct ParsedStringTable;
 
 class EndOfFileError : public ErrorInfo<EndOfFileError> {
 public:
@@ -36,13 +39,11 @@ public:
 };
 
 /// Parser used to parse a raw buffer to remarks::Remark objects.
-struct RemarkParser {
+struct Parser {
   /// The format of the parser.
   Format ParserFormat;
-  /// Path to prepend when opening an external remark file.
-  std::string ExternalFilePrependPath;
 
-  RemarkParser(Format ParserFormat) : ParserFormat(ParserFormat) {}
+  Parser(Format ParserFormat) : ParserFormat(ParserFormat) {}
 
   /// If no error occurs, this returns a valid Remark object.
   /// If an error of type EndOfFileError occurs, it is safe to recover from it
@@ -51,7 +52,7 @@ struct RemarkParser {
   /// The pointer should never be null.
   virtual Expected<std::unique_ptr<Remark>> next() = 0;
 
-  virtual ~RemarkParser() = default;
+  virtual ~Parser() = default;
 };
 
 /// In-memory representation of the string table parsed from a buffer (e.g. the
@@ -59,35 +60,18 @@ struct RemarkParser {
 struct ParsedStringTable {
   /// The buffer mapped from the section contents.
   StringRef Buffer;
-  /// This object has high changes to be std::move'd around, so don't use a
-  /// SmallVector for once.
-  std::vector<size_t> Offsets;
+  /// Collection of offsets in the buffer for each string entry.
+  SmallVector<size_t, 8> Offsets;
 
-  ParsedStringTable(StringRef Buffer);
-  /// Disable copy.
-  ParsedStringTable(const ParsedStringTable &) = delete;
-  ParsedStringTable &operator=(const ParsedStringTable &) = delete;
-  /// Should be movable.
-  ParsedStringTable(ParsedStringTable &&) = default;
-  ParsedStringTable &operator=(ParsedStringTable &&) = default;
-
-  size_t size() const { return Offsets.size(); }
   Expected<StringRef> operator[](size_t Index) const;
+  ParsedStringTable(StringRef Buffer);
 };
 
-Expected<std::unique_ptr<RemarkParser>> createRemarkParser(Format ParserFormat,
-                                                           StringRef Buf);
-
-Expected<std::unique_ptr<RemarkParser>>
+Expected<std::unique_ptr<Parser>>
 createRemarkParser(Format ParserFormat, StringRef Buf,
-                   ParsedStringTable StrTab);
-
-Expected<std::unique_ptr<RemarkParser>>
-createRemarkParserFromMeta(Format ParserFormat, StringRef Buf,
-                           Optional<ParsedStringTable> StrTab = None,
-                           Optional<StringRef> ExternalFilePrependPath = None);
+                   Optional<const ParsedStringTable *> StrTab = None);
 
 } // end namespace remarks
 } // end namespace llvm
 
-#endif // LLVM_REMARKS_REMARKPARSER_H
+#endif /* LLVM_REMARKS_REMARK_PARSER_H */

@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 // Tests for stable_partition and partition
 #include "support/pstl_test_config.h"
@@ -57,15 +57,15 @@ is_equal(Iterator first, Iterator last, Iterator d_first)
 
 template <typename Iterator>
 typename std::enable_if<!std::is_trivial<typename std::iterator_traits<Iterator>::value_type>::value, bool>::type
-    is_equal(Iterator, Iterator, Iterator)
+is_equal(Iterator, Iterator, Iterator)
 {
     return true;
 }
 
 struct test_one_policy
 {
-#if defined(_PSTL_ICC_17_VC141_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN) ||                                                             \
-    defined(_PSTL_ICC_16_VC14_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN) //dummy specializations to skip testing in case of broken configuration
+#if _PSTL_ICC_17_VC141_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN ||                                                            \
+    _PSTL_ICC_16_VC14_TEST_SIMD_LAMBDA_DEBUG_32_BROKEN //dummy specializations to skip testing in case of broken configuration
     template <typename BiDirIt, typename Size, typename UnaryOp, typename Generator>
     void
     operator()(pstl::execution::unsequenced_policy, BiDirIt first, BiDirIt last, BiDirIt exp_first, BiDirIt exp_last,
@@ -79,7 +79,7 @@ struct test_one_policy
                BiDirIt exp_last, Size n, UnaryOp unary_op, Generator generator)
     {
     }
-#elif defined(_PSTL_ICC_16_VC14_TEST_PAR_TBB_RT_RELEASE_64_BROKEN) //dummy specializations to skip testing in case of broken configuration
+#elif _PSTL_ICC_16_VC14_TEST_PAR_TBB_RT_RELEASE_64_BROKEN //dummy specializations to skip testing in case of broken configuration
     template <typename BiDirIt, typename Size, typename UnaryOp, typename Generator>
     void
     operator()(pstl::execution::parallel_policy, BiDirIt first, BiDirIt last, BiDirIt exp_first, BiDirIt exp_last,
@@ -97,8 +97,8 @@ struct test_one_policy
 
     template <typename Policy, typename BiDirIt, typename Size, typename UnaryOp, typename Generator>
     typename std::enable_if<!is_same_iterator_category<BiDirIt, std::forward_iterator_tag>::value, void>::type
-    operator()(Policy&& exec, BiDirIt first, BiDirIt last, BiDirIt exp_first, BiDirIt exp_last, Size, UnaryOp unary_op,
-               Generator generator)
+    operator()(Policy&& exec, BiDirIt first, BiDirIt last, BiDirIt exp_first, BiDirIt exp_last, Size,
+               UnaryOp unary_op, Generator generator)
     {
         // partition
         {
@@ -121,7 +121,8 @@ struct test_one_policy
     }
     template <typename Policy, typename BiDirIt, typename Size, typename UnaryOp, typename Generator>
     typename std::enable_if<is_same_iterator_category<BiDirIt, std::forward_iterator_tag>::value, void>::type
-    operator()(Policy&&, BiDirIt, BiDirIt, BiDirIt, BiDirIt, Size, UnaryOp, Generator)
+    operator()(Policy&&, BiDirIt, BiDirIt, BiDirIt, BiDirIt, Size,
+               UnaryOp, Generator)
     {
     }
 };
@@ -160,10 +161,10 @@ struct test_non_const
     }
 };
 
-int
+int32_t
 main()
 {
-#if !defined(_PSTL_ICC_16_17_TEST_REDUCTION_RELEASE_BROKEN)
+#if !_PSTL_ICC_16_17_TEST_REDUCTION_RELEASE_BROKEN
     test_by_type<int32_t>([](int32_t i) { return i; }, [](int32_t) { return true; });
 #endif
     test_by_type<float64_t>([](int32_t i) { return -i; }, [](const float64_t x) { return x < 0; });

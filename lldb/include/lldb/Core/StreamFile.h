@@ -6,52 +6,53 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_STREAMFILE_H
-#define LLDB_CORE_STREAMFILE_H
+#ifndef liblldb_StreamFile_h_
+#define liblldb_StreamFile_h_
 
 #include "lldb/Host/File.h"
 #include "lldb/Utility/Stream.h"
 #include "lldb/lldb-defines.h"
 #include "lldb/lldb-enumerations.h"
 
-#include <cstdint>
-#include <cstdio>
+#include <stdint.h>
+#include <stdio.h>
 
 namespace lldb_private {
 
 class StreamFile : public Stream {
 public:
+  // Constructors and Destructors
+  StreamFile();
+
   StreamFile(uint32_t flags, uint32_t addr_size, lldb::ByteOrder byte_order);
 
   StreamFile(int fd, bool transfer_ownership);
 
-  StreamFile(const char *path, File::OpenOptions options,
+  StreamFile(const char *path);
+
+  StreamFile(const char *path, uint32_t options,
              uint32_t permissions = lldb::eFilePermissionsFileDefault);
 
   StreamFile(FILE *fh, bool transfer_ownership);
 
-  StreamFile(std::shared_ptr<File> file) : m_file_sp(file) { assert(file); };
-
   ~StreamFile() override;
 
-  File &GetFile() { return *m_file_sp; }
+  File &GetFile() { return m_file; }
 
-  const File &GetFile() const { return *m_file_sp; }
-
-  std::shared_ptr<File> GetFileSP() { return m_file_sp; }
+  const File &GetFile() const { return m_file; }
 
   void Flush() override;
 
+
 protected:
   // Classes that inherit from StreamFile can see and modify these
-  std::shared_ptr<File> m_file_sp; // never NULL
+  File m_file;
   size_t WriteImpl(const void *s, size_t length) override;
 
 private:
-  StreamFile(const StreamFile &) = delete;
-  const StreamFile &operator=(const StreamFile &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(StreamFile);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_STREAMFILE_H
+#endif // liblldb_StreamFile_h_

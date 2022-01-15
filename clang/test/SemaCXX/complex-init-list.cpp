@@ -1,4 +1,5 @@
 // RUN: %clang_cc1 %s -verify -fsyntax-only -pedantic
+// expected-no-diagnostics
 
 // This file tests the clang extension which allows initializing the components
 // of a complex number individually using an initialization list. Basically,
@@ -10,4 +11,5 @@
 // test/Sema/complex-init-list.c.
 
 // Basic testcase
-_Complex float valid1 = { 1.0f, 2.0f }; // expected-warning {{'_Complex' is a C99 extension}}
+// (No pedantic warning is necessary because _Complex is not part of C++.)
+_Complex float valid1 = { 1.0f, 2.0f };

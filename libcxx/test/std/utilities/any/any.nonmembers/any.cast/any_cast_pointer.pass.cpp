@@ -6,10 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
-// Throwing bad_any_cast is supported starting in macosx10.13
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11|12}} && !no-exceptions
+// XFAIL: dylib-has-no-bad_any_cast && !libcpp-no-exceptions
 
 // <any>
 
@@ -153,8 +152,8 @@ void test_cast_non_copyable_type()
 void test_cast_array() {
     int arr[3];
     std::any a(arr);
-    RTTI_ASSERT(a.type() == typeid(int*)); // contained value is decayed
-    // We can't get an array out
+    assert(a.type() == typeid(int*)); // contained value is decayed
+//  We can't get an array out
     int (*p)[3] = std::any_cast<int[3]>(&a);
     assert(p == nullptr);
 }

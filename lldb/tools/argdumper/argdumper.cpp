@@ -6,15 +6,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Support/JSON.h"
+#include "lldb/Utility/JSON.h"
+#include "lldb/Utility/StreamString.h"
 
-using namespace llvm;
+#include <iostream>
+
+using namespace lldb_private;
 
 int main(int argc, char *argv[]) {
-  json::Array Arguments;
+  JSONArray::SP arguments(new JSONArray());
   for (int i = 1; i < argc; i++) {
-    Arguments.push_back(argv[i]);
+    arguments->AppendObject(JSONString::SP(new JSONString(argv[i])));
   }
-  llvm::outs() << json::Object({{"arguments", std::move(Arguments)}});
+
+  JSONObject::SP object(new JSONObject());
+  object->SetObject("arguments", arguments);
+
+  StreamString ss;
+
+  object->Write(ss);
+
+  std::cout << ss.GetData() << std::endl;
+
   return 0;
 }

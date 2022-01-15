@@ -6,14 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_STREAMASYNCHRONOUSIO_H
-#define LLDB_CORE_STREAMASYNCHRONOUSIO_H
+#ifndef liblldb_StreamAsynchronousIO_h_
+#define liblldb_StreamAsynchronousIO_h_
 
 #include "lldb/Utility/Stream.h"
 
 #include <string>
 
-#include <cstddef>
+#include <stddef.h>
 
 namespace lldb_private {
 class Debugger;
@@ -37,4 +37,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_STREAMASYNCHRONOUSIO_H
+#endif // liblldb_StreamAsynchronousIO_h

@@ -15,10 +15,11 @@
 #ifndef LLVM_LIB_TARGET_AMDGPU_MCTARGETDESC_AMDGPUHSAMETADATASTREAMER_H
 #define LLVM_LIB_TARGET_AMDGPU_MCTARGETDESC_AMDGPUHSAMETADATASTREAMER_H
 
-#include "Utils/AMDGPUBaseInfo.h"
+#include "AMDGPU.h"
+#include "AMDKernelCodeT.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/Support/AMDGPUMetadata.h"
-#include "llvm/Support/Alignment.h"
 
 namespace llvm {
 
@@ -26,7 +27,6 @@ class AMDGPUTargetStreamer;
 class Argument;
 class DataLayout;
 class Function;
-class MachineFunction;
 class MDNode;
 class Module;
 struct SIProgramInfo;
@@ -41,8 +41,7 @@ public:
 
   virtual bool emitTo(AMDGPUTargetStreamer &TargetStreamer) = 0;
 
-  virtual void begin(const Module &Mod,
-                     const IsaInfo::AMDGPUTargetID &TargetID) = 0;
+  virtual void begin(const Module &Mod) = 0;
 
   virtual void end() = 0;
 
@@ -50,11 +49,10 @@ public:
                           const SIProgramInfo &ProgramInfo) = 0;
 };
 
-// TODO: Rename MetadataStreamerV3 -> MetadataStreamerMsgPackV3.
-class MetadataStreamerV3 : public MetadataStreamer {
-protected:
+class MetadataStreamerV3 final : public MetadataStreamer {
+private:
   std::unique_ptr<msgpack::Document> HSAMetadataDoc =
-      std::make_unique<msgpack::Document>();
+      llvm::make_unique<msgpack::Document>();
 
   void dump(StringRef HSAMetadataString) const;
 
@@ -66,6 +64,8 @@ protected:
 
   StringRef getValueKind(Type *Ty, StringRef TypeQual,
                          StringRef BaseTypeName) const;
+
+  StringRef getValueType(Type *Ty, StringRef TypeName) const;
 
   std::string getTypeName(Type *Ty, bool Signed) const;
 
@@ -87,12 +87,11 @@ protected:
   void emitKernelArg(const Argument &Arg, unsigned &Offset,
                      msgpack::ArrayDocNode Args);
 
-  void emitKernelArg(const DataLayout &DL, Type *Ty, Align Alignment,
-                     StringRef ValueKind, unsigned &Offset,
-                     msgpack::ArrayDocNode Args, MaybeAlign PointeeAlign = None,
-                     StringRef Name = "", StringRef TypeName = "",
-                     StringRef BaseTypeName = "", StringRef AccQual = "",
-                     StringRef TypeQual = "");
+  void emitKernelArg(const DataLayout &DL, Type *Ty, StringRef ValueKind,
+                     unsigned &Offset, msgpack::ArrayDocNode Args,
+                     unsigned PointeeAlign = 0, StringRef Name = "",
+                     StringRef TypeName = "", StringRef BaseTypeName = "",
+                     StringRef AccQual = "", StringRef TypeQual = "");
 
   void emitHiddenKernelArgs(const Function &Func, unsigned &Offset,
                             msgpack::ArrayDocNode Args);
@@ -111,8 +110,7 @@ public:
 
   bool emitTo(AMDGPUTargetStreamer &TargetStreamer) override;
 
-  void begin(const Module &Mod,
-             const IsaInfo::AMDGPUTargetID &TargetID) override;
+  void begin(const Module &Mod) override;
 
   void end() override;
 
@@ -120,21 +118,6 @@ public:
                   const SIProgramInfo &ProgramInfo) override;
 };
 
-// TODO: Rename MetadataStreamerV4 -> MetadataStreamerMsgPackV4.
-class MetadataStreamerV4 final : public MetadataStreamerV3 {
-  void emitVersion();
-
-  void emitTargetID(const IsaInfo::AMDGPUTargetID &TargetID);
-
-public:
-  MetadataStreamerV4() = default;
-  ~MetadataStreamerV4() = default;
-
-  void begin(const Module &Mod,
-             const IsaInfo::AMDGPUTargetID &TargetID) override;
-};
-
-// TODO: Rename MetadataStreamerV2 -> MetadataStreamerYamlV2.
 class MetadataStreamerV2 final : public MetadataStreamer {
 private:
   Metadata HSAMetadata;
@@ -149,6 +132,8 @@ private:
 
   ValueKind getValueKind(Type *Ty, StringRef TypeQual,
                          StringRef BaseTypeName) const;
+
+  ValueType getValueType(Type *Ty, StringRef TypeName) const;
 
   std::string getTypeName(Type *Ty, bool Signed) const;
 
@@ -173,8 +158,8 @@ private:
 
   void emitKernelArg(const Argument &Arg);
 
-  void emitKernelArg(const DataLayout &DL, Type *Ty, Align Alignment,
-                     ValueKind ValueKind, MaybeAlign PointeeAlign = None,
+  void emitKernelArg(const DataLayout &DL, Type *Ty, ValueKind ValueKind,
+                     unsigned PointeeAlign = 0,
                      StringRef Name = "", StringRef TypeName = "",
                      StringRef BaseTypeName = "", StringRef AccQual = "",
                      StringRef TypeQual = "");
@@ -191,8 +176,7 @@ public:
 
   bool emitTo(AMDGPUTargetStreamer &TargetStreamer) override;
 
-  void begin(const Module &Mod,
-             const IsaInfo::AMDGPUTargetID &TargetID) override;
+  void begin(const Module &Mod) override;
 
   void end() override;
 

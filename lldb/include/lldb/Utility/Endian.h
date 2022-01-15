@@ -11,7 +11,7 @@
 
 #include "lldb/lldb-enumerations.h"
 
-#include <cstdint>
+#include <stdint.h>
 
 namespace lldb_private {
 
@@ -30,4 +30,4 @@ inline lldb::ByteOrder InlHostByteOrder() {
 }
 }
 
-#endif // LLDB_UTILITY_ENDIAN_H
+#endif // liblldb_host_endian_h_

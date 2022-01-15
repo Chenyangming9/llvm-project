@@ -11,7 +11,7 @@
 ...
 ---
 name:            test
-alignment:       16
+alignment:       4
 legalized:       false
 regBankSelected: false
 registers:

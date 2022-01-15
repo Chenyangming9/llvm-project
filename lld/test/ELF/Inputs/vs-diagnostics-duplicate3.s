@@ -1,8 +1,6 @@
 .file "duplicate3.s"
 
-.global baz, qux
+.global baz
 .text
 baz:
-  nop
-qux:
   nop

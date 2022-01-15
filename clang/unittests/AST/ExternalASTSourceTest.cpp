@@ -37,7 +37,7 @@ private:
 
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
                                                  StringRef InFile) override {
-    return std::make_unique<ASTConsumer>();
+    return llvm::make_unique<ASTConsumer>();
   }
 
   IntrusiveRefCntPtr<ExternalASTSource> Source;
@@ -53,6 +53,7 @@ bool testExternalASTSource(ExternalASTSource *Source,
       "test.cc", MemoryBuffer::getMemBuffer(FileContents).release());
   const char *Args[] = { "test.cc" };
   CompilerInvocation::CreateFromArgs(*Invocation, Args,
+                                     Args + array_lengthof(Args),
                                      Compiler.getDiagnostics());
   Compiler.setInvocation(std::move(Invocation));
 

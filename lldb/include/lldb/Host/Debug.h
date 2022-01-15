@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_HOST_DEBUG_H
-#define LLDB_HOST_DEBUG_H
+#ifndef liblldb_Debug_h_
+#define liblldb_Debug_h_
 
 #include <vector>
 
@@ -144,14 +144,8 @@ struct ThreadStopInfo {
       uint32_t data_count;
       lldb::addr_t data[8];
     } exception;
-
-    // eStopReasonFork / eStopReasonVFork
-    struct {
-      lldb::pid_t child_pid;
-      lldb::tid_t child_tid;
-    } fork;
   } details;
 };
 }
 
-#endif // LLDB_HOST_DEBUG_H
+#endif // liblldb_Debug_h_

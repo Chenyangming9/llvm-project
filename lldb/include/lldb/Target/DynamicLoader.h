@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TARGET_DYNAMICLOADER_H
-#define LLDB_TARGET_DYNAMICLOADER_H
+#ifndef liblldb_DynamicLoader_h_
+#define liblldb_DynamicLoader_h_
 
 #include "lldb/Core/PluginInterface.h"
 #include "lldb/Utility/FileSpec.h"
@@ -18,8 +18,8 @@
 #include "lldb/lldb-private-enumerations.h"
 #include "lldb/lldb-types.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 namespace lldb_private {
 class ModuleList;
 class Process;
@@ -67,6 +67,12 @@ public:
 
   /// Construct with a process.
   DynamicLoader(Process *process);
+
+  /// Destructor.
+  ///
+  /// The destructor is virtual since this class is designed to be inherited
+  /// from by the plug-in instance.
+  ~DynamicLoader() override;
 
   /// Called after attaching a process.
   ///
@@ -142,9 +148,13 @@ public:
   ///     The equivalent symbol list - any equivalent symbols found are appended
   ///     to this list.
   ///
-  virtual void FindEquivalentSymbols(Symbol *original_symbol,
-                                     ModuleList &module_list,
-                                     SymbolContextList &equivalent_symbols) {}
+  /// \return
+  ///    Number of equivalent symbols found.
+  virtual size_t FindEquivalentSymbols(Symbol *original_symbol,
+                                       ModuleList &module_list,
+                                       SymbolContextList &equivalent_symbols) {
+    return 0;
+  }
 
   /// Ask if it is ok to try and load or unload an shared library (image).
   ///
@@ -251,14 +261,6 @@ public:
     return false;
   }
 
-  /// Return whether the dynamic loader is fully initialized and it's safe to
-  /// call its APIs.
-  ///
-  /// On some systems (e.g. Darwin based systems), lldb will get notified by
-  /// the dynamic loader before it itself finished initializing and it's not
-  /// safe to call certain APIs or SPIs.
-  virtual bool IsFullyInitialized() { return true; }
-
 protected:
   // Utility methods for derived classes
 
@@ -302,7 +304,7 @@ protected:
   // Read a pointer from memory at the given addr. Return LLDB_INVALID_ADDRESS
   // if the read fails.
   lldb::addr_t ReadPointer(lldb::addr_t addr);
-
+  
   // Calls into the Process protected method LoadOperatingSystemPlugin:
   void LoadOperatingSystemPlugin(bool flush);
 
@@ -310,8 +312,11 @@ protected:
   // Member variables.
   Process
       *m_process; ///< The process that this dynamic loader plug-in is tracking.
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(DynamicLoader);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_TARGET_DYNAMICLOADER_H
+#endif // liblldb_DynamicLoader_h_

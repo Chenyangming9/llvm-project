@@ -1,10 +1,7 @@
 import("//llvm/utils/TableGen/tablegen.gni")
 
 tablegen("AArch64GenAsmMatcher") {
-  visibility = [
-    ":AsmParser",
-    "//llvm/lib/Target/AArch64:LLVMAArch64CodeGen",
-  ]
+  visibility = [ ":AsmParser" ]
   args = [ "-gen-asm-matcher" ]
   td_file = "../AArch64.td"
 }
@@ -21,5 +18,7 @@ static_library("AsmParser") {
     "//llvm/lib/Target/AArch64/Utils",
   ]
   include_dirs = [ ".." ]
-  sources = [ "AArch64AsmParser.cpp" ]
+  sources = [
+    "AArch64AsmParser.cpp",
+  ]
 }

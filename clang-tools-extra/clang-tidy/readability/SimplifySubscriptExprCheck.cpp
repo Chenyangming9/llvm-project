@@ -17,22 +17,25 @@ namespace clang {
 namespace tidy {
 namespace readability {
 
-static const char KDefaultTypes[] =
+static const char kDefaultTypes[] =
     "::std::basic_string;::std::basic_string_view;::std::vector;::std::array";
 
 SimplifySubscriptExprCheck::SimplifySubscriptExprCheck(
     StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context), Types(utils::options::parseStringList(
-                                         Options.get("Types", KDefaultTypes))) {
+                                         Options.get("Types", kDefaultTypes))) {
 }
 
 void SimplifySubscriptExprCheck::registerMatchers(MatchFinder *Finder) {
+  if (!getLangOpts().CPlusPlus)
+    return;
+
   const auto TypesMatcher = hasUnqualifiedDesugaredType(
       recordType(hasDeclaration(cxxRecordDecl(hasAnyName(
           llvm::SmallVector<StringRef, 8>(Types.begin(), Types.end()))))));
 
   Finder->addMatcher(
-      arraySubscriptExpr(hasBase(
+      arraySubscriptExpr(hasBase(ignoringParenImpCasts(
           cxxMemberCallExpr(
               has(memberExpr().bind("member")),
               on(hasType(qualType(
@@ -40,7 +43,7 @@ void SimplifySubscriptExprCheck::registerMatchers(MatchFinder *Finder) {
                                hasDescendant(substTemplateTypeParmType()))),
                   anyOf(TypesMatcher, pointerType(pointee(TypesMatcher)))))),
               callee(namedDecl(hasName("data"))))
-              .bind("call"))),
+              .bind("call")))),
       this);
 }
 

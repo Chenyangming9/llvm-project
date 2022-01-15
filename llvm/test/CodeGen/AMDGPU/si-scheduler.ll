@@ -3,15 +3,15 @@
 ; The only way the subtarget knows that the si machine scheduler is being used
 ; is to specify -mattr=si-scheduler.  If we just pass --misched=si, the backend
 ; won't know what scheduler we are using.
-; RUN: llc -march=amdgcn -mcpu=tahiti --misched=si -mattr=si-scheduler < %s | FileCheck %s
+; RUN: llc -march=amdgcn --misched=si -mattr=si-scheduler < %s | FileCheck %s
 ; RUN: llc -march=amdgcn -mcpu=gfx1010 --misched=si -mattr=si-scheduler < %s | FileCheck %s
 
 ; The test checks the "si" machine scheduler pass works correctly.
 
 ; CHECK-LABEL: {{^}}main:
 ; CHECK: s_wqm
-; CHECK: s_load_dwordx8
 ; CHECK: s_load_dwordx4
+; CHECK: s_load_dwordx8
 ; CHECK: s_waitcnt lgkmcnt(0)
 ; CHECK: image_sample
 ; CHECK: s_waitcnt vmcnt(0)
@@ -65,7 +65,7 @@ attributes #2 = { nounwind readonly }
 
 
 ; CHECK-LABEL: amdgpu_ps_main:
-; CHECK: s_buffer_load_dword
+; CHECK s_buffer_load_dword
 define amdgpu_ps void @_amdgpu_ps_main(i32 %arg) local_unnamed_addr {
 .entry:
   %tmp = insertelement <2 x i32> zeroinitializer, i32 %arg, i32 0

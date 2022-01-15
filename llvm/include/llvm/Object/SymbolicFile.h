@@ -18,6 +18,7 @@
 #include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include <cinttypes>
@@ -64,16 +65,12 @@ inline bool operator<(const DataRefImpl &a, const DataRefImpl &b) {
   return std::memcmp(&a, &b, sizeof(DataRefImpl)) < 0;
 }
 
-template <class content_type> class content_iterator {
+template <class content_type>
+class content_iterator
+    : public std::iterator<std::forward_iterator_tag, content_type> {
   content_type Current;
 
 public:
-  using iterator_category = std::forward_iterator_tag;
-  using value_type = content_type;
-  using difference_type = std::ptrdiff_t;
-  using pointer = value_type *;
-  using reference = value_type &;
-
   content_iterator(content_type symb) : Current(std::move(symb)) {}
 
   const content_type *operator->() const { return &Current; }
@@ -132,7 +129,7 @@ public:
   Error printName(raw_ostream &OS) const;
 
   /// Get symbol flags (bitwise OR of SymbolRef::Flags)
-  Expected<uint32_t> getFlags() const;
+  uint32_t getFlags() const;
 
   DataRefImpl getRawDataRefImpl() const;
   const SymbolicFile *getObject() const;
@@ -150,7 +147,7 @@ public:
 
   virtual Error printSymbolName(raw_ostream &OS, DataRefImpl Symb) const = 0;
 
-  virtual Expected<uint32_t> getSymbolFlags(DataRefImpl Symb) const = 0;
+  virtual uint32_t getSymbolFlags(DataRefImpl Symb) const = 0;
 
   virtual basic_symbol_iterator symbol_begin() const = 0;
 
@@ -165,18 +162,18 @@ public:
   // construction aux.
   static Expected<std::unique_ptr<SymbolicFile>>
   createSymbolicFile(MemoryBufferRef Object, llvm::file_magic Type,
-                     LLVMContext *Context, bool InitContent = true);
+                     LLVMContext *Context);
 
   static Expected<std::unique_ptr<SymbolicFile>>
   createSymbolicFile(MemoryBufferRef Object) {
     return createSymbolicFile(Object, llvm::file_magic::unknown, nullptr);
   }
+  static Expected<OwningBinary<SymbolicFile>>
+  createSymbolicFile(StringRef ObjectPath);
 
   static bool classof(const Binary *v) {
     return v->isSymbolic();
   }
-
-  static bool isSymbolicFile(file_magic Type, const LLVMContext *Context);
 };
 
 inline BasicSymbolRef::BasicSymbolRef(DataRefImpl SymbolP,
@@ -199,7 +196,7 @@ inline Error BasicSymbolRef::printName(raw_ostream &OS) const {
   return OwningObject->printSymbolName(OS, SymbolPimpl);
 }
 
-inline Expected<uint32_t> BasicSymbolRef::getFlags() const {
+inline uint32_t BasicSymbolRef::getFlags() const {
   return OwningObject->getSymbolFlags(SymbolPimpl);
 }
 

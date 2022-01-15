@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONVALUES_H
-#define LLDB_INTERPRETER_OPTIONVALUES_H
+#ifndef liblldb_OptionValues_h_
+#define liblldb_OptionValues_h_
 
 #include "lldb/Interpreter/OptionValue.h"
 #include "lldb/Interpreter/OptionValueArch.h"
@@ -17,7 +17,6 @@
 #include "lldb/Interpreter/OptionValueChar.h"
 #include "lldb/Interpreter/OptionValueDictionary.h"
 #include "lldb/Interpreter/OptionValueEnumeration.h"
-#include "lldb/Interpreter/OptionValueFileColonLine.h"
 #include "lldb/Interpreter/OptionValueFileSpec.h"
 #include "lldb/Interpreter/OptionValueFileSpecList.h"
 #include "lldb/Interpreter/OptionValueFormat.h"
@@ -31,4 +30,4 @@
 #include "lldb/Interpreter/OptionValueUInt64.h"
 #include "lldb/Interpreter/OptionValueUUID.h"
 
-#endif // LLDB_INTERPRETER_OPTIONVALUES_H
+#endif // liblldb_OptionValues_h_

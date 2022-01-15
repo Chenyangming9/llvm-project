@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <utility>
 
@@ -19,8 +19,8 @@
 #include <memory>
 #include <cassert>
 
-#include "archetypes.h"
-#include "test_convertible.h"
+#include "archetypes.hpp"
+#include "test_convertible.hpp"
 
 #include "test_macros.h"
 using namespace ImplicitTypes; // Get implicitly archetypes

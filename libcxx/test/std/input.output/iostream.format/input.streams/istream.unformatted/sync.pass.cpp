@@ -111,7 +111,6 @@ int main(int, char**)
         assert( is.bad());
         assert(!is.eof());
         assert( is.fail());
-        assert(threw);
     }
     {
         throwing_testbuf<wchar_t> sb(L" 123456789");
@@ -126,7 +125,6 @@ int main(int, char**)
         assert( is.bad());
         assert(!is.eof());
         assert( is.fail());
-        assert(threw);
     }
 #endif
 

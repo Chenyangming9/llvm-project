@@ -2,6 +2,9 @@
 target datalayout = "E-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v128:128:128-n32:64"
 target triple = "powerpc64-unknown-linux-gnu"
 
+; XFAIL: *
+; SE needs improvement
+
 ; CHECK: test_pos1_ir_slt
 ; CHECK: bdnz
 ; a < b
@@ -32,6 +35,7 @@ for.end:                                          ; preds = %for.body, %entry
 
 
 ; CHECK: test_pos2_ir_slt
+; FIXME: Support this loop!
 ; CHECK: bdnz
 ; a < b
 define void @test_pos2_ir_slt(i8* nocapture %p, i32 %a, i32 %b) nounwind {
@@ -61,6 +65,7 @@ for.end:                                          ; preds = %for.body, %entry
 
 
 ; CHECK: test_pos4_ir_slt
+; FIXME: Support this loop!
 ; CHECK: bdnz
 ; a < b
 define void @test_pos4_ir_slt(i8* nocapture %p, i32 %a, i32 %b) nounwind {

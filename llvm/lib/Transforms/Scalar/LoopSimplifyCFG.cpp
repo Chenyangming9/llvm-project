@@ -16,13 +16,13 @@
 #include "llvm/Transforms/Scalar/LoopSimplifyCFG.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/DependenceAnalysis.h"
 #include "llvm/Analysis/DomTreeUpdater.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/LoopInfo.h"
-#include "llvm/Analysis/LoopIterator.h"
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/MemorySSA.h"
 #include "llvm/Analysis/MemorySSAUpdater.h"
@@ -30,9 +30,6 @@
 #include "llvm/Analysis/ScalarEvolutionAliasAnalysis.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/Dominators.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Utils.h"
@@ -365,20 +362,15 @@ private:
 
     unsigned DummyIdx = 1;
     for (BasicBlock *BB : DeadExitBlocks) {
-      // Eliminate all Phis and LandingPads from dead exits.
-      // TODO: Consider removing all instructions in this dead block.
-      SmallVector<Instruction *, 4> DeadInstructions;
+      SmallVector<Instruction *, 4> DeadPhis;
       for (auto &PN : BB->phis())
-        DeadInstructions.push_back(&PN);
+        DeadPhis.push_back(&PN);
 
-      if (auto *LandingPad = dyn_cast<LandingPadInst>(BB->getFirstNonPHI()))
-        DeadInstructions.emplace_back(LandingPad);
-
-      for (Instruction *I : DeadInstructions) {
-        I->replaceAllUsesWith(UndefValue::get(I->getType()));
-        I->eraseFromParent();
+      // Eliminate all Phis from dead exits.
+      for (Instruction *PN : DeadPhis) {
+        PN->replaceAllUsesWith(UndefValue::get(PN->getType()));
+        PN->eraseFromParent();
       }
-
       assert(DummyIdx != 0 && "Too many dead exits!");
       DummySwitch->addCase(Builder.getInt32(DummyIdx++), BB);
       DTUpdates.push_back({DominatorTree::Insert, Preheader, BB});
@@ -414,10 +406,9 @@ private:
           FixLCSSALoop = FixLCSSALoop->getParentLoop();
         assert(FixLCSSALoop && "Should be a loop!");
         // We need all DT updates to be done before forming LCSSA.
+        DTU.applyUpdates(DTUpdates);
         if (MSSAU)
-          MSSAU->applyUpdates(DTUpdates, DT, /*UpdateDT=*/true);
-        else
-          DTU.applyUpdates(DTUpdates);
+          MSSAU->applyUpdates(DTUpdates, DT);
         DTUpdates.clear();
         formLCSSARecursively(*FixLCSSALoop, DT, &LI, &SE);
       }
@@ -425,7 +416,8 @@ private:
 
     if (MSSAU) {
       // Clear all updates now. Facilitates deletes that follow.
-      MSSAU->applyUpdates(DTUpdates, DT, /*UpdateDT=*/true);
+      DTU.applyUpdates(DTUpdates);
+      MSSAU->applyUpdates(DTUpdates, DT);
       DTUpdates.clear();
       if (VerifyMemorySSA)
         MSSAU->getMemorySSA()->verifyMemorySSA();
@@ -451,7 +443,7 @@ private:
       if (LI.isLoopHeader(BB)) {
         assert(LI.getLoopFor(BB) != &L && "Attempt to remove current loop!");
         Loop *DL = LI.getLoopFor(BB);
-        if (!DL->isOutermost()) {
+        if (DL->getParentLoop()) {
           for (auto *PL = DL->getParentLoop(); PL; PL = PL->getParentLoop())
             for (auto *BB : DL->getBlocks())
               PL->removeBlockFromLoop(BB);
@@ -668,9 +660,6 @@ static bool mergeBlocksIntoPredecessors(Loop &L, DominatorTree &DT,
     // Merge Succ into Pred and delete it.
     MergeBlockIntoPredecessor(Succ, &DTU, &LI, MSSAU);
 
-    if (MSSAU && VerifyMemorySSA)
-      MSSAU->getMemorySSA()->verifyMemorySSA();
-
     Changed = true;
   }
 
@@ -679,13 +668,13 @@ static bool mergeBlocksIntoPredecessors(Loop &L, DominatorTree &DT,
 
 static bool simplifyLoopCFG(Loop &L, DominatorTree &DT, LoopInfo &LI,
                             ScalarEvolution &SE, MemorySSAUpdater *MSSAU,
-                            bool &IsLoopDeleted) {
+                            bool &isLoopDeleted) {
   bool Changed = false;
 
   // Constant-fold terminators with known constant conditions.
-  Changed |= constantFoldTerminators(L, DT, LI, SE, MSSAU, IsLoopDeleted);
+  Changed |= constantFoldTerminators(L, DT, LI, SE, MSSAU, isLoopDeleted);
 
-  if (IsLoopDeleted)
+  if (isLoopDeleted)
     return true;
 
   // Eliminate unconditional branches by merging blocks into their predecessors.
@@ -701,7 +690,7 @@ PreservedAnalyses LoopSimplifyCFGPass::run(Loop &L, LoopAnalysisManager &AM,
                                            LoopStandardAnalysisResults &AR,
                                            LPMUpdater &LPMU) {
   Optional<MemorySSAUpdater> MSSAU;
-  if (AR.MSSA)
+  if (EnableMSSALoopDependency && AR.MSSA)
     MSSAU = MemorySSAUpdater(AR.MSSA);
   bool DeleteCurrentLoop = false;
   if (!simplifyLoopCFG(L, AR.DT, AR.LI, AR.SE,
@@ -713,7 +702,7 @@ PreservedAnalyses LoopSimplifyCFGPass::run(Loop &L, LoopAnalysisManager &AM,
     LPMU.markLoopAsDeleted(L, "loop-simplifycfg");
 
   auto PA = getLoopPassPreservedAnalyses();
-  if (AR.MSSA)
+  if (EnableMSSALoopDependency)
     PA.preserve<MemorySSAAnalysis>();
   return PA;
 }
@@ -758,7 +747,7 @@ public:
     getLoopAnalysisUsage(AU);
   }
 };
-} // end namespace
+}
 
 char LoopSimplifyCFGLegacyPass::ID = 0;
 INITIALIZE_PASS_BEGIN(LoopSimplifyCFGLegacyPass, "loop-simplifycfg",

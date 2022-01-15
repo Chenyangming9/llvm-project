@@ -10,8 +10,8 @@
 // sources.
 //
 //===----------------------------------------------------------------------===//
-#ifndef LLVM_XRAY_FILEHEADERREADER_H
-#define LLVM_XRAY_FILEHEADERREADER_H
+#ifndef LLVM_LIB_XRAY_FILEHEADERREADER_H_
+#define LLVM_LIB_XRAY_FILEHEADERREADER_H_
 
 #include "llvm/Support/DataExtractor.h"
 #include "llvm/Support/Error.h"
@@ -24,9 +24,9 @@ namespace xray {
 /// Convenience function for loading the file header given a data extractor at a
 /// specified offset.
 Expected<XRayFileHeader> readBinaryFormatHeader(DataExtractor &HeaderExtractor,
-                                                uint64_t &OffsetPtr);
+                                                uint32_t &OffsetPtr);
 
 } // namespace xray
 } // namespace llvm
 
-#endif // LLVM_XRAY_FILEHEADERREADER_H
+#endif // LLVM_LIB_XRAY_FILEHEADERREADER_H_

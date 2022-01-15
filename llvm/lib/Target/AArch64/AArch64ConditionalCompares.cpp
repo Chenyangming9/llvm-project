@@ -33,7 +33,6 @@
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -157,7 +156,7 @@ public:
   MachineInstr *CmpMI;
 
 private:
-  /// The branch condition in Head as determined by analyzeBranch.
+  /// The branch condition in Head as determined by AnalyzeBranch.
   SmallVector<MachineOperand, 4> HeadCond;
 
   /// The condition code that makes Head branch to CmpBB.
@@ -221,7 +220,7 @@ bool SSACCmpConv::trivialTailPHIs() {
     // PHI operands come in (VReg, MBB) pairs.
     for (unsigned oi = 1, oe = I.getNumOperands(); oi != oe; oi += 2) {
       MachineBasicBlock *MBB = I.getOperand(oi + 1).getMBB();
-      Register Reg = I.getOperand(oi).getReg();
+      unsigned Reg = I.getOperand(oi).getReg();
       if (MBB == Head) {
         assert((!HeadReg || HeadReg == Reg) && "Inconsistent PHI operands");
         HeadReg = Reg;
@@ -260,14 +259,14 @@ bool SSACCmpConv::isDeadDef(unsigned DstReg) {
   // Writes to the zero register are dead.
   if (DstReg == AArch64::WZR || DstReg == AArch64::XZR)
     return true;
-  if (!Register::isVirtualRegister(DstReg))
+  if (!TargetRegisterInfo::isVirtualRegister(DstReg))
     return false;
   // A virtual register def without any uses will be marked dead later, and
   // eventually replaced by the zero register.
   return MRI->use_nodbg_empty(DstReg);
 }
 
-// Parse a condition code returned by analyzeBranch, and compute the CondCode
+// Parse a condition code returned by AnalyzeBranch, and compute the CondCode
 // corresponding to TBB.
 // Return
 static bool parseCond(ArrayRef<MachineOperand> Cond, AArch64CC::CondCode &CC) {
@@ -317,7 +316,7 @@ MachineInstr *SSACCmpConv::findConvertibleCompare(MachineBasicBlock *MBB) {
 
   // Now find the instruction controlling the terminator.
   for (MachineBasicBlock::iterator B = MBB->begin(); I != B;) {
-    I = prev_nodbg(I, MBB->begin());
+    --I;
     assert(!I->isTerminator() && "Spurious terminator");
     switch (I->getOpcode()) {
     // cmp is an alias for subs with a dead destination register.
@@ -352,7 +351,8 @@ MachineInstr *SSACCmpConv::findConvertibleCompare(MachineBasicBlock *MBB) {
     }
 
     // Check for flag reads and clobbers.
-    PhysRegInfo PRI = AnalyzePhysRegInBundle(*I, AArch64::NZCV, TRI);
+    MIOperands::PhysRegInfo PRI =
+        MIOperands(*I).analyzePhysReg(AArch64::NZCV, TRI);
 
     if (PRI.Read) {
       // The ccmp doesn't produce exactly the same flags as the original
@@ -509,7 +509,7 @@ bool SSACCmpConv::canConvert(MachineBasicBlock *MBB) {
   // landing pad.
   if (!TBB || HeadCond.empty()) {
     LLVM_DEBUG(
-        dbgs() << "analyzeBranch didn't find conditional branch in Head.\n");
+        dbgs() << "AnalyzeBranch didn't find conditional branch in Head.\n");
     ++NumHeadBranchRejs;
     return false;
   }
@@ -536,7 +536,7 @@ bool SSACCmpConv::canConvert(MachineBasicBlock *MBB) {
 
   if (!TBB || CmpBBCond.empty()) {
     LLVM_DEBUG(
-        dbgs() << "analyzeBranch didn't find conditional branch in CmpBB.\n");
+        dbgs() << "AnalyzeBranch didn't find conditional branch in CmpBB.\n");
     ++NumCmpBranchRejs;
     return false;
   }
@@ -631,7 +631,7 @@ void SSACCmpConv::convert(SmallVectorImpl<MachineBasicBlock *> &RemovedBlocks) {
     }
     const MCInstrDesc &MCID = TII->get(Opc);
     // Create a dummy virtual register for the SUBS def.
-    Register DestReg =
+    unsigned DestReg =
         MRI->createVirtualRegister(TII->getRegClass(MCID, 0, TRI, *MF));
     // Insert a SUBS Rn, #0 instruction instead of the cbz / cbnz.
     BuildMI(*Head, Head->end(), TermDL, MCID)
@@ -710,7 +710,7 @@ void SSACCmpConv::convert(SmallVectorImpl<MachineBasicBlock *> &RemovedBlocks) {
         .add(CmpMI->getOperand(1)); // Branch target.
   }
   CmpMI->eraseFromParent();
-  Head->updateTerminator(CmpBB->getNextNode());
+  Head->updateTerminator();
 
   RemovedBlocks.push_back(CmpBB);
   CmpBB->eraseFromParent();
@@ -828,7 +828,7 @@ void AArch64ConditionalCompares::updateDomTree(
     assert(Node != HeadNode && "Cannot erase the head node");
     assert(Node->getIDom() == HeadNode && "CmpBB should be dominated by Head");
     while (Node->getNumChildren())
-      DomTree->changeImmediateDominator(Node->back(), HeadNode);
+      DomTree->changeImmediateDominator(Node->getChildren().back(), HeadNode);
     DomTree->eraseNode(RemovedMBB);
   }
 }

@@ -24,7 +24,7 @@ AST_MATCHER_P(Stmt, IgnoringTemporaries, ast_matchers::internal::Matcher<Stmt>,
   const Stmt *E = &Node;
   while (true) {
     if (const auto *MTE = dyn_cast<MaterializeTemporaryExpr>(E))
-      E = MTE->getSubExpr();
+      E = MTE->getTemporary();
     if (const auto *BTE = dyn_cast<CXXBindTemporaryExpr>(E))
       E = BTE->getSubExpr();
     if (const auto *ICE = dyn_cast<ImplicitCastExpr>(E))
@@ -42,6 +42,8 @@ AST_MATCHER_P(Stmt, IgnoringTemporaries, ast_matchers::internal::Matcher<Stmt>,
 //       str.append(StrCat(...))
 
 void StrCatAppendCheck::registerMatchers(MatchFinder *Finder) {
+  if (!getLangOpts().CPlusPlus)
+  	return;
   const auto StrCat = functionDecl(hasName("::absl::StrCat"));
   // The arguments of absl::StrCat are implicitly converted to AlphaNum. This 
   // matches to the arguments because of that behavior. 
@@ -58,17 +60,14 @@ void StrCatAppendCheck::registerMatchers(MatchFinder *Finder) {
   // StrCat on the RHS. The first argument of the StrCat call should be the same
   // as the LHS. Ignore calls from template instantiations.
   Finder->addMatcher(
-      traverse(TK_AsIs,
-               cxxOperatorCallExpr(
-                   unless(isInTemplateInstantiation()),
-                   hasOverloadedOperatorName("="),
-                   hasArgument(0, declRefExpr(to(decl().bind("LHS")))),
-                   hasArgument(
-                       1, IgnoringTemporaries(
-                              callExpr(callee(StrCat), hasArgument(0, AlphaNum),
-                                       unless(HasAnotherReferenceToLhs))
-                                  .bind("Call"))))
-                   .bind("Op")),
+      cxxOperatorCallExpr(
+          unless(isInTemplateInstantiation()), hasOverloadedOperatorName("="),
+          hasArgument(0, declRefExpr(to(decl().bind("LHS")))),
+          hasArgument(1, IgnoringTemporaries(
+                             callExpr(callee(StrCat), hasArgument(0, AlphaNum),
+                                      unless(HasAnotherReferenceToLhs))
+                                 .bind("Call"))))
+          .bind("Op"),
       this);
 }
 

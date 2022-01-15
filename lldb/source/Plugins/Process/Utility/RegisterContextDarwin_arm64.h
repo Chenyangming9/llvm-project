@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERCONTEXTDARWIN_ARM64_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERCONTEXTDARWIN_ARM64_H
+#ifndef liblldb_RegisterContextDarwin_arm64_h_
+#define liblldb_RegisterContextDarwin_arm64_h_
 
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/lldb-private.h"
@@ -73,7 +73,7 @@ public:
   };
 
   struct VReg {
-    alignas(16) char bytes[16];
+    llvm::AlignedCharArray<16, 16> bytes;
   };
 
   // mirrors <mach/arm/thread_status.h> arm_neon_state64_t
@@ -228,4 +228,4 @@ protected:
   static const lldb_private::RegisterInfo *GetRegisterInfos();
 };
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERCONTEXTDARWIN_ARM64_H
+#endif // liblldb_RegisterContextDarwin_arm64_h_

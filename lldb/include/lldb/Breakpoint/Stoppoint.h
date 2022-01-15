@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_BREAKPOINT_STOPPOINT_H
-#define LLDB_BREAKPOINT_STOPPOINT_H
+#ifndef liblldb_Stoppoint_h_
+#define liblldb_Stoppoint_h_
 
 #include "lldb/Utility/UserID.h"
 #include "lldb/lldb-private.h"
@@ -33,14 +33,13 @@ public:
   void SetID(lldb::break_id_t bid);
 
 protected:
-  lldb::break_id_t m_bid = LLDB_INVALID_BREAK_ID;
+  lldb::break_id_t m_bid;
 
 private:
   // For Stoppoint only
-  Stoppoint(const Stoppoint &) = delete;
-  const Stoppoint &operator=(const Stoppoint &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(Stoppoint);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_BREAKPOINT_STOPPOINT_H
+#endif // liblldb_Stoppoint_h_

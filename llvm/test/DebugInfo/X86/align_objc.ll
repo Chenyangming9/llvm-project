@@ -1,4 +1,5 @@
-; RUN: llc -filetype=obj < %s | llvm-dwarfdump -debug-info - | FileCheck %s
+; RUN: %llc_dwarf -filetype=obj < %s | llvm-dwarfdump -debug-info - | FileCheck %s
+; REQUIRES: object-emission
 
 ; typedef struct __attribute__((aligned (128))) {
 ;   char c;

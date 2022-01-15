@@ -25,10 +25,8 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCTargetOptionsCommandFlags.h"
-#include "llvm/Pass.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/LEB128.h"
+#include "llvm/MC/MCTargetOptionsCommandFlags.inc"
+#include "llvm/PassAnalysisSupport.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
@@ -37,8 +35,6 @@
 
 using namespace llvm;
 using namespace dwarf;
-
-mc::RegisterMCTargetOptionsFlags MOF;
 
 namespace {} // end anonymous namespace
 
@@ -168,8 +164,8 @@ DWARFDebugLine::Prologue dwarfgen::LineTable::createBasicPrologue() const {
     P.PrologueLength = 36;
     break;
   case 5:
-    P.TotalLength = 50;
-    P.PrologueLength = 42;
+    P.TotalLength = 47;
+    P.PrologueLength = 39;
     P.FormParams.AddrSize = AddrSize;
     break;
   default:
@@ -179,7 +175,6 @@ DWARFDebugLine::Prologue dwarfgen::LineTable::createBasicPrologue() const {
     P.TotalLength += 4;
     P.FormParams.Format = DWARF64;
   }
-  P.TotalLength += getContentsSize();
   P.FormParams.Version = Version;
   P.MinInstLength = 1;
   P.MaxOpsPerInst = 1;
@@ -239,7 +234,7 @@ void dwarfgen::LineTable::generate(MCContext &MC, AsmPrinter &Asm) const {
 
   writeData(Contents, Asm);
   if (EndSymbol != nullptr)
-    Asm.OutStreamer->emitLabel(EndSymbol);
+    Asm.OutStreamer->EmitLabel(EndSymbol);
 }
 
 void dwarfgen::LineTable::writeData(ArrayRef<ValueAndLength> Data,
@@ -250,47 +245,29 @@ void dwarfgen::LineTable::writeData(ArrayRef<ValueAndLength> Data,
     case Half:
     case Long:
     case Quad:
-      Asm.OutStreamer->emitIntValue(Entry.Value, Entry.Length);
+      Asm.OutStreamer->EmitIntValue(Entry.Value, Entry.Length);
       continue;
     case ULEB:
-      Asm.emitULEB128(Entry.Value);
+      Asm.EmitULEB128(Entry.Value);
       continue;
     case SLEB:
-      Asm.emitSLEB128(Entry.Value);
+      Asm.EmitSLEB128(Entry.Value);
       continue;
     }
     llvm_unreachable("unsupported ValueAndLength Length value");
   }
 }
 
-size_t dwarfgen::LineTable::getContentsSize() const {
-  size_t Size = 0;
-  for (auto Entry : Contents) {
-    switch (Entry.Length) {
-    case ULEB:
-      Size += getULEB128Size(Entry.Value);
-      break;
-    case SLEB:
-      Size += getSLEB128Size(Entry.Value);
-      break;
-    default:
-      Size += Entry.Length;
-      break;
-    }
-  }
-  return Size;
-}
-
 MCSymbol *dwarfgen::LineTable::writeDefaultPrologue(AsmPrinter &Asm) const {
   MCSymbol *UnitStart = Asm.createTempSymbol("line_unit_start");
   MCSymbol *UnitEnd = Asm.createTempSymbol("line_unit_end");
   if (Format == DwarfFormat::DWARF64) {
-    Asm.emitInt32((int)dwarf::DW_LENGTH_DWARF64);
-    Asm.emitLabelDifference(UnitEnd, UnitStart, 8);
+    Asm.emitInt32(0xffffffff);
+    Asm.EmitLabelDifference(UnitEnd, UnitStart, 8);
   } else {
-    Asm.emitLabelDifference(UnitEnd, UnitStart, 4);
+    Asm.EmitLabelDifference(UnitEnd, UnitStart, 4);
   }
-  Asm.OutStreamer->emitLabel(UnitStart);
+  Asm.OutStreamer->EmitLabel(UnitStart);
   Asm.emitInt16(Version);
   if (Version == 5) {
     Asm.emitInt8(AddrSize);
@@ -299,19 +276,19 @@ MCSymbol *dwarfgen::LineTable::writeDefaultPrologue(AsmPrinter &Asm) const {
 
   MCSymbol *PrologueStart = Asm.createTempSymbol("line_prologue_start");
   MCSymbol *PrologueEnd = Asm.createTempSymbol("line_prologue_end");
-  Asm.emitLabelDifference(PrologueEnd, PrologueStart,
+  Asm.EmitLabelDifference(PrologueEnd, PrologueStart,
                           Format == DwarfFormat::DWARF64 ? 8 : 4);
-  Asm.OutStreamer->emitLabel(PrologueStart);
+  Asm.OutStreamer->EmitLabel(PrologueStart);
 
   DWARFDebugLine::Prologue DefaultPrologue = createBasicPrologue();
   writeProloguePayload(DefaultPrologue, Asm);
-  Asm.OutStreamer->emitLabel(PrologueEnd);
+  Asm.OutStreamer->EmitLabel(PrologueEnd);
   return UnitEnd;
 }
 
 void dwarfgen::LineTable::writePrologue(AsmPrinter &Asm) const {
   if (Format == DwarfFormat::DWARF64) {
-    Asm.emitInt32((int)dwarf::DW_LENGTH_DWARF64);
+    Asm.emitInt32(0xffffffff);
     Asm.emitInt64(Prologue->TotalLength);
   } else {
     Asm.emitInt32(Prologue->TotalLength);
@@ -330,7 +307,7 @@ void dwarfgen::LineTable::writePrologue(AsmPrinter &Asm) const {
 }
 
 static void writeCString(StringRef Str, AsmPrinter &Asm) {
-  Asm.OutStreamer->emitBytes(Str);
+  Asm.OutStreamer->EmitBytes(Str);
   Asm.emitInt8(0);
 }
 
@@ -345,9 +322,9 @@ static void writeV2IncludeAndFileTable(const DWARFDebugLine::Prologue &Prologue,
   for (auto File : Prologue.FileNames) {
     assert(File.Name.getAsCString() && "expected a string form for file name");
     writeCString(*File.Name.getAsCString(), Asm);
-    Asm.emitULEB128(File.DirIdx);
-    Asm.emitULEB128(File.ModTime);
-    Asm.emitULEB128(File.Length);
+    Asm.EmitULEB128(File.DirIdx);
+    Asm.EmitULEB128(File.ModTime);
+    Asm.EmitULEB128(File.Length);
   }
   Asm.emitInt8(0);
 }
@@ -357,24 +334,21 @@ static void writeV5IncludeAndFileTable(const DWARFDebugLine::Prologue &Prologue,
   Asm.emitInt8(1); // directory_entry_format_count.
   // TODO: Add support for other content descriptions - we currently only
   // support a single DW_LNCT_path/DW_FORM_string.
-  Asm.emitULEB128(DW_LNCT_path);
-  Asm.emitULEB128(DW_FORM_string);
-  Asm.emitULEB128(Prologue.IncludeDirectories.size());
+  Asm.EmitULEB128(DW_LNCT_path);
+  Asm.EmitULEB128(DW_FORM_string);
+  Asm.EmitULEB128(Prologue.IncludeDirectories.size());
   for (auto Include : Prologue.IncludeDirectories) {
     assert(Include.getAsCString() && "expected a string form for include dir");
     writeCString(*Include.getAsCString(), Asm);
   }
 
-  Asm.emitInt8(2); // file_name_entry_format_count.
-  Asm.emitULEB128(DW_LNCT_path);
-  Asm.emitULEB128(DW_FORM_string);
-  Asm.emitULEB128(DW_LNCT_directory_index);
-  Asm.emitULEB128(DW_FORM_data1);
-  Asm.emitULEB128(Prologue.FileNames.size());
+  Asm.emitInt8(1); // file_name_entry_format_count.
+  Asm.EmitULEB128(DW_LNCT_path);
+  Asm.EmitULEB128(DW_FORM_string);
+  Asm.EmitULEB128(Prologue.FileNames.size());
   for (auto File : Prologue.FileNames) {
     assert(File.Name.getAsCString() && "expected a string form for file name");
     writeCString(*File.Name.getAsCString(), Asm);
-    Asm.emitInt8(File.DirIdx);
   }
 }
 
@@ -402,9 +376,8 @@ void dwarfgen::LineTable::writeProloguePayload(
 //===----------------------------------------------------------------------===//
 
 dwarfgen::Generator::Generator()
-    : MAB(nullptr), MCE(nullptr), MS(nullptr), TLOF(nullptr),
-      StringPool(nullptr), Abbreviations(Allocator),
-      StringOffsetsStartSym(nullptr), Version(0) {}
+    : MAB(nullptr), MCE(nullptr), MS(nullptr), StringPool(nullptr),
+      Abbreviations(Allocator) {}
 dwarfgen::Generator::~Generator() = default;
 
 llvm::Expected<std::unique_ptr<dwarfgen::Generator>>
@@ -436,8 +409,7 @@ llvm::Error dwarfgen::Generator::init(Triple TheTriple, uint16_t V) {
                                        TripleName,
                                    inconvertibleErrorCode());
 
-  MCTargetOptions MCOptions = mc::InitMCTargetOptionsFromFlags();
-  MAI.reset(TheTarget->createMCAsmInfo(*MRI, TripleName, MCOptions));
+  MAI.reset(TheTarget->createMCAsmInfo(*MRI, TripleName));
   if (!MAI)
     return make_error<StringError>("no asm info for target " + TripleName,
                                    inconvertibleErrorCode());
@@ -447,6 +419,7 @@ llvm::Error dwarfgen::Generator::init(Triple TheTriple, uint16_t V) {
     return make_error<StringError>("no subtarget info for target " + TripleName,
                                    inconvertibleErrorCode());
 
+  MCTargetOptions MCOptions = InitMCTargetOptionsFromFlags();
   MAB = TheTarget->createMCAsmBackend(*MSTI, *MRI, MCOptions);
   if (!MAB)
     return make_error<StringError>("no asm backend for target " + TripleName,
@@ -464,17 +437,16 @@ llvm::Error dwarfgen::Generator::init(Triple TheTriple, uint16_t V) {
     return make_error<StringError>("no target machine for target " + TripleName,
                                    inconvertibleErrorCode());
 
-  MC.reset(new MCContext(TheTriple, MAI.get(), MRI.get(), MSTI.get()));
   TLOF = TM->getObjFileLowering();
+  MC.reset(new MCContext(MAI.get(), MRI.get(), TLOF));
   TLOF->Initialize(*MC, *TM);
-  MC->setObjectFileInfo(TLOF);
 
   MCE = TheTarget->createMCCodeEmitter(*MII, *MRI, *MC);
   if (!MCE)
     return make_error<StringError>("no code emitter for target " + TripleName,
                                    inconvertibleErrorCode());
 
-  Stream = std::make_unique<raw_svector_ostream>(FileBytes);
+  Stream = make_unique<raw_svector_ostream>(FileBytes);
 
   MS = TheTarget->createMCObjectStreamer(
       TheTriple, *MC, std::unique_ptr<MCAsmBackend>(MAB),
@@ -497,7 +469,7 @@ llvm::Error dwarfgen::Generator::init(Triple TheTriple, uint16_t V) {
   MC->setDwarfVersion(Version);
   Asm->setDwarfVersion(Version);
 
-  StringPool = std::make_unique<DwarfStringPool>(Allocator, *Asm, StringRef());
+  StringPool = llvm::make_unique<DwarfStringPool>(Allocator, *Asm, StringRef());
   StringOffsetsStartSym = Asm->createTempSymbol("str_offsets_base");
 
   return Error::success();
@@ -505,7 +477,7 @@ llvm::Error dwarfgen::Generator::init(Triple TheTriple, uint16_t V) {
 
 StringRef dwarfgen::Generator::generate() {
   // Offset from the first CU in the debug info section is 0 initially.
-  uint64_t SecOffset = 0;
+  unsigned SecOffset = 0;
 
   // Iterate over each compile unit and set the size and offsets for each
   // DIE within each compile unit. All offsets are CU relative.
@@ -559,7 +531,7 @@ bool dwarfgen::Generator::saveFile(StringRef Path) {
   if (FileBytes.empty())
     return false;
   std::error_code EC;
-  raw_fd_ostream Strm(Path, EC, sys::fs::OF_None);
+  raw_fd_ostream Strm(Path, EC, sys::fs::F_None);
   if (EC)
     return false;
   Strm.write(FileBytes.data(), FileBytes.size());
@@ -569,12 +541,12 @@ bool dwarfgen::Generator::saveFile(StringRef Path) {
 
 dwarfgen::CompileUnit &dwarfgen::Generator::addCompileUnit() {
   CompileUnits.push_back(
-      std::make_unique<CompileUnit>(*this, Version, Asm->getPointerSize()));
+      make_unique<CompileUnit>(*this, Version, Asm->getPointerSize()));
   return *CompileUnits.back();
 }
 
 dwarfgen::LineTable &dwarfgen::Generator::addLineTable(DwarfFormat Format) {
   LineTables.push_back(
-      std::make_unique<LineTable>(Version, Format, Asm->getPointerSize()));
+      make_unique<LineTable>(Version, Format, Asm->getPointerSize()));
   return *LineTables.back();
 }

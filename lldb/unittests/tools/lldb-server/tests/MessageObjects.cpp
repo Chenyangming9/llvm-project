@@ -1,4 +1,4 @@
-//===-- MessageObjects.cpp ------------------------------------------------===//
+//===-- MessageObjects.cpp --------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -96,8 +96,7 @@ Expected<JThreadsInfo> JThreadsInfo::create(StringRef Response,
                                             ArrayRef<RegisterInfo> RegInfos) {
   JThreadsInfo jthreads_info;
 
-  StructuredData::ObjectSP json =
-      StructuredData::ParseJSON(std::string(Response));
+  StructuredData::ObjectSP json = StructuredData::ParseJSON(Response);
   StructuredData::Array *array = json->GetAsArray();
   if (!array)
     return make_parsing_error("JThreadsInfo: JSON array");
@@ -171,7 +170,7 @@ Expected<RegisterInfo> RegisterInfoParser::create(StringRef Response) {
   Info.byte_size /= CHAR_BIT;
 
   if (!to_integer(Elements["offset"], Info.byte_offset, 10))
-    Info.byte_offset = LLDB_INVALID_INDEX32;
+    return make_parsing_error("qRegisterInfo: offset");
 
   Info.encoding = Args::StringToEncoding(Elements["encoding"]);
   if (Info.encoding == eEncodingInvalid)
@@ -320,7 +319,7 @@ StopReplyStop::create(StringRef Response, support::endianness Endian,
   if (!RegistersOr)
     return RegistersOr.takeError();
 
-  return std::make_unique<StopReplyStop>(Signal, Thread, Name,
+  return llvm::make_unique<StopReplyStop>(Signal, Thread, Name,
                                           std::move(ThreadPcs),
                                           std::move(*RegistersOr), Reason);
 }
@@ -330,7 +329,7 @@ StopReplyExit::create(StringRef Response) {
   uint8_t Status;
   if (!to_integer(Response, Status, 16))
     return make_parsing_error("StopReply: exit status");
-  return std::make_unique<StopReplyExit>(Status);
+  return llvm::make_unique<StopReplyExit>(Status);
 }
 
 //====== Globals ===============================================================

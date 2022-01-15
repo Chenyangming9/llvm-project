@@ -14,7 +14,6 @@
 
 class a {
 public:
-  a();
   ~a();
 };
 class logger_base {

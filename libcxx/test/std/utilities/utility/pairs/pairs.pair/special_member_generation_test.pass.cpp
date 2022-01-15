@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <utility>
 
@@ -24,7 +24,7 @@
 #include <string>
 #include <tuple>
 
-#include "archetypes.h"
+#include "archetypes.hpp"
 
 #include "test_macros.h"
 using namespace ImplicitTypes; // Get implicitly archetypes

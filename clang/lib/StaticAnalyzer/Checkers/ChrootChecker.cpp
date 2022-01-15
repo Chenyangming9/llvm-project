@@ -127,7 +127,7 @@ void ChrootChecker::checkPreCall(const CallEvent &Call,
           BT_BreakJail.reset(new BuiltinBug(
               this, "Break out of jail", "No call of chdir(\"/\") immediately "
                                          "after chroot"));
-        C.emitReport(std::make_unique<PathSensitiveBugReport>(
+        C.emitReport(llvm::make_unique<BugReport>(
             *BT_BreakJail, BT_BreakJail->getDescription(), N));
       }
 }
@@ -136,6 +136,6 @@ void ento::registerChrootChecker(CheckerManager &mgr) {
   mgr.registerChecker<ChrootChecker>();
 }
 
-bool ento::shouldRegisterChrootChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterChrootChecker(const LangOptions &LO) {
   return true;
 }

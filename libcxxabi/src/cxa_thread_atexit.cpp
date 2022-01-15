@@ -10,12 +10,12 @@
 #include "cxxabi.h"
 #include <__threading_support>
 #ifndef _LIBCXXABI_HAS_NO_THREADS
-#if defined(__ELF__) && defined(_LIBCXXABI_LINK_PTHREAD_LIB)
+#if defined(__unix__) &&  defined(__ELF__) && defined(_LIBCXXABI_HAS_COMMENT_LIB_PRAGMA)
 #pragma comment(lib, "pthread")
 #endif
 #endif
 
-#include <stdlib.h>
+#include <cstdlib>
 
 namespace __cxxabiv1 {
 
@@ -77,7 +77,7 @@ namespace {
     while (auto head = dtors) {
       dtors = head->next;
       head->dtor(head->obj);
-      ::free(head);
+      std::free(head);
     }
 
     dtors_alive = false;
@@ -126,7 +126,7 @@ extern "C" {
         dtors_alive = true;
       }
 
-      auto head = static_cast<DtorList*>(::malloc(sizeof(DtorList)));
+      auto head = static_cast<DtorList*>(std::malloc(sizeof(DtorList)));
       if (!head) {
         return -1;
       }

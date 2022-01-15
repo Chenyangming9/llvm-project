@@ -34,8 +34,8 @@
 ; RUN: chmod 400 %t3.obj.imports
 ; RUN: not lld-link -entry:main -thinlto-index-only \
 ; RUN:     -thinlto-emit-imports-files %t1.obj %t2.obj %t3.obj \
-; RUN:     -out:%t4.exe 2>&1 | FileCheck -DMSG=%errc_EACCES %s --check-prefix=ERR
-; ERR: cannot open {{.*}}3.obj.imports: [[MSG]]
+; RUN:     -out:%t4.exe 2>&1 | FileCheck %s --check-prefix=ERR
+; ERR: cannot open {{.*}}3.obj.imports: {{P|p}}ermission denied
 
 ; Ensure lld doesn't generate import files when thinlto-index-only is not enabled
 ; RUN: rm -f %t1.obj.imports
@@ -47,7 +47,7 @@
 ; RUN: not ls %t2.obj.imports
 ; RUN: not ls %t3.obj.imports
 
-target datalayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target datalayout = "e-m:w-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-windows-msvc19.0.24215"
 
 declare void @g(...)

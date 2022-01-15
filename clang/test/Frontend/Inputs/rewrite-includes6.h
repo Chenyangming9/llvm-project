@@ -1,2 +1,2 @@
 #pragma once
-int included_line6;
+included_line6

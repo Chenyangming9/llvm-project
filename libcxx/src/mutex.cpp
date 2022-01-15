@@ -13,7 +13,7 @@
 #include "__undef_macros"
 
 #ifndef _LIBCPP_HAS_NO_THREADS
-#if defined(__ELF__) && defined(_LIBCPP_LINK_PTHREAD_LIB)
+#if defined(__unix__) &&  defined(__ELF__) && defined(_LIBCPP_HAS_COMMENT_LIB_PRAGMA)
 #pragma comment(lib, "pthread")
 #endif
 #endif
@@ -21,9 +21,9 @@
 _LIBCPP_BEGIN_NAMESPACE_STD
 #ifndef _LIBCPP_HAS_NO_THREADS
 
-const defer_lock_t  defer_lock{};
-const try_to_lock_t try_to_lock{};
-const adopt_lock_t  adopt_lock{};
+const defer_lock_t  defer_lock = {};
+const try_to_lock_t try_to_lock = {};
+const adopt_lock_t  adopt_lock = {};
 
 // ~mutex is defined elsewhere
 
@@ -36,13 +36,13 @@ mutex::lock()
 }
 
 bool
-mutex::try_lock() noexcept
+mutex::try_lock() _NOEXCEPT
 {
     return __libcpp_mutex_trylock(&__m_);
 }
 
 void
-mutex::unlock() noexcept
+mutex::unlock() _NOEXCEPT
 {
     int ec = __libcpp_mutex_unlock(&__m_);
     (void)ec;
@@ -74,7 +74,7 @@ recursive_mutex::lock()
 }
 
 void
-recursive_mutex::unlock() noexcept
+recursive_mutex::unlock() _NOEXCEPT
 {
     int e = __libcpp_recursive_mutex_unlock(&__m_);
     (void)e;
@@ -82,7 +82,7 @@ recursive_mutex::unlock() noexcept
 }
 
 bool
-recursive_mutex::try_lock() noexcept
+recursive_mutex::try_lock() _NOEXCEPT
 {
     return __libcpp_recursive_mutex_trylock(&__m_);
 }
@@ -109,7 +109,7 @@ timed_mutex::lock()
 }
 
 bool
-timed_mutex::try_lock() noexcept
+timed_mutex::try_lock() _NOEXCEPT
 {
     unique_lock<mutex> lk(__m_, try_to_lock);
     if (lk.owns_lock() && !__locked_)
@@ -121,7 +121,7 @@ timed_mutex::try_lock() noexcept
 }
 
 void
-timed_mutex::unlock() noexcept
+timed_mutex::unlock() _NOEXCEPT
 {
     lock_guard<mutex> _(__m_);
     __locked_ = false;
@@ -160,7 +160,7 @@ recursive_timed_mutex::lock()
 }
 
 bool
-recursive_timed_mutex::try_lock() noexcept
+recursive_timed_mutex::try_lock() _NOEXCEPT
 {
     __thread_id id = this_thread::get_id();
     unique_lock<mutex> lk(__m_, try_to_lock);
@@ -176,7 +176,7 @@ recursive_timed_mutex::try_lock() noexcept
 }
 
 void
-recursive_timed_mutex::unlock() noexcept
+recursive_timed_mutex::unlock() _NOEXCEPT
 {
     unique_lock<mutex> lk(__m_);
     if (--__count_ == 0)
@@ -209,7 +209,7 @@ void __call_once(volatile once_flag::_State_type& flag, void* arg,
 #ifndef _LIBCPP_NO_EXCEPTIONS
         try
         {
-#endif // _LIBCPP_NO_EXCEPTIONS
+#endif  // _LIBCPP_NO_EXCEPTIONS
             flag = 1;
             func(arg);
             flag = ~once_flag::_State_type(0);
@@ -220,7 +220,7 @@ void __call_once(volatile once_flag::_State_type& flag, void* arg,
             flag = 0;
             throw;
         }
-#endif // _LIBCPP_NO_EXCEPTIONS
+#endif  // _LIBCPP_NO_EXCEPTIONS
     }
 #else // !_LIBCPP_HAS_NO_THREADS
     __libcpp_mutex_lock(&mut);
@@ -231,7 +231,7 @@ void __call_once(volatile once_flag::_State_type& flag, void* arg,
 #ifndef _LIBCPP_NO_EXCEPTIONS
         try
         {
-#endif // _LIBCPP_NO_EXCEPTIONS
+#endif  // _LIBCPP_NO_EXCEPTIONS
             __libcpp_relaxed_store(&flag, once_flag::_State_type(1));
             __libcpp_mutex_unlock(&mut);
             func(arg);
@@ -250,7 +250,7 @@ void __call_once(volatile once_flag::_State_type& flag, void* arg,
             __libcpp_condvar_broadcast(&cv);
             throw;
         }
-#endif // _LIBCPP_NO_EXCEPTIONS
+#endif  // _LIBCPP_NO_EXCEPTIONS
     }
     else
         __libcpp_mutex_unlock(&mut);

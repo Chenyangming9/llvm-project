@@ -17,7 +17,7 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "constexpr_char_traits.h"
+#include "constexpr_char_traits.hpp"
 
 template <class S>
 void

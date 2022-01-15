@@ -22,7 +22,6 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Bitstream/BitCodes.h"
 #include "llvm/Bitstream/BitstreamReader.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 #include <utility>
 
@@ -239,9 +238,6 @@ private:
   /// generated from child processes.
   bool MergeChildRecords;
 
-  /// Whether we've started finishing and tearing down this instance.
-  bool IsFinishing = false;
-
   /// State that is shared among the various clones of this diagnostic
   /// consumer.
   struct SharedState {
@@ -300,7 +296,7 @@ namespace clang {
 namespace serialized_diags {
 std::unique_ptr<DiagnosticConsumer>
 create(StringRef OutputFile, DiagnosticOptions *Diags, bool MergeChildRecords) {
-  return std::make_unique<SDiagsWriter>(OutputFile, Diags, MergeChildRecords);
+  return llvm::make_unique<SDiagsWriter>(OutputFile, Diags, MergeChildRecords);
 }
 
 } // end namespace serialized_diags
@@ -571,17 +567,6 @@ unsigned SDiagsWriter::getEmitDiagnosticFlag(StringRef FlagName) {
 
 void SDiagsWriter::HandleDiagnostic(DiagnosticsEngine::Level DiagLevel,
                                     const Diagnostic &Info) {
-  assert(!IsFinishing &&
-         "Received a diagnostic after we've already started teardown.");
-  if (IsFinishing) {
-    SmallString<256> diagnostic;
-    Info.FormatDiagnostic(diagnostic);
-    getMetaDiags()->Report(
-        diag::warn_fe_serialized_diag_failure_during_finalisation)
-        << diagnostic;
-    return;
-  }
-
   // Enter the block for a non-note diagnostic immediately, rather than waiting
   // for beginDiagnostic, in case associated notes are emitted before we get
   // there.
@@ -758,7 +743,7 @@ DiagnosticsEngine *SDiagsWriter::getMetaDiags() {
     IntrusiveRefCntPtr<DiagnosticIDs> IDs(new DiagnosticIDs());
     auto Client =
         new TextDiagnosticPrinter(llvm::errs(), State->DiagOpts.get());
-    State->MetaDiagnostics = std::make_unique<DiagnosticsEngine>(
+    State->MetaDiagnostics = llvm::make_unique<DiagnosticsEngine>(
         IDs, State->DiagOpts.get(), Client);
   }
   return State->MetaDiagnostics.get();
@@ -775,9 +760,6 @@ void SDiagsWriter::RemoveOldDiagnostics() {
 }
 
 void SDiagsWriter::finish() {
-  assert(!IsFinishing);
-  IsFinishing = true;
-
   // The original instance is responsible for writing the file.
   if (!OriginalInstance)
     return;
@@ -798,25 +780,17 @@ void SDiagsWriter::finish() {
   }
 
   std::error_code EC;
-  auto OS = std::make_unique<llvm::raw_fd_ostream>(State->OutputFile.c_str(),
-                                                    EC, llvm::sys::fs::OF_None);
+  auto OS = llvm::make_unique<llvm::raw_fd_ostream>(State->OutputFile.c_str(),
+                                                    EC, llvm::sys::fs::F_None);
   if (EC) {
     getMetaDiags()->Report(diag::warn_fe_serialized_diag_failure)
         << State->OutputFile << EC.message();
-    OS->clear_error();
     return;
   }
 
   // Write the generated bitstream to "Out".
   OS->write((char *)&State->Buffer.front(), State->Buffer.size());
   OS->flush();
-
-  assert(!OS->has_error());
-  if (OS->has_error()) {
-    getMetaDiags()->Report(diag::warn_fe_serialized_diag_failure)
-        << State->OutputFile << OS->error().message();
-    OS->clear_error();
-  }
 }
 
 std::error_code SDiagsMerger::visitStartOfDiagnostic() {

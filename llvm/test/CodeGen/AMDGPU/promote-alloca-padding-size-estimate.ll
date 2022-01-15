@@ -1,12 +1,10 @@
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=kaveri --amdhsa-code-object-version=2 -disable-promote-alloca-to-vector -amdgpu-enable-lower-module-lds=0 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=kaveri -mattr=-code-object-v3 -disable-promote-alloca-to-vector < %s | FileCheck -check-prefix=GCN %s
 
-; This shows that the amount LDS size estimate should try to not be
-; sensitive to the order of the LDS globals. This should try to
-; estimate the worst case padding behavior to avoid overallocating
-; LDS.
+; This shows that the amount of LDS estimate is sensitive to the order
+; of the LDS globals.
 
-; These functions use the same amount of LDS, but the total, final
-; size changes depending on the visit order of first use.
+; Both of these functions use the same amount of LDS, but the total
+; changes depending on the visit order of first use.
 
 ; The one with the suboptimal order resulting in extra padding exceeds
 ; the desired limit
@@ -31,7 +29,7 @@
 
 
 ; GCN-LABEL: {{^}}promote_alloca_size_order_0:
-; GCN: workgroup_group_segment_byte_size = 1060
+; GCN: workgroup_group_segment_byte_size = 2340
 define amdgpu_kernel void @promote_alloca_size_order_0(i32 addrspace(1)* nocapture %out, i32 addrspace(1)* nocapture %in, i32 %idx) #0 {
 entry:
   %stack = alloca [5 x i32], align 4, addrspace(5)
@@ -63,7 +61,7 @@ entry:
 }
 
 ; GCN-LABEL: {{^}}promote_alloca_size_order_1:
-; GCN: workgroup_group_segment_byte_size = 1072
+; GCN: workgroup_group_segment_byte_size = 2352
 define amdgpu_kernel void @promote_alloca_size_order_1(i32 addrspace(1)* nocapture %out, i32 addrspace(1)* nocapture %in, i32 %idx) #0 {
 entry:
   %stack = alloca [5 x i32], align 4, addrspace(5)

@@ -159,10 +159,10 @@ roundss     $1, (%rax), %xmm2
 # CHECK-NEXT:  1      4     1.00    *                   blendpd	$11, (%rax), %xmm2
 # CHECK-NEXT:  1      1     1.00                        blendps	$11, %xmm0, %xmm2
 # CHECK-NEXT:  1      4     1.00    *                   blendps	$11, (%rax), %xmm2
-# CHECK-NEXT:  3      4     4.00                        blendvpd	%xmm0, %xmm0, %xmm2
-# CHECK-NEXT:  3      7     4.00    *                   blendvpd	%xmm0, (%rax), %xmm2
-# CHECK-NEXT:  3      4     4.00                        blendvps	%xmm0, %xmm0, %xmm2
-# CHECK-NEXT:  3      7     4.00    *                   blendvps	%xmm0, (%rax), %xmm2
+# CHECK-NEXT:  1      1     1.00                        blendvpd	%xmm0, %xmm0, %xmm2
+# CHECK-NEXT:  1      4     1.00    *                   blendvpd	%xmm0, (%rax), %xmm2
+# CHECK-NEXT:  1      1     1.00                        blendvps	%xmm0, %xmm0, %xmm2
+# CHECK-NEXT:  1      4     1.00    *                   blendvps	%xmm0, (%rax), %xmm2
 # CHECK-NEXT:  1      3     1.00                        dppd	$22, %xmm0, %xmm2
 # CHECK-NEXT:  1      6     1.00    *                   dppd	$22, (%rax), %xmm2
 # CHECK-NEXT:  1      3     1.00                        dpps	$22, %xmm0, %xmm2
@@ -180,8 +180,8 @@ roundss     $1, (%rax), %xmm2
 # CHECK-NEXT:  1      4     1.00    *                   pblendvb	%xmm0, (%rax), %xmm2
 # CHECK-NEXT:  1      1     1.00                        pblendw	$11, %xmm0, %xmm2
 # CHECK-NEXT:  1      4     1.00    *                   pblendw	$11, (%rax), %xmm2
-# CHECK-NEXT:  2      4     2.00                        pcmpeqq	%xmm0, %xmm2
-# CHECK-NEXT:  3      7     2.00    *                   pcmpeqq	(%rax), %xmm2
+# CHECK-NEXT:  1      1     0.50                        pcmpeqq	%xmm0, %xmm2
+# CHECK-NEXT:  1      4     1.00    *                   pcmpeqq	(%rax), %xmm2
 # CHECK-NEXT:  1      1     1.00                        pextrb	$1, %xmm0, %ecx
 # CHECK-NEXT:  2      4     2.00           *            pextrb	$1, %xmm0, (%rax)
 # CHECK-NEXT:  1      1     1.00                        pextrd	$1, %xmm0, %ecx
@@ -237,8 +237,8 @@ roundss     $1, (%rax), %xmm2
 # CHECK-NEXT:  1      4     1.00    *                   pmovzxwd	(%rax), %xmm2
 # CHECK-NEXT:  1      1     1.00                        pmovzxwq	%xmm0, %xmm2
 # CHECK-NEXT:  1      4     1.00    *                   pmovzxwq	(%rax), %xmm2
-# CHECK-NEXT:  2      5     2.00                        pmuldq	%xmm0, %xmm2
-# CHECK-NEXT:  2      8     2.00    *                   pmuldq	(%rax), %xmm2
+# CHECK-NEXT:  1      4     1.00                        pmuldq	%xmm0, %xmm2
+# CHECK-NEXT:  1      7     1.00    *                   pmuldq	(%rax), %xmm2
 # CHECK-NEXT:  1      4     1.00                        pmulld	%xmm0, %xmm2
 # CHECK-NEXT:  1      7     1.00    *                   pmulld	(%rax), %xmm2
 # CHECK-NEXT:  1      1     0.50                        ptest	%xmm0, %xmm1
@@ -264,7 +264,7 @@ roundss     $1, (%rax), %xmm2
 
 # CHECK:      Resource pressure per iteration:
 # CHECK-NEXT: [0]    [1]    [2]    [3]    [4]    [5]    [6]    [7]
-# CHECK-NEXT:  -      -      -     90.00  25.00   -      -     54.00
+# CHECK-NEXT:  -      -      -     73.00  22.00   -      -     54.00
 
 # CHECK:      Resource pressure by instruction:
 # CHECK-NEXT: [0]    [1]    [2]    [3]    [4]    [5]    [6]    [7]    Instructions:
@@ -272,10 +272,10 @@ roundss     $1, (%rax), %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -     1.00   blendpd	$11, (%rax), %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -      -     blendps	$11, %xmm0, %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -     1.00   blendps	$11, (%rax), %xmm2
-# CHECK-NEXT:  -      -      -     4.00    -      -      -      -     blendvpd	%xmm0, %xmm0, %xmm2
-# CHECK-NEXT:  -      -      -     4.00    -      -      -     1.00   blendvpd	%xmm0, (%rax), %xmm2
-# CHECK-NEXT:  -      -      -     4.00    -      -      -      -     blendvps	%xmm0, %xmm0, %xmm2
-# CHECK-NEXT:  -      -      -     4.00    -      -      -     1.00   blendvps	%xmm0, (%rax), %xmm2
+# CHECK-NEXT:  -      -      -     1.00    -      -      -      -     blendvpd	%xmm0, %xmm0, %xmm2
+# CHECK-NEXT:  -      -      -     1.00    -      -      -     1.00   blendvpd	%xmm0, (%rax), %xmm2
+# CHECK-NEXT:  -      -      -     1.00    -      -      -      -     blendvps	%xmm0, %xmm0, %xmm2
+# CHECK-NEXT:  -      -      -     1.00    -      -      -     1.00   blendvps	%xmm0, (%rax), %xmm2
 # CHECK-NEXT:  -      -      -      -     1.00    -      -      -     dppd	$22, %xmm0, %xmm2
 # CHECK-NEXT:  -      -      -      -     1.00    -      -     1.00   dppd	$22, (%rax), %xmm2
 # CHECK-NEXT:  -      -      -      -     1.00    -      -      -     dpps	$22, %xmm0, %xmm2
@@ -293,8 +293,8 @@ roundss     $1, (%rax), %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -     1.00   pblendvb	%xmm0, (%rax), %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -      -     pblendw	$11, %xmm0, %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -     1.00   pblendw	$11, (%rax), %xmm2
-# CHECK-NEXT:  -      -      -     2.00   2.00    -      -      -     pcmpeqq	%xmm0, %xmm2
-# CHECK-NEXT:  -      -      -     2.00   2.00    -      -     1.00   pcmpeqq	(%rax), %xmm2
+# CHECK-NEXT:  -      -      -     0.50   0.50    -      -      -     pcmpeqq	%xmm0, %xmm2
+# CHECK-NEXT:  -      -      -     0.50   0.50    -      -     1.00   pcmpeqq	(%rax), %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -      -     pextrb	$1, %xmm0, %ecx
 # CHECK-NEXT:  -      -      -     1.00    -      -      -     2.00   pextrb	$1, %xmm0, (%rax)
 # CHECK-NEXT:  -      -      -     1.00    -      -      -      -     pextrd	$1, %xmm0, %ecx
@@ -350,8 +350,8 @@ roundss     $1, (%rax), %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -     1.00   pmovzxwd	(%rax), %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -      -     pmovzxwq	%xmm0, %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -     1.00   pmovzxwq	(%rax), %xmm2
-# CHECK-NEXT:  -      -      -     2.00    -      -      -      -     pmuldq	%xmm0, %xmm2
-# CHECK-NEXT:  -      -      -     2.00    -      -      -     1.00   pmuldq	(%rax), %xmm2
+# CHECK-NEXT:  -      -      -     1.00    -      -      -      -     pmuldq	%xmm0, %xmm2
+# CHECK-NEXT:  -      -      -     1.00    -      -      -     1.00   pmuldq	(%rax), %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -      -     pmulld	%xmm0, %xmm2
 # CHECK-NEXT:  -      -      -     1.00    -      -      -     1.00   pmulld	(%rax), %xmm2
 # CHECK-NEXT:  -      -      -     0.50   0.50    -      -      -     ptest	%xmm0, %xmm1

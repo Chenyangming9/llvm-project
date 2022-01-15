@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TARGET_STACKFRAMELIST_H
-#define LLDB_TARGET_STACKFRAMELIST_H
+#ifndef liblldb_StackFrameList_h_
+#define liblldb_StackFrameList_h_
 
 #include <memory>
 #include <mutex>
@@ -89,9 +89,12 @@ protected:
 
   bool SetFrameAtIndex(uint32_t idx, lldb::StackFrameSP &frame_sp);
 
+  static void Merge(std::unique_ptr<StackFrameList> &curr_up,
+                    lldb::StackFrameListSP &prev_sp);
+
   void GetFramesUpTo(uint32_t end_idx);
 
-  void GetOnlyConcreteFramesUpTo(uint32_t end_idx, Unwind &unwinder);
+  void GetOnlyConcreteFramesUpTo(uint32_t end_idx, Unwind *unwinder);
 
   void SynthesizeTailCallFrames(StackFrame &next_frame);
 
@@ -152,10 +155,9 @@ protected:
   const bool m_show_inlined_frames;
 
 private:
-  StackFrameList(const StackFrameList &) = delete;
-  const StackFrameList &operator=(const StackFrameList &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(StackFrameList);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_TARGET_STACKFRAMELIST_H
+#endif // liblldb_StackFrameList_h_

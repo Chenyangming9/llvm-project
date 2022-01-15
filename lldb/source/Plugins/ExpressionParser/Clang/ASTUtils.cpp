@@ -1,4 +1,4 @@
-//===-- ASTUtils.cpp ------------------------------------------------------===//
+//===-- ASTUtils.cpp --------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,17 +8,17 @@
 
 #include "ASTUtils.h"
 
-lldb_private::ExternalASTSourceWrapper::~ExternalASTSourceWrapper() = default;
+lldb_private::ExternalASTSourceWrapper::~ExternalASTSourceWrapper() {}
 
 void lldb_private::ExternalASTSourceWrapper::PrintStats() {
   m_Source->PrintStats();
 }
 
-lldb_private::ASTConsumerForwarder::~ASTConsumerForwarder() = default;
+lldb_private::ASTConsumerForwarder::~ASTConsumerForwarder() {}
 
 void lldb_private::ASTConsumerForwarder::PrintStats() { m_c->PrintStats(); }
 
-lldb_private::SemaSourceWithPriorities::~SemaSourceWithPriorities() = default;
+lldb_private::SemaSourceWithPriorities::~SemaSourceWithPriorities() {}
 
 void lldb_private::SemaSourceWithPriorities::PrintStats() {
   for (size_t i = 0; i < Sources.size(); ++i)

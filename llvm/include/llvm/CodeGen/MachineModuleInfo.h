@@ -33,7 +33,6 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PointerIntPair.h"
-#include "llvm/IR/PassManager.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Pass.h"
@@ -54,8 +53,8 @@ class Module;
 //===----------------------------------------------------------------------===//
 /// This class can be derived from and used by targets to hold private
 /// target-specific information for each Module.  Objects of type are
-/// accessed/created with MachineModuleInfo::getObjFileInfo and destroyed when
-/// the MachineModuleInfo is destroyed.
+/// accessed/created with MMI::getInfo and destroyed when the MachineModuleInfo
+/// is destroyed.
 ///
 class MachineModuleInfoImpl {
 public:
@@ -75,17 +74,11 @@ protected:
 /// made by different debugging and exception handling schemes and reformated
 /// for specific use.
 ///
-class MachineModuleInfo {
-  friend class MachineModuleInfoWrapperPass;
-  friend class MachineModuleAnalysis;
-
+class MachineModuleInfo : public ImmutablePass {
   const LLVMTargetMachine &TM;
 
   /// This is the MCContext used for the entire code generator.
   MCContext Context;
-  // This is an external context, that if assigned, will be used instead of the
-  // internal context.
-  MCContext *ExternalContext = nullptr;
 
   /// This is the LLVM Module being worked on.
   const Module *TheModule;
@@ -147,37 +140,28 @@ class MachineModuleInfo {
   const Function *LastRequest = nullptr; ///< Used for shortcut/cache.
   MachineFunction *LastResult = nullptr; ///< Used for shortcut/cache.
 
-  MachineModuleInfo &operator=(MachineModuleInfo &&MMII) = delete;
-
 public:
+  static char ID; // Pass identification, replacement for typeid
+
   explicit MachineModuleInfo(const LLVMTargetMachine *TM = nullptr);
+  ~MachineModuleInfo() override;
 
-  explicit MachineModuleInfo(const LLVMTargetMachine *TM,
-                             MCContext *ExtContext);
-
-  MachineModuleInfo(MachineModuleInfo &&MMII);
-
-  ~MachineModuleInfo();
-
-  void initialize();
-  void finalize();
+  // Initialization and Finalization
+  bool doInitialization(Module &) override;
+  bool doFinalization(Module &) override;
 
   const LLVMTargetMachine &getTarget() const { return TM; }
 
-  const MCContext &getContext() const {
-    return ExternalContext ? *ExternalContext : Context;
-  }
-  MCContext &getContext() {
-    return ExternalContext ? *ExternalContext : Context;
-  }
+  const MCContext &getContext() const { return Context; }
+  MCContext &getContext() { return Context; }
 
   const Module *getModule() const { return TheModule; }
 
   /// Returns the MachineFunction constructed for the IR function \p F.
   /// Creates a new MachineFunction if none exists yet.
-  MachineFunction &getOrCreateMachineFunction(Function &F);
+  MachineFunction &getOrCreateMachineFunction(const Function &F);
 
-  /// \brief Returns the MachineFunction associated to IR function \p F if there
+  /// \bried Returns the MachineFunction associated to IR function \p F if there
   /// is one, otherwise nullptr.
   MachineFunction *getMachineFunction(const Function &F) const;
 
@@ -185,7 +169,7 @@ public:
   /// Machine Function map.
   void deleteMachineFunctionFor(Function &F);
 
-  /// Keep track of various per-module pieces of information for backends
+  /// Keep track of various per-function pieces of information for backends
   /// that would like to do so.
   template<typename Ty>
   Ty &getObjFileInfo() {
@@ -268,48 +252,7 @@ public:
     return Personalities;
   }
   /// \}
-
-  // MMI owes MCContext. It should never be invalidated.
-  bool invalidate(Module &, const PreservedAnalyses &,
-                  ModuleAnalysisManager::Invalidator &) {
-    return false;
-  }
 }; // End class MachineModuleInfo
-
-class MachineModuleInfoWrapperPass : public ImmutablePass {
-  MachineModuleInfo MMI;
-
-public:
-  static char ID; // Pass identification, replacement for typeid
-  explicit MachineModuleInfoWrapperPass(const LLVMTargetMachine *TM = nullptr);
-
-  explicit MachineModuleInfoWrapperPass(const LLVMTargetMachine *TM,
-                                        MCContext *ExtContext);
-
-  // Initialization and Finalization
-  bool doInitialization(Module &) override;
-  bool doFinalization(Module &) override;
-
-  MachineModuleInfo &getMMI() { return MMI; }
-  const MachineModuleInfo &getMMI() const { return MMI; }
-};
-
-/// An analysis that produces \c MachineInfo for a module.
-class MachineModuleAnalysis : public AnalysisInfoMixin<MachineModuleAnalysis> {
-  friend AnalysisInfoMixin<MachineModuleAnalysis>;
-  static AnalysisKey Key;
-
-  const LLVMTargetMachine *TM;
-
-public:
-  /// Provide the result type for this analysis pass.
-  using Result = MachineModuleInfo;
-
-  MachineModuleAnalysis(const LLVMTargetMachine *TM) : TM(TM) {}
-
-  /// Run the analysis pass and produce machine module information.
-  MachineModuleInfo run(Module &M, ModuleAnalysisManager &);
-};
 
 } // end namespace llvm
 

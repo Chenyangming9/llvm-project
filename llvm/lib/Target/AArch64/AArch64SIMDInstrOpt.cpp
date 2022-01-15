@@ -219,11 +219,10 @@ shouldReplaceInst(MachineFunction *MF, const MCInstrDesc *InstDesc,
                   SmallVectorImpl<const MCInstrDesc*> &InstDescRepl) {
   // Check if replacement decision is already available in the cached table.
   // if so, return it.
-  std::string Subtarget = std::string(SchedModel.getSubtargetInfo()->getCPU());
+  std::string Subtarget = SchedModel.getSubtargetInfo()->getCPU();
   auto InstID = std::make_pair(InstDesc->getOpcode(), Subtarget);
-  auto It = SIMDInstrTable.find(InstID);
-  if (It != SIMDInstrTable.end())
-    return It->second;
+  if (SIMDInstrTable.find(InstID) != SIMDInstrTable.end())
+    return SIMDInstrTable[InstID];
 
   unsigned SCIdx = InstDesc->getSchedClass();
   const MCSchedClassDesc *SCDesc =
@@ -289,11 +288,9 @@ bool AArch64SIMDInstrOpt::shouldExitEarly(MachineFunction *MF, Subpass SP) {
 
   // For this optimization, check for all concerned instructions.
   case Interleave:
-    std::string Subtarget =
-        std::string(SchedModel.getSubtargetInfo()->getCPU());
-    auto It = InterlEarlyExit.find(Subtarget);
-    if (It != InterlEarlyExit.end())
-      return It->second;
+    std::string Subtarget = SchedModel.getSubtargetInfo()->getCPU();
+    if (InterlEarlyExit.find(Subtarget) != InterlEarlyExit.end())
+      return InterlEarlyExit[Subtarget];
 
     for (auto &I : IRT) {
       OriginalMCID = &TII->get(I.OrigOpc);
@@ -429,16 +426,16 @@ bool AArch64SIMDInstrOpt::optimizeVectElement(MachineInstr &MI) {
   MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
 
   // Get the operands of the current SIMD arithmetic instruction.
-  Register MulDest = MI.getOperand(0).getReg();
-  Register SrcReg0 = MI.getOperand(1).getReg();
+  unsigned MulDest = MI.getOperand(0).getReg();
+  unsigned SrcReg0 = MI.getOperand(1).getReg();
   unsigned Src0IsKill = getKillRegState(MI.getOperand(1).isKill());
-  Register SrcReg1 = MI.getOperand(2).getReg();
+  unsigned SrcReg1 = MI.getOperand(2).getReg();
   unsigned Src1IsKill = getKillRegState(MI.getOperand(2).isKill());
   unsigned DupDest;
 
   // Instructions of interest have either 4 or 5 operands.
   if (MI.getNumOperands() == 5) {
-    Register SrcReg2 = MI.getOperand(3).getReg();
+    unsigned SrcReg2 = MI.getOperand(3).getReg();
     unsigned Src2IsKill = getKillRegState(MI.getOperand(3).isKill());
     unsigned LaneNumber = MI.getOperand(4).getImm();
     // Create a new DUP instruction. Note that if an equivalent DUP instruction

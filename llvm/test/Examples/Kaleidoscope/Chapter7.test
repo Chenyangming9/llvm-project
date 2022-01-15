@@ -1,5 +1,4 @@
 # RUN: Kaleidoscope-Ch7 < %s 2>&1 | FileCheck %s
-# REQUIRES: default_triple
 
 # Sequence operator and iterative fibonacci function to test user defined vars.
 def binary : 1 (x y) y;

@@ -12,13 +12,12 @@
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Signals.h"
 
-#include <cstdio>
-#include <cstdlib>
+#include <stdio.h>
+#include <stdlib.h>
 
 static llvm::ManagedStatic<lldb_private::SystemLifetimeManager>
     g_debugger_lifetime;
@@ -40,7 +39,7 @@ int main_platform(int argc, char *argv[]);
 namespace llgs {
 static void initialize() {
   if (auto e = g_debugger_lifetime->Initialize(
-          std::make_unique<SystemInitializerLLGS>(), nullptr))
+          llvm::make_unique<SystemInitializerLLGS>(), nullptr))
     llvm::consumeError(std::move(e));
 }
 
@@ -49,7 +48,8 @@ static void terminate_debugger() { g_debugger_lifetime->Terminate(); }
 
 // main
 int main(int argc, char *argv[]) {
-  llvm::InitLLVM IL(argc, argv, /*InstallPipeSignalExitHandler=*/false);
+  llvm::StringRef ToolName = argv[0];
+  llvm::sys::PrintStackTraceOnErrorSignal(ToolName);
   llvm::PrettyStackTraceProgram X(argc, argv);
 
   int option_error = 0;

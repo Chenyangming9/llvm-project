@@ -1,4 +1,4 @@
-//===-- PlatformAndroid.cpp -----------------------------------------------===//
+//===-- PlatformAndroid.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -25,8 +25,6 @@ using namespace lldb;
 using namespace lldb_private;
 using namespace lldb_private::platform_android;
 using namespace std::chrono;
-
-LLDB_PLUGIN_DEFINE(PlatformAndroid)
 
 static uint32_t g_initialize_count = 0;
 static const unsigned int g_android_default_cache_size =
@@ -70,8 +68,8 @@ PlatformSP PlatformAndroid::CreateInstance(bool force, const ArchSpec *arch) {
     const char *triple_cstr =
         arch ? arch->GetTriple().getTriple().c_str() : "<null>";
 
-    LLDB_LOGF(log, "PlatformAndroid::%s(force=%s, arch={%s,%s})", __FUNCTION__,
-              force ? "true" : "false", arch_name, triple_cstr);
+    log->Printf("PlatformAndroid::%s(force=%s, arch={%s,%s})", __FUNCTION__,
+                force ? "true" : "false", arch_name, triple_cstr);
   }
 
   bool create = force;
@@ -115,20 +113,24 @@ PlatformSP PlatformAndroid::CreateInstance(bool force, const ArchSpec *arch) {
   }
 
   if (create) {
-    LLDB_LOGF(log, "PlatformAndroid::%s() creating remote-android platform",
-              __FUNCTION__);
+    if (log)
+      log->Printf("PlatformAndroid::%s() creating remote-android platform",
+                  __FUNCTION__);
     return PlatformSP(new PlatformAndroid(false));
   }
 
-  LLDB_LOGF(
-      log, "PlatformAndroid::%s() aborting creation of remote-android platform",
-      __FUNCTION__);
+  if (log)
+    log->Printf(
+        "PlatformAndroid::%s() aborting creation of remote-android platform",
+        __FUNCTION__);
 
   return PlatformSP();
 }
 
 PlatformAndroid::PlatformAndroid(bool is_host)
     : PlatformLinux(is_host), m_sdk_version(0) {}
+
+PlatformAndroid::~PlatformAndroid() {}
 
 ConstString PlatformAndroid::GetPluginNameStatic(bool is_host) {
   if (is_host) {
@@ -170,7 +172,7 @@ Status PlatformAndroid::ConnectRemote(Args &args) {
   if (!UriParser::Parse(url, scheme, host, port, path))
     return Status("Invalid URL: %s", url);
   if (host != "localhost")
-    m_device_id = std::string(host);
+    m_device_id = host;
 
   auto error = PlatformLinux::ConnectRemote(args);
   if (error.Success()) {
@@ -210,8 +212,9 @@ Status PlatformAndroid::GetFile(const FileSpec &source,
   auto source_file = source_spec.GetCString(false);
 
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PLATFORM));
-  LLDB_LOGF(log, "Got mode == 0 on '%s': try to get file via 'shell cat'",
-            source_file);
+  if (log)
+    log->Printf("Got mode == 0 on '%s': try to get file via 'shell cat'",
+                source_file);
 
   if (strchr(source_file, '\'') != nullptr)
     return Status("Doesn't support single-quotes in filenames");
@@ -285,8 +288,9 @@ uint32_t PlatformAndroid::GetSdkVersion() {
 
   if (error.Fail() || version_string.empty()) {
     Log *log = GetLogIfAllCategoriesSet(LIBLLDB_LOG_PLATFORM);
-    LLDB_LOGF(log, "Get SDK version failed. (error: %s, output: %s)",
-              error.AsCString(), version_string.c_str());
+    if (log)
+      log->Printf("Get SDK version failed. (error: %s, output: %s)",
+                  error.AsCString(), version_string.c_str());
     return 0;
   }
 
@@ -333,7 +337,7 @@ Status PlatformAndroid::DownloadSymbolFile(const lldb::ModuleSP &module_sp,
 
     Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PLATFORM));
     if (log && error.Fail())
-      LLDB_LOGF(log, "Failed to remove temp directory: %s", error.AsCString());
+      log->Printf("Failed to remove temp directory: %s", error.AsCString());
   });
 
   FileSpec symfile_platform_filespec(tmpdir);
@@ -364,9 +368,9 @@ PlatformAndroid::GetLibdlFunctionDeclarations(lldb_private::Process *process) {
   const char *dl_open_name = nullptr;
   Target &target = process->GetTarget();
   for (auto name: dl_open_names) {
-    target.GetImages().FindFunctionSymbols(
-        ConstString(name), eFunctionNameTypeFull, matching_symbols);
-    if (matching_symbols.GetSize()) {
+    if (target.GetImages().FindFunctionSymbols(ConstString(name),
+                                               eFunctionNameTypeFull,
+                                               matching_symbols)) {
        dl_open_name = name;
        break;
     }

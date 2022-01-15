@@ -1,4 +1,4 @@
-//===-- SBProcess.cpp -----------------------------------------------------===//
+//===-- SBProcess.cpp -------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,7 +9,7 @@
 #include "lldb/API/SBProcess.h"
 #include "SBReproducerPrivate.h"
 
-#include <cinttypes>
+#include <inttypes.h>
 
 #include "lldb/lldb-defines.h"
 #include "lldb/lldb-types.h"
@@ -18,7 +18,6 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/StreamFile.h"
-#include "lldb/Core/StructuredDataImpl.h"
 #include "lldb/Target/MemoryRegionInfo.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/RegisterContext.h"
@@ -30,11 +29,11 @@
 #include "lldb/Utility/State.h"
 #include "lldb/Utility/Stream.h"
 
+
 #include "lldb/API/SBBroadcaster.h"
 #include "lldb/API/SBCommandReturnObject.h"
 #include "lldb/API/SBDebugger.h"
 #include "lldb/API/SBEvent.h"
-#include "lldb/API/SBFile.h"
 #include "lldb/API/SBFileSpec.h"
 #include "lldb/API/SBMemoryRegionInfo.h"
 #include "lldb/API/SBMemoryRegionInfoList.h"
@@ -44,6 +43,7 @@
 #include "lldb/API/SBThread.h"
 #include "lldb/API/SBThreadCollection.h"
 #include "lldb/API/SBTrace.h"
+#include "lldb/API/SBTraceOptions.h"
 #include "lldb/API/SBUnixSignals.h"
 
 using namespace lldb;
@@ -74,7 +74,7 @@ const SBProcess &SBProcess::operator=(const SBProcess &rhs) {
 }
 
 // Destructor
-SBProcess::~SBProcess() = default;
+SBProcess::~SBProcess() {}
 
 const char *SBProcess::GetBroadcasterClassName() {
   LLDB_RECORD_STATIC_METHOD_NO_ARGS(const char *, SBProcess,
@@ -270,8 +270,8 @@ size_t SBProcess::PutSTDIN(const char *src, size_t src_len) {
 }
 
 size_t SBProcess::GetSTDOUT(char *dst, size_t dst_len) const {
-  LLDB_RECORD_CHAR_PTR_METHOD_CONST(size_t, SBProcess, GetSTDOUT,
-                                    (char *, size_t), dst, "", dst_len);
+  LLDB_RECORD_METHOD_CONST(size_t, SBProcess, GetSTDOUT, (char *, size_t), dst,
+                           dst_len);
 
   size_t bytes_read = 0;
   ProcessSP process_sp(GetSP());
@@ -284,8 +284,8 @@ size_t SBProcess::GetSTDOUT(char *dst, size_t dst_len) const {
 }
 
 size_t SBProcess::GetSTDERR(char *dst, size_t dst_len) const {
-  LLDB_RECORD_CHAR_PTR_METHOD_CONST(size_t, SBProcess, GetSTDERR,
-                                    (char *, size_t), dst, "", dst_len);
+  LLDB_RECORD_METHOD_CONST(size_t, SBProcess, GetSTDERR, (char *, size_t), dst,
+                           dst_len);
 
   size_t bytes_read = 0;
   ProcessSP process_sp(GetSP());
@@ -298,8 +298,8 @@ size_t SBProcess::GetSTDERR(char *dst, size_t dst_len) const {
 }
 
 size_t SBProcess::GetAsyncProfileData(char *dst, size_t dst_len) const {
-  LLDB_RECORD_CHAR_PTR_METHOD_CONST(size_t, SBProcess, GetAsyncProfileData,
-                                    (char *, size_t), dst, "", dst_len);
+  LLDB_RECORD_METHOD_CONST(size_t, SBProcess, GetAsyncProfileData,
+                           (char *, size_t), dst, dst_len);
 
   size_t bytes_read = 0;
   ProcessSP process_sp(GetSP());
@@ -311,34 +311,43 @@ size_t SBProcess::GetAsyncProfileData(char *dst, size_t dst_len) const {
   return bytes_read;
 }
 
-void SBProcess::ReportEventState(const SBEvent &event, SBFile out) const {
-  LLDB_RECORD_METHOD_CONST(void, SBProcess, ReportEventState,
-                           (const SBEvent &, SBFile), event, out);
+lldb::SBTrace SBProcess::StartTrace(SBTraceOptions &options,
+                                    lldb::SBError &error) {
+  LLDB_RECORD_METHOD(lldb::SBTrace, SBProcess, StartTrace,
+                     (lldb::SBTraceOptions &, lldb::SBError &), options, error);
 
-  return ReportEventState(event, out.m_opaque_sp);
+  ProcessSP process_sp(GetSP());
+  error.Clear();
+  SBTrace trace_instance;
+  trace_instance.SetSP(process_sp);
+  lldb::user_id_t uid = LLDB_INVALID_UID;
+
+  if (!process_sp) {
+    error.SetErrorString("invalid process");
+  } else {
+    uid = process_sp->StartTrace(*(options.m_traceoptions_sp), error.ref());
+    trace_instance.SetTraceUID(uid);
+  }
+  return LLDB_RECORD_RESULT(trace_instance);
 }
 
 void SBProcess::ReportEventState(const SBEvent &event, FILE *out) const {
   LLDB_RECORD_METHOD_CONST(void, SBProcess, ReportEventState,
                            (const lldb::SBEvent &, FILE *), event, out);
-  FileSP outfile = std::make_shared<NativeFile>(out, false);
-  return ReportEventState(event, outfile);
-}
 
-void SBProcess::ReportEventState(const SBEvent &event, FileSP out) const {
-
-  LLDB_RECORD_METHOD_CONST(void, SBProcess, ReportEventState,
-                           (const SBEvent &, FileSP), event, out);
-
-  if (!out || !out->IsValid())
+  if (out == nullptr)
     return;
 
   ProcessSP process_sp(GetSP());
   if (process_sp) {
-    StreamFile stream(out);
     const StateType event_state = SBProcess::GetStateFromEvent(event);
-    stream.Printf("Process %" PRIu64 " %s\n",
+    char message[1024];
+    int message_len = ::snprintf(
+        message, sizeof(message), "Process %" PRIu64 " %s\n",
         process_sp->GetID(), SBDebugger::StateAsCString(event_state));
+
+    if (message_len > 0)
+      ::fwrite(message, 1, message_len, out);
   }
 }
 
@@ -990,30 +999,6 @@ bool SBProcess::GetDescription(SBStream &description) {
   return true;
 }
 
-SBStructuredData SBProcess::GetExtendedCrashInformation() {
-  LLDB_RECORD_METHOD_NO_ARGS(lldb::SBStructuredData, SBProcess,
-                             GetExtendedCrashInformation);
-  SBStructuredData data;
-  ProcessSP process_sp(GetSP());
-  if (!process_sp)
-    return LLDB_RECORD_RESULT(data);
-
-  PlatformSP platform_sp = process_sp->GetTarget().GetPlatform();
-
-  if (!platform_sp)
-    return LLDB_RECORD_RESULT(data);
-
-  auto expected_data =
-      platform_sp->FetchExtendedCrashInformation(*process_sp.get());
-
-  if (!expected_data)
-    return LLDB_RECORD_RESULT(data);
-
-  StructuredData::ObjectSP fetched_data = *expected_data;
-  data.m_impl_up->SetObjectSP(fetched_data);
-  return LLDB_RECORD_RESULT(data);
-}
-
 uint32_t
 SBProcess::GetNumSupportedHardwareWatchpoints(lldb::SBError &sb_error) const {
   LLDB_RECORD_METHOD_CONST(uint32_t, SBProcess,
@@ -1195,9 +1180,6 @@ bool SBProcess::IsInstrumentationRuntimePresent(
   if (!process_sp)
     return false;
 
-  std::lock_guard<std::recursive_mutex> guard(
-      process_sp->GetTarget().GetAPIMutex());
-
   InstrumentationRuntimeSP runtime_sp =
       process_sp->GetInstrumentationRuntime(type);
 
@@ -1227,8 +1209,7 @@ lldb::SBError SBProcess::SaveCore(const char *file_name) {
   }
 
   FileSpec core_file(file_name);
-  SaveCoreStyle core_style = SaveCoreStyle::eSaveCoreFull;
-  error.ref() = PluginManager::SaveCore(process_sp, core_file, core_style);
+  error.ref() = PluginManager::SaveCore(process_sp, core_file);
   return LLDB_RECORD_RESULT(error);
 }
 
@@ -1288,51 +1269,6 @@ lldb::SBProcessInfo SBProcess::GetProcessInfo() {
   return LLDB_RECORD_RESULT(sb_proc_info);
 }
 
-lldb::addr_t SBProcess::AllocateMemory(size_t size, uint32_t permissions,
-                                       lldb::SBError &sb_error) {
-  LLDB_RECORD_METHOD(lldb::addr_t, SBProcess, AllocateMemory,
-                     (size_t, uint32_t, lldb::SBError &), size, permissions,
-                     sb_error);
-
-  lldb::addr_t addr = LLDB_INVALID_ADDRESS;
-  ProcessSP process_sp(GetSP());
-  if (process_sp) {
-    Process::StopLocker stop_locker;
-    if (stop_locker.TryLock(&process_sp->GetRunLock())) {
-      std::lock_guard<std::recursive_mutex> guard(
-          process_sp->GetTarget().GetAPIMutex());
-      addr = process_sp->AllocateMemory(size, permissions, sb_error.ref());
-    } else {
-      sb_error.SetErrorString("process is running");
-    }
-  } else {
-    sb_error.SetErrorString("SBProcess is invalid");
-  }
-  return addr;
-}
-
-lldb::SBError SBProcess::DeallocateMemory(lldb::addr_t ptr) {
-  LLDB_RECORD_METHOD(lldb::SBError, SBProcess, DeallocateMemory, (lldb::addr_t),
-                     ptr);
-
-  lldb::SBError sb_error;
-  ProcessSP process_sp(GetSP());
-  if (process_sp) {
-    Process::StopLocker stop_locker;
-    if (stop_locker.TryLock(&process_sp->GetRunLock())) {
-      std::lock_guard<std::recursive_mutex> guard(
-          process_sp->GetTarget().GetAPIMutex());
-      Status error = process_sp->DeallocateMemory(ptr);
-      sb_error.SetError(error);
-    } else {
-      sb_error.SetErrorString("process is running");
-    }
-  } else {
-    sb_error.SetErrorString("SBProcess is invalid");
-  }
-  return sb_error;
-}
-
 namespace lldb_private {
 namespace repro {
 
@@ -1363,12 +1299,14 @@ void RegisterMethods<SBProcess>(Registry &R) {
                        (lldb::tid_t, lldb::addr_t));
   LLDB_REGISTER_METHOD_CONST(lldb::SBTarget, SBProcess, GetTarget, ());
   LLDB_REGISTER_METHOD(size_t, SBProcess, PutSTDIN, (const char *, size_t));
+  LLDB_REGISTER_METHOD_CONST(size_t, SBProcess, GetSTDOUT, (char *, size_t));
+  LLDB_REGISTER_METHOD_CONST(size_t, SBProcess, GetSTDERR, (char *, size_t));
+  LLDB_REGISTER_METHOD_CONST(size_t, SBProcess, GetAsyncProfileData,
+                             (char *, size_t));
+  LLDB_REGISTER_METHOD(lldb::SBTrace, SBProcess, StartTrace,
+                       (lldb::SBTraceOptions &, lldb::SBError &));
   LLDB_REGISTER_METHOD_CONST(void, SBProcess, ReportEventState,
                              (const lldb::SBEvent &, FILE *));
-  LLDB_REGISTER_METHOD_CONST(void, SBProcess, ReportEventState,
-                             (const lldb::SBEvent &, FileSP));
-  LLDB_REGISTER_METHOD_CONST(void, SBProcess, ReportEventState,
-                             (const lldb::SBEvent &, SBFile));
   LLDB_REGISTER_METHOD(
       void, SBProcess, AppendEventStateReport,
       (const lldb::SBEvent &, lldb::SBCommandReturnObject &));
@@ -1433,8 +1371,6 @@ void RegisterMethods<SBProcess>(Registry &R) {
   LLDB_REGISTER_METHOD(lldb::addr_t, SBProcess, ReadPointerFromMemory,
                        (lldb::addr_t, lldb::SBError &));
   LLDB_REGISTER_METHOD(bool, SBProcess, GetDescription, (lldb::SBStream &));
-  LLDB_REGISTER_METHOD(lldb::SBStructuredData, SBProcess,
-                       GetExtendedCrashInformation, ());
   LLDB_REGISTER_METHOD_CONST(uint32_t, SBProcess,
                              GetNumSupportedHardwareWatchpoints,
                              (lldb::SBError &));
@@ -1462,14 +1398,6 @@ void RegisterMethods<SBProcess>(Registry &R) {
   LLDB_REGISTER_METHOD(lldb::SBMemoryRegionInfoList, SBProcess,
                        GetMemoryRegions, ());
   LLDB_REGISTER_METHOD(lldb::SBProcessInfo, SBProcess, GetProcessInfo, ());
-  LLDB_REGISTER_METHOD(lldb::addr_t, SBProcess, AllocateMemory,
-                       (size_t, uint32_t, lldb::SBError &));
-  LLDB_REGISTER_METHOD(lldb::SBError, SBProcess, DeallocateMemory,
-                       (lldb::addr_t));
-
-  LLDB_REGISTER_CHAR_PTR_METHOD_CONST(size_t, SBProcess, GetSTDOUT);
-  LLDB_REGISTER_CHAR_PTR_METHOD_CONST(size_t, SBProcess, GetSTDERR);
-  LLDB_REGISTER_CHAR_PTR_METHOD_CONST(size_t, SBProcess, GetAsyncProfileData);
 }
 
 }

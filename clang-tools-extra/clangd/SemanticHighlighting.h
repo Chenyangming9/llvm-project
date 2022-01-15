@@ -6,11 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file supports semantic highlighting: categorizing tokens in the file so
-// that the editor can color/style them differently.
-// This is particularly valuable for C++: its complex and context-dependent
-// grammar is a challenge for simple syntax-highlighting techniques.
-//
+// An implementation of semantic highlighting based on this proposal:
+// https://github.com/microsoft/vscode-languageserver-node/pull/367 in clangd.
 // Semantic highlightings are calculated for an AST by visiting every AST node
 // and classifying nodes that are interesting to highlight (variables/function
 // calls etc.).
@@ -20,90 +17,45 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_SEMANTICHIGHLIGHTING_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_SEMANTICHIGHLIGHTING_H
 
+#include "ClangdUnit.h"
 #include "Protocol.h"
-#include "llvm/Support/raw_ostream.h"
 
 namespace clang {
 namespace clangd {
-class ParsedAST;
 
 enum class HighlightingKind {
   Variable = 0,
-  LocalVariable,
-  Parameter,
   Function,
   Method,
-  StaticMethod,
   Field,
-  StaticField,
   Class,
-  Interface,
   Enum,
   EnumConstant,
-  Typedef,
-  Type,
-  Unknown,
   Namespace,
   TemplateParameter,
-  Concept,
-  Primitive,
-  Macro,
 
-  // This one is different from the other kinds as it's a line style
-  // rather than a token style.
-  InactiveCode,
-
-  LastKind = InactiveCode
+  NumKinds,
 };
-
-llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, HighlightingKind K);
-
-enum class HighlightingModifier {
-  Declaration,
-  // FIXME: Definition (needs findExplicitReferences support)
-  Deprecated,
-  Deduced,
-  Readonly,
-  Static,
-  Abstract,
-  DependentName,
-  DefaultLibrary,
-
-  FunctionScope,
-  ClassScope,
-  FileScope,
-  GlobalScope,
-
-  LastModifier = GlobalScope
-};
-static_assert(static_cast<unsigned>(HighlightingModifier::LastModifier) < 32,
-              "Increase width of modifiers bitfield!");
-llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, HighlightingModifier K);
 
 // Contains all information needed for the highlighting a token.
 struct HighlightingToken {
   HighlightingKind Kind;
-  uint32_t Modifiers = 0;
   Range R;
-
-  HighlightingToken &addModifier(HighlightingModifier M) {
-    Modifiers |= 1 << static_cast<unsigned>(M);
-    return *this;
-  }
 };
 
-bool operator==(const HighlightingToken &L, const HighlightingToken &R);
-bool operator<(const HighlightingToken &L, const HighlightingToken &R);
+bool operator==(const HighlightingToken &Lhs, const HighlightingToken &Rhs);
 
 // Returns all HighlightingTokens from an AST. Only generates highlights for the
 // main AST.
 std::vector<HighlightingToken> getSemanticHighlightings(ParsedAST &AST);
 
-std::vector<SemanticToken> toSemanticTokens(llvm::ArrayRef<HighlightingToken>);
-llvm::StringRef toSemanticTokenType(HighlightingKind Kind);
-llvm::StringRef toSemanticTokenModifier(HighlightingModifier Modifier);
-std::vector<SemanticTokensEdit> diffTokens(llvm::ArrayRef<SemanticToken> Before,
-                                           llvm::ArrayRef<SemanticToken> After);
+/// Converts a HighlightingKind to a corresponding TextMate scope
+/// (https://manual.macromates.com/en/language_grammars).
+llvm::StringRef toTextMateScope(HighlightingKind Kind);
+
+// Convert to LSP's semantic highlighting information.
+std::vector<SemanticHighlightingInformation>
+toSemanticHighlightingInformation(llvm::ArrayRef<HighlightingToken> Tokens);
 
 } // namespace clangd
 } // namespace clang

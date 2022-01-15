@@ -18,7 +18,6 @@ entry:
 
 ; CHECK: define void @foo
 ; CHECK-NEXT: entry:
-; CHECK-NEXT: call void @llvm.donothing
 ; CHECK-NEXT: %id = call token @llvm.coro.id
 ; CHECK-NEXT: call i1 @llvm.coro.alloc(token %id)
 ; CHECK-NEXT: ret void

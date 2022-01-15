@@ -1,11 +1,13 @@
-add_llvm_component_library(LLVMCore
+set(LLVM_TARGET_DEFINITIONS AttributesCompatFunc.td)
+tablegen(LLVM AttributesCompatFunc.inc -gen-attrs)
+add_public_tablegen_target(AttributeCompatFuncTableGen)
+
+add_llvm_library(LLVMCore
   AbstractCallSite.cpp
   AsmWriter.cpp
-  Assumptions.cpp
   Attributes.cpp
   AutoUpgrade.cpp
   BasicBlock.cpp
-  BuiltinGCs.cpp
   Comdat.cpp
   ConstantFold.cpp
   ConstantRange.cpp
@@ -20,9 +22,7 @@ add_llvm_component_library(LLVMCore
   DiagnosticInfo.cpp
   DiagnosticPrinter.cpp
   Dominators.cpp
-  FPEnv.cpp
   Function.cpp
-  GCStrategy.cpp
   GVMaterializer.cpp
   Globals.cpp
   IRBuilder.cpp
@@ -33,7 +33,6 @@ add_llvm_component_library(LLVMCore
   IntrinsicInst.cpp
   LLVMContext.cpp
   LLVMContextImpl.cpp
-  LLVMRemarkStreamer.cpp
   LegacyPassManager.cpp
   MDBuilder.cpp
   Mangler.cpp
@@ -47,13 +46,10 @@ add_llvm_component_library(LLVMCore
   PassManager.cpp
   PassRegistry.cpp
   PassTimingInfo.cpp
-  PrintPasses.cpp
+  RemarkStreamer.cpp
   SafepointIRVerifier.cpp
   ProfileSummary.cpp
-  PseudoProbe.cpp
-  ReplaceConstant.cpp
   Statepoint.cpp
-  StructuralHash.cpp
   Type.cpp
   TypeFinder.cpp
   Use.cpp
@@ -65,14 +61,6 @@ add_llvm_component_library(LLVMCore
   ADDITIONAL_HEADER_DIRS
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/IR
 
-  LINK_LIBS
-  ${LLVM_PTHREAD_LIB}
-
   DEPENDS
   intrinsics_gen
-
-  LINK_COMPONENTS
-  BinaryFormat
-  Remarks
-  Support
   )

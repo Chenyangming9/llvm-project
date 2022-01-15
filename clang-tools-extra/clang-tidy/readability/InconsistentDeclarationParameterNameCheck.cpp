@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <sstream>
 
 using namespace clang::ast_matchers;
 
@@ -72,7 +73,7 @@ bool checkIfFixItHintIsApplicable(
   if (!ParameterSourceDeclaration->isThisDeclarationADefinition())
     return false;
 
-  // Assumption: if parameter is not referenced in function definition body, it
+  // Assumption: if parameter is not referenced in function defintion body, it
   // may indicate that it's outdated, so don't touch it.
   if (!SourceParam->isReferenced())
     return false;
@@ -93,8 +94,8 @@ bool nameMatch(StringRef L, StringRef R, bool Strict) {
     return L.empty() || R.empty() || L == R;
   // We allow two names if one is a prefix/suffix of the other, ignoring case.
   // Important special case: this is true if either parameter has no name!
-  return L.startswith_insensitive(R) || R.startswith_insensitive(L) ||
-         L.endswith_insensitive(R) || R.endswith_insensitive(L);
+  return L.startswith_lower(R) || R.startswith_lower(L) ||
+         L.endswith_lower(R) || R.endswith_lower(L);
 }
 
 DifferingParamsContainer
@@ -195,16 +196,18 @@ getParameterSourceDeclaration(const FunctionDecl *OriginalDeclaration) {
 std::string joinParameterNames(
     const DifferingParamsContainer &DifferingParams,
     llvm::function_ref<StringRef(const DifferingParamInfo &)> ChooseParamName) {
-  llvm::SmallString<40> Str;
+  llvm::SmallVector<char, 40> Buffer;
+  llvm::raw_svector_ostream Str(Buffer);
   bool First = true;
   for (const DifferingParamInfo &ParamInfo : DifferingParams) {
     if (First)
       First = false;
     else
-      Str += ", ";
-    Str.append({"'", ChooseParamName(ParamInfo), "'"});
+      Str << ", ";
+
+    Str << "'" << ChooseParamName(ParamInfo).str() << "'";
   }
-  return std::string(Str);
+  return Str.str().str();
 }
 
 void formatDifferingParamsDiagnostic(
@@ -294,7 +297,8 @@ void InconsistentDeclarationParameterNameCheck::storeOptions(
 
 void InconsistentDeclarationParameterNameCheck::registerMatchers(
     MatchFinder *Finder) {
-  Finder->addMatcher(functionDecl(hasOtherDeclarations()).bind("functionDecl"),
+  Finder->addMatcher(functionDecl(unless(isImplicit()), hasOtherDeclarations())
+                         .bind("functionDecl"),
                      this);
 }
 

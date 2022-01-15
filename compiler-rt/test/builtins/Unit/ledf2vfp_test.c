@@ -1,5 +1,16 @@
 // RUN: %clang_builtins %s %librt -o %t && %run %t
-// REQUIRES: librt_has_ledf2vfp
+
+//===-- ledf2vfp_test.c - Test __ledf2vfp ---------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file tests __ledf2vfp for the compiler_rt library.
+//
+//===----------------------------------------------------------------------===//
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -9,7 +20,7 @@
 
 extern int __ledf2vfp(double a, double b);
 
-#if defined(__arm__) && defined(__ARM_FP) && (__ARM_FP & 0x8)
+#if __arm__ && __VFP_FP__
 int test__ledf2vfp(double a, double b)
 {
     int actual = __ledf2vfp(a, b);
@@ -23,7 +34,7 @@ int test__ledf2vfp(double a, double b)
 
 int main()
 {
-#if defined(__arm__) && defined(__ARM_FP) && (__ARM_FP & 0x8)
+#if __arm__ && __VFP_FP__
     if (test__ledf2vfp(0.0, 0.0))
         return 1;
     if (test__ledf2vfp(1.0, 1.0))

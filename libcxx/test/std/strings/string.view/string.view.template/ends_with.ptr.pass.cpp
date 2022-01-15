@@ -5,17 +5,17 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-// UNSUPPORTED: c++03, c++11, c++14, c++17
+// UNSUPPORTED: c++98, c++03, c++11, c++14, c++17
 
 // <string_view>
 
-//   constexpr bool ends_with(const CharT *x) const;
+//   constexpr bool starts_with(const CharT *x) const;
 
 #include <string_view>
 #include <cassert>
 
 #include "test_macros.h"
-#include "constexpr_char_traits.h"
+#include "constexpr_char_traits.hpp"
 
 int main(int, char**)
 {

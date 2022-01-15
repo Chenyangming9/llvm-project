@@ -28,7 +28,6 @@
 // CHECK: Target options:
 // CHECK:     Triple:
 // CHECK:     CPU:
-// CHECK:     TuneCPU:
 // CHECK:     ABI:
 
 // CHECK: Header search options:

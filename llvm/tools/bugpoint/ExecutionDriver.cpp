@@ -33,6 +33,7 @@ enum OutputType {
   RunJIT,
   RunLLC,
   RunLLCIA,
+  LLC_Safe,
   CompileCustom,
   Custom
 };
@@ -52,6 +53,7 @@ cl::opt<OutputType> InterpreterSel(
                clEnumValN(RunLLC, "run-llc", "Compile with LLC"),
                clEnumValN(RunLLCIA, "run-llc-ia",
                           "Compile with LLC with integrated assembler"),
+               clEnumValN(LLC_Safe, "llc-safe", "Use LLC for all"),
                clEnumValN(CompileCustom, "compile-custom",
                           "Use -compile-command to define a command to "
                           "compile the bitcode. Useful to avoid linking."),
@@ -180,6 +182,7 @@ Error BugDriver::initializeExecutionEnvironment() {
     break;
   case RunLLC:
   case RunLLCIA:
+  case LLC_Safe:
     Interpreter = AbstractInterpreter::createLLC(
         getToolName(), Message, CCBinary, &ToolArgv, &CCToolArgv,
         InterpreterSel == RunLLCIA);
@@ -209,12 +212,21 @@ Error BugDriver::initializeExecutionEnvironment() {
   switch (SafeInterpreterSel) {
   case AutoPick:
     // In "llc-safe" mode, default to using LLC as the "safe" backend.
-    if (InterpreterSel == RunLLC) {
+    if (!SafeInterpreter && InterpreterSel == LLC_Safe) {
       SafeInterpreterSel = RunLLC;
       SafeToolArgs.push_back("--relocation-model=pic");
       SafeInterpreter = AbstractInterpreter::createLLC(
           Path.c_str(), Message, CCBinary, &SafeToolArgs, &CCToolArgv);
-    } else if (InterpreterSel != CompileCustom) {
+    }
+
+    if (!SafeInterpreter && InterpreterSel != RunLLC &&
+        InterpreterSel != RunJIT) {
+      SafeInterpreterSel = RunLLC;
+      SafeToolArgs.push_back("--relocation-model=pic");
+      SafeInterpreter = AbstractInterpreter::createLLC(
+          Path.c_str(), Message, CCBinary, &SafeToolArgs, &CCToolArgv);
+    }
+    if (!SafeInterpreter) {
       SafeInterpreterSel = AutoPick;
       Message = "Sorry, I can't automatically select a safe interpreter!\n";
     }
@@ -235,7 +247,7 @@ Error BugDriver::initializeExecutionEnvironment() {
               "\"safe\" backend right now!\n";
     break;
   }
-  if (!SafeInterpreter && InterpreterSel != CompileCustom) {
+  if (!SafeInterpreter) {
     outs() << Message << "\nExiting.\n";
     exit(1);
   }
@@ -299,7 +311,7 @@ Expected<std::string> BugDriver::executeProgram(const Module &Program,
              << "!\n";
       exit(1);
     }
-    BitcodeFile = std::string(UniqueFilename.str());
+    BitcodeFile = UniqueFilename.str();
 
     if (writeProgramToFile(BitcodeFile, UniqueFD, Program)) {
       errs() << ToolName << ": Error emitting bitcode to file '" << BitcodeFile
@@ -324,7 +336,7 @@ Expected<std::string> BugDriver::executeProgram(const Module &Program,
            << "\n";
     exit(1);
   }
-  OutputFile = std::string(UniqueFile.str());
+  OutputFile = UniqueFile.str();
 
   // Figure out which shared objects to run, if any.
   std::vector<std::string> SharedObjs(AdditionalSOs);

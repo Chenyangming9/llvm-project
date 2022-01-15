@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONVALUEDICTIONARY_H
-#define LLDB_INTERPRETER_OPTIONVALUEDICTIONARY_H
+#ifndef liblldb_OptionValueDictionary_h_
+#define liblldb_OptionValueDictionary_h_
 
 #include <map>
 
@@ -15,14 +15,14 @@
 
 namespace lldb_private {
 
-class OptionValueDictionary
-    : public Cloneable<OptionValueDictionary, OptionValue> {
+class OptionValueDictionary : public OptionValue {
 public:
   OptionValueDictionary(uint32_t type_mask = UINT32_MAX,
                         bool raw_value_dump = true)
-      : m_type_mask(type_mask), m_raw_value_dump(raw_value_dump) {}
+      : OptionValue(), m_type_mask(type_mask), m_values(),
+        m_raw_value_dump(raw_value_dump) {}
 
-  ~OptionValueDictionary() override = default;
+  ~OptionValueDictionary() override {}
 
   // Virtual subclass pure virtual overrides
 
@@ -35,13 +35,13 @@ public:
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
 
-  void Clear() override {
+  bool Clear() override {
     m_values.clear();
     m_value_was_set = false;
+    return true;
   }
 
-  lldb::OptionValueSP
-  DeepCopy(const lldb::OptionValueSP &new_parent) const override;
+  lldb::OptionValueSP DeepCopy() const override;
 
   bool IsAggregateValue() const override { return true; }
 
@@ -81,4 +81,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONVALUEDICTIONARY_H
+#endif // liblldb_OptionValueDictionary_h_

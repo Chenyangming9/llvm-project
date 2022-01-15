@@ -10,16 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CODEGEN_MIRPARSER_MIPARSER_H
-#define LLVM_CODEGEN_MIRPARSER_MIPARSER_H
+#ifndef LLVM_LIB_CODEGEN_MIRPARSER_MIPARSER_H
+#define LLVM_LIB_CODEGEN_MIRPARSER_MIPARSER_H
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
-#include "llvm/CodeGen/Register.h"
 #include "llvm/Support/Allocator.h"
-#include "llvm/Support/SMLoc.h"
-#include <utility>
 
 namespace llvm {
 
@@ -43,8 +40,8 @@ struct VRegInfo {
     const TargetRegisterClass *RC;
     const RegisterBank *RegBank;
   } D;
-  Register VReg;
-  Register PreferredReg;
+  unsigned VReg;
+  unsigned PreferredReg = 0;
 };
 
 using Name2RegClassMap = StringMap<const TargetRegisterClass *>;
@@ -58,7 +55,7 @@ private:
   StringMap<unsigned> Names2InstrOpCodes;
 
   /// Maps from register names to registers.
-  StringMap<Register> Names2Regs;
+  StringMap<unsigned> Names2Regs;
 
   /// Maps from register mask names to register masks.
   StringMap<const uint32_t *> Names2RegMasks;
@@ -103,7 +100,7 @@ public:
 
   /// Try to convert a register name to a register number. Return true if the
   /// register name is invalid.
-  bool getRegisterByName(StringRef RegName, Register &Reg);
+  bool getRegisterByName(StringRef RegName, unsigned &Reg);
 
   /// Check if the given identifier is a name of a register mask.
   ///
@@ -166,27 +163,20 @@ struct PerFunctionMIParsingState {
   const SlotMapping &IRSlots;
   PerTargetMIParsingState &Target;
 
-  std::map<unsigned, TrackingMDNodeRef> MachineMetadataNodes;
-  std::map<unsigned, std::pair<TempMDTuple, SMLoc>> MachineForwardRefMDNodes;
-
   DenseMap<unsigned, MachineBasicBlock *> MBBSlots;
-  DenseMap<Register, VRegInfo *> VRegInfos;
+  DenseMap<unsigned, VRegInfo *> VRegInfos;
   StringMap<VRegInfo *> VRegInfosNamed;
   DenseMap<unsigned, int> FixedStackObjectSlots;
   DenseMap<unsigned, int> StackObjectSlots;
   DenseMap<unsigned, unsigned> ConstantPoolSlots;
   DenseMap<unsigned, unsigned> JumpTableSlots;
 
-  /// Maps from slot numbers to function's unnamed values.
-  DenseMap<unsigned, const Value *> Slots2Values;
-
   PerFunctionMIParsingState(MachineFunction &MF, SourceMgr &SM,
                             const SlotMapping &IRSlots,
                             PerTargetMIParsingState &Target);
 
-  VRegInfo &getVRegInfo(Register Num);
+  VRegInfo &getVRegInfo(unsigned Num);
   VRegInfo &getVRegInfoNamed(StringRef RegName);
-  const Value *getIRValue(unsigned Slot);
 };
 
 /// Parse the machine basic block definitions, and skip the machine
@@ -222,10 +212,10 @@ bool parseMBBReference(PerFunctionMIParsingState &PFS,
                        SMDiagnostic &Error);
 
 bool parseRegisterReference(PerFunctionMIParsingState &PFS,
-                            Register &Reg, StringRef Src,
+                            unsigned &Reg, StringRef Src,
                             SMDiagnostic &Error);
 
-bool parseNamedRegisterReference(PerFunctionMIParsingState &PFS, Register &Reg,
+bool parseNamedRegisterReference(PerFunctionMIParsingState &PFS, unsigned &Reg,
                                  StringRef Src, SMDiagnostic &Error);
 
 bool parseVirtualRegisterReference(PerFunctionMIParsingState &PFS,
@@ -238,9 +228,6 @@ bool parseStackObjectReference(PerFunctionMIParsingState &PFS, int &FI,
 bool parseMDNode(PerFunctionMIParsingState &PFS, MDNode *&Node, StringRef Src,
                  SMDiagnostic &Error);
 
-bool parseMachineMetadata(PerFunctionMIParsingState &PFS, StringRef Src,
-                          SMRange SourceRange, SMDiagnostic &Error);
-
 } // end namespace llvm
 
-#endif // LLVM_CODEGEN_MIRPARSER_MIPARSER_H
+#endif // LLVM_LIB_CODEGEN_MIRPARSER_MIPARSER_H

@@ -1,10 +1,7 @@
-// RUN: %clang_cc1 -triple i686-win32             -fsyntax-only -fms-extensions -verify -std=c++11 -Wunsupported-dll-base-class-template -DMS %s
-// RUN: %clang_cc1 -triple x86_64-win32           -fsyntax-only -fms-extensions -verify -std=c++1y -Wunsupported-dll-base-class-template -DMS %s
-// RUN: %clang_cc1 -triple i686-mingw32           -fsyntax-only -fms-extensions -verify -std=c++1y -Wunsupported-dll-base-class-template %s
-// RUN: %clang_cc1 -triple x86_64-mingw32         -fsyntax-only -fms-extensions -verify -std=c++11 -Wunsupported-dll-base-class-template %s
-// RUN: %clang_cc1 -triple i686-windows-itanium   -fsyntax-only -fms-extensions -verify -std=c++11 -Wunsupported-dll-base-class-template -DWI %s
-// RUN: %clang_cc1 -triple x86_64-windows-itanium -fsyntax-only -fms-extensions -verify -std=c++1y -Wunsupported-dll-base-class-template -DWI %s
-// RUN: %clang_cc1 -triple x86_64-scei-ps4        -fsyntax-only -fdeclspec      -verify -std=c++1y -Wunsupported-dll-base-class-template -DWI %s
+// RUN: %clang_cc1 -triple i686-win32     -fsyntax-only -fms-extensions -verify -std=c++11 -Wunsupported-dll-base-class-template -DMS %s
+// RUN: %clang_cc1 -triple x86_64-win32   -fsyntax-only -fms-extensions -verify -std=c++1y -Wunsupported-dll-base-class-template -DMS %s
+// RUN: %clang_cc1 -triple i686-mingw32   -fsyntax-only -fms-extensions -verify -std=c++1y -Wunsupported-dll-base-class-template %s
+// RUN: %clang_cc1 -triple x86_64-mingw32 -fsyntax-only -fms-extensions -verify -std=c++11 -Wunsupported-dll-base-class-template %s
 
 // Helper structs to make templates more expressive.
 struct ImplicitInst_Exported {};
@@ -352,7 +349,7 @@ class __declspec(dllexport) ClassDecl;
 
 class __declspec(dllexport) ClassDef {};
 
-#if defined(MS) || defined (WI)
+#ifdef MS
 // expected-warning@+3{{'dllexport' attribute ignored}}
 #endif
 template <typename T> struct PartiallySpecializedClassTemplate {};
@@ -370,13 +367,13 @@ ImplicitlyInstantiatedExportedTemplate<IncompleteType> implicitlyInstantiatedExp
 
 // Don't instantiate class members of templates with explicit instantiation declarations, even if they are exported.
 struct IncompleteType2;
-#if defined(MS) || defined (WI)
+#ifdef MS
 // expected-note@+2{{attribute is here}}
 #endif
 template <typename T> struct __declspec(dllexport) ExportedTemplateWithExplicitInstantiationDecl {
   int f() { return sizeof(T); } // no-error
 };
-#if defined(MS) || defined (WI)
+#ifdef MS
 // expected-warning@+2{{explicit instantiation declaration should not be 'dllexport'}}
 #endif
 extern template struct ExportedTemplateWithExplicitInstantiationDecl<IncompleteType2>;
@@ -411,13 +408,13 @@ struct __declspec(dllexport) ExportedBaseClass2 : public ExportedBaseClassTempla
 
 // Warn about explicit instantiation declarations of dllexport classes.
 template <typename T> struct ExplicitInstantiationDeclTemplate {};
-#if defined(MS) || defined (WI)
+#ifdef MS
 // expected-warning@+2{{explicit instantiation declaration should not be 'dllexport'}} expected-note@+2{{attribute is here}}
 #endif
 extern template struct __declspec(dllexport) ExplicitInstantiationDeclTemplate<int>;
 
 template <typename T> struct __declspec(dllexport) ExplicitInstantiationDeclExportedTemplate {};
-#if defined(MS) || defined (WI)
+#ifdef MS
 // expected-note@-2{{attribute is here}}
 // expected-warning@+2{{explicit instantiation declaration should not be 'dllexport'}}
 #endif
@@ -456,7 +453,7 @@ template <typename T> struct ExplicitlyExportInstantiatedTemplate { void func() 
 template struct __declspec(dllexport) ExplicitlyExportInstantiatedTemplate<int>;
 template <typename T> struct ExplicitlyExportDeclaredInstantiatedTemplate { void func() {} };
 extern template struct ExplicitlyExportDeclaredInstantiatedTemplate<int>;
-#if not defined(MS) && not defined (WI)
+#ifndef MS
 // expected-warning@+2{{'dllexport' attribute ignored on explicit instantiation definition}}
 #endif
 template struct __declspec(dllexport) ExplicitlyExportDeclaredInstantiatedTemplate<int>;
@@ -745,7 +742,7 @@ struct MemberRedecl {
 
   static         int  StaticField;         // expected-note{{previous declaration is here}}
   static  const  int  StaticConstField;    // expected-note{{previous declaration is here}}
-  constexpr static int ConstexprField = 1; // expected-note-re{{previous {{(declaration|definition)}} is here}}
+  constexpr static int ConstexprField = 1; // expected-note{{previous declaration is here}}
 };
 
 __declspec(dllexport)        void MemberRedecl::normalDef() {}         // expected-error{{redeclaration of 'MemberRedecl::normalDef' cannot add 'dllexport' attribute}}
@@ -760,12 +757,7 @@ __declspec(dllexport)        void MemberRedecl::staticInlineDecl() {}  // expect
 
 __declspec(dllexport)        int  MemberRedecl::StaticField = 1;       // expected-error{{redeclaration of 'MemberRedecl::StaticField' cannot add 'dllexport' attribute}}
 __declspec(dllexport) const  int  MemberRedecl::StaticConstField = 1;  // expected-error{{redeclaration of 'MemberRedecl::StaticConstField' cannot add 'dllexport' attribute}}
-#ifdef MS
-// expected-warning@+4{{attribute declaration must precede definition}}
-#else
-// expected-error@+2{{redeclaration of 'MemberRedecl::ConstexprField' cannot add 'dllexport' attribute}}
-#endif
-__declspec(dllexport) constexpr int MemberRedecl::ConstexprField;
+__declspec(dllexport) constexpr int MemberRedecl::ConstexprField;      // expected-error{{redeclaration of 'MemberRedecl::ConstexprField' cannot add 'dllexport' attribute}}
 
 #ifdef MS
 struct __declspec(dllexport) ClassWithMultipleDefaultCtors {
@@ -792,11 +784,6 @@ template <typename T> struct HasDefaults2 {
   HasDefaults2(int x = sizeof(T)) {} // expected-error {{invalid application of 'sizeof'}}
 };
 template struct HasDefaults2<void>; // expected-note {{in instantiation of member function 'HasDefaults2<void>::HasDefaults2' requested here}}
-
-template <typename T> struct __declspec(dllexport) HasDefaults3 { // expected-note{{in instantiation of default function argument expression for 'HasDefaults3<void>' required here}}
-  HasDefaults3(int x = sizeof(T)) {} // expected-error {{invalid application of 'sizeof'}}
-};
-template <> HasDefaults3<void>::HasDefaults3(int) {};
 
 #endif
 
@@ -854,7 +841,7 @@ struct MemTmplRedecl {
 #if __has_feature(cxx_variable_templates)
   template<typename T> static        int  StaticField;         // expected-note{{previous declaration is here}}
   template<typename T> static const  int  StaticConstField;    // expected-note{{previous declaration is here}}
-  template<typename T> constexpr static int ConstexprField = 1; // expected-note-re{{previous {{(declaration|definition)}} is here}}
+  template<typename T> constexpr static int ConstexprField = 1; // expected-note{{previous declaration is here}}
 #endif // __has_feature(cxx_variable_templates)
 };
 
@@ -868,13 +855,7 @@ template<typename T> __declspec(dllexport)        void MemTmplRedecl::staticInli
 #if __has_feature(cxx_variable_templates)
 template<typename T> __declspec(dllexport)        int  MemTmplRedecl::StaticField = 1;      // expected-error{{redeclaration of 'MemTmplRedecl::StaticField' cannot add 'dllexport' attribute}}
 template<typename T> __declspec(dllexport) const  int  MemTmplRedecl::StaticConstField = 1; // expected-error{{redeclaration of 'MemTmplRedecl::StaticConstField' cannot add 'dllexport' attribute}}
-
-#ifdef MS
-// expected-warning@+4{{attribute declaration must precede definition}}
-#else
-// expected-error@+2{{redeclaration of 'MemTmplRedecl::ConstexprField' cannot add 'dllexport' attribute}}
-#endif
-template<typename T> __declspec(dllexport) constexpr int MemTmplRedecl::ConstexprField;
+template<typename T> __declspec(dllexport) constexpr int MemTmplRedecl::ConstexprField;     // expected-error{{redeclaration of 'MemTmplRedecl::ConstexprField' cannot add 'dllexport' attribute}}
 #endif // __has_feature(cxx_variable_templates)
 
 
@@ -1064,7 +1045,7 @@ struct CTMR /*ClassTmplMemberRedecl*/ {
 
   static         int  StaticField;         // expected-note{{previous declaration is here}}
   static  const  int  StaticConstField;    // expected-note{{previous declaration is here}}
-  constexpr static int ConstexprField = 1; // expected-note-re{{previous {{(definition|declaration)}} is here}}
+  constexpr static int ConstexprField = 1; // expected-note{{previous declaration is here}}
 };
 
 template<typename T> __declspec(dllexport)        void CTMR<T>::normalDef() {}         // expected-error{{redeclaration of 'CTMR::normalDef' cannot add 'dllexport' attribute}}
@@ -1079,12 +1060,7 @@ template<typename T> __declspec(dllexport)        void CTMR<T>::staticInlineDecl
 
 template<typename T> __declspec(dllexport)        int  CTMR<T>::StaticField = 1;       // expected-error{{redeclaration of 'CTMR::StaticField' cannot add 'dllexport' attribute}}
 template<typename T> __declspec(dllexport) const  int  CTMR<T>::StaticConstField = 1;  // expected-error{{redeclaration of 'CTMR::StaticConstField' cannot add 'dllexport' attribute}}
-#ifdef MS
-// expected-warning@+4{{attribute declaration must precede definition}}
-#else
-// expected-error@+2{{redeclaration of 'CTMR::ConstexprField' cannot add 'dllexport' attribute}}
-#endif
-template<typename T> __declspec(dllexport) constexpr int CTMR<T>::ConstexprField;
+template<typename T> __declspec(dllexport) constexpr int CTMR<T>::ConstexprField;      // expected-error{{redeclaration of 'CTMR::ConstexprField' cannot add 'dllexport' attribute}}
 
 
 
@@ -1144,7 +1120,7 @@ struct CTMTR /*ClassTmplMemberTmplRedecl*/ {
 #if __has_feature(cxx_variable_templates)
   template<typename U> static        int  StaticField;         // expected-note{{previous declaration is here}}
   template<typename U> static const  int  StaticConstField;    // expected-note{{previous declaration is here}}
-  template<typename U> constexpr static int ConstexprField = 1; // expected-note-re{{previous {{(declaration|definition)}} is here}}
+  template<typename U> constexpr static int ConstexprField = 1; // expected-note{{previous declaration is here}}
 #endif // __has_feature(cxx_variable_templates)
 };
 
@@ -1158,12 +1134,7 @@ template<typename T> template<typename U> __declspec(dllexport)        void CTMT
 #if __has_feature(cxx_variable_templates)
 template<typename T> template<typename U> __declspec(dllexport)        int  CTMTR<T>::StaticField = 1;       // expected-error{{redeclaration of 'CTMTR::StaticField' cannot add 'dllexport' attribute}}
 template<typename T> template<typename U> __declspec(dllexport) const  int  CTMTR<T>::StaticConstField = 1;  // expected-error{{redeclaration of 'CTMTR::StaticConstField' cannot add 'dllexport' attribute}}
-#ifdef MS
-// expected-warning@+4{{attribute declaration must precede definition}}
-#else
-// expected-error@+2{{redeclaration of 'CTMTR::ConstexprField' cannot add 'dllexport' attribute}}
-#endif
-template<typename T> template<typename U> __declspec(dllexport) constexpr int CTMTR<T>::ConstexprField;
+template<typename T> template<typename U> __declspec(dllexport) constexpr int CTMTR<T>::ConstexprField;      // expected-error{{redeclaration of 'CTMTR::ConstexprField' cannot add 'dllexport' attribute}}
 #endif // __has_feature(cxx_variable_templates)
 
 // FIXME: Precedence rules seem to be different for classes.
@@ -1172,7 +1143,7 @@ template<typename T> template<typename U> __declspec(dllexport) constexpr int CT
 // Lambdas
 //===----------------------------------------------------------------------===//
 // The MS ABI doesn't provide a stable mangling for lambdas, so they can't be imported or exported.
-#if defined(MS) || defined (WI)
+#ifdef MS
 // expected-error@+2{{lambda cannot be declared 'dllexport'}}
 #endif
 auto Lambda = []() __declspec(dllexport) -> bool { return true; };

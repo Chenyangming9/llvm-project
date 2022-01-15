@@ -10,10 +10,7 @@ group("unittests") {
     "CrossTU:CrossTUTests",
     "Driver:ClangDriverTests",
     "Format:FormatTests",
-    "Frontend:FrontendTests",
     "Index:IndexTests",
-    "Interpreter:ClangReplInterpreterTests",
-    "Introspection:IntrospectionTests",
     "Lex:LexTests",
     "Rename:ClangRenameTests",
     "Rewrite:RewriteTests",
@@ -25,6 +22,7 @@ group("unittests") {
   if (clang_enable_static_analyzer) {
     deps += [
       "Analysis:ClangAnalysisTests",
+      "Frontend:FrontendTests",
       "StaticAnalyzer:StaticAnalysisTests",
     ]
   }
@@ -33,10 +31,7 @@ group("unittests") {
     # to failures, mostly in libclang.VirtualFileOverlay_*.
     # FIXME: Also, the executable can't find libclang.dll since that's
     # in a different directory.
-    deps += [
-      "libclang:libclangTests",
-      "libclang/CrashTests:libclangCrashTests",
-    ]
+    deps += [ "libclang:libclangTests" ]
   }
   testonly = true
 }

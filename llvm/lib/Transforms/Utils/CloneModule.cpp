@@ -48,7 +48,7 @@ std::unique_ptr<Module> llvm::CloneModule(
     function_ref<bool(const GlobalValue *)> ShouldCloneDefinition) {
   // First off, we need to create the new module.
   std::unique_ptr<Module> New =
-      std::make_unique<Module>(M.getModuleIdentifier(), M.getContext());
+      llvm::make_unique<Module>(M.getModuleIdentifier(), M.getContext());
   New->setSourceFileName(M.getSourceFileName());
   New->setDataLayout(M.getDataLayout());
   New->setTargetTriple(M.getTargetTriple());
@@ -115,26 +115,27 @@ std::unique_ptr<Module> llvm::CloneModule(
   // have been created, loop through and copy the global variable referrers
   // over...  We also set the attributes on the global now.
   //
-  for (const GlobalVariable &G : M.globals()) {
-    GlobalVariable *GV = cast<GlobalVariable>(VMap[&G]);
-
-    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
-    G.getAllMetadata(MDs);
-    for (auto MD : MDs)
-      GV->addMetadata(MD.first, *MapMetadata(MD.second, VMap));
-
-    if (G.isDeclaration())
+  for (Module::const_global_iterator I = M.global_begin(), E = M.global_end();
+       I != E; ++I) {
+    if (I->isDeclaration())
       continue;
 
-    if (!ShouldCloneDefinition(&G)) {
+    GlobalVariable *GV = cast<GlobalVariable>(VMap[&*I]);
+    if (!ShouldCloneDefinition(&*I)) {
       // Skip after setting the correct linkage for an external reference.
       GV->setLinkage(GlobalValue::ExternalLinkage);
       continue;
     }
-    if (G.hasInitializer())
-      GV->setInitializer(MapValue(G.getInitializer(), VMap));
+    if (I->hasInitializer())
+      GV->setInitializer(MapValue(I->getInitializer(), VMap));
 
-    copyComdat(GV, &G);
+    SmallVector<std::pair<unsigned, MDNode *>, 1> MDs;
+    I->getAllMetadata(MDs);
+    for (auto MD : MDs)
+      GV->addMetadata(MD.first,
+                      *MapMetadata(MD.second, VMap, RF_MoveDistinctMDs));
+
+    copyComdat(GV, &*I);
   }
 
   // Similarly, copy over function bodies now...
@@ -160,8 +161,7 @@ std::unique_ptr<Module> llvm::CloneModule(
     }
 
     SmallVector<ReturnInst *, 8> Returns; // Ignore returns cloned.
-    CloneFunctionInto(F, &I, VMap, CloneFunctionChangeType::ClonedModule,
-                      Returns);
+    CloneFunctionInto(F, &I, VMap, /*ModuleLevelChanges=*/true, Returns);
 
     if (I.hasPersonalityFn())
       F->setPersonalityFn(MapValue(I.getPersonalityFn(), VMap));

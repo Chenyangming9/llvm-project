@@ -1591,16 +1591,16 @@ sections:
       - VirtualAddress:  154
         SymbolName:      main
         Type:            IMAGE_REL_AMD64_SECTION
-      - VirtualAddress:  222
+      - VirtualAddress:  229
         SymbolName:      main
         Type:            IMAGE_REL_AMD64_SECREL
-      - VirtualAddress:  226
+      - VirtualAddress:  233
         SymbolName:      main
         Type:            IMAGE_REL_AMD64_SECTION
-      - VirtualAddress:  328
+      - VirtualAddress:  336
         SymbolName:      main
         Type:            IMAGE_REL_AMD64_SECREL
-      - VirtualAddress:  332
+      - VirtualAddress:  340
         SymbolName:      main
         Type:            IMAGE_REL_AMD64_SECTION
   - Name:            .xdata

@@ -20,39 +20,33 @@ namespace clang {
 namespace tidy {
 namespace readability {
 
-void RedundantMemberInitCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
-  Options.store(Opts, "IgnoreBaseInCopyConstructors",
-                IgnoreBaseInCopyConstructors);
-}
-
 void RedundantMemberInitCheck::registerMatchers(MatchFinder *Finder) {
+  if (!getLangOpts().CPlusPlus)
+    return;
+
+  auto Construct =
+      cxxConstructExpr(
+          hasDeclaration(cxxConstructorDecl(hasParent(
+              cxxRecordDecl(unless(isTriviallyDefaultConstructible()))))))
+          .bind("construct");
+
   Finder->addMatcher(
       cxxConstructorDecl(
-          unless(isDelegatingConstructor()), ofClass(unless(isUnion())),
+          unless(isDelegatingConstructor()),
+          ofClass(unless(
+              anyOf(isUnion(), ast_matchers::isTemplateInstantiation()))),
           forEachConstructorInitializer(
-              cxxCtorInitializer(
-                  withInitializer(
-                      cxxConstructExpr(
-                          hasDeclaration(
-                              cxxConstructorDecl(ofClass(cxxRecordDecl(
-                                  unless(isTriviallyDefaultConstructible()))))))
-                          .bind("construct")),
-                  unless(forField(hasType(isConstQualified()))),
-                  unless(forField(hasParent(recordDecl(isUnion())))))
-                  .bind("init")))
-          .bind("constructor"),
+              cxxCtorInitializer(isWritten(),
+                                 withInitializer(ignoringImplicit(Construct)),
+                                 unless(forField(hasType(isConstQualified()))),
+                                 unless(forField(hasParent(recordDecl(isUnion())))))
+                  .bind("init"))),
       this);
 }
 
 void RedundantMemberInitCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *Init = Result.Nodes.getNodeAs<CXXCtorInitializer>("init");
   const auto *Construct = Result.Nodes.getNodeAs<CXXConstructExpr>("construct");
-  const auto *ConstructorDecl =
-      Result.Nodes.getNodeAs<CXXConstructorDecl>("constructor");
-
-  if (IgnoreBaseInCopyConstructors && ConstructorDecl->isCopyConstructor() &&
-      Init->isBaseInitializer())
-    return;
 
   if (Construct->getNumArgs() == 0 ||
       Construct->getArg(0)->isDefaultArgument()) {

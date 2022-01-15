@@ -29,7 +29,6 @@ void FunctionScopeInfo::Clear() {
   HasDroppedStmt = false;
   HasOMPDeclareReductionCombiner = false;
   HasFallthroughStmt = false;
-  UsesFPIntrin = false;
   HasPotentialAvailabilityViolations = false;
   ObjCShouldCallSuper = false;
   ObjCIsDesignatedInit = false;

@@ -36,14 +36,6 @@ inline bool isPreISelGenericOpcode(unsigned Opcode) {
 inline bool isTargetSpecificOpcode(unsigned Opcode) {
   return Opcode > TargetOpcode::PRE_ISEL_GENERIC_OPCODE_END;
 }
-
-/// \returns true if \p Opcode is an optimization hint opcode which is not
-/// supposed to appear after ISel.
-inline bool isPreISelGenericOptimizationHint(unsigned Opcode) {
-  return Opcode >= TargetOpcode::PRE_ISEL_GENERIC_OPTIMIZATION_HINT_START &&
-         Opcode <= TargetOpcode::PRE_ISEL_GENERIC_OPTIMIZATION_HINT_END;
-}
-
 } // end namespace llvm
 
 #endif

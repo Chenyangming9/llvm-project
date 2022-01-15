@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONGROUPUUID_H
-#define LLDB_INTERPRETER_OPTIONGROUPUUID_H
+#ifndef liblldb_OptionGroupUUID_h_
+#define liblldb_OptionGroupUUID_h_
 
 #include "lldb/Interpreter/OptionValueUUID.h"
 #include "lldb/Interpreter/Options.h"
@@ -18,14 +18,15 @@ namespace lldb_private {
 
 class OptionGroupUUID : public OptionGroup {
 public:
-  OptionGroupUUID() = default;
+  OptionGroupUUID();
 
-  ~OptionGroupUUID() override = default;
+  ~OptionGroupUUID() override;
 
   llvm::ArrayRef<OptionDefinition> GetDefinitions() override;
 
   Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
                         ExecutionContext *execution_context) override;
+  Status SetOptionValue(uint32_t, const char *, ExecutionContext *) = delete;
 
   void OptionParsingStarting(ExecutionContext *execution_context) override;
 
@@ -37,4 +38,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONGROUPUUID_H
+#endif // liblldb_OptionGroupUUID_h_

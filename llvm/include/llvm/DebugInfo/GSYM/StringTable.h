@@ -1,8 +1,9 @@
 //===- StringTable.h --------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,6 +14,8 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/DebugInfo/GSYM/Range.h"
 #include <stdint.h>
+#include <string>
+
 
 namespace llvm {
 namespace gsym {
@@ -48,4 +51,4 @@ inline raw_ostream &operator<<(raw_ostream &OS, const StringTable &S) {
 
 } // namespace gsym
 } // namespace llvm
-#endif // LLVM_DEBUGINFO_GSYM_STRINGTABLE_H
+#endif // #ifndef LLVM_DEBUGINFO_GSYM_STRINGTABLE_H

@@ -18,11 +18,11 @@
 // wstring to_wstring(double val);
 // wstring to_wstring(long double val);
 
+#include <limits>
 #include <string>
 #include <cassert>
-#include <limits>
+#include <sstream>
 
-#include "parse_integer.h"
 #include "test_macros.h"
 
 template <class T>
@@ -50,12 +50,16 @@ test_signed()
     {
         std::wstring s = std::to_wstring(std::numeric_limits<T>::max());
         assert(s.size() == std::numeric_limits<T>::digits10 + 1);
-        T t = parse_integer<T>(s);
+        std::wistringstream is(s);
+        T t(0);
+        is >> t;
         assert(t == std::numeric_limits<T>::max());
     }
     {
         std::wstring s = std::to_wstring(std::numeric_limits<T>::min());
-        T t = parse_integer<T>(s);
+        std::wistringstream is(s);
+        T t(0);
+        is >> t;
         assert(t == std::numeric_limits<T>::min());
     }
 }
@@ -79,7 +83,9 @@ test_unsigned()
     {
         std::wstring s = std::to_wstring(std::numeric_limits<T>::max());
         assert(s.size() == std::numeric_limits<T>::digits10 + 1);
-        T t = parse_integer<T>(s);
+        std::wistringstream is(s);
+        T t(0);
+        is >> t;
         assert(t == std::numeric_limits<T>::max());
     }
 }

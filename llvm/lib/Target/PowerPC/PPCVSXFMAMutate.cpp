@@ -29,7 +29,6 @@
 #include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/CodeGen/SlotIndexes.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -127,8 +126,8 @@ protected:
         if (!AddendMI->isFullCopy())
           continue;
 
-        Register AddendSrcReg = AddendMI->getOperand(1).getReg();
-        if (Register::isVirtualRegister(AddendSrcReg)) {
+        unsigned AddendSrcReg = AddendMI->getOperand(1).getReg();
+        if (TargetRegisterInfo::isVirtualRegister(AddendSrcReg)) {
           if (MRI.getRegClass(AddendMI->getOperand(0).getReg()) !=
               MRI.getRegClass(AddendSrcReg))
             continue;
@@ -183,12 +182,12 @@ protected:
         //   %5 = A-form-op %5, %5, %11;
         // where %5 and %11 are both kills. This case would be skipped
         // otherwise.
-        Register OldFMAReg = MI.getOperand(0).getReg();
+        unsigned OldFMAReg = MI.getOperand(0).getReg();
 
         // Find one of the product operands that is killed by this instruction.
         unsigned KilledProdOp = 0, OtherProdOp = 0;
-        Register Reg2 = MI.getOperand(2).getReg();
-        Register Reg3 = MI.getOperand(3).getReg();
+        unsigned Reg2 = MI.getOperand(2).getReg();
+        unsigned Reg3 = MI.getOperand(3).getReg();
         if (LIS->getInterval(Reg2).Query(FMAIdx).isKill()
             && Reg2 != OldFMAReg) {
           KilledProdOp = 2;
@@ -209,14 +208,14 @@ protected:
         // legality checks above, the live range for the addend source register
         // could be extended), but it seems likely that such a trivial copy can
         // be coalesced away later, and thus is not worth the effort.
-        if (Register::isVirtualRegister(AddendSrcReg) &&
+        if (TargetRegisterInfo::isVirtualRegister(AddendSrcReg) &&
             !LIS->getInterval(AddendSrcReg).liveAt(FMAIdx))
           continue;
 
         // Transform: (O2 * O3) + O1 -> (O2 * O1) + O3.
 
-        Register KilledProdReg = MI.getOperand(KilledProdOp).getReg();
-        Register OtherProdReg = MI.getOperand(OtherProdOp).getReg();
+        unsigned KilledProdReg = MI.getOperand(KilledProdOp).getReg();
+        unsigned OtherProdReg = MI.getOperand(OtherProdOp).getReg();
 
         unsigned AddSubReg = AddendMI->getOperand(1).getSubReg();
         unsigned KilledProdSubReg = MI.getOperand(KilledProdOp).getSubReg();
@@ -315,9 +314,9 @@ protected:
         // Extend the live interval of the addend source (it might end at the
         // copy to be removed, or somewhere in between there and here). This
         // is necessary only if it is a physical register.
-        if (!AddendSrcReg.isVirtual())
-          for (MCRegUnitIterator Units(AddendSrcReg.asMCReg(), TRI);
-               Units.isValid(); ++Units) {
+        if (!TargetRegisterInfo::isVirtualRegister(AddendSrcReg))
+          for (MCRegUnitIterator Units(AddendSrcReg, TRI); Units.isValid();
+               ++Units) {
             unsigned Unit = *Units;
 
             LiveRange &AddendSrcRange = LIS->getRegUnit(Unit);

@@ -41,9 +41,6 @@ public:
     /// An implicit or explicit C++ constructor call
     Constructor,
 
-    /// A C++ inherited constructor produced by a "using T::T" directive
-    InheritedConstructor,
-
     /// A C++ allocation function call (operator `new`), via C++ new-expression
     Allocator,
 
@@ -87,9 +84,6 @@ public:
   AnyCall(const CXXConstructExpr *NE)
       : E(NE), D(NE->getConstructor()), K(Constructor) {}
 
-  AnyCall(const CXXInheritedCtorInitExpr *CIE)
-      : E(CIE), D(CIE->getConstructor()), K(InheritedConstructor) {}
-
   AnyCall(const CXXDestructorDecl *D) : E(nullptr), D(D), K(Destructor) {}
 
   AnyCall(const CXXConstructorDecl *D) : E(nullptr), D(D), K(Constructor) {}
@@ -107,8 +101,8 @@ public:
 
   }
 
-  /// If @c E is a generic call (to ObjC method /function/block/etc),
-  /// return a constructed @c AnyCall object. Return None otherwise.
+  /// If {@code E} is a generic call (to ObjC method /function/block/etc),
+  /// return a constructed {@code AnyCall} object. Return None otherwise.
   static Optional<AnyCall> forExpr(const Expr *E) {
     if (const auto *ME = dyn_cast<ObjCMessageExpr>(E)) {
       return AnyCall(ME);
@@ -120,15 +114,13 @@ public:
       return AnyCall(CXDE);
     } else if (const auto *CXCE = dyn_cast<CXXConstructExpr>(E)) {
       return AnyCall(CXCE);
-    } else if (const auto *CXCIE = dyn_cast<CXXInheritedCtorInitExpr>(E)) {
-      return AnyCall(CXCIE);
     } else {
       return None;
     }
   }
 
-  /// If @c D is a callable (Objective-C method or a function), return
-  /// a constructed @c AnyCall object. Return None otherwise.
+  /// If {@code D} is a callable (Objective-C method or a function), return
+  /// a constructed {@code AnyCall} object. Return None otherwise.
   // FIXME: block support.
   static Optional<AnyCall> forDecl(const Decl *D) {
     if (const auto *FD = dyn_cast<FunctionDecl>(D)) {
@@ -177,7 +169,6 @@ public:
       return cast<CallExpr>(E)->getCallReturnType(Ctx);
     case Destructor:
     case Constructor:
-    case InheritedConstructor:
     case Allocator:
     case Deallocator:
       return cast<FunctionDecl>(D)->getReturnType();
@@ -186,7 +177,7 @@ public:
   }
 
   /// \returns Function identifier if it is a named declaration,
-  /// @c nullptr otherwise.
+  /// {@code nullptr} otherwise.
   const IdentifierInfo *getIdentifier() const {
     if (const auto *ND = dyn_cast_or_null<NamedDecl>(D))
       return ND->getIdentifier();

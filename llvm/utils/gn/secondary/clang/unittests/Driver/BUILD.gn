@@ -5,7 +5,6 @@ unittest("ClangDriverTests") {
   deps = [
     "//clang/lib/Basic",
     "//clang/lib/Driver",
-    "//clang/lib/Frontend",
     "//llvm/lib/Option",
     "//llvm/lib/Support",
     "//llvm/lib/Target:TargetsToBuild",
@@ -14,7 +13,6 @@ unittest("ClangDriverTests") {
     "DistroTest.cpp",
     "ModuleCacheTest.cpp",
     "MultilibTest.cpp",
-    "SanitizerArgsTest.cpp",
     "ToolChainTest.cpp",
   ]
 }

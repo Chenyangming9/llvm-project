@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_BREAKPOINT_BREAKPOINTLIST_H
-#define LLDB_BREAKPOINT_BREAKPOINTLIST_H
+#ifndef liblldb_BreakpointList_h_
+#define liblldb_BreakpointList_h_
 
 #include <list>
 #include <mutex>
@@ -67,10 +67,8 @@ public:
   ///   The breakpoint name for which to search.
   ///
   /// \result
-  ///   error if the input name was not a legal breakpoint name, vector
-  ///   of breakpoints otherwise.
-  llvm::Expected<std::vector<lldb::BreakpointSP>>
-  FindBreakpointsByName(const char *name);
+  ///   \bfalse if the input name was not a legal breakpoint name.
+  bool FindBreakpointsByName(const char *name, BreakpointList &matching_bps);
 
   /// Returns the number of elements in this breakpoint list.
   ///
@@ -140,7 +138,7 @@ public:
 
   /// Sets the passed in Locker to hold the Breakpoint List mutex.
   ///
-  /// \param[in] lock
+  /// \param[in] locker
   ///   The locker object that is set.
   void GetListMutex(std::unique_lock<std::recursive_mutex> &lock);
 
@@ -168,10 +166,9 @@ public:
   }
 
 private:
-  BreakpointList(const BreakpointList &) = delete;
-  const BreakpointList &operator=(const BreakpointList &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(BreakpointList);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_BREAKPOINT_BREAKPOINTLIST_H
+#endif // liblldb_BreakpointList_h_

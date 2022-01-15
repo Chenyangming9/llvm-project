@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14, c++17
+// UNSUPPORTED: c++98, c++03, c++11, c++14, c++17
 
 // <functional>
 //
@@ -38,7 +38,6 @@ Foo& get_foo() {
     return foo;
 }
 
-int main(int, char**) {
+int main() {
     test();
-    return 0;
 }

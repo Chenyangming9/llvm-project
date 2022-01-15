@@ -104,19 +104,11 @@ private:
         // In this case, just terminate the process.
         if (ReachedEnd)
           return;
-        // Cache the result so that peek() is not called again as it may be
-        // quite expensive in AND with large subtrees.
-        auto Candidate = Child->peek();
         // If any child goes beyond given ID (i.e. ID is not the common item),
         // all children should be advanced to the next common item.
-        if (Candidate > SyncID) {
-          SyncID = Candidate;
+        if (Child->peek() > SyncID) {
+          SyncID = Child->peek();
           NeedsAdvance = true;
-          // Reset and try to sync again. Sync starts with the first child as
-          // this is the cheapest (smallest size estimate). This way advanceTo
-          // is called on the large posting lists once the sync point is very
-          // likely.
-          break;
         }
       }
     } while (NeedsAdvance);
@@ -215,6 +207,7 @@ private:
     return OS;
   }
 
+  // FIXME(kbobyrev): Would storing Children in min-heap be faster?
   std::vector<std::unique_ptr<Iterator>> Children;
   friend Corpus; // For optimizations.
 };
@@ -387,7 +380,7 @@ Corpus::intersect(std::vector<std::unique_ptr<Iterator>> Children) const {
   case 1:
     return std::move(RealChildren.front());
   default:
-    return std::make_unique<AndIterator>(std::move(RealChildren));
+    return llvm::make_unique<AndIterator>(std::move(RealChildren));
   }
 }
 
@@ -417,16 +410,16 @@ Corpus::unionOf(std::vector<std::unique_ptr<Iterator>> Children) const {
   case 1:
     return std::move(RealChildren.front());
   default:
-    return std::make_unique<OrIterator>(std::move(RealChildren));
+    return llvm::make_unique<OrIterator>(std::move(RealChildren));
   }
 }
 
 std::unique_ptr<Iterator> Corpus::all() const {
-  return std::make_unique<TrueIterator>(Size);
+  return llvm::make_unique<TrueIterator>(Size);
 }
 
 std::unique_ptr<Iterator> Corpus::none() const {
-  return std::make_unique<FalseIterator>();
+  return llvm::make_unique<FalseIterator>();
 }
 
 std::unique_ptr<Iterator> Corpus::boost(std::unique_ptr<Iterator> Child,
@@ -435,14 +428,14 @@ std::unique_ptr<Iterator> Corpus::boost(std::unique_ptr<Iterator> Child,
     return Child;
   if (Child->kind() == Iterator::Kind::False)
     return Child;
-  return std::make_unique<BoostIterator>(std::move(Child), Factor);
+  return llvm::make_unique<BoostIterator>(std::move(Child), Factor);
 }
 
 std::unique_ptr<Iterator> Corpus::limit(std::unique_ptr<Iterator> Child,
                                         size_t Limit) const {
   if (Child->kind() == Iterator::Kind::False)
     return Child;
-  return std::make_unique<LimitIterator>(std::move(Child), Limit);
+  return llvm::make_unique<LimitIterator>(std::move(Child), Limit);
 }
 
 } // namespace dex

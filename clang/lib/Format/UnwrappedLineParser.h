@@ -85,9 +85,8 @@ private:
   void reset();
   void parseFile();
   void parseLevel(bool HasOpeningBrace);
-  void parseBlock(bool MustBeDeclaration, unsigned AddLevels = 1u,
-                  bool MunchSemi = true,
-                  bool UnindentWhitesmithsBraces = false);
+  void parseBlock(bool MustBeDeclaration, bool AddLevel = true,
+                  bool MunchSemi = true);
   void parseChildBlock();
   void parsePPDirective();
   void parsePPDefine();
@@ -97,9 +96,9 @@ private:
   void parsePPEndIf();
   void parsePPUnknown();
   void readTokenWithJavaScriptASI();
-  void parseStructuralElement(bool IsTopLevel = false);
+  void parseStructuralElement();
   bool tryToParseBracedList();
-  bool parseBracedList(bool ContinueOnSemicolons = false, bool IsEnum = false,
+  bool parseBracedList(bool ContinueOnSemicolons = false,
                        tok::TokenKind ClosingBraceKind = tok::r_brace);
   void parseParens();
   void parseSquare(bool LambdaIntroducer = false);
@@ -107,24 +106,18 @@ private:
   void parseTryCatch();
   void parseForOrWhileLoop();
   void parseDoWhile();
-  void parseLabel(bool LeftAlignLabel = false);
+  void parseLabel();
   void parseCaseLabel();
   void parseSwitch();
   void parseNamespace();
   void parseNew();
   void parseAccessSpecifier();
   bool parseEnum();
-  bool parseStructLike();
-  void parseConcept();
-  void parseRequires();
-  void parseRequiresExpression(unsigned int OriginalLevel);
-  void parseConstraintExpression(unsigned int OriginalLevel);
   void parseJavaEnumBody();
   // Parses a record (aka class) as a top level element. If ParseAsExpr is true,
   // parses the record as a child block, i.e. if the class declaration is an
   // expression.
   void parseRecord(bool ParseAsExpr = false);
-  void parseObjCLightweightGenerics();
   void parseObjCMethod();
   void parseObjCProtocolList();
   void parseObjCUntilAtEnd();
@@ -132,22 +125,10 @@ private:
   bool parseObjCProtocol();
   void parseJavaScriptEs6ImportExport();
   void parseStatementMacro();
-  void parseCSharpAttribute();
-  // Parse a C# generic type constraint: `where T : IComparable<T>`.
-  // See:
-  // https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/where-generic-type-constraint
-  void parseCSharpGenericTypeConstraint();
   bool tryToParseLambda();
   bool tryToParseLambdaIntroducer();
-  bool tryToParsePropertyAccessor();
   void tryToParseJSFunction();
-  bool tryToParseSimpleAttribute();
-
-  // Used by addUnwrappedLine to denote whether to keep or remove a level
-  // when resetting the line state.
-  enum class LineLevel { Remove, Keep };
-
-  void addUnwrappedLine(LineLevel AdjustLevel = LineLevel::Remove);
+  void addUnwrappedLine();
   bool eof() const;
   // LevelDifference is the difference of levels after and before the current
   // token. For example:

@@ -50,7 +50,8 @@ public:
   /// TextDiagnostic logic requires.
   static void printDiagnosticLevel(raw_ostream &OS,
                                    DiagnosticsEngine::Level Level,
-                                   bool ShowColors);
+                                   bool ShowColors,
+                                   bool CLFallbackMode = false);
 
   /// Pretty-print a diagnostic message to a raw_ostream.
   ///

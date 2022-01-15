@@ -10,11 +10,11 @@
 ; LiveDebugValues should produce DBG_VALUEs for variable "b" in successive
 ; blocks once we recognize that it is spilled.
 ; CHECK-MIR: ![[BDIVAR:[0-9]+]] = !DILocalVariable(name: "b"
-; CHECK-MIR: DBG_VALUE $rsp, 0, ![[BDIVAR]], !DIExpression(DW_OP_constu, 24, DW_OP_minus)
+; CHECK-MIR: DBG_VALUE $rsp, 0, ![[BDIVAR]], !DIExpression(DW_OP_constu, 32, DW_OP_minus)
 ; CHECK-MIR-LABEL: bb.6.for.inc13:
-; CHECK-MIR: DBG_VALUE $rsp, 0, ![[BDIVAR]], !DIExpression(DW_OP_constu, 24, DW_OP_minus)
+; CHECK-MIR: DBG_VALUE $rsp, 0, ![[BDIVAR]], !DIExpression(DW_OP_constu, 32, DW_OP_minus)
 ; CHECK-MIR-LABEL: bb.7.for.inc16:
-; CHECK-MIR: DBG_VALUE $rsp, 0, ![[BDIVAR]], !DIExpression(DW_OP_constu, 24, DW_OP_minus)
+; CHECK-MIR: DBG_VALUE $rsp, 0, ![[BDIVAR]], !DIExpression(DW_OP_constu, 32, DW_OP_minus)
 
 
 ; CHECK: .debug_info contents:
@@ -32,10 +32,10 @@
 ; CHECK:      DW_TAG_formal_parameter
 ; CHECK-NEXT:   DW_AT_const_value [DW_FORM_sdata] (1)
 ; CHECK-NEXT:   DW_AT_name {{.*}} "p")
-; CHECK: DW_AT_location [DW_FORM_sec_offset]   ([[A:0x[0-9a-z]*]]:
-; CHECK: DW_AT_location [DW_FORM_sec_offset]   ([[E:0x[0-9a-z]*]]:
-; CHECK: DW_AT_location [DW_FORM_sec_offset]   ([[B:0x[0-9a-z]*]]:
-; CHECK: DW_AT_location [DW_FORM_sec_offset]   ([[D:0x[0-9a-z]*]]:
+; CHECK: DW_AT_location [DW_FORM_sec_offset]   ([[A:0x[0-9a-z]*]]
+; CHECK: DW_AT_location [DW_FORM_sec_offset]   ([[E:0x[0-9a-z]*]]
+; CHECK: DW_AT_location [DW_FORM_sec_offset]   ([[B:0x[0-9a-z]*]]
+; CHECK: DW_AT_location [DW_FORM_sec_offset]   ([[D:0x[0-9a-z]*]]
 ; CHECK: DW_AT_ranges [DW_FORM_sec_offset]   (0x00000000
 ; CHECK-NOT: .debug_loc contents:
 ; CHECK-NOT: Beginning address offset
@@ -45,31 +45,27 @@
 ; if they've changed due to a bugfix, change in register allocation, etc.
 
 ; CHECK:      [[A]]:
-; CHECK-NEXT:   DW_LLE_startx_length (0x00000001, 0x00000011): DW_OP_consts +0, DW_OP_stack_value
-; CHECK-NEXT:   DW_LLE_startx_length (0x00000002, 0x0000000b): DW_OP_reg0 RAX
-; CHECK-NEXT:   DW_LLE_startx_length (0x00000003, 0x00000012): DW_OP_breg7 RSP-4
-; CHECK-NEXT:   DW_LLE_end_of_list   ()
+; CHECK-NEXT:   Addr idx 2 (w/ length 169): DW_OP_consts +0, DW_OP_stack_value
+; CHECK-NEXT:   Addr idx 3 (w/ length 15): DW_OP_reg0 RAX
+; CHECK-NEXT:   Addr idx 4 (w/ length 18): DW_OP_breg7 RSP-8
 ; CHECK:      [[E]]:
-; CHECK-NEXT:   DW_LLE_startx_length (0x00000004, 0x0000000b): DW_OP_reg0 RAX
-; CHECK-NEXT:   DW_LLE_startx_length (0x00000005, 0x0000005a): DW_OP_breg7 RSP-48
-; CHECK-NEXT:   DW_LLE_end_of_list   ()
+; CHECK-NEXT:   Addr idx 5 (w/ length 9): DW_OP_reg0 RAX
+; CHECK-NEXT:   Addr idx 6 (w/ length 98): DW_OP_breg7 RSP-44
 ; CHECK:      [[B]]:
-; CHECK-NEXT:   DW_LLE_startx_length (0x00000006, 0x0000000b): DW_OP_reg0 RAX
-; CHECK-NEXT:   DW_LLE_startx_length (0x00000007, 0x00000042): DW_OP_breg7 RSP-24
-; CHECK-NEXT:   DW_LLE_end_of_list   ()
+; CHECK-NEXT:   Addr idx 7 (w/ length 15): DW_OP_reg0 RAX
+; CHECK-NEXT:   Addr idx 8 (w/ length 66): DW_OP_breg7 RSP-32
 ; CHECK:      [[D]]:
-; CHECK-NEXT:   DW_LLE_startx_length (0x00000008, 0x0000000b): DW_OP_reg0 RAX
-; CHECK-NEXT:   DW_LLE_startx_length (0x00000009, 0x0000002a): DW_OP_breg7 RSP-12
-; CHECK-NEXT:   DW_LLE_end_of_list   ()
+; CHECK-NEXT:   Addr idx 9 (w/ length 15): DW_OP_reg0 RAX
+; CHECK-NEXT:   Addr idx 10 (w/ length 42): DW_OP_breg7 RSP-20
 
 ; Make sure we don't produce any relocations in any .dwo section (though in particular, debug_info.dwo)
 ; HDR-NOT: .rela.{{.*}}.dwo
 
 ; Make sure we have enough stuff in the debug_addr to cover the address indexes
-; (9 is the last index in debug_loc.dwo, making 10 entries of 8 bytes each,
-; 10 * 8 == 80 base 10 == 50 base 16)
+; (10 is the last index in debug_loc.dwo, making 11 entries of 8 bytes each,
+; 11 * 8 == 88 base 10 == 58 base 16)
 
-; HDR: .debug_addr 00000050
+; HDR: .debug_addr 00000058
 ; HDR-NOT: .rela.{{.*}}.dwo
 
 ; Check for the existence of a DWARF v5-style range list table in the .debug_rnglists
@@ -81,7 +77,7 @@
 ; V5RNGLISTS-NOT:  DW_TAG
 ; V5RNGLISTS:      DW_AT_rnglists_base [DW_FORM_sec_offset]  (0x0000000c)
 ; V5RNGLISTS:      .debug_rnglists contents:
-; V5RNGLISTS-NEXT: 0x00000000: range list header: length = 0x00000015, format = DWARF32, version = 0x0005,
+; V5RNGLISTS-NEXT: 0x00000000: range list header: length = 0x00000019, version = 0x0005,
 ; V5RNGLISTS-SAME: addr_size = 0x08, seg_size = 0x00, offset_entry_count = 0x00000001
 ; V5RNGLISTS-NEXT: offsets: [
 ; V5RNGLISTS-NEXT: => 0x00000010
@@ -96,7 +92,7 @@
 ; extern int c;
 ; static void foo (int p)
 ; {
-;   int a, b;
+;   int a, b; 
 ;   unsigned int d, e;
 
 ;   for (a = 0; a < 30; a++)
@@ -104,12 +100,12 @@
 ;       for (b = 0; b < 30; b++)
 ;         for (e = 0; e < 30; e++)
 ;           {
-;             int *w = &c;
-;             *w &= p;
+;             int *w = &c; 
+;             *w &= p; 
 ;           }
 ; }
 
-; void
+; void 
 ; bar ()
 ; {
 ;   foo (1);
@@ -119,7 +115,7 @@
 
 ; clang -g -S -gsplit-dwarf -O1 small.c
 
-@c = external dso_local global i32
+@c = external global i32
 
 ; Function Attrs: nounwind uwtable
 define void @bar() #0 !dbg !4 {
@@ -187,7 +183,7 @@ for.end18:                                        ; preds = %for.inc16
 ; Function Attrs: nounwind readnone
 declare void @llvm.dbg.value(metadata, metadata, metadata) #1
 
-attributes #0 = { nounwind uwtable "less-precise-fpmad"="false" "frame-pointer"="none" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind uwtable "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #1 = { nounwind readnone }
 
 !llvm.dbg.cu = !{!0}

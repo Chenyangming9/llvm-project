@@ -11,8 +11,6 @@
 #include "clang/AST/Attr.h"
 #include "clang/AST/Comment.h"
 #include "clang/AST/CommentVisitor.h"
-#include "clang/Basic/FileManager.h"
-#include "clang/Basic/SourceManager.h"
 #include "clang/Format/Format.h"
 #include "clang/Index/USRGeneration.h"
 #include "llvm/ADT/StringExtras.h"
@@ -298,10 +296,6 @@ void CommentASTToHTMLConverter::visitInlineCommandComment(
     Result << "<em>";
     appendToResultWithHTMLEscaping(Arg0);
     Result << "</em>";
-    return;
-  case InlineCommandComment::RenderAnchor:
-    assert(C->getNumArgs() == 1);
-    Result << "<span id=\"" << Arg0 << "\"></span>";
     return;
   }
 }
@@ -646,10 +640,6 @@ void CommentASTToXMLConverter::visitInlineCommandComment(
     Result << "<emphasized>";
     appendToResultWithXMLEscaping(Arg0);
     Result << "</emphasized>";
-    return;
-  case InlineCommandComment::RenderAnchor:
-    assert(C->getNumArgs() == 1);
-    Result << "<anchor id=\"" << Arg0 << "\"></anchor>";
     return;
   }
 }

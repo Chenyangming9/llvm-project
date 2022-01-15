@@ -1,5 +1,4 @@
-; RUN: opt -S < %s -analyze -scalar-evolution -loop-simplify -scalar-evolution -enable-new-pm=0 | FileCheck %s
-; RUN: opt -S < %s -passes='print<scalar-evolution>,loop-simplify,print<scalar-evolution>' 2>&1 | FileCheck %s
+; RUN: opt -S < %s -analyze -scalar-evolution -loop-simplify -scalar-evolution | FileCheck %s
 
 ; Provide legal integer types.
 target datalayout = "n8:16:32:64"

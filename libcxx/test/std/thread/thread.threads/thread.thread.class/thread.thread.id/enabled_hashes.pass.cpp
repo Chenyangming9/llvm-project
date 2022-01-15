@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: libcpp-has-no-threads
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <thread>
 
@@ -16,7 +16,7 @@
 
 #include <thread>
 
-#include "poisoned_hash_helper.h"
+#include "poisoned_hash_helper.hpp"
 
 #include "test_macros.h"
 

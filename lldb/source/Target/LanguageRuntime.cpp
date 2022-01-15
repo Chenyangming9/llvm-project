@@ -1,4 +1,4 @@
-//===-- LanguageRuntime.cpp -----------------------------------------------===//
+//===-- LanguageRuntime.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -78,7 +78,8 @@ void ExceptionSearchFilter::UpdateModuleListIfNeeded() {
   }
 }
 
-SearchFilterSP ExceptionSearchFilter::DoCreateCopy() {
+SearchFilterSP
+ExceptionSearchFilter::DoCopyForBreakpoint(Breakpoint &breakpoint) {
   return SearchFilterSP(
       new ExceptionSearchFilter(TargetSP(), m_language, false));
 }
@@ -110,11 +111,12 @@ public:
   ~ExceptionBreakpointResolver() override = default;
 
   Searcher::CallbackReturn SearchCallback(SearchFilter &filter,
-                                          SymbolContext &context,
-                                          Address *addr) override {
+                                          SymbolContext &context, Address *addr,
+                                          bool containing) override {
 
     if (SetActualResolver())
-      return m_actual_resolver_sp->SearchCallback(filter, context, addr);
+      return m_actual_resolver_sp->SearchCallback(filter, context, addr,
+                                                  containing);
     else
       return eCallbackReturnStop;
   }
@@ -153,17 +155,15 @@ public:
   }
 
 protected:
-  BreakpointResolverSP CopyForBreakpoint(BreakpointSP &breakpoint) override {
-    BreakpointResolverSP ret_sp(
+  BreakpointResolverSP CopyForBreakpoint(Breakpoint &breakpoint) override {
+    return BreakpointResolverSP(
         new ExceptionBreakpointResolver(m_language, m_catch_bp, m_throw_bp));
-    ret_sp->SetBreakpoint(breakpoint);
-    return ret_sp;
   }
 
   bool SetActualResolver() {
-    BreakpointSP breakpoint_sp = GetBreakpoint();
-    if (breakpoint_sp) {
-      ProcessSP process_sp = breakpoint_sp->GetTarget().GetProcessSP();
+    ProcessSP process_sp;
+    if (m_breakpoint) {
+      process_sp = m_breakpoint->GetTarget().GetProcessSP();
       if (process_sp) {
         bool refreash_resolver = !m_actual_resolver_sp;
         if (m_language_runtime == nullptr) {
@@ -180,7 +180,7 @@ protected:
 
         if (refreash_resolver && m_language_runtime) {
           m_actual_resolver_sp = m_language_runtime->CreateExceptionResolver(
-              breakpoint_sp, m_catch_bp, m_throw_bp);
+              m_breakpoint, m_catch_bp, m_throw_bp);
         }
       } else {
         m_actual_resolver_sp.reset();
@@ -202,19 +202,26 @@ protected:
 
 LanguageRuntime *LanguageRuntime::FindPlugin(Process *process,
                                              lldb::LanguageType language) {
+  std::unique_ptr<LanguageRuntime> language_runtime_up;
   LanguageRuntimeCreateInstance create_callback;
+
   for (uint32_t idx = 0;
        (create_callback =
             PluginManager::GetLanguageRuntimeCreateCallbackAtIndex(idx)) !=
        nullptr;
        ++idx) {
-    if (LanguageRuntime *runtime = create_callback(process, language))
-      return runtime;
+    language_runtime_up.reset(create_callback(process, language));
+
+    if (language_runtime_up)
+      return language_runtime_up.release();
   }
+
   return nullptr;
 }
 
-LanguageRuntime::LanguageRuntime(Process *process) : Runtime(process) {}
+LanguageRuntime::LanguageRuntime(Process *process) : m_process(process) {}
+
+LanguageRuntime::~LanguageRuntime() = default;
 
 BreakpointPreconditionSP
 LanguageRuntime::GetExceptionPrecondition(LanguageType language,
@@ -257,25 +264,6 @@ BreakpointSP LanguageRuntime::CreateExceptionBreakpoint(
   }
 
   return exc_breakpt_sp;
-}
-
-UnwindPlanSP
-LanguageRuntime::GetRuntimeUnwindPlan(Thread &thread, RegisterContext *regctx,
-                                      bool &behaves_like_zeroth_frame) {
-  ProcessSP process_sp = thread.GetProcess();
-  if (!process_sp.get())
-    return UnwindPlanSP();
-  if (process_sp->GetDisableLangRuntimeUnwindPlans() == true)
-    return UnwindPlanSP();
-  for (const lldb::LanguageType lang_type : Language::GetSupportedLanguages()) {
-    if (LanguageRuntime *runtime = process_sp->GetLanguageRuntime(lang_type)) {
-      UnwindPlanSP plan_sp = runtime->GetRuntimeUnwindPlan(
-          process_sp, regctx, behaves_like_zeroth_frame);
-      if (plan_sp.get())
-        return plan_sp;
-    }
-  }
-  return UnwindPlanSP();
 }
 
 void LanguageRuntime::InitializeCommands(CommandObject *parent) {

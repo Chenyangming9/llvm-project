@@ -8,32 +8,31 @@
 
 #include "RegisterValue.h"
 #include "llvm/ADT/APFloat.h"
-#include "llvm/ADT/StringRef.h"
 
 namespace llvm {
 namespace exegesis {
 
-static APFloat getFloatValue(const fltSemantics &FltSemantics,
-                             PredefinedValues Value) {
+static llvm::APFloat getFloatValue(const llvm::fltSemantics &FltSemantics,
+                                   PredefinedValues Value) {
   switch (Value) {
   case PredefinedValues::POS_ZERO:
-    return APFloat::getZero(FltSemantics);
+    return llvm::APFloat::getZero(FltSemantics);
   case PredefinedValues::NEG_ZERO:
-    return APFloat::getZero(FltSemantics, true);
+    return llvm::APFloat::getZero(FltSemantics, true);
   case PredefinedValues::ONE:
-    return APFloat(FltSemantics, "1");
+    return llvm::APFloat(FltSemantics, "1");
   case PredefinedValues::TWO:
-    return APFloat(FltSemantics, "2");
+    return llvm::APFloat(FltSemantics, "2");
   case PredefinedValues::INF:
-    return APFloat::getInf(FltSemantics);
+    return llvm::APFloat::getInf(FltSemantics);
   case PredefinedValues::QNAN:
-    return APFloat::getQNaN(FltSemantics);
+    return llvm::APFloat::getQNaN(FltSemantics);
   case PredefinedValues::SMALLEST_NORM:
-    return APFloat::getSmallestNormalized(FltSemantics);
+    return llvm::APFloat::getSmallestNormalized(FltSemantics);
   case PredefinedValues::LARGEST:
-    return APFloat::getLargest(FltSemantics);
+    return llvm::APFloat::getLargest(FltSemantics);
   case PredefinedValues::ULP:
-    return APFloat::getSmallest(FltSemantics);
+    return llvm::APFloat::getSmallest(FltSemantics);
   case PredefinedValues::ONE_PLUS_ULP:
     auto Output = getFloatValue(FltSemantics, PredefinedValues::ONE);
     Output.next(false);
@@ -42,8 +41,8 @@ static APFloat getFloatValue(const fltSemantics &FltSemantics,
   llvm_unreachable("Unhandled exegesis::PredefinedValues");
 }
 
-APInt bitcastFloatValue(const fltSemantics &FltSemantics,
-                        PredefinedValues Value) {
+llvm::APInt bitcastFloatValue(const llvm::fltSemantics &FltSemantics,
+                              PredefinedValues Value) {
   return getFloatValue(FltSemantics, Value).bitcastToAPInt();
 }
 

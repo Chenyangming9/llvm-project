@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: no-exceptions
+// UNSUPPORTED: libcxxabi-no-exceptions
 
 #include "cxxabi.h"
 
@@ -16,11 +16,6 @@
 #include <exception>
 
 #include <memory>
-
-// Disable warning about throw always calling terminate.
-#if defined(__GNUC__) && !defined(__clang__)
-# pragma GCC diagnostic ignored "-Wterminate"
-#endif
 
 // use dtors instead of try/catch
 namespace test1 {
@@ -52,7 +47,7 @@ void destroy(void* v)
   t->~T();
 }
 
-int main(int, char**)
+int main()
 {
   std::set_terminate(my_terminate);
   {
@@ -61,6 +56,4 @@ int main(int, char**)
   __cxxabiv1::__cxa_vec_dtor(a, 10, sizeof(test1::A), destroy<test1::A>);
   assert(false);
   }
-
-  return 0;
 }

@@ -36,6 +36,7 @@ public:
 
   DecodeStatus getInstruction(MCInst &Instr, uint64_t &Size,
                               ArrayRef<uint8_t> Bytes, uint64_t Address,
+                              raw_ostream &VStream,
                               raw_ostream &CStream) const override;
 };
 }
@@ -47,7 +48,7 @@ static MCDisassembler *createSparcDisassembler(const Target &T,
 }
 
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeSparcDisassembler() {
+extern "C" void LLVMInitializeSparcDisassembler() {
   // Register the disassembler.
   TargetRegistry::RegisterMCDisassembler(getTheSparcTarget(),
                                          createSparcDisassembler);
@@ -113,7 +114,7 @@ static const unsigned ASRRegDecoderTable[] = {
 static const unsigned PRRegDecoderTable[] = {
   SP::TPC, SP::TNPC, SP::TSTATE, SP::TT, SP::TICK, SP::TBA, SP::PSTATE,
   SP::TL, SP::PIL, SP::CWP, SP::CANSAVE, SP::CANRESTORE, SP::CLEANWIN,
-  SP::OTHERWIN, SP::WSTATE, SP::PC
+  SP::OTHERWIN, SP::WSTATE
 };
 
 static const uint16_t IntPairDecoderTable[] = {
@@ -331,6 +332,7 @@ static DecodeStatus readInstruction32(ArrayRef<uint8_t> Bytes, uint64_t Address,
 DecodeStatus SparcDisassembler::getInstruction(MCInst &Instr, uint64_t &Size,
                                                ArrayRef<uint8_t> Bytes,
                                                uint64_t Address,
+                                               raw_ostream &VStream,
                                                raw_ostream &CStream) const {
   uint32_t Insn;
   bool isLittleEndian = getContext().getAsmInfo()->isLittleEndian();

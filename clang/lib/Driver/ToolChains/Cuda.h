@@ -15,9 +15,9 @@
 #include "clang/Driver/Tool.h"
 #include "clang/Driver/ToolChain.h"
 #include "llvm/ADT/Optional.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/VersionTuple.h"
-#include <bitset>
 #include <set>
 #include <vector>
 
@@ -30,8 +30,6 @@ private:
   const Driver &D;
   bool IsValid = false;
   CudaVersion Version = CudaVersion::UNKNOWN;
-  std::string DetectedVersion;
-  bool DetectedVersionIsNotSupported = false;
   std::string InstallPath;
   std::string BinPath;
   std::string LibPath;
@@ -41,7 +39,7 @@ private:
 
   // CUDA architectures for which we have raised an error in
   // CheckCudaVersionSupportsArch.
-  mutable std::bitset<(int)CudaArch::LAST> ArchsWithBadVersion;
+  mutable llvm::SmallSet<CudaArch, 4> ArchsWithBadVersion;
 
 public:
   CudaInstallationDetector(const Driver &D, const llvm::Triple &HostTriple,
@@ -77,7 +75,6 @@ public:
   std::string getLibDeviceFile(StringRef Gpu) const {
     return LibDeviceMap.lookup(Gpu);
   }
-  void WarnIfUnsupportedVersion();
 };
 
 namespace tools {
@@ -86,7 +83,9 @@ namespace NVPTX {
 // Run ptxas, the NVPTX assembler.
 class LLVM_LIBRARY_VISIBILITY Assembler : public Tool {
  public:
-   Assembler(const ToolChain &TC) : Tool("NVPTX::Assembler", "ptxas", TC) {}
+   Assembler(const ToolChain &TC)
+       : Tool("NVPTX::Assembler", "ptxas", TC, RF_Full, llvm::sys::WEM_UTF8,
+              "--options-file") {}
 
    bool hasIntegratedCPP() const override { return false; }
 
@@ -100,7 +99,9 @@ class LLVM_LIBRARY_VISIBILITY Assembler : public Tool {
 // assembly into a single output file.
 class LLVM_LIBRARY_VISIBILITY Linker : public Tool {
  public:
-   Linker(const ToolChain &TC) : Tool("NVPTX::Linker", "fatbinary", TC) {}
+   Linker(const ToolChain &TC)
+       : Tool("NVPTX::Linker", "fatbinary", TC, RF_Full, llvm::sys::WEM_UTF8,
+              "--options-file") {}
 
    bool hasIntegratedCPP() const override { return false; }
 
@@ -113,7 +114,8 @@ class LLVM_LIBRARY_VISIBILITY Linker : public Tool {
 class LLVM_LIBRARY_VISIBILITY OpenMPLinker : public Tool {
  public:
    OpenMPLinker(const ToolChain &TC)
-       : Tool("NVPTX::OpenMPLinker", "nvlink", TC) {}
+       : Tool("NVPTX::OpenMPLinker", "nvlink", TC, RF_Full, llvm::sys::WEM_UTF8,
+              "--options-file") {}
 
    bool hasIntegratedCPP() const override { return false; }
 
@@ -146,10 +148,6 @@ public:
   void addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                              llvm::opt::ArgStringList &CC1Args,
                              Action::OffloadKind DeviceOffloadKind) const override;
-
-  llvm::DenormalMode getDefaultDenormalModeForType(
-      const llvm::opt::ArgList &DriverArgs, const JobAction &JA,
-      const llvm::fltSemantics *FPType = nullptr) const override;
 
   // Never try to use the integrated assembler with CUDA; always fork out to
   // ptxas.
@@ -185,8 +183,6 @@ public:
                      const llvm::opt::ArgList &Args) const override;
 
   unsigned GetDefaultDwarfVersion() const override { return 2; }
-  // NVPTX supports only DWARF2.
-  unsigned getMaxDwarfVersion() const override { return 2; }
 
   const ToolChain &HostTC;
   CudaInstallationDetector CudaInstallation;

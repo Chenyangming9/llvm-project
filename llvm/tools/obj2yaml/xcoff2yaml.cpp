@@ -55,7 +55,7 @@ std::error_code XCOFFDumper::dumpSymbols() {
 
   for (const SymbolRef &S : Obj.symbols()) {
     DataRefImpl SymbolDRI = S.getRawDataRefImpl();
-    const XCOFFSymbolRef SymbolEntRef = Obj.toSymbolRef(SymbolDRI);
+    const XCOFFSymbolEntry *SymbolEntPtr = Obj.toSymbolEntry(SymbolDRI);
     XCOFFYAML::Symbol Sym;
 
     Expected<StringRef> SymNameRefOrErr = Obj.getSymbolName(SymbolDRI);
@@ -64,18 +64,18 @@ std::error_code XCOFFDumper::dumpSymbols() {
     }
     Sym.SymbolName = SymNameRefOrErr.get();
 
-    Sym.Value = SymbolEntRef.getValue();
+    Sym.Value = SymbolEntPtr->Value;
 
     Expected<StringRef> SectionNameRefOrErr =
-        Obj.getSymbolSectionName(SymbolEntRef);
+        Obj.getSymbolSectionName(SymbolEntPtr);
     if (!SectionNameRefOrErr)
       return errorToErrorCode(SectionNameRefOrErr.takeError());
 
     Sym.SectionName = SectionNameRefOrErr.get();
 
-    Sym.Type = SymbolEntRef.getSymbolType();
-    Sym.StorageClass = SymbolEntRef.getStorageClass();
-    Sym.NumberOfAuxEntries = SymbolEntRef.getNumberOfAuxEntries();
+    Sym.Type = SymbolEntPtr->SymbolType;
+    Sym.StorageClass = SymbolEntPtr->StorageClass;
+    Sym.NumberOfAuxEntries = SymbolEntPtr->NumberOfAuxEntries;
     Symbols.push_back(Sym);
   }
 

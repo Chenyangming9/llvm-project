@@ -101,47 +101,6 @@ public:
   }
 };
 
-/// Provides information about branches coverage for a function/file.
-class BranchCoverageInfo {
-  /// The number of branches that were executed at least once.
-  size_t Covered;
-
-  /// The total number of branches in a function/file.
-  size_t NumBranches;
-
-public:
-  BranchCoverageInfo() : Covered(0), NumBranches(0) {}
-
-  BranchCoverageInfo(size_t Covered, size_t NumBranches)
-      : Covered(Covered), NumBranches(NumBranches) {
-    assert(Covered <= NumBranches && "Covered branches over-counted");
-  }
-
-  BranchCoverageInfo &operator+=(const BranchCoverageInfo &RHS) {
-    Covered += RHS.Covered;
-    NumBranches += RHS.NumBranches;
-    return *this;
-  }
-
-  void merge(const BranchCoverageInfo &RHS) {
-    Covered = std::max(Covered, RHS.Covered);
-    NumBranches = std::max(NumBranches, RHS.NumBranches);
-  }
-
-  size_t getCovered() const { return Covered; }
-
-  size_t getNumBranches() const { return NumBranches; }
-
-  bool isFullyCovered() const { return Covered == NumBranches; }
-
-  double getPercentCovered() const {
-    assert(Covered <= NumBranches && "Covered branches over-counted");
-    if (NumBranches == 0)
-      return 0.0;
-    return double(Covered) / double(NumBranches) * 100.0;
-  }
-};
-
 /// Provides information about function coverage for a file.
 class FunctionCoverageInfo {
   /// The number of functions that were executed.
@@ -188,19 +147,15 @@ struct FunctionCoverageSummary {
   uint64_t ExecutionCount;
   RegionCoverageInfo RegionCoverage;
   LineCoverageInfo LineCoverage;
-  BranchCoverageInfo BranchCoverage;
 
   FunctionCoverageSummary(const std::string &Name)
-      : Name(Name), ExecutionCount(0), RegionCoverage(), LineCoverage(),
-        BranchCoverage() {}
+      : Name(Name), ExecutionCount(0), RegionCoverage(), LineCoverage() {}
 
   FunctionCoverageSummary(const std::string &Name, uint64_t ExecutionCount,
                           const RegionCoverageInfo &RegionCoverage,
-                          const LineCoverageInfo &LineCoverage,
-                          const BranchCoverageInfo &BranchCoverage)
+                          const LineCoverageInfo &LineCoverage)
       : Name(Name), ExecutionCount(ExecutionCount),
-        RegionCoverage(RegionCoverage), LineCoverage(LineCoverage),
-        BranchCoverage(BranchCoverage) {}
+        RegionCoverage(RegionCoverage), LineCoverage(LineCoverage) {}
 
   /// Compute the code coverage summary for the given function coverage
   /// mapping record.
@@ -219,7 +174,6 @@ struct FileCoverageSummary {
   StringRef Name;
   RegionCoverageInfo RegionCoverage;
   LineCoverageInfo LineCoverage;
-  BranchCoverageInfo BranchCoverage;
   FunctionCoverageInfo FunctionCoverage;
   FunctionCoverageInfo InstantiationCoverage;
 
@@ -231,7 +185,6 @@ struct FileCoverageSummary {
     RegionCoverage += RHS.RegionCoverage;
     LineCoverage += RHS.LineCoverage;
     FunctionCoverage += RHS.FunctionCoverage;
-    BranchCoverage += RHS.BranchCoverage;
     InstantiationCoverage += RHS.InstantiationCoverage;
     return *this;
   }
@@ -239,7 +192,6 @@ struct FileCoverageSummary {
   void addFunction(const FunctionCoverageSummary &Function) {
     RegionCoverage += Function.RegionCoverage;
     LineCoverage += Function.LineCoverage;
-    BranchCoverage += Function.BranchCoverage;
     FunctionCoverage.addFunction(/*Covered=*/Function.ExecutionCount > 0);
   }
 

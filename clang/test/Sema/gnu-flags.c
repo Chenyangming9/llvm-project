@@ -124,9 +124,7 @@ enum {
 	fic = (int)(0.75 * 1000 * 1000)
 };
 static const int size = 100;
-int data[size];
-
-void foo(void) { int data[size]; } // OK, always a VLA
+void foo(void) { int data[size]; }
 
 #if ALL || REDECLAREDENUM
 // expected-note@+4 {{previous definition is here}}

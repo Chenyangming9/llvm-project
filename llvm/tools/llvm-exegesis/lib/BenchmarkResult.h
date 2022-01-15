@@ -15,8 +15,8 @@
 #ifndef LLVM_TOOLS_LLVM_EXEGESIS_BENCHMARKRESULT_H
 #define LLVM_TOOLS_LLVM_EXEGESIS_BENCHMARKRESULT_H
 
+#include "BenchmarkCode.h"
 #include "LlvmState.h"
-#include "RegisterValue.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCInst.h"
@@ -28,13 +28,11 @@
 #include <vector>
 
 namespace llvm {
-class Error;
-
 namespace exegesis {
 
 struct InstructionBenchmarkKey {
   // The LLVM opcode name.
-  std::vector<MCInst> Instructions;
+  std::vector<llvm::MCInst> Instructions;
   // The initial values of the registers.
   std::vector<RegisterValue> RegisterInitialValues;
   // An opaque configuration, that can be used to separate several benchmarks of
@@ -64,34 +62,31 @@ struct InstructionBenchmark {
   std::string CpuName;
   std::string LLVMTriple;
   // Which instruction is being benchmarked here?
-  const MCInst &keyInstruction() const { return Key.Instructions[0]; }
+  const llvm::MCInst &keyInstruction() const { return Key.Instructions[0]; }
   // The number of instructions inside the repeated snippet. For example, if a
   // snippet of 3 instructions is repeated 4 times, this is 12.
-  unsigned NumRepetitions = 0;
-  enum RepetitionModeE { Duplicate, Loop, AggregateMin };
+  int NumRepetitions = 0;
   // Note that measurements are per instruction.
   std::vector<BenchmarkMeasure> Measurements;
   std::string Error;
   std::string Info;
   std::vector<uint8_t> AssembledSnippet;
-  // How to aggregate measurements.
-  enum ResultAggregationModeE { Min, Max, Mean, MinVariance };
+
   // Read functions.
-  static Expected<InstructionBenchmark> readYaml(const LLVMState &State,
-                                                 StringRef Filename);
+  static llvm::Expected<InstructionBenchmark>
+  readYaml(const LLVMState &State, llvm::StringRef Filename);
 
-  static Expected<std::vector<InstructionBenchmark>>
-  readYamls(const LLVMState &State, StringRef Filename);
+  static llvm::Expected<std::vector<InstructionBenchmark>>
+  readYamls(const LLVMState &State, llvm::StringRef Filename);
 
-  class Error readYamlFrom(const LLVMState &State, StringRef InputContent);
+  llvm::Error readYamlFrom(const LLVMState &State,
+                           llvm::StringRef InputContent);
 
   // Write functions, non-const because of YAML traits.
-  class Error writeYamlTo(const LLVMState &State, raw_ostream &S);
+  llvm::Error writeYamlTo(const LLVMState &State, llvm::raw_ostream &S);
 
-  class Error writeYaml(const LLVMState &State, const StringRef Filename);
+  llvm::Error writeYaml(const LLVMState &State, const llvm::StringRef Filename);
 };
-
-bool operator==(const BenchmarkMeasure &A, const BenchmarkMeasure &B);
 
 //------------------------------------------------------------------------------
 // Utilities to work with Benchmark measures.

@@ -5,7 +5,7 @@
 
 int main()
 {
-  //need to use an OpenMP construct so that OMPT will be initialized
+  //need to use an OpenMP construct so that OMPT will be initalized
   #pragma omp parallel num_threads(1)
     print_ids(0);
 

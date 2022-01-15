@@ -12,7 +12,6 @@
 
 #include "Unix.h"
 #include "llvm/Config/config.h"
-#include "llvm/Support/Alignment.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Process.h"
@@ -29,13 +28,23 @@
 #include <zircon/syscalls.h>
 #endif
 
+#if defined(__mips__)
+#  if defined(__OpenBSD__)
+#    include <mips64/sysarch.h>
+#  elif !defined(__FreeBSD__)
+#    include <sys/cachectl.h>
+#  endif
+#endif
+
 #if defined(__APPLE__)
 extern "C" void sys_icache_invalidate(const void *Addr, size_t len);
 #else
 extern "C" void __clear_cache(void *, void*);
 #endif
 
-static int getPosixProtectionFlags(unsigned Flags) {
+namespace {
+
+int getPosixProtectionFlags(unsigned Flags) {
   switch (Flags & llvm::sys::Memory::MF_RWE_MASK) {
   case llvm::sys::Memory::MF_READ:
     return PROT_READ;
@@ -66,6 +75,8 @@ static int getPosixProtectionFlags(unsigned Flags) {
   // Provide a default return value as required by some compilers.
   return PROT_NONE;
 }
+
+} // anonymous namespace
 
 namespace llvm {
 namespace sys {
@@ -165,7 +176,7 @@ Memory::releaseMappedMemory(MemoryBlock &M) {
 
 std::error_code
 Memory::protectMappedMemory(const MemoryBlock &M, unsigned Flags) {
-  static const Align PageSize = Align(Process::getPageSizeEstimate());
+  static const size_t PageSize = Process::getPageSizeEstimate();
   if (M.Address == nullptr || M.AllocatedSize == 0)
     return std::error_code();
 
@@ -173,8 +184,8 @@ Memory::protectMappedMemory(const MemoryBlock &M, unsigned Flags) {
     return std::error_code(EINVAL, std::generic_category());
 
   int Protect = getPosixProtectionFlags(Flags);
-  uintptr_t Start = alignAddr((const uint8_t *)M.Address - PageSize.value() + 1, PageSize);
-  uintptr_t End = alignAddr((const uint8_t *)M.Address + M.AllocatedSize, PageSize);
+  uintptr_t Start = alignAddr((uint8_t *)M.Address - PageSize + 1, PageSize);
+  uintptr_t End = alignAddr((uint8_t *)M.Address + M.AllocatedSize, PageSize);
 
   bool InvalidateCache = (Flags & MF_EXEC);
 

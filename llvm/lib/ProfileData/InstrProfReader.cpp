@@ -15,7 +15,6 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/ProfileSummary.h"
 #include "llvm/ProfileData/InstrProf.h"
@@ -24,8 +23,8 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/SwapByteOrder.h"
 #include "llvm/Support/SymbolRemappingReader.h"
+#include "llvm/Support/SwapByteOrder.h"
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
@@ -41,7 +40,7 @@ using namespace llvm;
 static Expected<std::unique_ptr<MemoryBuffer>>
 setupMemoryBuffer(const Twine &Path) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> BufferOrErr =
-      MemoryBuffer::getFileOrSTDIN(Path, /*IsText=*/true);
+      MemoryBuffer::getFileOrSTDIN(Path);
   if (std::error_code EC = BufferOrErr.getError())
     return errorCodeToError(EC);
   return std::move(BufferOrErr.get());
@@ -120,7 +119,7 @@ IndexedInstrProfReader::create(std::unique_ptr<MemoryBuffer> Buffer,
   // Create the reader.
   if (!IndexedInstrProfReader::hasFormat(*Buffer))
     return make_error<InstrProfError>(instrprof_error::bad_magic);
-  auto Result = std::make_unique<IndexedInstrProfReader>(
+  auto Result = llvm::make_unique<IndexedInstrProfReader>(
       std::move(Buffer), std::move(RemappingBuffer));
 
   // Initialize the reader and return the result.
@@ -145,7 +144,7 @@ bool TextInstrProfReader::hasFormat(const MemoryBuffer &Buffer) {
   StringRef buffer = Buffer.getBufferStart();
   return count == 0 ||
          std::all_of(buffer.begin(), buffer.begin() + count,
-                     [](char c) { return isPrint(c) || isSpace(c); });
+                     [](char c) { return isPrint(c) || ::isspace(c); });
 }
 
 // Read the profile variant flag from the header: ":FE" means this is a FE
@@ -154,29 +153,23 @@ bool TextInstrProfReader::hasFormat(const MemoryBuffer &Buffer) {
 Error TextInstrProfReader::readHeader() {
   Symtab.reset(new InstrProfSymtab());
   bool IsIRInstr = false;
-  bool IsEntryFirst = false;
-  bool IsCS = false;
-
-  while (Line->startswith(":")) {
-    StringRef Str = Line->substr(1);
-    if (Str.equals_insensitive("ir"))
-      IsIRInstr = true;
-    else if (Str.equals_insensitive("fe"))
-      IsIRInstr = false;
-    else if (Str.equals_insensitive("csir")) {
-      IsIRInstr = true;
-      IsCS = true;
-    } else if (Str.equals_insensitive("entry_first"))
-      IsEntryFirst = true;
-    else if (Str.equals_insensitive("not_entry_first"))
-      IsEntryFirst = false;
-    else
-      return error(instrprof_error::bad_header);
-    ++Line;
+  if (!Line->startswith(":")) {
+    IsIRLevelProfile = false;
+    return success();
   }
+  StringRef Str = (Line)->substr(1);
+  if (Str.equals_lower("ir"))
+    IsIRInstr = true;
+  else if (Str.equals_lower("fe"))
+    IsIRInstr = false;
+  else if (Str.equals_lower("csir")) {
+    IsIRInstr = true;
+    HasCSIRLevelProfile = true;
+  } else
+    return error(instrprof_error::bad_header);
+
+  ++Line;
   IsIRLevelProfile = IsIRInstr;
-  InstrEntryBBEnabled = IsEntryFirst;
-  HasCSIRLevelProfile = IsCS;
   return success();
 }
 
@@ -366,25 +359,19 @@ Error RawInstrProfReader<IntPtrT>::readHeader(
   if (GET_VERSION(Version) != RawInstrProf::Version)
     return error(instrprof_error::unsupported_version);
 
-  BinaryIdsSize = swap(Header.BinaryIdsSize);
   CountersDelta = swap(Header.CountersDelta);
   NamesDelta = swap(Header.NamesDelta);
   auto DataSize = swap(Header.DataSize);
-  auto PaddingBytesBeforeCounters = swap(Header.PaddingBytesBeforeCounters);
   auto CountersSize = swap(Header.CountersSize);
-  auto PaddingBytesAfterCounters = swap(Header.PaddingBytesAfterCounters);
   NamesSize = swap(Header.NamesSize);
   ValueKindLast = swap(Header.ValueKindLast);
 
   auto DataSizeInBytes = DataSize * sizeof(RawInstrProf::ProfileData<IntPtrT>);
   auto PaddingSize = getNumPaddingBytes(NamesSize);
 
-  // Profile data starts after profile header and binary ids if exist.
-  ptrdiff_t DataOffset = sizeof(RawInstrProf::Header) + BinaryIdsSize;
-  ptrdiff_t CountersOffset =
-      DataOffset + DataSizeInBytes + PaddingBytesBeforeCounters;
-  ptrdiff_t NamesOffset = CountersOffset + (sizeof(uint64_t) * CountersSize) +
-                          PaddingBytesAfterCounters;
+  ptrdiff_t DataOffset = sizeof(RawInstrProf::Header);
+  ptrdiff_t CountersOffset = DataOffset + DataSizeInBytes;
+  ptrdiff_t NamesOffset = CountersOffset + sizeof(uint64_t) * CountersSize;
   ptrdiff_t ValueDataOffset = NamesOffset + NamesSize + PaddingSize;
 
   auto *Start = reinterpret_cast<const char *>(&Header);
@@ -394,15 +381,11 @@ Error RawInstrProfReader<IntPtrT>::readHeader(
   Data = reinterpret_cast<const RawInstrProf::ProfileData<IntPtrT> *>(
       Start + DataOffset);
   DataEnd = Data + DataSize;
-
-  // Binary ids start just after the header.
-  BinaryIdsStart =
-      reinterpret_cast<const uint8_t *>(&Header) + sizeof(RawInstrProf::Header);
   CountersStart = reinterpret_cast<const uint64_t *>(Start + CountersOffset);
   NamesStart = Start + NamesOffset;
   ValueDataStart = reinterpret_cast<const uint8_t *>(Start + ValueDataOffset);
 
-  std::unique_ptr<InstrProfSymtab> NewSymtab = std::make_unique<InstrProfSymtab>();
+  std::unique_ptr<InstrProfSymtab> NewSymtab = make_unique<InstrProfSymtab>();
   if (Error E = createSymtab(*NewSymtab.get()))
     return E;
 
@@ -430,19 +413,13 @@ Error RawInstrProfReader<IntPtrT>::readRawCounts(
   if (NumCounters == 0)
     return error(instrprof_error::malformed);
 
+  auto RawCounts = makeArrayRef(getCounter(CounterPtr), NumCounters);
   auto *NamesStartAsCounter = reinterpret_cast<const uint64_t *>(NamesStart);
-  ptrdiff_t MaxNumCounters = NamesStartAsCounter - CountersStart;
 
-  // Check bounds. Note that the counter pointer embedded in the data record
-  // may itself be corrupt.
-  if (MaxNumCounters < 0 || NumCounters > (uint32_t)MaxNumCounters)
+  // Check bounds.
+  if (RawCounts.data() < CountersStart ||
+      RawCounts.data() + RawCounts.size() > NamesStartAsCounter)
     return error(instrprof_error::malformed);
-  ptrdiff_t CounterOffset = getCounterOffset(CounterPtr);
-  if (CounterOffset < 0 || CounterOffset > MaxNumCounters ||
-      ((uint32_t)CounterOffset + NumCounters) > (uint32_t)MaxNumCounters)
-    return error(instrprof_error::malformed);
-
-  auto RawCounts = makeArrayRef(getCounter(CounterOffset), NumCounters);
 
   if (ShouldSwapBytes) {
     Record.Counts.clear();
@@ -509,33 +486,6 @@ Error RawInstrProfReader<IntPtrT>::readNextRecord(NamedInstrProfRecord &Record) 
 
   // Iterate.
   advanceData();
-  return success();
-}
-
-template <class IntPtrT>
-Error RawInstrProfReader<IntPtrT>::printBinaryIds(raw_ostream &OS) {
-  if (BinaryIdsSize == 0)
-    return success();
-
-  OS << "Binary IDs: \n";
-  const uint8_t *BI = BinaryIdsStart;
-  while (BI < BinaryIdsStart + BinaryIdsSize) {
-    uint64_t BinaryIdLen = swap(*reinterpret_cast<const uint64_t *>(BI));
-    // Increment by binary id length data type size.
-    BI += sizeof(BinaryIdLen);
-    if (BI > (const uint8_t *)DataBuffer->getBufferEnd())
-      return make_error<InstrProfError>(instrprof_error::malformed);
-
-    for (uint64_t I = 0; I < BinaryIdLen; I++)
-      OS << format("%02x", BI[I]);
-    OS << "\n";
-
-    // Increment by binary id data length.
-    BI += BinaryIdLen;
-    if (BI > (const uint8_t *)DataBuffer->getBufferEnd())
-      return make_error<InstrProfError>(instrprof_error::malformed);
-  }
-
   return success();
 }
 
@@ -817,7 +767,7 @@ IndexedInstrProfReader::readSummary(IndexedInstrProf::ProfVersion Version,
         UseCS ? this->CS_Summary : this->Summary;
 
     // initialize InstrProfSummary using the SummaryData from disk.
-    Summary = std::make_unique<ProfileSummary>(
+    Summary = llvm::make_unique<ProfileSummary>(
         UseCS ? ProfileSummary::PSK_CSInstr : ProfileSummary::PSK_Instr,
         DetailedSummary, SummaryData->get(Summary::TotalBlockCount),
         SummaryData->get(Summary::MaxBlockCount),
@@ -827,13 +777,13 @@ IndexedInstrProfReader::readSummary(IndexedInstrProf::ProfVersion Version,
         SummaryData->get(Summary::TotalNumFunctions));
     return Cur + SummarySize;
   } else {
-    // The older versions do not support a profile summary. This just computes
-    // an empty summary, which will not result in accurate hot/cold detection.
-    // We would need to call addRecord for all NamedInstrProfRecords to get the
-    // correct summary. However, this version is old (prior to early 2016) and
-    // has not been supporting an accurate summary for several years.
+    // For older version of profile data, we need to compute on the fly:
+    using namespace IndexedInstrProf;
+
     InstrProfSummaryBuilder Builder(ProfileSummaryBuilder::DefaultCutoffs);
-    Summary = Builder.getSummary();
+    // FIXME: This only computes an empty summary. Need to call addRecord for
+    // all NamedInstrProfRecords to get the correct summary.
+    this->Summary = Builder.getSummary();
     return Cur;
   }
 }
@@ -877,18 +827,18 @@ Error IndexedInstrProfReader::readHeader() {
 
   // The rest of the file is an on disk hash table.
   auto IndexPtr =
-      std::make_unique<InstrProfReaderIndex<OnDiskHashTableImplV3>>(
+      llvm::make_unique<InstrProfReaderIndex<OnDiskHashTableImplV3>>(
           Start + HashOffset, Cur, Start, HashType, FormatVersion);
 
   // Load the remapping table now if requested.
   if (RemappingBuffer) {
-    Remapper = std::make_unique<
+    Remapper = llvm::make_unique<
         InstrProfReaderItaniumRemapper<OnDiskHashTableImplV3>>(
         std::move(RemappingBuffer), *IndexPtr);
     if (Error E = Remapper->populateRemappings())
       return E;
   } else {
-    Remapper = std::make_unique<InstrProfReaderNullRemapper>(*IndexPtr);
+    Remapper = llvm::make_unique<InstrProfReaderNullRemapper>(*IndexPtr);
   }
   Index = std::move(IndexPtr);
 
@@ -899,7 +849,7 @@ InstrProfSymtab &IndexedInstrProfReader::getSymtab() {
   if (Symtab.get())
     return *Symtab.get();
 
-  std::unique_ptr<InstrProfSymtab> NewSymtab = std::make_unique<InstrProfSymtab>();
+  std::unique_ptr<InstrProfSymtab> NewSymtab = make_unique<InstrProfSymtab>();
   if (Error E = Index->populateSymtab(*NewSymtab.get())) {
     consumeError(error(InstrProfError::take(std::move(E))));
   }
@@ -951,7 +901,7 @@ Error IndexedInstrProfReader::readNextRecord(NamedInstrProfRecord &Record) {
   return success();
 }
 
-void InstrProfReader::accumulateCounts(CountSumOrPercent &Sum, bool IsCS) {
+void InstrProfReader::accumuateCounts(CountSumOrPercent &Sum, bool IsCS) {
   uint64_t NumFuncs = 0;
   for (const auto &Func : *this) {
     if (isIRLevelProfile()) {
@@ -959,7 +909,7 @@ void InstrProfReader::accumulateCounts(CountSumOrPercent &Sum, bool IsCS) {
       if (FuncIsCS != IsCS)
         continue;
     }
-    Func.accumulateCounts(Sum);
+    Func.accumuateCounts(Sum);
     ++NumFuncs;
   }
   Sum.NumEntries = NumFuncs;

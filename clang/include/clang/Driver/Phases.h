@@ -20,13 +20,11 @@ namespace phases {
     Compile,
     Backend,
     Assemble,
-    Link,
-    IfsMerge,
-    LastPhase = IfsMerge,
+    Link
   };
 
   enum {
-    MaxNumberOfPhases = LastPhase + 1
+    MaxNumberOfPhases = Link + 1
   };
 
   const char *getPhaseName(ID Id);

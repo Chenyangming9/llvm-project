@@ -1,5 +1,4 @@
 ; RUN: opt %loadPolly -polly-simplify -analyze < %s | FileCheck %s -match-full-lines
-; RUN: opt %loadPolly "-passes=scop(print<polly-simplify>)" -disable-output -aa-pipeline=basic-aa < %s | FileCheck %s -match-full-lines
 ;
 ; Don't remove store where there is another store to the same target
 ; in-between them.

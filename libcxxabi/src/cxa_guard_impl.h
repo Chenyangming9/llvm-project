@@ -40,6 +40,7 @@
 #include "__cxxabi_config.h"
 #include "include/atomic_support.h"
 #include <unistd.h>
+#include <sys/types.h>
 #if defined(__has_include)
 # if __has_include(<sys/syscall.h>)
 #   include <sys/syscall.h>
@@ -49,17 +50,9 @@
 #include <stdlib.h>
 #include <__threading_support>
 #ifndef _LIBCXXABI_HAS_NO_THREADS
-#if defined(__ELF__) && defined(_LIBCXXABI_LINK_PTHREAD_LIB)
+#if defined(__unix__) &&  defined(__ELF__) && defined(_LIBCXXABI_HAS_COMMENT_LIB_PRAGMA)
 #pragma comment(lib, "pthread")
 #endif
-#endif
-
-#if defined(__clang__)
-# pragma clang diagnostic push
-# pragma clang diagnostic ignored "-Wtautological-pointer-compare"
-#elif defined(__GNUC__)
-# pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Waddress"
 #endif
 
 // To make testing possible, this header is included from both cxa_guard.cpp
@@ -115,32 +108,6 @@ struct LazyValue {
   bool is_init = false;
 };
 
-template <class IntType>
-class AtomicInt {
-public:
-  using MemoryOrder = std::__libcpp_atomic_order;
-
-  explicit AtomicInt(IntType *b) : b_(b) {}
-  AtomicInt(AtomicInt const&) = delete;
-  AtomicInt& operator=(AtomicInt const&) = delete;
-
-  IntType load(MemoryOrder ord) {
-    return std::__libcpp_atomic_load(b_, ord);
-  }
-  void store(IntType val, MemoryOrder ord) {
-    std::__libcpp_atomic_store(b_, val, ord);
-  }
-  IntType exchange(IntType new_val, MemoryOrder ord) {
-    return std::__libcpp_atomic_exchange(b_, new_val, ord);
-  }
-  bool compare_exchange(IntType *expected, IntType desired, MemoryOrder ord_success, MemoryOrder ord_failure) {
-    return std::__libcpp_atomic_compare_exchange(b_, expected, desired, ord_success, ord_failure);
-  }
-
-private:
-  IntType *b_;
-};
-
 //===----------------------------------------------------------------------===//
 //                       PlatformGetThreadID
 //===----------------------------------------------------------------------===//
@@ -162,7 +129,14 @@ constexpr uint32_t (*PlatformThreadID)() = nullptr;
 
 
 constexpr bool PlatformSupportsThreadID() {
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wtautological-pointer-compare"
+#endif
   return +PlatformThreadID != nullptr;
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 }
 
 //===----------------------------------------------------------------------===//
@@ -201,7 +175,7 @@ public:
   /// Implements __cxa_guard_acquire
   AcquireResult cxa_guard_acquire() {
     AtomicInt<uint8_t> guard_byte(guard_byte_address);
-    if (guard_byte.load(std::_AO_Acquire) != UNSET)
+    if (guard_byte.load(std::_AO_Acquire) == COMPLETE_BIT)
       return INIT_IS_DONE;
     return derived()->acquire_init_byte();
   }
@@ -221,7 +195,7 @@ public:
 public:
   /// base_address - the address of the original guard object.
   void* const base_address;
-  /// The address of the guard byte at offset 0.
+  /// The address of the guord byte at offset 0.
   uint8_t* const guard_byte_address;
   /// The address of the byte used by the implementation during initialization.
   uint8_t* const init_byte_address;
@@ -376,18 +350,18 @@ private:
     LockGuard& operator=(LockGuard const&) = delete;
 
     explicit LockGuard(const char* calling_func)
-        : calling_func_(calling_func)  {
+        : calling_func(calling_func)  {
       if (global_mutex.lock())
-        ABORT_WITH_MESSAGE("%s failed to acquire mutex", calling_func_);
+        ABORT_WITH_MESSAGE("%s failed to acquire mutex", calling_func);
     }
 
     ~LockGuard() {
       if (global_mutex.unlock())
-        ABORT_WITH_MESSAGE("%s failed to release mutex", calling_func_);
+        ABORT_WITH_MESSAGE("%s failed to release mutex", calling_func);
     }
 
   private:
-    const char* const calling_func_;
+    const char* const calling_func;
   };
 };
 
@@ -412,7 +386,14 @@ constexpr void (*PlatformFutexWake)(int*) = nullptr;
 #endif
 
 constexpr bool PlatformSupportsFutex() {
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wtautological-pointer-compare"
+#endif
   return +PlatformFutexWait != nullptr;
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 }
 
 /// InitByteFutex - Manages initialization using atomics and the futex syscall
@@ -582,11 +563,5 @@ using SelectedImplementation =
 
 } // end namespace
 } // end namespace __cxxabiv1
-
-#if defined(__clang__)
-# pragma clang diagnostic pop
-#elif defined(__GNUC__)
-# pragma GCC diagnostic pop
-#endif
 
 #endif // LIBCXXABI_SRC_INCLUDE_CXA_GUARD_IMPL_H

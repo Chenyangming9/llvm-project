@@ -21,7 +21,7 @@
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/DynamicType.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
 
@@ -47,9 +47,9 @@ class DynamicTypeChecker : public Checker<check::PostStmt<ImplicitCastExpr>> {
       ID.AddPointer(Reg);
     }
 
-    PathDiagnosticPieceRef VisitNode(const ExplodedNode *N,
-                                     BugReporterContext &BRC,
-                                     PathSensitiveBugReport &BR) override;
+    std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *N,
+                                                   BugReporterContext &BRC,
+                                                   BugReport &BR) override;
 
   private:
     // The tracked region.
@@ -80,16 +80,18 @@ void DynamicTypeChecker::reportTypeError(QualType DynamicType,
   QualType::print(StaticType.getTypePtr(), Qualifiers(), OS, C.getLangOpts(),
                   llvm::Twine());
   OS << "'";
-  auto R = std::make_unique<PathSensitiveBugReport>(
-      *BT, OS.str(), C.generateNonFatalErrorNode());
+  std::unique_ptr<BugReport> R(
+      new BugReport(*BT, OS.str(), C.generateNonFatalErrorNode()));
   R->markInteresting(Reg);
-  R->addVisitor(std::make_unique<DynamicTypeBugVisitor>(Reg));
+  R->addVisitor(llvm::make_unique<DynamicTypeBugVisitor>(Reg));
   R->addRange(ReportedNode->getSourceRange());
   C.emitReport(std::move(R));
 }
 
-PathDiagnosticPieceRef DynamicTypeChecker::DynamicTypeBugVisitor::VisitNode(
-    const ExplodedNode *N, BugReporterContext &BRC, PathSensitiveBugReport &) {
+std::shared_ptr<PathDiagnosticPiece>
+DynamicTypeChecker::DynamicTypeBugVisitor::VisitNode(const ExplodedNode *N,
+                                                     BugReporterContext &BRC,
+                                                     BugReport &) {
   ProgramStateRef State = N->getState();
   ProgramStateRef StatePrev = N->getFirstPred()->getState();
 
@@ -103,7 +105,7 @@ PathDiagnosticPieceRef DynamicTypeChecker::DynamicTypeBugVisitor::VisitNode(
     return nullptr;
 
   // Retrieve the associated statement.
-  const Stmt *S = N->getStmtForDiagnostics();
+  const Stmt *S = PathDiagnosticLocation::getStmt(N);
   if (!S)
     return nullptr;
 
@@ -139,7 +141,8 @@ PathDiagnosticPieceRef DynamicTypeChecker::DynamicTypeBugVisitor::VisitNode(
   // Generate the extra diagnostic.
   PathDiagnosticLocation Pos(S, BRC.getSourceManager(),
                              N->getLocationContext());
-  return std::make_shared<PathDiagnosticEventPiece>(Pos, OS.str(), true);
+  return std::make_shared<PathDiagnosticEventPiece>(Pos, OS.str(), true,
+                                                    nullptr);
 }
 
 static bool hasDefinition(const ObjCObjectPointerType *ObjPtr) {
@@ -203,6 +206,6 @@ void ento::registerDynamicTypeChecker(CheckerManager &mgr) {
   mgr.registerChecker<DynamicTypeChecker>();
 }
 
-bool ento::shouldRegisterDynamicTypeChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterDynamicTypeChecker(const LangOptions &LO) {
   return true;
 }

@@ -6,10 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
-
-// These tests require locale for non-char paths
-// UNSUPPORTED: libcpp-has-no-localization
+// UNSUPPORTED: c++98, c++03
 
 // <filesystem>
 
@@ -22,45 +19,31 @@
 // std::u32string generic_u32string() const;
 
 
-#include "filesystem_include.h"
+#include "filesystem_include.hpp"
 #include <type_traits>
 #include <cassert>
 
 #include "test_macros.h"
 #include "test_iterators.h"
-#include "count_new.h"
+#include "count_new.hpp"
 #include "min_allocator.h"
-#include "filesystem_test_helper.h"
+#include "filesystem_test_helper.hpp"
 
-MultiStringType input = MKSTR("c:\\foo\\bar");
-#ifdef _WIN32
-// On windows, the generic_* accessors return a path with forward slashes
-MultiStringType ref = MKSTR("c:/foo/bar");
-#else
-// On posix, the input string is returned as-is
-MultiStringType ref = MKSTR("c:\\foo\\bar");
-#endif
+MultiStringType longString = MKSTR("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/123456789/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
 
 int main(int, char**)
 {
   using namespace fs;
-  auto const& MS = ref;
-  const char* value = input;
+  auto const& MS = longString;
+  const char* value = longString;
   const path p(value);
   {
     std::string s = p.generic_string();
-    assert(s == (const char*)MS);
+    assert(s == value);
   }
   {
-#if TEST_STD_VER > 17 && defined(__cpp_char8_t)
-    ASSERT_SAME_TYPE(decltype(p.generic_u8string()), std::u8string);
-    std::u8string s = p.generic_u8string();
-    assert(s == (const char8_t*)MS);
-#else
-    ASSERT_SAME_TYPE(decltype(p.generic_u8string()), std::string);
     std::string s = p.generic_u8string();
     assert(s == (const char*)MS);
-#endif
   }
   {
     std::wstring s = p.generic_wstring();

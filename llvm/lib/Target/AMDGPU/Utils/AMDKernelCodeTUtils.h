@@ -13,7 +13,7 @@
 #ifndef LLVM_LIB_TARGET_AMDGPU_UTILS_AMDKERNELCODETUTILS_H
 #define LLVM_LIB_TARGET_AMDGPU_UTILS_AMDKERNELCODETUTILS_H
 
-struct amd_kernel_code_t;
+#include "AMDKernelCodeT.h"
 
 namespace llvm {
 

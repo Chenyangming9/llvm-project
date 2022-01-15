@@ -7,11 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "Compiler.h"
-#include "support/Logger.h"
+#include "Logger.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Serialization/PCHContainerOperations.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormatVariadic.h"
 
@@ -42,61 +41,30 @@ void IgnoreDiagnostics::HandleDiagnostic(DiagnosticsEngine::Level DiagLevel,
 }
 
 std::unique_ptr<CompilerInvocation>
-buildCompilerInvocation(const ParseInputs &Inputs, clang::DiagnosticConsumer &D,
-                        std::vector<std::string> *CC1Args) {
+buildCompilerInvocation(const ParseInputs &Inputs) {
   std::vector<const char *> ArgStrs;
   for (const auto &S : Inputs.CompileCommand.CommandLine)
     ArgStrs.push_back(S.c_str());
 
-  auto VFS = Inputs.TFS->view(Inputs.CompileCommand.Directory);
+  if (Inputs.FS->setCurrentWorkingDirectory(Inputs.CompileCommand.Directory)) {
+    log("Couldn't set working directory when creating compiler invocation.");
+    // We proceed anyway, our lit-tests rely on results for non-existing working
+    // dirs.
+  }
+
+  // FIXME(ibiryukov): store diagnostics from CommandLine when we start
+  // reporting them.
+  IgnoreDiagnostics IgnoreDiagnostics;
   llvm::IntrusiveRefCntPtr<DiagnosticsEngine> CommandLineDiagsEngine =
-      CompilerInstance::createDiagnostics(new DiagnosticOptions, &D, false);
+      CompilerInstance::createDiagnostics(new DiagnosticOptions,
+                                          &IgnoreDiagnostics, false);
   std::unique_ptr<CompilerInvocation> CI = createInvocationFromCommandLine(
-      ArgStrs, CommandLineDiagsEngine, std::move(VFS),
-      /*ShouldRecoverOnErrors=*/true, CC1Args);
+      ArgStrs, CommandLineDiagsEngine, Inputs.FS);
   if (!CI)
     return nullptr;
   // createInvocationFromCommandLine sets DisableFree.
   CI->getFrontendOpts().DisableFree = false;
   CI->getLangOpts()->CommentOpts.ParseAllComments = true;
-  CI->getLangOpts()->RetainCommentsFromSystemHeaders = true;
-  // Disable "clang -verify" diagnostics, they are rarely useful in clangd, and
-  // our compiler invocation set-up doesn't seem to work with it (leading
-  // assertions in VerifyDiagnosticConsumer).
-  CI->getDiagnosticOpts().VerifyDiagnostics = false;
-  CI->getDiagnosticOpts().ShowColors = false;
-
-  // Disable any dependency outputting, we don't want to generate files or write
-  // to stdout/stderr.
-  CI->getDependencyOutputOpts().ShowIncludesDest =
-      ShowIncludesDestination::None;
-  CI->getDependencyOutputOpts().OutputFile.clear();
-  CI->getDependencyOutputOpts().HeaderIncludeOutputFile.clear();
-  CI->getDependencyOutputOpts().DOTOutputFile.clear();
-  CI->getDependencyOutputOpts().ModuleDependencyOutputDir.clear();
-
-  // Disable any pch generation/usage operations. Since serialized preamble
-  // format is unstable, using an incompatible one might result in unexpected
-  // behaviours, including crashes.
-  CI->getPreprocessorOpts().ImplicitPCHInclude.clear();
-  CI->getPreprocessorOpts().PrecompiledPreambleBytes = {0, false};
-  CI->getPreprocessorOpts().PCHThroughHeader.clear();
-  CI->getPreprocessorOpts().PCHWithHdrStop = false;
-  CI->getPreprocessorOpts().PCHWithHdrStopCreate = false;
-  // Don't crash on `#pragma clang __debug parser_crash`
-  CI->getPreprocessorOpts().DisablePragmaDebugCrash = true;
-
-  // Always default to raw container format as clangd doesn't registry any other
-  // and clang dies when faced with unknown formats.
-  CI->getHeaderSearchOpts().ModuleFormat =
-      PCHContainerOperations().getRawReader().getFormat().str();
-
-  CI->getFrontendOpts().Plugins.clear();
-  CI->getFrontendOpts().AddPluginActions.clear();
-  CI->getFrontendOpts().PluginArgs.clear();
-  CI->getFrontendOpts().ProgramAction = frontend::ParseSyntaxOnly;
-  CI->getFrontendOpts().ActionName.clear();
-
   return CI;
 }
 
@@ -120,7 +88,7 @@ prepareCompilerInstance(std::unique_ptr<clang::CompilerInvocation> CI,
         CI->getFrontendOpts().Inputs[0].getFile(), Buffer.get());
   }
 
-  auto Clang = std::make_unique<CompilerInstance>(
+  auto Clang = llvm::make_unique<CompilerInstance>(
       std::make_shared<PCHContainerOperations>());
   Clang->setInvocation(std::move(CI));
   Clang->createDiagnostics(&DiagsClient, false);
@@ -130,7 +98,9 @@ prepareCompilerInstance(std::unique_ptr<clang::CompilerInvocation> CI,
     VFS = VFSWithRemapping;
   Clang->createFileManager(VFS);
 
-  if (!Clang->createTarget())
+  Clang->setTarget(TargetInfo::CreateTargetInfo(
+      Clang->getDiagnostics(), Clang->getInvocation().TargetOpts));
+  if (!Clang->hasTarget())
     return nullptr;
 
   // RemappedFileBuffers will handle the lifetime of the Buffer pointer,

@@ -1,9 +1,3 @@
-add_llvm_component_library(LLVMBPFInfo
+add_llvm_library(LLVMBPFInfo
   BPFTargetInfo.cpp
-
-  LINK_COMPONENTS
-  Support
-
-  ADD_TO_COMPONENT
-  BPF
   )

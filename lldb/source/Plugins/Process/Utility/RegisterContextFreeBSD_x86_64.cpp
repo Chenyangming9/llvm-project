@@ -1,4 +1,4 @@
-//===-- RegisterContextFreeBSD_x86_64.cpp ---------------------------------===//
+//===-- RegisterContextFreeBSD_x86_64.cpp ----------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -59,9 +59,7 @@ struct UserArea {
   DBG dbg;
 };
 
-#define DR_OFFSET(reg_index)                                                   \
-  (LLVM_EXTENSION offsetof(UserArea, dbg) +                                    \
-   LLVM_EXTENSION offsetof(DBG, dr[reg_index]))
+#define DR_OFFSET(reg_index) (LLVM_EXTENSION offsetof(DBG, dr[reg_index]))
 
 // Include RegisterInfos_x86_64 to declare our g_register_infos_x86_64
 // structure.

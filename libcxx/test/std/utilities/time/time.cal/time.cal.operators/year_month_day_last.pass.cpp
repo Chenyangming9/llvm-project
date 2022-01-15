@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-// UNSUPPORTED: c++03, c++11, c++14, c++17
+// UNSUPPORTED: c++98, c++03, c++11, c++14, c++17
 // <chrono>
 // class year_month_day_last;
 
@@ -40,7 +40,6 @@
 
 int main(int, char**)
 {
-    using day                 = std::chrono::day;
     using month               = std::chrono::month;
     using year_month          = std::chrono::year_month;
     using year                = std::chrono::year;
@@ -123,13 +122,5 @@ int main(int, char**)
             }
     }
 
-    // the result of year_month_day_last::day() is unspecified when !ok(),
-    // but it shouldn't crash.
-    {
-        year_month_day_last ymdl = year{2020}/month{13}/last;
-        assert(!ymdl.ok());
-        day d = ymdl.day(); (void)d; // doesn't crash
-    }
-
-    return 0;
+  return 0;
 }

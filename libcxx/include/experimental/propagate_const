@@ -135,7 +135,7 @@ template <class _Tp>
 class propagate_const
 {
 public:
-  typedef remove_reference_t<decltype(*declval<_Tp&>())> element_type;
+  typedef remove_reference_t<decltype(*_VSTD::declval<_Tp&>())> element_type;
 
   static_assert(!is_array<_Tp>::value,
       "Instantiation of propagate_const with an array type is ill-formed.");
@@ -575,3 +575,4 @@ _LIBCPP_END_NAMESPACE_STD
 
 #endif // _LIBCPP_STD_VER > 11
 #endif // _LIBCPP_EXPERIMENTAL_PROPAGATE_CONST
+

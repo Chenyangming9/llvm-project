@@ -13,29 +13,28 @@
 
 #include "fuchsia.h"
 #include "linux.h"
-#include "trusty.h"
 
 #include <stddef.h>
 #include <string.h>
 
 namespace scudo {
 
-template <class Dest, class Source> inline Dest bit_cast(const Source &S) {
-  static_assert(sizeof(Dest) == sizeof(Source), "");
+template <class Dest, class Source> INLINE Dest bit_cast(const Source &S) {
+  COMPILER_CHECK(sizeof(Dest) == sizeof(Source));
   Dest D;
   memcpy(&D, &S, sizeof(D));
   return D;
 }
 
-inline constexpr uptr roundUpTo(uptr X, uptr Boundary) {
+INLINE constexpr uptr roundUpTo(uptr X, uptr Boundary) {
   return (X + Boundary - 1) & ~(Boundary - 1);
 }
 
-inline constexpr uptr roundDownTo(uptr X, uptr Boundary) {
+INLINE constexpr uptr roundDownTo(uptr X, uptr Boundary) {
   return X & ~(Boundary - 1);
 }
 
-inline constexpr bool isAligned(uptr X, uptr Alignment) {
+INLINE constexpr bool isAligned(uptr X, uptr Alignment) {
   return (X & (Alignment - 1)) == 0;
 }
 
@@ -49,14 +48,14 @@ template <class T> void Swap(T &A, T &B) {
   B = Tmp;
 }
 
-inline bool isPowerOfTwo(uptr X) { return (X & (X - 1)) == 0; }
+INLINE bool isPowerOfTwo(uptr X) { return (X & (X - 1)) == 0; }
 
-inline uptr getMostSignificantSetBitIndex(uptr X) {
+INLINE uptr getMostSignificantSetBitIndex(uptr X) {
   DCHECK_NE(X, 0U);
   return SCUDO_WORDSIZE - 1U - static_cast<uptr>(__builtin_clzl(X));
 }
 
-inline uptr roundUpToPowerOfTwo(uptr Size) {
+INLINE uptr roundUpToPowerOfTwo(uptr Size) {
   DCHECK(Size);
   if (isPowerOfTwo(Size))
     return Size;
@@ -66,17 +65,17 @@ inline uptr roundUpToPowerOfTwo(uptr Size) {
   return 1UL << (Up + 1);
 }
 
-inline uptr getLeastSignificantSetBitIndex(uptr X) {
+INLINE uptr getLeastSignificantSetBitIndex(uptr X) {
   DCHECK_NE(X, 0U);
   return static_cast<uptr>(__builtin_ctzl(X));
 }
 
-inline uptr getLog2(uptr X) {
+INLINE uptr getLog2(uptr X) {
   DCHECK(isPowerOfTwo(X));
   return getLeastSignificantSetBitIndex(X);
 }
 
-inline u32 getRandomU32(u32 *State) {
+INLINE u32 getRandomU32(u32 *State) {
   // ANSI C linear congruential PRNG (16-bit output).
   // return (*State = *State * 1103515245 + 12345) >> 16;
   // XorShift (32-bit output).
@@ -86,11 +85,11 @@ inline u32 getRandomU32(u32 *State) {
   return *State;
 }
 
-inline u32 getRandomModN(u32 *State, u32 N) {
+INLINE u32 getRandomModN(u32 *State, u32 N) {
   return getRandomU32(State) % N; // [0, N)
 }
 
-template <typename T> inline void shuffle(T *A, u32 N, u32 *RandState) {
+template <typename T> INLINE void shuffle(T *A, u32 N, u32 *RandState) {
   if (N <= 1)
     return;
   u32 State = *RandState;
@@ -101,7 +100,7 @@ template <typename T> inline void shuffle(T *A, u32 N, u32 *RandState) {
 
 // Hardware specific inlinable functions.
 
-inline void yieldProcessor(u8 Count) {
+INLINE void yieldProcessor(u8 Count) {
 #if defined(__i386__) || defined(__x86_64__)
   __asm__ __volatile__("" ::: "memory");
   for (u8 I = 0; I < Count; I++)
@@ -118,7 +117,7 @@ inline void yieldProcessor(u8 Count) {
 
 extern uptr PageSizeCached;
 uptr getPageSizeSlow();
-inline uptr getPageSizeCached() {
+INLINE uptr getPageSizeCached() {
   // Bionic uses a hardcoded value.
   if (SCUDO_ANDROID)
     return 4096U;
@@ -127,14 +126,11 @@ inline uptr getPageSizeCached() {
   return getPageSizeSlow();
 }
 
-// Returns 0 if the number of CPUs could not be determined.
 u32 getNumberOfCPUs();
 
 const char *getEnv(const char *Name);
 
 u64 getMonotonicTime();
-
-u32 getThreadID();
 
 // Our randomness gathering function is limited to 256 bytes to ensure we get
 // as many bytes as requested, and avoid interruptions (on Linux).
@@ -146,7 +142,6 @@ bool getRandom(void *Buffer, uptr Length, bool Blocking = false);
 #define MAP_ALLOWNOMEM (1U << 0)
 #define MAP_NOACCESS (1U << 1)
 #define MAP_RESIZABLE (1U << 2)
-#define MAP_MEMTAG (1U << 3)
 
 // Our platform memory mapping use is restricted to 3 scenarios:
 // - reserve memory at a random address (MAP_NOACCESS);
@@ -166,45 +161,15 @@ void *map(void *Addr, uptr Size, const char *Name, uptr Flags = 0,
 void unmap(void *Addr, uptr Size, uptr Flags = 0,
            MapPlatformData *Data = nullptr);
 
-void setMemoryPermission(uptr Addr, uptr Size, uptr Flags,
-                         MapPlatformData *Data = nullptr);
-
 void releasePagesToOS(uptr BaseAddress, uptr Offset, uptr Size,
                       MapPlatformData *Data = nullptr);
 
-// Internal map & unmap fatal error. This must not call map(). SizeIfOOM shall
-// hold the requested size on an out-of-memory error, 0 otherwise.
-void NORETURN dieOnMapUnmapError(uptr SizeIfOOM = 0);
+// Internal map & unmap fatal error. This must not call map().
+void NORETURN dieOnMapUnmapError(bool OutOfMemory = false);
 
 // Logging related functions.
 
 void setAbortMessage(const char *Message);
-
-struct BlockInfo {
-  uptr BlockBegin;
-  uptr BlockSize;
-  uptr RegionBegin;
-  uptr RegionEnd;
-};
-
-enum class Option : u8 {
-  ReleaseInterval,      // Release to OS interval in milliseconds.
-  MemtagTuning,         // Whether to tune tagging for UAF or overflow.
-  ThreadDisableMemInit, // Whether to disable automatic heap initialization and,
-                        // where possible, memory tagging, on this thread.
-  MaxCacheEntriesCount, // Maximum number of blocks that can be cached.
-  MaxCacheEntrySize,    // Maximum size of a block that can be cached.
-  MaxTSDsCount,         // Number of usable TSDs for the shared registry.
-};
-
-constexpr unsigned char PatternFillByte = 0xAB;
-
-enum FillContentsMode {
-  NoFill = 0,
-  ZeroFill = 1,
-  PatternOrZeroFill = 2 // Pattern fill unless the memory is known to be
-                        // zero-initialized already.
-};
 
 } // namespace scudo
 

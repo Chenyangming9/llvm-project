@@ -6,11 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CODEGEN_GLOBALISEL_GISELWORKLIST_H
-#define LLVM_CODEGEN_GLOBALISEL_GISELWORKLIST_H
+#ifndef LLVM_GISEL_WORKLIST_H
+#define LLVM_GISEL_WORKLIST_H
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/Support/Debug.h"
 
 namespace llvm {
 

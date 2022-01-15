@@ -128,7 +128,7 @@ define float @f7(float %dummy, float %a, float *%dest) {
 ; CHECK: br %r14
 entry:
   %abs = call float @llvm.fabs.f32(float %a)
-  %res = fneg float %abs
+  %res = fsub float -0.0, %abs
   %cmp = fcmp olt float %res, 0.0
   br i1 %cmp, label %exit, label %store
 
@@ -147,7 +147,7 @@ define float @f8(float %dummy, float %a, float *%dest) {
 ; CHECK-NEXT: bler %r14
 ; CHECK: br %r14
 entry:
-  %res = fneg float %a
+  %res = fsub float -0.0, %a
   %cmp = fcmp ole float %res, 0.0
   br i1 %cmp, label %exit, label %store
 
@@ -375,7 +375,7 @@ define float @f18(float %dummy, float %a, float *%dest) {
 ; CHECK: br %r14
 entry:
   %abs = call float @llvm.fabs.f32(float %a)
-  %res = fneg float %abs
+  %res = fsub float -0.0, %abs
   %cmp = fcmp ogt float %abs, 0.0
   br i1 %cmp, label %exit, label %store
 
@@ -394,7 +394,7 @@ define float @f19(float %dummy, float %a, float *%dest) {
 ; CHECK-NEXT: bler %r14
 ; CHECK: br %r14
 entry:
-  %res = fneg float %a
+  %res = fsub float -0.0, %a
   %cmp = fcmp oge float %a, 0.0
   br i1 %cmp, label %exit, label %store
 

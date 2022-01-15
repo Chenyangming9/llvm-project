@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 #include "support/pstl_test_config.h"
 
@@ -39,15 +39,15 @@ struct test_transform_scan
               typename T, typename BinaryOp>
     typename std::enable_if<!TestUtils::isReverse<InputIterator>::value, void>::type
     operator()(Policy&& exec, InputIterator first, InputIterator last, OutputIterator out_first,
-               OutputIterator out_last, OutputIterator expected_first, OutputIterator, Size n, UnaryOp unary_op, T init,
-               BinaryOp binary_op, T trash)
+               OutputIterator out_last, OutputIterator expected_first, OutputIterator, Size n,
+               UnaryOp unary_op, T init, BinaryOp binary_op, T trash)
     {
         using namespace std;
 
-        auto orr1 =
-            inclusive
-                ? transform_inclusive_scan(std::execution::seq, first, last, expected_first, binary_op, unary_op, init)
-                : transform_exclusive_scan(std::execution::seq, first, last, expected_first, init, binary_op, unary_op);
+        auto orr1 = inclusive ? transform_inclusive_scan(std::execution::seq, first, last, expected_first, binary_op,
+                                                         unary_op, init)
+                              : transform_exclusive_scan(std::execution::seq, first, last, expected_first, init,
+                                                         binary_op, unary_op);
         auto orr2 = inclusive ? transform_inclusive_scan(exec, first, last, out_first, binary_op, unary_op, init)
                               : transform_exclusive_scan(exec, first, last, out_first, init, binary_op, unary_op);
         EXPECT_TRUE(out_last == orr2, "transform...scan returned wrong iterator");
@@ -66,8 +66,9 @@ struct test_transform_scan
     template <typename Policy, typename InputIterator, typename OutputIterator, typename Size, typename UnaryOp,
               typename T, typename BinaryOp>
     typename std::enable_if<TestUtils::isReverse<InputIterator>::value, void>::type
-    operator()(Policy&&, InputIterator, InputIterator, OutputIterator, OutputIterator, OutputIterator, OutputIterator,
-               Size, UnaryOp, T, BinaryOp, T)
+    operator()(Policy&&, InputIterator, InputIterator, OutputIterator,
+               OutputIterator, OutputIterator, OutputIterator, Size,
+               UnaryOp, T, BinaryOp, T)
     {
     }
 };
@@ -159,13 +160,13 @@ test_matrix(UnaryOp unary_op, Out init, BinaryOp binary_op, Out trash)
     }
 }
 
-int
+int32_t
 main()
 {
     for (int32_t mode = 0; mode < 2; ++mode)
     {
         inclusive = mode != 0;
-#if !defined(_PSTL_ICC_19_TEST_SIMD_UDS_WINDOWS_RELEASE_BROKEN)
+#if !_PSTL_ICC_19_TEST_SIMD_UDS_WINDOWS_RELEASE_BROKEN
         test_matrix<Matrix2x2<int32_t>, Matrix2x2<int32_t>>([](const Matrix2x2<int32_t> x) { return x; },
                                                             Matrix2x2<int32_t>(), multiply_matrix<int32_t>,
                                                             Matrix2x2<int32_t>(-666, 666));

@@ -194,7 +194,7 @@ namespace EntityReferenced {
   template<typename T>
   struct Y {
     static void f(T x) { 
-      x = 1; // expected-error{{incompatible integer to pointer conversion assigning to 'int *' from 'int'}}
+      x = 1; // expected-error{{assigning to 'int *' from incompatible type 'int'}}
     }
   };
 
@@ -270,23 +270,6 @@ namespace PR9227 {
   void test_char_possibly_negative() { enable_if_char<'\x02'>::type i; } // expected-error{{enable_if_char<'\x02'>'; did you mean 'enable_if_char<'a'>::type'?}}
   void test_char_single_quote() { enable_if_char<'\''>::type i; } // expected-error{{enable_if_char<'\''>'; did you mean 'enable_if_char<'a'>::type'?}}
   void test_char_backslash() { enable_if_char<'\\'>::type i; } // expected-error{{enable_if_char<'\\'>'; did you mean 'enable_if_char<'a'>::type'?}}
-
-  template <int N> struct enable_if_int {};
-  template <> struct enable_if_int<1> { typedef int type; }; // expected-note{{'enable_if_int<1>::type' declared here}}
-  void test_int() { enable_if_int<2>::type i; } // expected-error{{enable_if_int<2>'; did you mean 'enable_if_int<1>::type'?}}
-
-  template <unsigned int N> struct enable_if_unsigned_int {};
-  template <> struct enable_if_unsigned_int<1> { typedef int type; }; // expected-note{{'enable_if_unsigned_int<1>::type' declared here}}
-  void test_unsigned_int() { enable_if_unsigned_int<2>::type i; } // expected-error{{enable_if_unsigned_int<2>'; did you mean 'enable_if_unsigned_int<1>::type'?}}
-
-  template <unsigned long long N> struct enable_if_unsigned_long_long {};
-  template <> struct enable_if_unsigned_long_long<1> { typedef int type; }; // expected-note{{'enable_if_unsigned_long_long<1>::type' declared here}}
-  void test_unsigned_long_long() { enable_if_unsigned_long_long<2>::type i; } // expected-error{{enable_if_unsigned_long_long<2>'; did you mean 'enable_if_unsigned_long_long<1>::type'?}}
-
-  template <long long N> struct enable_if_long_long {};
-  template <> struct enable_if_long_long<1> { typedef int type; }; // expected-note{{'enable_if_long_long<1>::type' declared here}}
-  void test_long_long() { enable_if_long_long<2>::type i; } // expected-error{{enable_if_long_long<2>'; did you mean 'enable_if_long_long<1>::type'?}}
-
 }
 
 namespace PR10579 {
@@ -462,10 +445,10 @@ namespace nondependent_default_arg_ordering {
   template<typename A> void f(X<A>); // expected-note {{candidate}}
   template<typename A> void f(X<A, &m>); // expected-note {{candidate}}
   template<typename A, A B> void f(X<A, B>); // expected-note 2{{candidate}}
-  template<template<typename U, U> class T, typename A, int *B> void f(T<A, B>);
+  template<template<typename U, U> class T, typename A, int *B> void f(T<A, B>); // expected-note 2{{candidate}}
   void g() {
     // FIXME: The first and second function templates above should be
-    // considered more specialized than the third, but during partial
+    // considered more specialized than the last two, but during partial
     // ordering we fail to check that we actually deduced template arguments
     // that make the deduced A identical to A.
     X<int *, &n> x; f(x); // expected-error {{ambiguous}}
@@ -498,48 +481,4 @@ namespace dependent_backreference {
   // non-dependent type 'int'.
   template<short S> void a() { X<short, S, &arr> x; }
   template<short S> void b() { X<int, S, &arr> x; } // expected-note {{substituting}}
-}
-
-namespace instantiation_dependent {
-  template<typename T, __typeof(sizeof(T))> void f(int);
-  template<typename T, __typeof(sizeof(0))> int &f(...);
-  int &rf = f<struct incomplete, 0>(0);
-
-  int arr[sizeof(sizeof(int))];
-  template<typename T, int (*)[sizeof(sizeof(T))]> void g(int);
-  template<typename T, int (*)[sizeof(sizeof(int))]> int &g(...);
-  int &rg = g<struct incomplete, &arr>(0);
-}
-
-namespace complete_array_from_incomplete {
-  template <typename T, const char* const A[static_cast<int>(T::kNum)]>
-  class Base {};
-  template <class T, const char* const A[]>
-  class Derived : public Base<T, A> {};
-
-  struct T {
-    static const int kNum = 3;
-  };
-  extern const char *const kStrs[3] = {};
-  Derived<T, kStrs> d;
-}
-
-namespace type_of_pack {
-  template<typename ...T> struct A { // expected-warning 0-1{{extension}}
-    template<T *...V> void f() {
-      g(V.f() ...); // expected-error {{base type 'T *' is not a structure or union}}
-    }
-  };
-}
-
-namespace match_type_after_substitution {
-  template<typename T> struct X {};
-  X<int> y;
-  template<typename T, X<T> &Y> struct B {
-    typedef B<T, Y> Self;
-  };
-
-  // These two formulations should resolve to the same type.
-  typedef B<int, y> Z;
-  typedef Z::Self Z;
 }

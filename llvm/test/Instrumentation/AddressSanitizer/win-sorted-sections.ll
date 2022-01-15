@@ -1,5 +1,4 @@
-; RUN: opt < %s -asan -asan-module -enable-new-pm=0 -S | FileCheck %s
-; RUN: opt < %s -passes='asan-pipeline' -S | FileCheck %s
+; RUN: opt < %s -asan -asan-module -S | FileCheck %s
 
 ; All of these globals should pass through uninstrumented because of their
 ; custom section name. The .CRT section is the standard way to register custom

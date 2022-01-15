@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <filesystem>
 
 // enum class file_type;
 
-#include "filesystem_include.h"
+#include "filesystem_include.hpp"
 #include <type_traits>
 #include <cassert>
 
@@ -29,10 +29,9 @@ int main(int, char**) {
   typedef std::underlying_type<E>::type UT;
   static_assert(!std::is_convertible<E, UT>::value, "");
 
-  LIBCPP_ONLY(static_assert(std::is_same<UT, signed char>::value, "")); // Implementation detail
+  static_assert(std::is_same<UT, signed char>::value, ""); // Implementation detail
 
-  // The standard doesn't specify the numeric values of the enum.
-  LIBCPP_STATIC_ASSERT(
+  static_assert(
           E::none == ME(0) &&
           E::not_found == ME(-1) &&
           E::regular == ME(1) &&

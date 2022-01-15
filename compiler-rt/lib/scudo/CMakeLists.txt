@@ -34,9 +34,11 @@ set(SCUDO_MINIMAL_OBJECT_LIBS
   RTInterception)
 
 if (COMPILER_RT_HAS_GWP_ASAN)
-  list(APPEND SCUDO_MINIMAL_OBJECT_LIBS
-       RTGwpAsan RTGwpAsanOptionsParser RTGwpAsanBacktraceLibc
-       RTGwpAsanSegvHandler)
+  # Currently, Scudo uses the GwpAsan flag parser. This backs onto the flag
+  # parsing mechanism of sanitizer_common. Once Scudo has its own flag parsing,
+  # and parses GwpAsan options, you can remove this dependency.
+  list(APPEND SCUDO_MINIMAL_OBJECT_LIBS RTGwpAsan RTGwpAsanOptionsParser
+                                        RTGwpAsanBacktraceLibc)
   list(APPEND SCUDO_CFLAGS -DGWP_ASAN_HOOKS)
 endif()
 

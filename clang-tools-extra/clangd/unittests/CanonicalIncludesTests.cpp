@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "index/CanonicalIncludes.h"
-#include "clang/Basic/LangOptions.h"
 #include "gtest/gtest.h"
 
 namespace clang {
@@ -18,29 +17,29 @@ TEST(CanonicalIncludesTest, CStandardLibrary) {
   CanonicalIncludes CI;
   auto Language = LangOptions();
   Language.C11 = true;
-  CI.addSystemHeadersMapping(Language);
+  addSystemHeadersMapping(&CI, Language);
   // Usual standard library symbols are mapped correctly.
-  EXPECT_EQ("<stdio.h>", CI.mapSymbol("printf"));
-  EXPECT_EQ("", CI.mapSymbol("unknown_symbol"));
+  EXPECT_EQ("<stdio.h>", CI.mapHeader("path/stdio.h", "printf"));
 }
 
 TEST(CanonicalIncludesTest, CXXStandardLibrary) {
   CanonicalIncludes CI;
   auto Language = LangOptions();
   Language.CPlusPlus = true;
-  CI.addSystemHeadersMapping(Language);
+  addSystemHeadersMapping(&CI, Language);
 
   // Usual standard library symbols are mapped correctly.
-  EXPECT_EQ("<vector>", CI.mapSymbol("std::vector"));
-  EXPECT_EQ("<cstdio>", CI.mapSymbol("std::printf"));
-  // std::move is ambiguous, currently always mapped to <utility>
-  EXPECT_EQ("<utility>", CI.mapSymbol("std::move"));
+  EXPECT_EQ("<vector>", CI.mapHeader("path/vector.h", "std::vector"));
+  EXPECT_EQ("<cstdio>", CI.mapHeader("path/stdio.h", "std::printf"));
+  // std::move is ambiguous, currently mapped only based on path
+  EXPECT_EQ("<utility>", CI.mapHeader("libstdc++/bits/move.h", "std::move"));
+  EXPECT_EQ("path/utility.h", CI.mapHeader("path/utility.h", "std::move"));
   // Unknown std symbols aren't mapped.
-  EXPECT_EQ("", CI.mapSymbol("std::notathing"));
+  EXPECT_EQ("foo/bar.h", CI.mapHeader("foo/bar.h", "std::notathing"));
   // iosfwd declares some symbols it doesn't own.
-  EXPECT_EQ("<ostream>", CI.mapSymbol("std::ostream"));
+  EXPECT_EQ("<ostream>", CI.mapHeader("iosfwd", "std::ostream"));
   // And (for now) we assume it owns the others.
-  EXPECT_EQ("<iosfwd>", CI.mapHeader("iosfwd"));
+  EXPECT_EQ("<iosfwd>", CI.mapHeader("iosfwd", "std::notwathing"));
 }
 
 TEST(CanonicalIncludesTest, PathMapping) {
@@ -48,21 +47,26 @@ TEST(CanonicalIncludesTest, PathMapping) {
   CanonicalIncludes CI;
   CI.addMapping("foo/bar", "<baz>");
 
-  EXPECT_EQ("<baz>", CI.mapHeader("foo/bar"));
-  EXPECT_EQ("", CI.mapHeader("bar/bar"));
+  EXPECT_EQ("<baz>", CI.mapHeader("foo/bar", "some::symbol"));
+  EXPECT_EQ("bar/bar", CI.mapHeader("bar/bar", "some::symbol"));
+}
+
+TEST(CanonicalIncludesTest, SymbolMapping) {
+  // As used for standard library.
+  CanonicalIncludes CI;
+  CI.addSymbolMapping("some::symbol", "<baz>");
+
+  EXPECT_EQ("<baz>", CI.mapHeader("foo/bar", "some::symbol"));
+  EXPECT_EQ("foo/bar", CI.mapHeader("foo/bar", "other::symbol"));
 }
 
 TEST(CanonicalIncludesTest, Precedence) {
   CanonicalIncludes CI;
   CI.addMapping("some/path", "<path>");
-  LangOptions Language;
-  Language.CPlusPlus = true;
-  CI.addSystemHeadersMapping(Language);
+  CI.addSymbolMapping("some::symbol", "<symbol>");
 
-  // We added a mapping from some/path to <path>.
-  ASSERT_EQ("<path>", CI.mapHeader("some/path"));
-  // We should have a path from 'bits/stl_vector.h' to '<vector>'.
-  ASSERT_EQ("<vector>", CI.mapHeader("bits/stl_vector.h"));
+  // Symbol mapping beats path mapping.
+  EXPECT_EQ("<symbol>", CI.mapHeader("some/path", "some::symbol"));
 }
 
 } // namespace

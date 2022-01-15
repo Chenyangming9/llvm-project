@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#define DEBUG_TYPE "hexagon-disassembler"
+
 #include "MCTargetDesc/HexagonBaseInfo.h"
 #include "MCTargetDesc/HexagonMCChecker.h"
 #include "MCTargetDesc/HexagonMCInstrInfo.h"
@@ -30,8 +32,6 @@
 #include <cstdint>
 #include <memory>
 
-#define DEBUG_TYPE "hexagon-disassembler"
-
 using namespace llvm;
 using namespace Hexagon;
 
@@ -53,9 +53,11 @@ public:
 
   DecodeStatus getSingleInstruction(MCInst &Instr, MCInst &MCB,
                                     ArrayRef<uint8_t> Bytes, uint64_t Address,
-                                    raw_ostream &CStream, bool &Complete) const;
+                                    raw_ostream &VStream, raw_ostream &CStream,
+                                    bool &Complete) const;
   DecodeStatus getInstruction(MCInst &Instr, uint64_t &Size,
                               ArrayRef<uint8_t> Bytes, uint64_t Address,
+                              raw_ostream &VStream,
                               raw_ostream &CStream) const override;
   void remapInstruction(MCInst &Instr) const;
 };
@@ -156,7 +158,7 @@ static MCDisassembler *createHexagonDisassembler(const Target &T,
   return new HexagonDisassembler(STI, Ctx, T.createMCInstrInfo());
 }
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHexagonDisassembler() {
+extern "C" void LLVMInitializeHexagonDisassembler() {
   TargetRegistry::RegisterMCDisassembler(getTheHexagonTarget(),
                                          createHexagonDisassembler);
 }
@@ -164,6 +166,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHexagonDisassembler() {
 DecodeStatus HexagonDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
                                                  ArrayRef<uint8_t> Bytes,
                                                  uint64_t Address,
+                                                 raw_ostream &os,
                                                  raw_ostream &cs) const {
   DecodeStatus Result = DecodeStatus::Success;
   bool Complete = false;
@@ -175,8 +178,8 @@ DecodeStatus HexagonDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
   while (Result == Success && !Complete) {
     if (Bytes.size() < HEXAGON_INSTR_SIZE)
       return MCDisassembler::Fail;
-    MCInst *Inst = getContext().createMCInst();
-    Result = getSingleInstruction(*Inst, MI, Bytes, Address, cs, Complete);
+    MCInst *Inst = new (getContext()) MCInst;
+    Result = getSingleInstruction(*Inst, MI, Bytes, Address, os, cs, Complete);
     MI.addOperand(MCOperand::createInst(Inst));
     Size += HEXAGON_INSTR_SIZE;
     Bytes = Bytes.slice(HEXAGON_INSTR_SIZE);
@@ -185,10 +188,7 @@ DecodeStatus HexagonDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
     return Result;
   if (Size > HEXAGON_MAX_PACKET_SIZE)
     return MCDisassembler::Fail;
-
-  const auto ArchSTI = Hexagon_MC::getArchSubtarget(&STI);
-  const auto STI_ = (ArchSTI != nullptr) ? *ArchSTI : STI;
-  HexagonMCChecker Checker(getContext(), *MCII, STI_, MI,
+  HexagonMCChecker Checker(getContext(), *MCII, STI, MI,
                            *getContext().getRegisterInfo(), false);
   if (!Checker.check())
     return MCDisassembler::Fail;
@@ -290,11 +290,9 @@ static void adjustDuplex(MCInst &MI, MCContext &Context) {
   }
 }
 
-DecodeStatus HexagonDisassembler::getSingleInstruction(MCInst &MI, MCInst &MCB,
-                                                       ArrayRef<uint8_t> Bytes,
-                                                       uint64_t Address,
-                                                       raw_ostream &cs,
-                                                       bool &Complete) const {
+DecodeStatus HexagonDisassembler::getSingleInstruction(
+    MCInst &MI, MCInst &MCB, ArrayRef<uint8_t> Bytes, uint64_t Address,
+    raw_ostream &os, raw_ostream &cs, bool &Complete) const {
   assert(Bytes.size() >= HEXAGON_INSTR_SIZE);
 
   uint32_t Instruction = support::endian::read32le(Bytes.data());
@@ -384,8 +382,8 @@ DecodeStatus HexagonDisassembler::getSingleInstruction(MCInst &MI, MCInst &MCB,
       break;
     }
     MI.setOpcode(Hexagon::DuplexIClass0 + duplexIClass);
-    MCInst *MILow = getContext().createMCInst();
-    MCInst *MIHigh = getContext().createMCInst();
+    MCInst *MILow = new (getContext()) MCInst;
+    MCInst *MIHigh = new (getContext()) MCInst;
     auto TmpExtender = CurrentExtender;
     CurrentExtender =
         nullptr; // constant extenders in duplex must always be in slot 1
@@ -498,13 +496,9 @@ DecodeStatus HexagonDisassembler::getSingleInstruction(MCInst &MI, MCInst &MCB,
     } else if (HexagonMCInstrInfo::hasNewValue(*MCII, Inst)) {
       unsigned Producer =
           HexagonMCInstrInfo::getNewValueOperand(*MCII, Inst).getReg();
-
-      if (HexagonMCInstrInfo::IsVecRegPair(Producer)) {
-        const bool Rev = HexagonMCInstrInfo::IsReverseVecRegPair(Producer);
-        const unsigned ProdPairIndex =
-            Rev ? Producer - Hexagon::WR0 : Producer - Hexagon::W0;
-        Producer = (ProdPairIndex << 1) + SubregBit + Hexagon::V0;
-      } else if (SubregBit)
+      if (Producer >= Hexagon::W0 && Producer <= Hexagon::W15)
+        Producer = ((Producer - Hexagon::W0) << 1) + SubregBit + Hexagon::V0;
+      else if (SubregBit)
         // Hexagon PRM 10.11 New-value operands
         // Nt[0] is reserved and should always be encoded as zero.
         return MCDisassembler::Fail;
@@ -610,16 +604,12 @@ static DecodeStatus DecodeHvxWRRegisterClass(MCInst &Inst, unsigned RegNo,
                                              uint64_t /*Address*/,
                                              const void *Decoder) {
   static const MCPhysReg HvxWRDecoderTable[] = {
-      Hexagon::W0,   Hexagon::WR0,  Hexagon::W1,   Hexagon::WR1,  Hexagon::W2,
-      Hexagon::WR2,  Hexagon::W3,   Hexagon::WR3,  Hexagon::W4,   Hexagon::WR4,
-      Hexagon::W5,   Hexagon::WR5,  Hexagon::W6,   Hexagon::WR6,  Hexagon::W7,
-      Hexagon::WR7,  Hexagon::W8,   Hexagon::WR8,  Hexagon::W9,   Hexagon::WR9,
-      Hexagon::W10,  Hexagon::WR10, Hexagon::W11,  Hexagon::WR11, Hexagon::W12,
-      Hexagon::WR12, Hexagon::W13,  Hexagon::WR13, Hexagon::W14,  Hexagon::WR14,
-      Hexagon::W15,  Hexagon::WR15,
-  };
+      Hexagon::W0,  Hexagon::W1,  Hexagon::W2,  Hexagon::W3,
+      Hexagon::W4,  Hexagon::W5,  Hexagon::W6,  Hexagon::W7,
+      Hexagon::W8,  Hexagon::W9,  Hexagon::W10, Hexagon::W11,
+      Hexagon::W12, Hexagon::W13, Hexagon::W14, Hexagon::W15};
 
-  return DecodeRegisterClass(Inst, RegNo, HvxWRDecoderTable);
+  return (DecodeRegisterClass(Inst, RegNo >> 1, HvxWRDecoderTable));
 }
 
 LLVM_ATTRIBUTE_UNUSED  // Suppress warning temporarily.

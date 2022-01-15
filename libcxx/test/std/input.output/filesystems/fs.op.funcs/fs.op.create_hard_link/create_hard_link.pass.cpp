@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <filesystem>
 
@@ -14,11 +14,11 @@
 // void create_hard_link(const path& existing_symlink, const path& new_symlink,
 //                   error_code& ec) noexcept;
 
-#include "filesystem_include.h"
+#include "filesystem_include.hpp"
 
 #include "test_macros.h"
-#include "rapid-cxx-test.h"
-#include "filesystem_test_helper.h"
+#include "rapid-cxx-test.hpp"
+#include "filesystem_test_helper.hpp"
 
 using namespace fs;
 

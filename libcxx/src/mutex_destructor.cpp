@@ -41,10 +41,11 @@ public:
 };
 
 
-mutex::~mutex() noexcept
+mutex::~mutex() _NOEXCEPT
 {
     __libcpp_mutex_destroy(&__m_);
 }
 
 #endif // !_LIBCPP_HAS_NO_THREADS
 _LIBCPP_END_NAMESPACE_STD
+

@@ -1,14 +1,5 @@
-// RUN: %clang_analyze_cc1 -analyzer-output=text -verify %s \
-// RUN:   -analyzer-checker=core \
-// RUN:   -analyzer-checker=cplusplus.NewDelete \
-// RUN:   -analyzer-config core.CallAndMessage:ArgPointeeInitializedness=true
-
-// RUN: %clang_analyze_cc1 -analyzer-output=text -verify %s \
-// RUN:   -DTEST_INLINABLE_ALLOCATORS \
-// RUN:   -analyzer-checker=core \
-// RUN:   -analyzer-checker=cplusplus.NewDelete \
-// RUN:   -analyzer-config core.CallAndMessage:ArgPointeeInitializedness=true
-
+// RUN: %clang_analyze_cc1 -analyzer-checker=cplusplus.NewDelete,core,alpha.core.CallAndMessageUnInitRefArg -analyzer-output=text -verify %s
+// RUN: %clang_analyze_cc1 -analyzer-checker=cplusplus.NewDelete,core,alpha.core.CallAndMessageUnInitRefArg -analyzer-output=text -DTEST_INLINABLE_ALLOCATORS -verify %s
 // Passing uninitialized const data to unknown function
 
 #include "Inputs/system-header-simulator-cxx.h"
@@ -63,7 +54,7 @@ int& f6_1_sub(int &p) {
 }
 
 void f6_1(void) {
-  int t;               // expected-note{{'t' declared without an initial value}}
+  int t; // expected-note{{'t' declared without an initial value}}
   int p = f6_1_sub(t); //expected-warning {{Assigned value is garbage or undefined}}
                        //expected-note@-1 {{Passing value via 1st parameter 'p'}}
                        //expected-note@-2 {{Calling 'f6_1_sub'}}
@@ -75,9 +66,9 @@ void f6_1(void) {
 
 void f6_2(void) {
   int t;       //expected-note {{'t' declared without an initial value}}
-  int &p = t;  //expected-note {{'p' initialized here}}
-  int &s = p;  //expected-note {{'s' initialized to the value of 'p'}}
-  int &q = s;  //expected-note {{'q' initialized to the value of 's'}}
+  int &p = t;
+  int &s = p;
+  int &q = s;  //expected-note {{'q' initialized here}}
   doStuff6(q); //expected-warning {{1st function call argument is an uninitialized value}}
                //expected-note@-1 {{1st function call argument is an uninitialized value}}
 }
@@ -105,7 +96,7 @@ void f6(void) {
 
 
 void f5(void) {
-  int t;               // expected-note {{'t' declared without an initial value}}
+  int t;
   int* tp = &t;        // expected-note {{'tp' initialized here}}
   doStuff_uninit(tp);  // expected-warning {{1st function call argument is a pointer to uninitialized value}}
                        // expected-note@-1 {{1st function call argument is a pointer to uninitialized value}}

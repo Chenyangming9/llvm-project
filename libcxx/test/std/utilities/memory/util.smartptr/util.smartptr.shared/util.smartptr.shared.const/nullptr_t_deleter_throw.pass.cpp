@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: no-exceptions
+// UNSUPPORTED: libcpp-no-exceptions
 // UNSUPPORTED: sanitizer-new-delete
 
 // <memory>
@@ -21,7 +21,7 @@
 #include <cstdlib>
 
 #include "test_macros.h"
-#include "count_new.h"
+#include "count_new.hpp"
 
 #include "deleter_types.h"
 

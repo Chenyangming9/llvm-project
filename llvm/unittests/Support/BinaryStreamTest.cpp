@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Support/Allocator.h"
 #include "llvm/Support/BinaryByteStream.h"
 #include "llvm/Support/BinaryItemStream.h"
 #include "llvm/Support/BinaryStreamArray.h"
@@ -145,8 +144,8 @@ protected:
 
     for (uint32_t I = 0; I < NumEndians; ++I) {
       auto InByteStream =
-          std::make_unique<BinaryByteStream>(InputData, Endians[I]);
-      auto InBrokenStream = std::make_unique<BrokenStream>(
+          llvm::make_unique<BinaryByteStream>(InputData, Endians[I]);
+      auto InBrokenStream = llvm::make_unique<BrokenStream>(
           BrokenInputData, Endians[I], Align);
 
       Streams[I * 2].Input = std::move(InByteStream);
@@ -160,8 +159,8 @@ protected:
 
     for (uint32_t I = 0; I < NumEndians; ++I) {
       Streams[I * 2].Output =
-          std::make_unique<MutableBinaryByteStream>(OutputData, Endians[I]);
-      Streams[I * 2 + 1].Output = std::make_unique<BrokenStream>(
+          llvm::make_unique<MutableBinaryByteStream>(OutputData, Endians[I]);
+      Streams[I * 2 + 1].Output = llvm::make_unique<BrokenStream>(
           BrokenOutputData, Endians[I], Align);
     }
   }
@@ -169,8 +168,8 @@ protected:
   void initializeOutputFromInput(uint32_t Align) {
     for (uint32_t I = 0; I < NumEndians; ++I) {
       Streams[I * 2].Output =
-          std::make_unique<MutableBinaryByteStream>(InputData, Endians[I]);
-      Streams[I * 2 + 1].Output = std::make_unique<BrokenStream>(
+          llvm::make_unique<MutableBinaryByteStream>(InputData, Endians[I]);
+      Streams[I * 2 + 1].Output = llvm::make_unique<BrokenStream>(
           BrokenInputData, Endians[I], Align);
     }
   }
@@ -178,8 +177,8 @@ protected:
   void initializeInputFromOutput(uint32_t Align) {
     for (uint32_t I = 0; I < NumEndians; ++I) {
       Streams[I * 2].Input =
-          std::make_unique<BinaryByteStream>(OutputData, Endians[I]);
-      Streams[I * 2 + 1].Input = std::make_unique<BrokenStream>(
+          llvm::make_unique<BinaryByteStream>(OutputData, Endians[I]);
+      Streams[I * 2 + 1].Input = llvm::make_unique<BrokenStream>(
           BrokenOutputData, Endians[I], Align);
     }
   }

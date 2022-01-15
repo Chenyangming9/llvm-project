@@ -16,5 +16,7 @@ static_library("Disassembler") {
     "//llvm/lib/Target/Lanai/TargetInfo",
   ]
   include_dirs = [ ".." ]
-  sources = [ "LanaiDisassembler.cpp" ]
+  sources = [
+    "LanaiDisassembler.cpp",
+  ]
 }

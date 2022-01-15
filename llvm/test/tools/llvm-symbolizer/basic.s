@@ -17,7 +17,6 @@ foo:
 
 # Check --obj aliases --exe, -e
 # RUN: llvm-symbolizer 0xa 0xb --exe=%t.o | FileCheck %s
-# RUN: llvm-symbolizer 0xa 0xb --exe %t.o | FileCheck %s
 # RUN: llvm-symbolizer 0xa 0xb -e %t.o | FileCheck %s
 # RUN: llvm-symbolizer 0xa 0xb -e=%t.o | FileCheck %s
 # RUN: llvm-symbolizer 0xa 0xb -e%t.o | FileCheck %s

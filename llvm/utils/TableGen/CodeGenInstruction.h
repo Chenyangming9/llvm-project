@@ -16,7 +16,6 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/MachineValueType.h"
 #include "llvm/Support/SMLoc.h"
-#include <cassert>
 #include <string>
 #include <utility>
 #include <vector>
@@ -30,11 +29,10 @@ template <typename T> class ArrayRef;
   class CGIOperandList {
   public:
     class ConstraintInfo {
-      enum { None, EarlyClobber, Tied } Kind = None;
-      unsigned OtherTiedOperand = 0;
-
+      enum { None, EarlyClobber, Tied } Kind;
+      unsigned OtherTiedOperand;
     public:
-      ConstraintInfo() = default;
+      ConstraintInfo() : Kind(None) {}
 
       static ConstraintInfo getEarlyClobber() {
         ConstraintInfo I;
@@ -182,7 +180,7 @@ template <typename T> class ArrayRef;
     /// where $foo is a whole operand and $foo.bar refers to a suboperand.
     /// This aborts if the name is invalid.  If AllowWholeOp is true, references
     /// to operands with suboperands are allowed, otherwise not.
-    std::pair<unsigned,unsigned> ParseOperandName(StringRef Op,
+    std::pair<unsigned,unsigned> ParseOperandName(const std::string &Op,
                                                   bool AllowWholeOp = true);
 
     /// getFlattenedOperandNumber - Flatten a operand/suboperand pair into a
@@ -211,7 +209,7 @@ template <typename T> class ArrayRef;
       return false;
     }
 
-    void ProcessDisableEncoding(StringRef Value);
+    void ProcessDisableEncoding(std::string Value);
   };
 
 
@@ -233,7 +231,6 @@ template <typename T> class ArrayRef;
     std::vector<Record*> ImplicitDefs, ImplicitUses;
 
     // Various boolean values we track for the instruction.
-    bool isPreISelOpcode : 1;
     bool isReturn : 1;
     bool isEHScopeReturn : 1;
     bool isBranch : 1;
@@ -279,7 +276,6 @@ template <typename T> class ArrayRef;
     bool hasChain : 1;
     bool hasChain_Inferred : 1;
     bool variadicOpsAreDefs : 1;
-    bool isAuthenticated : 1;
 
     std::string DeprecatedReason;
     bool HasComplexDeprecationPredicate;
@@ -311,17 +307,7 @@ template <typename T> class ArrayRef;
     // This can be used on intructions that use typeN or ptypeN to identify
     // operands that should be considered as pointers even though SelectionDAG
     // didn't make a distinction between integer and pointers.
-    bool isOperandAPointer(unsigned i) const {
-      return isOperandImpl(i, "IsPointer");
-    }
-
-    /// Check if the operand is required to be an immediate.
-    bool isOperandImmArg(unsigned i) const {
-      return isOperandImpl(i, "IsImmediate");
-    }
-
-  private:
-    bool isOperandImpl(unsigned i, StringRef PropertyName) const;
+    bool isOperandAPointer(unsigned i) const;
   };
 
 
@@ -345,9 +331,9 @@ template <typename T> class ArrayRef;
     struct ResultOperand {
     private:
       std::string Name;
-      Record *R = nullptr;
-      int64_t Imm = 0;
+      Record *R;
 
+      int64_t Imm;
     public:
       enum {
         K_Record,

@@ -46,6 +46,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/TargetParser.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -92,7 +93,7 @@ class ARMTargetAsmStreamer : public ARMTargetStreamer {
   void emitIntTextAttribute(unsigned Attribute, unsigned IntValue,
                             StringRef StringValue) override;
   void emitArch(ARM::ArchKind Arch) override;
-  void emitArchExtension(uint64_t ArchExt) override;
+  void emitArchExtension(unsigned ArchExt) override;
   void emitObjectArch(ARM::ArchKind Arch) override;
   void emitFPU(unsigned FPU) override;
   void emitInst(uint32_t Inst, char Suffix = '\0') override;
@@ -176,8 +177,7 @@ void ARMTargetAsmStreamer::switchVendor(StringRef Vendor) {}
 void ARMTargetAsmStreamer::emitAttribute(unsigned Attribute, unsigned Value) {
   OS << "\t.eabi_attribute\t" << Attribute << ", " << Twine(Value);
   if (IsVerboseAsm) {
-    StringRef Name = ELFAttrs::attrTypeAsString(
-        Attribute, ARMBuildAttrs::getARMAttributeTags());
+    StringRef Name = ARMBuildAttrs::AttrTypeAsString(Attribute);
     if (!Name.empty())
       OS << "\t@ " << Name;
   }
@@ -193,8 +193,7 @@ void ARMTargetAsmStreamer::emitTextAttribute(unsigned Attribute,
   default:
     OS << "\t.eabi_attribute\t" << Attribute << ", \"" << String << "\"";
     if (IsVerboseAsm) {
-      StringRef Name = ELFAttrs::attrTypeAsString(
-          Attribute, ARMBuildAttrs::getARMAttributeTags());
+      StringRef Name = ARMBuildAttrs::AttrTypeAsString(Attribute);
       if (!Name.empty())
         OS << "\t@ " << Name;
     }
@@ -213,9 +212,7 @@ void ARMTargetAsmStreamer::emitIntTextAttribute(unsigned Attribute,
     if (!StringValue.empty())
       OS << ", \"" << StringValue << "\"";
     if (IsVerboseAsm)
-      OS << "\t@ "
-         << ELFAttrs::attrTypeAsString(Attribute,
-                                       ARMBuildAttrs::getARMAttributeTags());
+      OS << "\t@ " << ARMBuildAttrs::AttrTypeAsString(Attribute);
     break;
   }
   OS << "\n";
@@ -225,7 +222,7 @@ void ARMTargetAsmStreamer::emitArch(ARM::ArchKind Arch) {
   OS << "\t.arch\t" << ARM::getArchName(Arch) << "\n";
 }
 
-void ARMTargetAsmStreamer::emitArchExtension(uint64_t ArchExt) {
+void ARMTargetAsmStreamer::emitArchExtension(unsigned ArchExt) {
   OS << "\t.arch_extension\t" << ARM::getArchExtName(ArchExt) << "\n";
 }
 
@@ -241,7 +238,7 @@ void ARMTargetAsmStreamer::finishAttributeSection() {}
 
 void
 ARMTargetAsmStreamer::AnnotateTLSDescriptorSequence(const MCSymbolRefExpr *S) {
-  OS << "\t.tlsdescseq\t" << S->getSymbol().getName() << "\n";
+  OS << "\t.tlsdescseq\t" << S->getSymbol().getName();
 }
 
 void ARMTargetAsmStreamer::emitThumbSet(MCSymbol *Symbol, const MCExpr *Value) {
@@ -273,12 +270,115 @@ void ARMTargetAsmStreamer::emitUnwindRaw(int64_t Offset,
 
 class ARMTargetELFStreamer : public ARMTargetStreamer {
 private:
+  // This structure holds all attributes, accounting for
+  // their string/numeric value, so we can later emit them
+  // in declaration order, keeping all in the same vector
+  struct AttributeItem {
+    enum {
+      HiddenAttribute = 0,
+      NumericAttribute,
+      TextAttribute,
+      NumericAndTextAttributes
+    } Type;
+    unsigned Tag;
+    unsigned IntValue;
+    std::string StringValue;
+
+    static bool LessTag(const AttributeItem &LHS, const AttributeItem &RHS) {
+      // The conformance tag must be emitted first when serialised
+      // into an object file. Specifically, the addenda to the ARM ABI
+      // states that (2.3.7.4):
+      //
+      // "To simplify recognition by consumers in the common case of
+      // claiming conformity for the whole file, this tag should be
+      // emitted first in a file-scope sub-subsection of the first
+      // public subsection of the attributes section."
+      //
+      // So it is special-cased in this comparison predicate when the
+      // attributes are sorted in finishAttributeSection().
+      return (RHS.Tag != ARMBuildAttrs::conformance) &&
+             ((LHS.Tag == ARMBuildAttrs::conformance) || (LHS.Tag < RHS.Tag));
+    }
+  };
+
   StringRef CurrentVendor;
   unsigned FPU = ARM::FK_INVALID;
   ARM::ArchKind Arch = ARM::ArchKind::INVALID;
   ARM::ArchKind EmittedArch = ARM::ArchKind::INVALID;
+  SmallVector<AttributeItem, 64> Contents;
 
   MCSection *AttributeSection = nullptr;
+
+  AttributeItem *getAttributeItem(unsigned Attribute) {
+    for (size_t i = 0; i < Contents.size(); ++i)
+      if (Contents[i].Tag == Attribute)
+        return &Contents[i];
+    return nullptr;
+  }
+
+  void setAttributeItem(unsigned Attribute, unsigned Value,
+                        bool OverwriteExisting) {
+    // Look for existing attribute item
+    if (AttributeItem *Item = getAttributeItem(Attribute)) {
+      if (!OverwriteExisting)
+        return;
+      Item->Type = AttributeItem::NumericAttribute;
+      Item->IntValue = Value;
+      return;
+    }
+
+    // Create new attribute item
+    AttributeItem Item = {
+      AttributeItem::NumericAttribute,
+      Attribute,
+      Value,
+      StringRef("")
+    };
+    Contents.push_back(Item);
+  }
+
+  void setAttributeItem(unsigned Attribute, StringRef Value,
+                        bool OverwriteExisting) {
+    // Look for existing attribute item
+    if (AttributeItem *Item = getAttributeItem(Attribute)) {
+      if (!OverwriteExisting)
+        return;
+      Item->Type = AttributeItem::TextAttribute;
+      Item->StringValue = Value;
+      return;
+    }
+
+    // Create new attribute item
+    AttributeItem Item = {
+      AttributeItem::TextAttribute,
+      Attribute,
+      0,
+      Value
+    };
+    Contents.push_back(Item);
+  }
+
+  void setAttributeItems(unsigned Attribute, unsigned IntValue,
+                         StringRef StringValue, bool OverwriteExisting) {
+    // Look for existing attribute item
+    if (AttributeItem *Item = getAttributeItem(Attribute)) {
+      if (!OverwriteExisting)
+        return;
+      Item->Type = AttributeItem::NumericAndTextAttributes;
+      Item->IntValue = IntValue;
+      Item->StringValue = StringValue;
+      return;
+    }
+
+    // Create new attribute item
+    AttributeItem Item = {
+      AttributeItem::NumericAndTextAttributes,
+      Attribute,
+      IntValue,
+      StringValue
+    };
+    Contents.push_back(Item);
+  }
 
   void emitArchDefaultAttributes();
   void emitFPUDefaultAttributes();
@@ -314,6 +414,8 @@ private:
   void AnnotateTLSDescriptorSequence(const MCSymbolRefExpr *SRE) override;
   void emitThumbSet(MCSymbol *Symbol, const MCExpr *Value) override;
 
+  size_t calculateContentSize() const;
+
   // Reset state between object emissions
   void reset() override;
 
@@ -339,18 +441,16 @@ public:
   friend class ARMTargetELFStreamer;
 
   ARMELFStreamer(MCContext &Context, std::unique_ptr<MCAsmBackend> TAB,
-                 std::unique_ptr<MCObjectWriter> OW,
-                 std::unique_ptr<MCCodeEmitter> Emitter, bool IsThumb,
-                 bool IsAndroid)
-      : MCELFStreamer(Context, std::move(TAB), std::move(OW),
-                      std::move(Emitter)),
-        IsThumb(IsThumb), IsAndroid(IsAndroid) {
+                 std::unique_ptr<MCObjectWriter> OW, std::unique_ptr<MCCodeEmitter> Emitter,
+                 bool IsThumb)
+      : MCELFStreamer(Context, std::move(TAB), std::move(OW), std::move(Emitter)),
+        IsThumb(IsThumb) {
     EHReset();
   }
 
   ~ARMELFStreamer() override = default;
 
-  void finishImpl() override;
+  void FinishImpl() override;
 
   // ARM exception handling directives
   void emitFnStart();
@@ -366,13 +466,13 @@ public:
   void emitUnwindRaw(int64_t Offset, const SmallVectorImpl<uint8_t> &Opcodes);
   void emitFill(const MCExpr &NumBytes, uint64_t FillValue,
                 SMLoc Loc) override {
-    emitDataMappingSymbol();
+    EmitDataMappingSymbol();
     MCObjectStreamer::emitFill(NumBytes, FillValue, Loc);
   }
 
-  void changeSection(MCSection *Section, const MCExpr *Subsection) override {
+  void ChangeSection(MCSection *Section, const MCExpr *Subsection) override {
     LastMappingSymbols[getCurrentSection().first] = std::move(LastEMSInfo);
-    MCELFStreamer::changeSection(Section, Subsection);
+    MCELFStreamer::ChangeSection(Section, Subsection);
     auto LastMappingSymbol = LastMappingSymbols.find(Section);
     if (LastMappingSymbol != LastMappingSymbols.end()) {
       LastEMSInfo = std::move(LastMappingSymbol->second);
@@ -384,14 +484,14 @@ public:
   /// This function is the one used to emit instruction data into the ELF
   /// streamer. We override it to add the appropriate mapping symbol if
   /// necessary.
-  void emitInstruction(const MCInst &Inst,
+  void EmitInstruction(const MCInst &Inst,
                        const MCSubtargetInfo &STI) override {
     if (IsThumb)
       EmitThumbMappingSymbol();
     else
       EmitARMMappingSymbol();
 
-    MCELFStreamer::emitInstruction(Inst, STI);
+    MCELFStreamer::EmitInstruction(Inst, STI);
   }
 
   void emitInst(uint32_t Inst, char Suffix) {
@@ -431,15 +531,15 @@ public:
       llvm_unreachable("Invalid Suffix");
     }
 
-    MCELFStreamer::emitBytes(StringRef(Buffer, Size));
+    MCELFStreamer::EmitBytes(StringRef(Buffer, Size));
   }
 
   /// This is one of the functions used to emit data into an ELF section, so the
   /// ARM streamer overrides it to add the appropriate mapping symbol ($d) if
   /// necessary.
-  void emitBytes(StringRef Data) override {
-    emitDataMappingSymbol();
-    MCELFStreamer::emitBytes(Data);
+  void EmitBytes(StringRef Data) override {
+    EmitDataMappingSymbol();
+    MCELFStreamer::EmitBytes(Data);
   }
 
   void FlushPendingMappingSymbol() {
@@ -453,7 +553,7 @@ public:
   /// This is one of the functions used to emit data into an ELF section, so the
   /// ARM streamer overrides it to add the appropriate mapping symbol ($d) if
   /// necessary.
-  void emitValueImpl(const MCExpr *Value, unsigned Size, SMLoc Loc) override {
+  void EmitValueImpl(const MCExpr *Value, unsigned Size, SMLoc Loc) override {
     if (const MCSymbolRefExpr *SRE = dyn_cast_or_null<MCSymbolRefExpr>(Value)) {
       if (SRE->getKind() == MCSymbolRefExpr::VK_ARM_SBREL && !(Size == 4)) {
         getContext().reportError(Loc, "relocated expression must be 32-bit");
@@ -462,12 +562,12 @@ public:
       getOrCreateDataFragment();
     }
 
-    emitDataMappingSymbol();
-    MCELFStreamer::emitValueImpl(Value, Size, Loc);
+    EmitDataMappingSymbol();
+    MCELFStreamer::EmitValueImpl(Value, Size, Loc);
   }
 
-  void emitAssemblerFlag(MCAssemblerFlag Flag) override {
-    MCELFStreamer::emitAssemblerFlag(Flag);
+  void EmitAssemblerFlag(MCAssemblerFlag Flag) override {
+    MCELFStreamer::EmitAssemblerFlag(Flag);
 
     switch (Flag) {
     case MCAF_SyntaxUnified:
@@ -484,28 +584,6 @@ public:
       return;
     }
   }
-
-  /// If a label is defined before the .type directive sets the label's type
-  /// then the label can't be recorded as thumb function when the label is
-  /// defined. We override emitSymbolAttribute() which is called as part of the
-  /// parsing of .type so that if the symbol has already been defined we can
-  /// record the label as Thumb. FIXME: there is a corner case where the state
-  /// is changed in between the label definition and the .type directive, this
-  /// is not expected to occur in practice and handling it would require the
-  /// backend to track IsThumb for every label.
-  bool emitSymbolAttribute(MCSymbol *Symbol, MCSymbolAttr Attribute) override {
-    bool Val = MCELFStreamer::emitSymbolAttribute(Symbol, Attribute);
-
-    if (!IsThumb)
-      return Val;
-
-    unsigned Type = cast<MCSymbolELF>(Symbol)->getType();
-    if ((Type == ELF::STT_FUNC || Type == ELF::STT_GNU_IFUNC) &&
-        Symbol->isDefined())
-      getAssembler().setIsThumbFunc(Symbol);
-
-    return Val;
-  };
 
 private:
   enum ElfMappingSymbol {
@@ -529,7 +607,7 @@ private:
     ElfMappingSymbol State;
   };
 
-  void emitDataMappingSymbol() {
+  void EmitDataMappingSymbol() {
     if (LastEMSInfo->State == EMS_Data)
       return;
     else if (LastEMSInfo->State == EMS_None) {
@@ -568,24 +646,27 @@ private:
   void EmitMappingSymbol(StringRef Name) {
     auto *Symbol = cast<MCSymbolELF>(getContext().getOrCreateSymbol(
         Name + "." + Twine(MappingSymbolCounter++)));
-    emitLabel(Symbol);
+    EmitLabel(Symbol);
 
     Symbol->setType(ELF::STT_NOTYPE);
     Symbol->setBinding(ELF::STB_LOCAL);
+    Symbol->setExternal(false);
   }
 
   void EmitMappingSymbol(StringRef Name, SMLoc Loc, MCFragment *F,
                          uint64_t Offset) {
     auto *Symbol = cast<MCSymbolELF>(getContext().getOrCreateSymbol(
         Name + "." + Twine(MappingSymbolCounter++)));
-    emitLabelAtPos(Symbol, Loc, F, Offset);
+    EmitLabel(Symbol, Loc, F);
     Symbol->setType(ELF::STT_NOTYPE);
     Symbol->setBinding(ELF::STB_LOCAL);
+    Symbol->setExternal(false);
+    Symbol->setOffset(Offset);
   }
 
-  void emitThumbFunc(MCSymbol *Func) override {
+  void EmitThumbFunc(MCSymbol *Func) override {
     getAssembler().setIsThumbFunc(Func);
-    emitSymbolAttribute(Func, MCSA_ELF_TypeFunction);
+    EmitSymbolAttribute(Func, MCSA_ELF_TypeFunction);
   }
 
   // Helper functions for ARM exception handling directives
@@ -606,7 +687,6 @@ private:
   void EmitFixup(const MCExpr *Expr, MCFixupKind Kind);
 
   bool IsThumb;
-  bool IsAndroid;
   int64_t MappingSymbolCounter = 0;
 
   DenseMap<const MCSection *, std::unique_ptr<ElfMappingSymbolInfo>>
@@ -683,28 +763,26 @@ void ARMTargetELFStreamer::switchVendor(StringRef Vendor) {
   if (!CurrentVendor.empty())
     finishAttributeSection();
 
-  assert(getStreamer().Contents.empty() &&
+  assert(Contents.empty() &&
          ".ARM.attributes should be flushed before changing vendor");
   CurrentVendor = Vendor;
 
 }
 
 void ARMTargetELFStreamer::emitAttribute(unsigned Attribute, unsigned Value) {
-  getStreamer().setAttributeItem(Attribute, Value,
-                                 /* OverwriteExisting= */ true);
+  setAttributeItem(Attribute, Value, /* OverwriteExisting= */ true);
 }
 
 void ARMTargetELFStreamer::emitTextAttribute(unsigned Attribute,
                                              StringRef Value) {
-  getStreamer().setAttributeItem(Attribute, Value,
-                                 /* OverwriteExisting= */ true);
+  setAttributeItem(Attribute, Value, /* OverwriteExisting= */ true);
 }
 
 void ARMTargetELFStreamer::emitIntTextAttribute(unsigned Attribute,
                                                 unsigned IntValue,
                                                 StringRef StringValue) {
-  getStreamer().setAttributeItems(Attribute, IntValue, StringValue,
-                                  /* OverwriteExisting= */ true);
+  setAttributeItems(Attribute, IntValue, StringValue,
+                    /* OverwriteExisting= */ true);
 }
 
 void ARMTargetELFStreamer::emitArch(ARM::ArchKind Value) {
@@ -717,14 +795,19 @@ void ARMTargetELFStreamer::emitObjectArch(ARM::ArchKind Value) {
 
 void ARMTargetELFStreamer::emitArchDefaultAttributes() {
   using namespace ARMBuildAttrs;
-  ARMELFStreamer &S = getStreamer();
 
-  S.setAttributeItem(CPU_name, ARM::getCPUAttr(Arch), false);
+  setAttributeItem(CPU_name,
+                   ARM::getCPUAttr(Arch),
+                   false);
 
   if (EmittedArch == ARM::ArchKind::INVALID)
-    S.setAttributeItem(CPU_arch, ARM::getArchAttr(Arch), false);
+    setAttributeItem(CPU_arch,
+                     ARM::getArchAttr(Arch),
+                     false);
   else
-    S.setAttributeItem(CPU_arch, ARM::getArchAttr(EmittedArch), false);
+    setAttributeItem(CPU_arch,
+                     ARM::getArchAttr(EmittedArch),
+                     false);
 
   switch (Arch) {
   case ARM::ArchKind::ARMV2:
@@ -732,50 +815,49 @@ void ARMTargetELFStreamer::emitArchDefaultAttributes() {
   case ARM::ArchKind::ARMV3:
   case ARM::ArchKind::ARMV3M:
   case ARM::ArchKind::ARMV4:
-    S.setAttributeItem(ARM_ISA_use, Allowed, false);
+    setAttributeItem(ARM_ISA_use, Allowed, false);
     break;
 
   case ARM::ArchKind::ARMV4T:
   case ARM::ArchKind::ARMV5T:
-  case ARM::ArchKind::XSCALE:
   case ARM::ArchKind::ARMV5TE:
   case ARM::ArchKind::ARMV6:
-    S.setAttributeItem(ARM_ISA_use, Allowed, false);
-    S.setAttributeItem(THUMB_ISA_use, Allowed, false);
+    setAttributeItem(ARM_ISA_use, Allowed, false);
+    setAttributeItem(THUMB_ISA_use, Allowed, false);
     break;
 
   case ARM::ArchKind::ARMV6T2:
-    S.setAttributeItem(ARM_ISA_use, Allowed, false);
-    S.setAttributeItem(THUMB_ISA_use, AllowThumb32, false);
+    setAttributeItem(ARM_ISA_use, Allowed, false);
+    setAttributeItem(THUMB_ISA_use, AllowThumb32, false);
     break;
 
   case ARM::ArchKind::ARMV6K:
   case ARM::ArchKind::ARMV6KZ:
-    S.setAttributeItem(ARM_ISA_use, Allowed, false);
-    S.setAttributeItem(THUMB_ISA_use, Allowed, false);
-    S.setAttributeItem(Virtualization_use, AllowTZ, false);
+    setAttributeItem(ARM_ISA_use, Allowed, false);
+    setAttributeItem(THUMB_ISA_use, Allowed, false);
+    setAttributeItem(Virtualization_use, AllowTZ, false);
     break;
 
   case ARM::ArchKind::ARMV6M:
-    S.setAttributeItem(THUMB_ISA_use, Allowed, false);
+    setAttributeItem(THUMB_ISA_use, Allowed, false);
     break;
 
   case ARM::ArchKind::ARMV7A:
-    S.setAttributeItem(CPU_arch_profile, ApplicationProfile, false);
-    S.setAttributeItem(ARM_ISA_use, Allowed, false);
-    S.setAttributeItem(THUMB_ISA_use, AllowThumb32, false);
+    setAttributeItem(CPU_arch_profile, ApplicationProfile, false);
+    setAttributeItem(ARM_ISA_use, Allowed, false);
+    setAttributeItem(THUMB_ISA_use, AllowThumb32, false);
     break;
 
   case ARM::ArchKind::ARMV7R:
-    S.setAttributeItem(CPU_arch_profile, RealTimeProfile, false);
-    S.setAttributeItem(ARM_ISA_use, Allowed, false);
-    S.setAttributeItem(THUMB_ISA_use, AllowThumb32, false);
+    setAttributeItem(CPU_arch_profile, RealTimeProfile, false);
+    setAttributeItem(ARM_ISA_use, Allowed, false);
+    setAttributeItem(THUMB_ISA_use, AllowThumb32, false);
     break;
 
   case ARM::ArchKind::ARMV7EM:
   case ARM::ArchKind::ARMV7M:
-    S.setAttributeItem(CPU_arch_profile, MicroControllerProfile, false);
-    S.setAttributeItem(THUMB_ISA_use, AllowThumb32, false);
+    setAttributeItem(CPU_arch_profile, MicroControllerProfile, false);
+    setAttributeItem(THUMB_ISA_use, AllowThumb32, false);
     break;
 
   case ARM::ArchKind::ARMV8A:
@@ -784,30 +866,29 @@ void ARMTargetELFStreamer::emitArchDefaultAttributes() {
   case ARM::ArchKind::ARMV8_3A:
   case ARM::ArchKind::ARMV8_4A:
   case ARM::ArchKind::ARMV8_5A:
-  case ARM::ArchKind::ARMV8_6A:
-    S.setAttributeItem(CPU_arch_profile, ApplicationProfile, false);
-    S.setAttributeItem(ARM_ISA_use, Allowed, false);
-    S.setAttributeItem(THUMB_ISA_use, AllowThumb32, false);
-    S.setAttributeItem(MPextension_use, Allowed, false);
-    S.setAttributeItem(Virtualization_use, AllowTZVirtualization, false);
+    setAttributeItem(CPU_arch_profile, ApplicationProfile, false);
+    setAttributeItem(ARM_ISA_use, Allowed, false);
+    setAttributeItem(THUMB_ISA_use, AllowThumb32, false);
+    setAttributeItem(MPextension_use, Allowed, false);
+    setAttributeItem(Virtualization_use, AllowTZVirtualization, false);
     break;
 
   case ARM::ArchKind::ARMV8MBaseline:
   case ARM::ArchKind::ARMV8MMainline:
-    S.setAttributeItem(THUMB_ISA_use, AllowThumbDerived, false);
-    S.setAttributeItem(CPU_arch_profile, MicroControllerProfile, false);
+    setAttributeItem(THUMB_ISA_use, AllowThumbDerived, false);
+    setAttributeItem(CPU_arch_profile, MicroControllerProfile, false);
     break;
 
   case ARM::ArchKind::IWMMXT:
-    S.setAttributeItem(ARM_ISA_use, Allowed, false);
-    S.setAttributeItem(THUMB_ISA_use, Allowed, false);
-    S.setAttributeItem(WMMX_arch, AllowWMMXv1, false);
+    setAttributeItem(ARM_ISA_use, Allowed, false);
+    setAttributeItem(THUMB_ISA_use, Allowed, false);
+    setAttributeItem(WMMX_arch, AllowWMMXv1, false);
     break;
 
   case ARM::ArchKind::IWMMXT2:
-    S.setAttributeItem(ARM_ISA_use, Allowed, false);
-    S.setAttributeItem(THUMB_ISA_use, Allowed, false);
-    S.setAttributeItem(WMMX_arch, AllowWMMXv2, false);
+    setAttributeItem(ARM_ISA_use, Allowed, false);
+    setAttributeItem(THUMB_ISA_use, Allowed, false);
+    setAttributeItem(WMMX_arch, AllowWMMXv2, false);
     break;
 
   default:
@@ -821,106 +902,123 @@ void ARMTargetELFStreamer::emitFPU(unsigned Value) {
 }
 
 void ARMTargetELFStreamer::emitFPUDefaultAttributes() {
-  ARMELFStreamer &S = getStreamer();
-
   switch (FPU) {
   case ARM::FK_VFP:
   case ARM::FK_VFPV2:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv2,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv2,
+                     /* OverwriteExisting= */ false);
     break;
 
   case ARM::FK_VFPV3:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv3A,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv3A,
+                     /* OverwriteExisting= */ false);
     break;
 
   case ARM::FK_VFPV3_FP16:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv3A,
-                       /* OverwriteExisting= */ false);
-    S.setAttributeItem(ARMBuildAttrs::FP_HP_extension, ARMBuildAttrs::AllowHPFP,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv3A,
+                     /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_HP_extension,
+                     ARMBuildAttrs::AllowHPFP,
+                     /* OverwriteExisting= */ false);
     break;
 
   case ARM::FK_VFPV3_D16:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv3B,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv3B,
+                     /* OverwriteExisting= */ false);
     break;
 
   case ARM::FK_VFPV3_D16_FP16:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv3B,
-                       /* OverwriteExisting= */ false);
-    S.setAttributeItem(ARMBuildAttrs::FP_HP_extension, ARMBuildAttrs::AllowHPFP,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv3B,
+                     /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_HP_extension,
+                     ARMBuildAttrs::AllowHPFP,
+                     /* OverwriteExisting= */ false);
     break;
 
   case ARM::FK_VFPV3XD:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv3B,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv3B,
+                     /* OverwriteExisting= */ false);
     break;
   case ARM::FK_VFPV3XD_FP16:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv3B,
-                       /* OverwriteExisting= */ false);
-    S.setAttributeItem(ARMBuildAttrs::FP_HP_extension, ARMBuildAttrs::AllowHPFP,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv3B,
+                     /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_HP_extension,
+                     ARMBuildAttrs::AllowHPFP,
+                     /* OverwriteExisting= */ false);
     break;
 
   case ARM::FK_VFPV4:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv4A,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv4A,
+                     /* OverwriteExisting= */ false);
     break;
 
   // ABI_HardFP_use is handled in ARMAsmPrinter, so _SP_D16 is treated the same
   // as _D16 here.
   case ARM::FK_FPV4_SP_D16:
   case ARM::FK_VFPV4_D16:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv4B,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv4B,
+                     /* OverwriteExisting= */ false);
     break;
 
   case ARM::FK_FP_ARMV8:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPARMv8A,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPARMv8A,
+                     /* OverwriteExisting= */ false);
     break;
 
   // FPV5_D16 is identical to FP_ARMV8 except for the number of D registers, so
   // uses the FP_ARMV8_D16 build attribute.
   case ARM::FK_FPV5_SP_D16:
   case ARM::FK_FPV5_D16:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPARMv8B,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPARMv8B,
+                     /* OverwriteExisting= */ false);
     break;
 
   case ARM::FK_NEON:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv3A,
-                       /* OverwriteExisting= */ false);
-    S.setAttributeItem(ARMBuildAttrs::Advanced_SIMD_arch,
-                       ARMBuildAttrs::AllowNeon,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv3A,
+                     /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::Advanced_SIMD_arch,
+                     ARMBuildAttrs::AllowNeon,
+                     /* OverwriteExisting= */ false);
     break;
 
   case ARM::FK_NEON_FP16:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv3A,
-                       /* OverwriteExisting= */ false);
-    S.setAttributeItem(ARMBuildAttrs::Advanced_SIMD_arch,
-                       ARMBuildAttrs::AllowNeon,
-                       /* OverwriteExisting= */ false);
-    S.setAttributeItem(ARMBuildAttrs::FP_HP_extension, ARMBuildAttrs::AllowHPFP,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv3A,
+                     /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::Advanced_SIMD_arch,
+                     ARMBuildAttrs::AllowNeon,
+                     /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_HP_extension,
+                     ARMBuildAttrs::AllowHPFP,
+                     /* OverwriteExisting= */ false);
     break;
 
   case ARM::FK_NEON_VFPV4:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPv4A,
-                       /* OverwriteExisting= */ false);
-    S.setAttributeItem(ARMBuildAttrs::Advanced_SIMD_arch,
-                       ARMBuildAttrs::AllowNeon2,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPv4A,
+                     /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::Advanced_SIMD_arch,
+                     ARMBuildAttrs::AllowNeon2,
+                     /* OverwriteExisting= */ false);
     break;
 
   case ARM::FK_NEON_FP_ARMV8:
   case ARM::FK_CRYPTO_NEON_FP_ARMV8:
-    S.setAttributeItem(ARMBuildAttrs::FP_arch, ARMBuildAttrs::AllowFPARMv8A,
-                       /* OverwriteExisting= */ false);
+    setAttributeItem(ARMBuildAttrs::FP_arch,
+                     ARMBuildAttrs::AllowFPARMv8A,
+                     /* OverwriteExisting= */ false);
     // 'Advanced_SIMD_arch' must be emitted not here, but within
     // ARMAsmPrinter::emitAttributes(), depending on hasV8Ops() and hasV8_1a()
     break;
@@ -935,8 +1033,39 @@ void ARMTargetELFStreamer::emitFPUDefaultAttributes() {
   }
 }
 
+size_t ARMTargetELFStreamer::calculateContentSize() const {
+  size_t Result = 0;
+  for (size_t i = 0; i < Contents.size(); ++i) {
+    AttributeItem item = Contents[i];
+    switch (item.Type) {
+    case AttributeItem::HiddenAttribute:
+      break;
+    case AttributeItem::NumericAttribute:
+      Result += getULEB128Size(item.Tag);
+      Result += getULEB128Size(item.IntValue);
+      break;
+    case AttributeItem::TextAttribute:
+      Result += getULEB128Size(item.Tag);
+      Result += item.StringValue.size() + 1; // string + '\0'
+      break;
+    case AttributeItem::NumericAndTextAttributes:
+      Result += getULEB128Size(item.Tag);
+      Result += getULEB128Size(item.IntValue);
+      Result += item.StringValue.size() + 1; // string + '\0';
+      break;
+    }
+  }
+  return Result;
+}
+
 void ARMTargetELFStreamer::finishAttributeSection() {
-  ARMELFStreamer &S = getStreamer();
+  // <format-version>
+  // [ <section-length> "vendor-name"
+  // [ <file-tag> <size> <attribute>*
+  //   | <section-tag> <size> <section-number>* 0 <attribute>*
+  //   | <symbol-tag> <size> <symbol-number>* 0 <attribute>*
+  //   ]+
+  // ]*
 
   if (FPU != ARM::FK_INVALID)
     emitFPUDefaultAttributes();
@@ -944,30 +1073,63 @@ void ARMTargetELFStreamer::finishAttributeSection() {
   if (Arch != ARM::ArchKind::INVALID)
     emitArchDefaultAttributes();
 
-  if (S.Contents.empty())
+  if (Contents.empty())
     return;
 
-  auto LessTag = [](const MCELFStreamer::AttributeItem &LHS,
-                    const MCELFStreamer::AttributeItem &RHS) -> bool {
-    // The conformance tag must be emitted first when serialised into an
-    // object file. Specifically, the addenda to the ARM ABI states that
-    // (2.3.7.4):
-    //
-    // "To simplify recognition by consumers in the common case of claiming
-    // conformity for the whole file, this tag should be emitted first in a
-    // file-scope sub-subsection of the first public subsection of the
-    // attributes section."
-    //
-    // So it is special-cased in this comparison predicate when the
-    // attributes are sorted in finishAttributeSection().
-    return (RHS.Tag != ARMBuildAttrs::conformance) &&
-           ((LHS.Tag == ARMBuildAttrs::conformance) || (LHS.Tag < RHS.Tag));
-  };
-  llvm::sort(S.Contents, LessTag);
+  llvm::sort(Contents, AttributeItem::LessTag);
 
-  S.emitAttributesSection(CurrentVendor, ".ARM.attributes",
-                          ELF::SHT_ARM_ATTRIBUTES, AttributeSection);
+  ARMELFStreamer &Streamer = getStreamer();
 
+  // Switch to .ARM.attributes section
+  if (AttributeSection) {
+    Streamer.SwitchSection(AttributeSection);
+  } else {
+    AttributeSection = Streamer.getContext().getELFSection(
+        ".ARM.attributes", ELF::SHT_ARM_ATTRIBUTES, 0);
+    Streamer.SwitchSection(AttributeSection);
+
+    // Format version
+    Streamer.EmitIntValue(0x41, 1);
+  }
+
+  // Vendor size + Vendor name + '\0'
+  const size_t VendorHeaderSize = 4 + CurrentVendor.size() + 1;
+
+  // Tag + Tag Size
+  const size_t TagHeaderSize = 1 + 4;
+
+  const size_t ContentsSize = calculateContentSize();
+
+  Streamer.EmitIntValue(VendorHeaderSize + TagHeaderSize + ContentsSize, 4);
+  Streamer.EmitBytes(CurrentVendor);
+  Streamer.EmitIntValue(0, 1); // '\0'
+
+  Streamer.EmitIntValue(ARMBuildAttrs::File, 1);
+  Streamer.EmitIntValue(TagHeaderSize + ContentsSize, 4);
+
+  // Size should have been accounted for already, now
+  // emit each field as its type (ULEB or String)
+  for (size_t i = 0; i < Contents.size(); ++i) {
+    AttributeItem item = Contents[i];
+    Streamer.EmitULEB128IntValue(item.Tag);
+    switch (item.Type) {
+    default: llvm_unreachable("Invalid attribute type");
+    case AttributeItem::NumericAttribute:
+      Streamer.EmitULEB128IntValue(item.IntValue);
+      break;
+    case AttributeItem::TextAttribute:
+      Streamer.EmitBytes(item.StringValue);
+      Streamer.EmitIntValue(0, 1); // '\0'
+      break;
+    case AttributeItem::NumericAndTextAttributes:
+      Streamer.EmitULEB128IntValue(item.IntValue);
+      Streamer.EmitBytes(item.StringValue);
+      Streamer.EmitIntValue(0, 1); // '\0'
+      break;
+    }
+  }
+
+  Contents.clear();
   FPU = ARM::FK_INVALID;
 }
 
@@ -979,7 +1141,7 @@ void ARMTargetELFStreamer::emitLabel(MCSymbol *Symbol) {
   Streamer.getAssembler().registerSymbol(*Symbol);
   unsigned Type = cast<MCSymbolELF>(Symbol)->getType();
   if (Type == ELF::STT_FUNC || Type == ELF::STT_GNU_IFUNC)
-    Streamer.emitThumbFunc(Symbol);
+    Streamer.EmitThumbFunc(Symbol);
 }
 
 void
@@ -991,13 +1153,13 @@ void ARMTargetELFStreamer::emitThumbSet(MCSymbol *Symbol, const MCExpr *Value) {
   if (const MCSymbolRefExpr *SRE = dyn_cast<MCSymbolRefExpr>(Value)) {
     const MCSymbol &Sym = SRE->getSymbol();
     if (!Sym.isDefined()) {
-      getStreamer().emitAssignment(Symbol, Value);
+      getStreamer().EmitAssignment(Symbol, Value);
       return;
     }
   }
 
-  getStreamer().emitThumbFunc(Symbol);
-  getStreamer().emitAssignment(Symbol, Value);
+  getStreamer().EmitThumbFunc(Symbol);
+  getStreamer().EmitAssignment(Symbol, Value);
 }
 
 void ARMTargetELFStreamer::emitInst(uint32_t Inst, char Suffix) {
@@ -1006,12 +1168,12 @@ void ARMTargetELFStreamer::emitInst(uint32_t Inst, char Suffix) {
 
 void ARMTargetELFStreamer::reset() { AttributeSection = nullptr; }
 
-void ARMELFStreamer::finishImpl() {
+void ARMELFStreamer::FinishImpl() {
   MCTargetStreamer &TS = *getTargetStreamer();
   ARMTargetStreamer &ATS = static_cast<ARMTargetStreamer &>(TS);
   ATS.finishAttributeSection();
 
-  MCELFStreamer::finishImpl();
+  MCELFStreamer::FinishImpl();
 }
 
 void ARMELFStreamer::reset() {
@@ -1037,7 +1199,7 @@ inline void ARMELFStreamer::SwitchToEHSection(StringRef Prefix,
     static_cast<const MCSectionELF &>(Fn.getSection());
 
   // Create the name for new section
-  StringRef FnSecName(FnSection.getName());
+  StringRef FnSecName(FnSection.getSectionName());
   SmallString<128> EHSecName(Prefix);
   if (FnSecName != ".text") {
     EHSecName += FnSecName;
@@ -1048,15 +1210,14 @@ inline void ARMELFStreamer::SwitchToEHSection(StringRef Prefix,
   if (Group)
     Flags |= ELF::SHF_GROUP;
   MCSectionELF *EHSection = getContext().getELFSection(
-      EHSecName, Type, Flags, 0, Group, /*IsComdat=*/true,
-      FnSection.getUniqueID(),
-      static_cast<const MCSymbolELF *>(FnSection.getBeginSymbol()));
+      EHSecName, Type, Flags, 0, Group, FnSection.getUniqueID(),
+      static_cast<const MCSymbolELF *>(&Fn));
 
   assert(EHSection && "Failed to get the required EH section");
 
   // Switch to .ARM.extab or .ARM.exidx section
   SwitchSection(EHSection);
-  emitCodeAlignment(4);
+  EmitCodeAlignment(4);
 }
 
 inline void ARMELFStreamer::SwitchToExTabSection(const MCSymbol &FnStart) {
@@ -1095,7 +1256,7 @@ void ARMELFStreamer::EHReset() {
 void ARMELFStreamer::emitFnStart() {
   assert(FnStart == nullptr);
   FnStart = getContext().createTempSymbol();
-  emitLabel(FnStart);
+  EmitLabel(FnStart);
 }
 
 void ARMELFStreamer::emitFnEnd() {
@@ -1108,12 +1269,7 @@ void ARMELFStreamer::emitFnEnd() {
   // Emit the exception index table entry
   SwitchToExIdxSection(*FnStart);
 
-  // The EHABI requires a dependency preserving R_ARM_NONE relocation to the
-  // personality routine to protect it from an arbitrary platform's static
-  // linker garbage collection. We disable this for Android where the unwinder
-  // is either dynamically linked or directly references the personality
-  // routine.
-  if (PersonalityIndex < ARM::EHABI::NUM_PERSONALITY_INDEX && !IsAndroid)
+  if (PersonalityIndex < ARM::EHABI::NUM_PERSONALITY_INDEX)
     EmitPersonalityFixup(GetAEABIUnwindPersonalityName(PersonalityIndex));
 
   const MCSymbolRefExpr *FnStartRef =
@@ -1121,17 +1277,17 @@ void ARMELFStreamer::emitFnEnd() {
                             MCSymbolRefExpr::VK_ARM_PREL31,
                             getContext());
 
-  emitValue(FnStartRef, 4);
+  EmitValue(FnStartRef, 4);
 
   if (CantUnwind) {
-    emitInt32(ARM::EHABI::EXIDX_CANTUNWIND);
+    EmitIntValue(ARM::EHABI::EXIDX_CANTUNWIND, 4);
   } else if (ExTab) {
     // Emit a reference to the unwind opcodes in the ".ARM.extab" section.
     const MCSymbolRefExpr *ExTabEntryRef =
       MCSymbolRefExpr::create(ExTab,
                               MCSymbolRefExpr::VK_ARM_PREL31,
                               getContext());
-    emitValue(ExTabEntryRef, 4);
+    EmitValue(ExTabEntryRef, 4);
   } else {
     // For the __aeabi_unwind_cpp_pr0, we have to emit the unwind opcodes in
     // the second word of exception index table entry.  The size of the unwind
@@ -1144,7 +1300,7 @@ void ARMELFStreamer::emitFnEnd() {
                       Opcodes[1] << 8 |
                       Opcodes[2] << 16 |
                       Opcodes[3] << 24;
-    emitIntValue(Intval, Opcodes.size());
+    EmitIntValue(Intval, Opcodes.size());
   }
 
   // Switch to the section containing FnStart
@@ -1203,7 +1359,7 @@ void ARMELFStreamer::FlushUnwindOpcodes(bool NoHandlerData) {
   // Create .ARM.extab label for offset in .ARM.exidx
   assert(!ExTab);
   ExTab = getContext().createTempSymbol();
-  emitLabel(ExTab);
+  EmitLabel(ExTab);
 
   // Emit personality
   if (Personality) {
@@ -1212,7 +1368,7 @@ void ARMELFStreamer::FlushUnwindOpcodes(bool NoHandlerData) {
                               MCSymbolRefExpr::VK_ARM_PREL31,
                               getContext());
 
-    emitValue(PersonalityRef, 4);
+    EmitValue(PersonalityRef, 4);
   }
 
   // Emit unwind opcodes
@@ -1223,7 +1379,7 @@ void ARMELFStreamer::FlushUnwindOpcodes(bool NoHandlerData) {
                       Opcodes[I + 1] << 8 |
                       Opcodes[I + 2] << 16 |
                       Opcodes[I + 3] << 24;
-    emitInt32(Intval);
+    EmitIntValue(Intval, 4);
   }
 
   // According to ARM EHABI section 9.2, if the __aeabi_unwind_cpp_pr1() or
@@ -1234,7 +1390,7 @@ void ARMELFStreamer::FlushUnwindOpcodes(bool NoHandlerData) {
   // In case that the .handlerdata directive is not specified by the
   // programmer, we should emit zero to terminate the handler data.
   if (NoHandlerData && !Personality)
-    emitInt32(0);
+    EmitIntValue(0, 4);
 }
 
 void ARMELFStreamer::emitHandlerData() { FlushUnwindOpcodes(false); }
@@ -1348,11 +1504,9 @@ MCELFStreamer *createARMELFStreamer(MCContext &Context,
                                     std::unique_ptr<MCAsmBackend> TAB,
                                     std::unique_ptr<MCObjectWriter> OW,
                                     std::unique_ptr<MCCodeEmitter> Emitter,
-                                    bool RelaxAll, bool IsThumb,
-                                    bool IsAndroid) {
-  ARMELFStreamer *S =
-      new ARMELFStreamer(Context, std::move(TAB), std::move(OW),
-                         std::move(Emitter), IsThumb, IsAndroid);
+                                    bool RelaxAll, bool IsThumb) {
+  ARMELFStreamer *S = new ARMELFStreamer(Context, std::move(TAB), std::move(OW),
+                                         std::move(Emitter), IsThumb);
   // FIXME: This should eventually end up somewhere else where more
   // intelligent flag decisions can be made. For now we are just maintaining
   // the status quo for ARM and setting EF_ARM_EABI_VER5 as the default.

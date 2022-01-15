@@ -36,11 +36,10 @@ void TemporaryObjectsCheck::registerMatchers(MatchFinder *Finder) {
 
   // Matcher for user-defined constructors.
   Finder->addMatcher(
-      traverse(TK_AsIs,
-               cxxConstructExpr(hasParent(cxxFunctionalCastExpr()),
-                                hasDeclaration(cxxConstructorDecl(hasParent(
-                                    cxxRecordDecl(matchesAnyName(Names))))))
-                   .bind("temps")),
+      cxxConstructExpr(hasParent(cxxFunctionalCastExpr()),
+                       hasDeclaration(cxxConstructorDecl(
+                           hasParent(cxxRecordDecl(matchesAnyName(Names))))))
+          .bind("temps"),
       this);
 }
 

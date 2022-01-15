@@ -20,24 +20,20 @@
 #undef PPC
 
 namespace llvm {
-class PPCRegisterBankInfo;
-class PPCSubtarget;
-class PPCTargetMachine;
-class PassRegistry;
-class FunctionPass;
-class InstructionSelector;
-class MachineInstr;
-class MachineOperand;
-class AsmPrinter;
-class MCInst;
-class MCOperand;
-class ModulePass;
+  class PPCTargetMachine;
+  class PassRegistry;
+  class FunctionPass;
+  class MachineInstr;
+  class MachineOperand;
+  class AsmPrinter;
+  class MCInst;
+  class MCOperand;
 
-FunctionPass *createPPCCTRLoops();
+  FunctionPass *createPPCCTRLoops();
 #ifndef NDEBUG
   FunctionPass *createPPCCTRLoopsVerify();
 #endif
-  FunctionPass *createPPCLoopInstrFormPrepPass(PPCTargetMachine &TM);
+  FunctionPass *createPPCLoopPreIncPrepPass(PPCTargetMachine &TM);
   FunctionPass *createPPCTOCRegDepsPass();
   FunctionPass *createPPCEarlyReturnPass();
   FunctionPass *createPPCVSXCopyPass();
@@ -47,22 +43,23 @@ FunctionPass *createPPCCTRLoops();
   FunctionPass *createPPCMIPeepholePass();
   FunctionPass *createPPCBranchSelectionPass();
   FunctionPass *createPPCBranchCoalescingPass();
+  FunctionPass *createPPCQPXLoadSplatPass();
   FunctionPass *createPPCISelDag(PPCTargetMachine &TM, CodeGenOpt::Level OL);
   FunctionPass *createPPCTLSDynamicCallPass();
   FunctionPass *createPPCBoolRetToIntPass();
   FunctionPass *createPPCExpandISELPass();
   FunctionPass *createPPCPreEmitPeepholePass();
-  FunctionPass *createPPCExpandAtomicPseudoPass();
   void LowerPPCMachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
-                                    AsmPrinter &AP);
+                                    AsmPrinter &AP, bool isDarwin);
   bool LowerPPCMachineOperandToMCOperand(const MachineOperand &MO,
-                                         MCOperand &OutMO, AsmPrinter &AP);
+                                         MCOperand &OutMO, AsmPrinter &AP,
+                                         bool isDarwin);
 
   void initializePPCCTRLoopsPass(PassRegistry&);
 #ifndef NDEBUG
   void initializePPCCTRLoopsVerifyPass(PassRegistry&);
 #endif
-  void initializePPCLoopInstrFormPrepPass(PassRegistry&);
+  void initializePPCLoopPreIncPrepPass(PassRegistry&);
   void initializePPCTOCRegDepsPass(PassRegistry&);
   void initializePPCEarlyReturnPass(PassRegistry&);
   void initializePPCVSXCopyPass(PassRegistry&);
@@ -71,22 +68,15 @@ FunctionPass *createPPCCTRLoops();
   void initializePPCReduceCRLogicalsPass(PassRegistry&);
   void initializePPCBSelPass(PassRegistry&);
   void initializePPCBranchCoalescingPass(PassRegistry&);
+  void initializePPCQPXLoadSplatPass(PassRegistry&);
   void initializePPCBoolRetToIntPass(PassRegistry&);
   void initializePPCExpandISELPass(PassRegistry &);
   void initializePPCPreEmitPeepholePass(PassRegistry &);
   void initializePPCTLSDynamicCallPass(PassRegistry &);
   void initializePPCMIPeepholePass(PassRegistry&);
-  void initializePPCExpandAtomicPseudoPass(PassRegistry &);
 
   extern char &PPCVSXFMAMutateID;
 
-  ModulePass *createPPCLowerMASSVEntriesPass();
-  void initializePPCLowerMASSVEntriesPass(PassRegistry &);
-  extern char &PPCLowerMASSVEntriesID;
-
-  InstructionSelector *
-  createPPCInstructionSelector(const PPCTargetMachine &, const PPCSubtarget &,
-                               const PPCRegisterBankInfo &);
   namespace PPCII {
 
   /// Target Operand Flag enum.
@@ -96,77 +86,41 @@ FunctionPass *createPPCCTRLoops();
     MO_NO_FLAG,
 
     /// On a symbol operand "FOO", this indicates that the reference is actually
-    /// to "FOO@plt".  This is used for calls and jumps to external functions
-    /// and for PIC calls on 32-bit ELF systems.
+    /// to "FOO@plt".  This is used for calls and jumps to external functions on
+    /// for PIC calls on Linux and ELF systems.
     MO_PLT = 1,
 
     /// MO_PIC_FLAG - If this bit is set, the symbol reference is relative to
     /// the function's picbase, e.g. lo16(symbol-picbase).
     MO_PIC_FLAG = 2,
 
-    /// MO_PCREL_FLAG - If this bit is set, the symbol reference is relative to
-    /// the current instruction address(pc), e.g., var@pcrel. Fixup is VK_PCREL.
-    MO_PCREL_FLAG = 4,
+    /// MO_NLP_FLAG - If this bit is set, the symbol reference is actually to
+    /// the non_lazy_ptr for the global, e.g. lo16(symbol$non_lazy_ptr-picbase).
+    MO_NLP_FLAG = 4,
 
-    /// MO_GOT_FLAG - If this bit is set the symbol reference is to be computed
-    /// via the GOT. For example when combined with the MO_PCREL_FLAG it should
-    /// produce the relocation @got@pcrel. Fixup is VK_PPC_GOT_PCREL.
-    MO_GOT_FLAG = 8,
-
-    // MO_PCREL_OPT_FLAG - If this bit is set the operand is part of a
-    // PC Relative linker optimization.
-    MO_PCREL_OPT_FLAG = 16,
-
-    /// MO_TLSGD_FLAG - If this bit is set the symbol reference is relative to
-    /// TLS General Dynamic model for Linux and the variable offset of TLS
-    /// General Dynamic model for AIX.
-    MO_TLSGD_FLAG = 32,
-
-    /// MO_TPREL_FLAG - If this bit is set the symbol reference is relative to
-    /// TLS Initial Exec model.
-    MO_TPREL_FLAG = 64,
-
-    /// MO_TLSLD_FLAG - If this bit is set the symbol reference is relative to
-    /// TLS Local Dynamic model.
-    MO_TLSLD_FLAG = 128,
-
-    /// MO_TLSGDM_FLAG - If this bit is set the symbol reference is relative
-    /// to the region handle of TLS General Dynamic model for AIX.
-    MO_TLSGDM_FLAG = 256,
-
-    /// MO_GOT_TLSGD_PCREL_FLAG - A combintaion of flags, if these bits are set
-    /// they should produce the relocation @got@tlsgd@pcrel.
-    /// Fix up is VK_PPC_GOT_TLSGD_PCREL
-    MO_GOT_TLSGD_PCREL_FLAG = MO_PCREL_FLAG | MO_GOT_FLAG | MO_TLSGD_FLAG,
-
-    /// MO_GOT_TLSLD_PCREL_FLAG - A combintaion of flags, if these bits are set
-    /// they should produce the relocation @got@tlsld@pcrel.
-    /// Fix up is VK_PPC_GOT_TLSLD_PCREL
-    MO_GOT_TLSLD_PCREL_FLAG = MO_PCREL_FLAG | MO_GOT_FLAG | MO_TLSLD_FLAG,
-
-    /// MO_GOT_TPREL_PCREL_FLAG - A combintaion of flags, if these bits are set
-    /// they should produce the relocation @got@tprel@pcrel.
-    /// Fix up is VK_PPC_GOT_TPREL_PCREL
-    MO_GOT_TPREL_PCREL_FLAG = MO_GOT_FLAG | MO_TPREL_FLAG | MO_PCREL_FLAG,
+    /// MO_NLP_HIDDEN_FLAG - If this bit is set, the symbol reference is to a
+    /// symbol with hidden visibility.  This causes a different kind of
+    /// non-lazy-pointer to be generated.
+    MO_NLP_HIDDEN_FLAG = 8,
 
     /// The next are not flags but distinct values.
-    MO_ACCESS_MASK = 0xf00,
+    MO_ACCESS_MASK = 0xf0,
 
     /// MO_LO, MO_HA - lo16(symbol) and ha16(symbol)
-    MO_LO = 1 << 8,
-    MO_HA = 2 << 8,
+    MO_LO = 1 << 4,
+    MO_HA = 2 << 4,
 
-    MO_TPREL_LO = 4 << 8,
-    MO_TPREL_HA = 3 << 8,
+    MO_TPREL_LO = 4 << 4,
+    MO_TPREL_HA = 3 << 4,
 
     /// These values identify relocations on immediates folded
     /// into memory operations.
-    MO_DTPREL_LO = 5 << 8,
-    MO_TLSLD_LO = 6 << 8,
-    MO_TOC_LO = 7 << 8,
+    MO_DTPREL_LO = 5 << 4,
+    MO_TLSLD_LO = 6 << 4,
+    MO_TOC_LO = 7 << 4,
 
     // Symbol for VK_PPC_TLS fixup attached to an ADD instruction
-    MO_TLS = 8 << 8
+    MO_TLS = 8 << 4
   };
   } // end namespace PPCII
 

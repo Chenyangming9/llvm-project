@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "SafeStackLayout.h"
+#include "SafeStackColoring.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
@@ -38,7 +39,7 @@ LLVM_DUMP_METHOD void StackLayout::print(raw_ostream &OS) {
 }
 
 void StackLayout::addObject(const Value *V, unsigned Size, unsigned Alignment,
-                            const StackLifetime::LiveRange &Range) {
+                            const StackColoring::LiveRange &Range) {
   StackObjects.push_back({V, Size, Alignment, Range});
   ObjectAlignments[V] = Alignment;
   MaxAlignment = std::max(MaxAlignment, Alignment);
@@ -75,7 +76,7 @@ void StackLayout::layoutObject(StackObject &Obj) {
       LLVM_DEBUG(dbgs() << "  Does not intersect, skip.\n");
       continue;
     }
-    if (Obj.Range.overlaps(R.Range)) {
+    if (Obj.Range.Overlaps(R.Range)) {
       // Find the next appropriate location.
       Start = AdjustStackOffset(R.End, Obj.Size, Obj.Alignment);
       End = Start + Obj.Size;
@@ -95,7 +96,7 @@ void StackLayout::layoutObject(StackObject &Obj) {
     if (Start > LastRegionEnd) {
       LLVM_DEBUG(dbgs() << "  Creating gap region: " << LastRegionEnd << " .. "
                         << Start << "\n");
-      Regions.emplace_back(LastRegionEnd, Start, StackLifetime::LiveRange(0));
+      Regions.emplace_back(LastRegionEnd, Start, StackColoring::LiveRange());
       LastRegionEnd = Start;
     }
     LLVM_DEBUG(dbgs() << "  Creating new region: " << LastRegionEnd << " .. "
@@ -124,7 +125,7 @@ void StackLayout::layoutObject(StackObject &Obj) {
   // Update live ranges for all affected regions.
   for (StackRegion &R : Regions) {
     if (Start < R.End && End > R.Start)
-      R.Range.join(Obj.Range);
+      R.Range.Join(Obj.Range);
     if (End <= R.End)
       break;
   }
@@ -140,10 +141,10 @@ void StackLayout::computeLayout() {
 
   // Sort objects by size (largest first) to reduce fragmentation.
   if (StackObjects.size() > 2)
-    llvm::stable_sort(drop_begin(StackObjects),
-                      [](const StackObject &a, const StackObject &b) {
-                        return a.Size > b.Size;
-                      });
+    std::stable_sort(StackObjects.begin() + 1, StackObjects.end(),
+                     [](const StackObject &a, const StackObject &b) {
+                       return a.Size > b.Size;
+                     });
 
   for (auto &Obj : StackObjects)
     layoutObject(Obj);

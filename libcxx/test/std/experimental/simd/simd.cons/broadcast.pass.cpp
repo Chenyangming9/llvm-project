@@ -6,16 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
+
+// See GCC PR63723.
+// UNSUPPORTED: gcc-4.9
 
 // <experimental/simd>
 //
 // [simd.class]
 // template <class U> simd(U&& value);
 
-#include <experimental/simd>
 #include <cstdint>
-#include <cassert>
+#include <experimental/simd>
 
 #include "test_macros.h"
 

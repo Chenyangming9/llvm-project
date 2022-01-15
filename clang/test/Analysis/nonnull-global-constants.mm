@@ -7,11 +7,7 @@ void clang_analyzer_eval(bool);
 
 @class NSString;
 typedef const struct __CFString *CFStringRef;
-typedef const struct __CFBoolean *CFBooleanRef;
-
-#define CF_BRIDGED_TYPE(T) __attribute__((objc_bridge(T)))
-typedef const struct CF_BRIDGED_TYPE(NSNull) __CFNull *CFNullRef;
-extern const CFNullRef kCFNull;
+typedef const struct __CFBoolean * CFBooleanRef;
 
 // Global NSString* is non-null.
 extern NSString *const StringConstGlobal;
@@ -116,8 +112,4 @@ void testNonnullNonconstCFString() {
 extern const CFStringRef _Nonnull str4;
 void testNonnullNonnullCFString() {
   clang_analyzer_eval(str4); // expected-warning{{TRUE}}
-}
-
-void test_kCFNull() {
-  clang_analyzer_eval(kCFNull); // expected-warning{{TRUE}}
 }

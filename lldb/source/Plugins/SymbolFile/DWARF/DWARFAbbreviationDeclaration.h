@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_SYMBOLFILE_DWARF_DWARFABBREVIATIONDECLARATION_H
-#define LLDB_SOURCE_PLUGINS_SYMBOLFILE_DWARF_DWARFABBREVIATIONDECLARATION_H
+#ifndef liblldb_DWARFAbbreviationDeclaration_h_
+#define liblldb_DWARFAbbreviationDeclaration_h_
 
 #include "DWARFAttribute.h"
 #include "DWARFDefines.h"
@@ -53,12 +53,13 @@ public:
   extract(const lldb_private::DWARFDataExtractor &data,
           lldb::offset_t *offset_ptr);
   bool IsValid();
+  bool operator==(const DWARFAbbreviationDeclaration &rhs) const;
 
 protected:
-  dw_uleb128_t m_code = InvalidCode;
-  dw_tag_t m_tag = llvm::dwarf::DW_TAG_null;
-  uint8_t m_has_children = 0;
+  dw_uleb128_t m_code;
+  dw_tag_t m_tag;
+  uint8_t m_has_children;
   DWARFAttribute::collection m_attributes;
 };
 
-#endif // LLDB_SOURCE_PLUGINS_SYMBOLFILE_DWARF_DWARFABBREVIATIONDECLARATION_H
+#endif // liblldb_DWARFAbbreviationDeclaration_h_

@@ -72,26 +72,26 @@ cl::opt<std::string> Style("style",
                            cl::desc("The style name used for reformatting."),
                            cl::init("LLVM"), cl::cat(ChangeNamespaceCategory));
 
-cl::opt<std::string> AllowedFile(
-    "allowed_file",
+cl::opt<std::string> WhiteListFile(
+    "whitelist_file",
     cl::desc("A file containing regexes of symbol names that are not expected "
              "to be updated when changing namespaces around them."),
     cl::init(""), cl::cat(ChangeNamespaceCategory));
 
-llvm::ErrorOr<std::vector<std::string>> GetAllowedSymbolPatterns() {
+llvm::ErrorOr<std::vector<std::string>> GetWhiteListedSymbolPatterns() {
   std::vector<std::string> Patterns;
-  if (AllowedFile.empty())
+  if (WhiteListFile.empty())
     return Patterns;
 
   llvm::SmallVector<StringRef, 8> Lines;
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> File =
-      llvm::MemoryBuffer::getFile(AllowedFile);
+      llvm::MemoryBuffer::getFile(WhiteListFile);
   if (!File)
     return File.getError();
   llvm::StringRef Content = File.get()->getBuffer();
   Content.split(Lines, '\n', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
   for (auto Line : Lines)
-    Patterns.push_back(std::string(Line.trim()));
+    Patterns.push_back(Line.trim());
   return Patterns;
 }
 
@@ -99,24 +99,19 @@ llvm::ErrorOr<std::vector<std::string>> GetAllowedSymbolPatterns() {
 
 int main(int argc, const char **argv) {
   llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
-  auto ExpectedParser =
-      tooling::CommonOptionsParser::create(argc, argv, ChangeNamespaceCategory);
-  if (!ExpectedParser) {
-    llvm::errs() << ExpectedParser.takeError();
-    return 1;
-  }
-  tooling::CommonOptionsParser &OptionsParser = ExpectedParser.get();
+  tooling::CommonOptionsParser OptionsParser(argc, argv,
+                                             ChangeNamespaceCategory);
   const auto &Files = OptionsParser.getSourcePathList();
   tooling::RefactoringTool Tool(OptionsParser.getCompilations(), Files);
-  llvm::ErrorOr<std::vector<std::string>> AllowedPatterns =
-      GetAllowedSymbolPatterns();
-  if (!AllowedPatterns) {
-    llvm::errs() << "Failed to open allow file " << AllowedFile << ". "
-                 << AllowedPatterns.getError().message() << "\n";
+  llvm::ErrorOr<std::vector<std::string>> WhiteListPatterns =
+      GetWhiteListedSymbolPatterns();
+  if (!WhiteListPatterns) {
+    llvm::errs() << "Failed to open whitelist file " << WhiteListFile << ". "
+                 << WhiteListPatterns.getError().message() << "\n";
     return 1;
   }
   change_namespace::ChangeNamespaceTool NamespaceTool(
-      OldNamespace, NewNamespace, FilePattern, *AllowedPatterns,
+      OldNamespace, NewNamespace, FilePattern, *WhiteListPatterns,
       &Tool.getReplacements(), Style);
   ast_matchers::MatchFinder Finder;
   NamespaceTool.registerMatchers(&Finder);
@@ -152,8 +147,8 @@ int main(int argc, const char **argv) {
       for (auto I = ChangedFiles.begin(), E = ChangedFiles.end(); I != E; ++I) {
         OS << "  {\n";
         OS << "    \"FilePath\": \"" << *I << "\",\n";
-        const auto Entry = FileMgr.getFile(*I);
-        auto ID = Sources.getOrCreateFileID(*Entry, SrcMgr::C_User);
+        const auto *Entry = FileMgr.getFile(*I);
+        auto ID = Sources.getOrCreateFileID(Entry, SrcMgr::C_User);
         std::string Content;
         llvm::raw_string_ostream ContentStream(Content);
         Rewrite.getEditBuffer(ID).write(ContentStream);
@@ -170,9 +165,9 @@ int main(int argc, const char **argv) {
   }
 
   for (const auto &File : ChangedFiles) {
-    const auto Entry = FileMgr.getFile(File);
+    const auto *Entry = FileMgr.getFile(File);
 
-    auto ID = Sources.getOrCreateFileID(*Entry, SrcMgr::C_User);
+    auto ID = Sources.getOrCreateFileID(Entry, SrcMgr::C_User);
     outs() << "============== " << File << " ==============\n";
     Rewrite.getEditBuffer(ID).write(llvm::outs());
     outs() << "\n============================================\n";

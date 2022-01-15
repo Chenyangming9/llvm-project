@@ -9,11 +9,7 @@
 // User-provided filters for always/never XRay instrumenting certain functions.
 //
 //===----------------------------------------------------------------------===//
-
 #include "clang/Basic/XRayLists.h"
-#include "clang/Basic/FileManager.h"
-#include "clang/Basic/SourceManager.h"
-#include "llvm/Support/SpecialCaseList.h"
 
 using namespace clang;
 
@@ -21,15 +17,10 @@ XRayFunctionFilter::XRayFunctionFilter(
     ArrayRef<std::string> AlwaysInstrumentPaths,
     ArrayRef<std::string> NeverInstrumentPaths,
     ArrayRef<std::string> AttrListPaths, SourceManager &SM)
-    : AlwaysInstrument(llvm::SpecialCaseList::createOrDie(
-          AlwaysInstrumentPaths, SM.getFileManager().getVirtualFileSystem())),
-      NeverInstrument(llvm::SpecialCaseList::createOrDie(
-          NeverInstrumentPaths, SM.getFileManager().getVirtualFileSystem())),
-      AttrList(llvm::SpecialCaseList::createOrDie(
-          AttrListPaths, SM.getFileManager().getVirtualFileSystem())),
-      SM(SM) {}
-
-XRayFunctionFilter::~XRayFunctionFilter() = default;
+    : AlwaysInstrument(
+          llvm::SpecialCaseList::createOrDie(AlwaysInstrumentPaths)),
+      NeverInstrument(llvm::SpecialCaseList::createOrDie(NeverInstrumentPaths)),
+      AttrList(llvm::SpecialCaseList::createOrDie(AttrListPaths)), SM(SM) {}
 
 XRayFunctionFilter::ImbueAttribute
 XRayFunctionFilter::shouldImbueFunction(StringRef FunctionName) const {

@@ -163,9 +163,8 @@ entry:
   ; GP32-M:     addiu   $sp, $sp, -1024
   ; GP32-MMR2:  addiusp -1024
   ; GP32-MMR6:  addiu   $sp, $sp, -1024
-  ; GP32:       sw      $ra, 1020($sp)
-  ; GP32:       sw      $fp, 1016($sp)
-  ; GP32:       sw      $23, 1012($sp)
+  ; GP32:       sw      $fp, 1020($sp)
+  ; GP32:       sw      $23, 1016($sp)
   ;
   ; GP32:       move    $fp, $sp
   ; GP32:       addiu   $[[T0:[0-9]+|gp]], $zero, -512
@@ -178,9 +177,8 @@ entry:
 
   ; epilogue
   ; GP32:       move    $sp, $fp
-  ; GP32:       lw      $23, 1012($sp)
-  ; GP32:       lw      $fp, 1016($sp)
-  ; GP32:       lw      $ra, 1020($sp)
+  ; GP32:       lw      $23, 1016($sp)
+  ; GP32:       lw      $fp, 1020($sp)
   ; GP32-M:     addiu   $sp, $sp, 1024
   ; GP32-MMR2:  addiusp 1024
   ; GP32-MMR6:  addiu   $sp, $sp, 1024
@@ -203,9 +201,8 @@ entry:
   ; FIXME: We are currently over-allocating stack space.
   ; N32:        addiu   $sp, $sp, -1024
   ; N64:        daddiu  $sp, $sp, -1024
-  ; GP64:       sd      $ra, 1016($sp)
-  ; GP64:       sd      $fp, 1008($sp)
-  ; GP64:       sd      $23, 1000($sp)
+  ; GP64:       sd      $fp, 1016($sp)
+  ; GP64:       sd      $23, 1008($sp)
   ;
   ; GP64:       move    $fp, $sp
   ; GP64:       addiu   $[[T0:[0-9]+|gp]], $zero, -512
@@ -218,9 +215,8 @@ entry:
 
   ; epilogue
   ; GP64:       move    $sp, $fp
-  ; GP64:       ld      $23, 1000($sp)
-  ; GP64:       ld      $fp, 1008($sp)
-  ; GP64:       ld      $ra, 1016($sp)
+  ; GP64:       ld      $23, 1008($sp)
+  ; GP64:       ld      $fp, 1016($sp)
   ; N32:        addiu   $sp, $sp, 1024
   ; N64:        daddiu  $sp, $sp, 1024
 

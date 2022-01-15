@@ -82,9 +82,6 @@ namespace dr406 { // dr406: yes
   typedef struct {
     static int n; // expected-error {{static data member 'n' not allowed in anonymous struct}}
   } A;
-  typedef union {
-    static int n; // expected-error {{static data member 'n' not allowed in anonymous union}}
-  } B;
 }
 
 namespace dr407 { // dr407: 3.8
@@ -297,11 +294,13 @@ namespace dr420 { // dr420: yes
   void test2(T p) {
     p->template Y<int>::~Y<int>();
     p->~Y<int>();
-    p->template ~Y<int>(); // expected-error {{'template' keyword not permitted in destructor name}}
+    // FIXME: This is ill-formed, but this diagnostic is terrible. We should
+    // reject this in the parser.
+    p->template ~Y<int>(); // expected-error 2{{no member named '~typename Y<int>'}}
   }
   template<typename T> struct Y {};
-  template void test2(Y<int>*);
-  template void test2(ptr<Y<int> >);
+  template void test2(Y<int>*); // expected-note {{instantiation}}
+  template void test2(ptr<Y<int> >); // expected-note {{instantiation}}
 
   void test3(int *p, ptr<int> q) {
     typedef int Int;
@@ -487,21 +486,14 @@ namespace dr433 { // dr433: yes
   S<int> s;
 }
 
-namespace dr434 { // dr434: sup 2352
+namespace dr434 { // dr434: yes
   void f() {
     const int ci = 0;
     int *pi = 0;
-    const int *&rpci = pi; // expected-error {{incompatible qualifiers}}
-    const int * const &rcpci = pi; // OK
+    const int *&rpci = pi; // expected-error {{cannot bind}}
     rpci = &ci;
     *pi = 1;
   }
-
-#if __cplusplus >= 201103L
-  int *pi = 0;
-  const int * const &rcpci = pi;
-  static_assert(&rcpci == &pi, "");
-#endif
 }
 
 // dr435: na
@@ -644,8 +636,8 @@ namespace dr450 { // dr450: yes
 
 namespace dr451 { // dr451: yes
   const int a = 1 / 0; // expected-warning {{undefined}}
-  const int b = 1 / 0; // expected-warning {{undefined}} expected-note {{here}} expected-note 0-1{{division by zero}}
-  int arr[b]; // expected-error +{{variable length arr}} expected-note {{initializer of 'b' is not a constant}}
+  const int b = 1 / 0; // expected-warning {{undefined}}
+  int arr[b]; // expected-error +{{variable length arr}}
 }
 
 namespace dr452 { // dr452: yes
@@ -682,7 +674,7 @@ namespace dr457 { // dr457: yes
   const int a = 1;
   const volatile int b = 1;
   int ax[a];
-  int bx[b]; // expected-error +{{variable length array}} expected-note {{read of volatile}}
+  int bx[b]; // expected-error +{{variable length array}}
 
   enum E {
     ea = a,
@@ -690,7 +682,7 @@ namespace dr457 { // dr457: yes
   };
 }
 
-namespace dr458 { // dr458: 11
+namespace dr458 { // dr458: no
   struct A {
     int T;
     int f();
@@ -706,9 +698,9 @@ namespace dr458 { // dr458: 11
   int A::f() {
     return T;
   }
-  template<typename T> // expected-note {{declared here}}
+  template<typename T>
   int A::g() {
-    return T; // expected-error {{'T' does not refer to a value}}
+    return T; // FIXME: this is invalid, it finds the template parameter
   }
 
   template<typename T>
@@ -719,9 +711,9 @@ namespace dr458 { // dr458: 11
   int B<T>::g() {
     return T;
   }
-  template<typename U> template<typename T> // expected-note {{declared here}}
+  template<typename U> template<typename T>
   int B<U>::h() {
-    return T; // expected-error {{'T' does not refer to a value}}
+    return T; // FIXME: this is invalid, it finds the template parameter
   }
 }
 
@@ -1088,8 +1080,8 @@ namespace dr486 { // dr486: yes
 
 namespace dr487 { // dr487: yes
   enum E { e };
-  int operator+(int, E); // expected-note 0-1{{here}}
-  int i[4 + e]; // expected-error 2{{variable length array}} expected-note 0-1{{non-constexpr}}
+  int operator+(int, E);
+  int i[4 + e]; // expected-error 2{{variable length array}}
 }
 
 namespace dr488 { // dr488: yes c++11

@@ -1,4 +1,4 @@
-; RUN: llc -march=hexagon < %s -pipeliner-experimental-cg=true | FileCheck %s
+; RUN: llc -march=hexagon < %s | FileCheck %s
 
 ; Test that the instruction ordering code in the pipeliner fixes up dependences
 ; between post-increment register definitions and uses so that the register

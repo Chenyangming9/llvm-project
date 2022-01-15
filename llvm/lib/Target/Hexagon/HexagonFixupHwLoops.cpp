@@ -20,7 +20,7 @@
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Pass.h"
+#include "llvm/PassSupport.h"
 
 using namespace llvm;
 
@@ -114,11 +114,12 @@ bool HexagonFixupHwLoops::fixupLoopInstrs(MachineFunction &MF) {
 
   // First pass - compute the offset of each basic block.
   for (const MachineBasicBlock &MBB : MF) {
-    if (MBB.getAlignment() != Align(1)) {
+    if (MBB.getAlignment()) {
       // Although we don't know the exact layout of the final code, we need
       // to account for alignment padding somehow. This heuristic pads each
       // aligned basic block according to the alignment value.
-      InstOffset = alignTo(InstOffset, MBB.getAlignment());
+      int ByteAlign = (1u << MBB.getAlignment()) - 1;
+      InstOffset = (InstOffset + ByteAlign) & ~(ByteAlign);
     }
 
     BlockToInstOffset[&MBB] = InstOffset;

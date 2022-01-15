@@ -149,11 +149,9 @@ bool AArch64StorePairSuppress::runOnMachineFunction(MachineFunction &MF) {
         continue;
       const MachineOperand *BaseOp;
       int64_t Offset;
-      bool OffsetIsScalable;
-      if (TII->getMemOperandWithOffset(MI, BaseOp, Offset, OffsetIsScalable,
-                                       TRI) &&
+      if (TII->getMemOperandWithOffset(MI, BaseOp, Offset, TRI) &&
           BaseOp->isReg()) {
-        Register BaseReg = BaseOp->getReg();
+        unsigned BaseReg = BaseOp->getReg();
         if (PrevBaseReg == BaseReg) {
           // If this block can take STPs, skip ahead to the next block.
           if (!SuppressSTP && shouldAddSTPToBlock(MI.getParent()))

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_MINIDUMP_REGISTERCONTEXTMINIDUMP_ARM_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_MINIDUMP_REGISTERCONTEXTMINIDUMP_ARM_H
+#ifndef liblldb_RegisterContextMinidump_ARM_h_
+#define liblldb_RegisterContextMinidump_ARM_h_
 
 #include "MinidumpTypes.h"
 
@@ -37,12 +37,6 @@ public:
   void InvalidateAllRegisters() override {
     // Do nothing... registers are always valid...
   }
-
-  // Used for unit testing.
-  static size_t GetRegisterCountStatic();
-  // Used for unit testing.
-  static const lldb_private::RegisterInfo *
-  GetRegisterInfoAtIndexStatic(size_t reg, bool apple);
 
   size_t GetRegisterCount() override;
 
@@ -95,4 +89,4 @@ protected:
 
 } // end namespace minidump
 } // end namespace lldb_private
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_MINIDUMP_REGISTERCONTEXTMINIDUMP_ARM_H
+#endif // liblldb_RegisterContextMinidump_ARM_h_

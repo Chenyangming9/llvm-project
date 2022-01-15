@@ -15,5 +15,7 @@ static_library("LibDriver") {
     "//llvm/lib/Option",
     "//llvm/lib/Support",
   ]
-  sources = [ "LibDriver.cpp" ]
+  sources = [
+    "LibDriver.cpp",
+  ]
 }

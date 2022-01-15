@@ -15,16 +15,11 @@
 #define LLVM_ANALYSIS_TYPEMETADATAUTILS_H
 
 #include "llvm/ADT/SmallVector.h"
-#include <cstdint>
+#include "llvm/IR/CallSite.h"
 
 namespace llvm {
 
-class CallBase;
-class CallInst;
-class Constant;
 class DominatorTree;
-class Instruction;
-class Module;
 
 /// The type of CFI jumptable needed for a function.
 enum CfiFunctionLinkage {
@@ -38,7 +33,7 @@ struct DevirtCallSite {
   /// The offset from the address point to the virtual function.
   uint64_t Offset;
   /// The call site itself.
-  CallBase &CB;
+  CallSite CS;
 };
 
 /// Given a call to the intrinsic \@llvm.type.test, find all devirtualizable
@@ -55,8 +50,6 @@ void findDevirtualizableCallsForTypeCheckedLoad(
     SmallVectorImpl<Instruction *> &LoadedPtrs,
     SmallVectorImpl<Instruction *> &Preds, bool &HasNonCallUses,
     const CallInst *CI, DominatorTree &DT);
-
-Constant *getPointerAtOffset(Constant *I, uint64_t Offset, Module &M);
 }
 
 #endif

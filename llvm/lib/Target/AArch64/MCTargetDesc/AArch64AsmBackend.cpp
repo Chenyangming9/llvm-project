@@ -24,7 +24,6 @@
 #include "llvm/MC/MCSectionMachO.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/MCValue.h"
-#include "llvm/Support/EndianStream.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
@@ -34,7 +33,6 @@ namespace {
 class AArch64AsmBackend : public MCAsmBackend {
   static const unsigned PCRelFlagVal =
       MCFixupKindInfo::FKF_IsAlignedDownTo32Bits | MCFixupKindInfo::FKF_IsPCRel;
-protected:
   Triple TheTriple;
 
 public:
@@ -67,12 +65,8 @@ public:
         {"fixup_aarch64_pcrel_branch14", 5, 14, PCRelFlagVal},
         {"fixup_aarch64_pcrel_branch19", 5, 19, PCRelFlagVal},
         {"fixup_aarch64_pcrel_branch26", 0, 26, PCRelFlagVal},
-        {"fixup_aarch64_pcrel_call26", 0, 26, PCRelFlagVal}};
-
-    // Fixup kinds from .reloc directive are like R_AARCH64_NONE. They do not
-    // require any extra processing.
-    if (Kind >= FirstLiteralRelocationKind)
-      return MCAsmBackend::getFixupKindInfo(FK_NONE);
+        {"fixup_aarch64_pcrel_call26", 0, 26, PCRelFlagVal},
+        {"fixup_aarch64_tlsdesc_call", 0, 0, 0}};
 
     if (Kind < FirstTargetFixupKind)
       return MCAsmBackend::getFixupKindInfo(Kind);
@@ -87,12 +81,18 @@ public:
                   uint64_t Value, bool IsResolved,
                   const MCSubtargetInfo *STI) const override;
 
+  bool mayNeedRelaxation(const MCInst &Inst,
+                         const MCSubtargetInfo &STI) const override;
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                             const MCRelaxableFragment *DF,
                             const MCAsmLayout &Layout) const override;
-  void relaxInstruction(MCInst &Inst,
-                        const MCSubtargetInfo &STI) const override;
+  void relaxInstruction(const MCInst &Inst, const MCSubtargetInfo &STI,
+                        MCInst &Res) const override;
   bool writeNopData(raw_ostream &OS, uint64_t Count) const override;
+
+  void HandleAssemblerFlag(MCAssemblerFlag Flag) {}
+
+  unsigned getPointerSize() const { return 8; }
 
   unsigned getFixupKindContainereSizeInBytes(unsigned Kind) const;
 
@@ -107,6 +107,10 @@ static unsigned getFixupKindNumBytes(unsigned Kind) {
   switch (Kind) {
   default:
     llvm_unreachable("Unknown fixup kind!");
+
+  case FK_NONE:
+  case AArch64::fixup_aarch64_tlsdesc_call:
+    return 0;
 
   case FK_Data_1:
     return 1;
@@ -149,8 +153,9 @@ static unsigned AdrImmBits(unsigned Value) {
 static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
                                  uint64_t Value, MCContext &Ctx,
                                  const Triple &TheTriple, bool IsResolved) {
+  unsigned Kind = Fixup.getKind();
   int64_t SignedValue = static_cast<int64_t>(Value);
-  switch (Fixup.getTargetKind()) {
+  switch (Kind) {
   default:
     llvm_unreachable("Unknown fixup kind!");
   case AArch64::fixup_aarch64_pcrel_adr_imm21:
@@ -220,22 +225,11 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
         static_cast<AArch64MCExpr::VariantKind>(Target.getRefKind());
     if (AArch64MCExpr::getSymbolLoc(RefKind) != AArch64MCExpr::VK_ABS &&
         AArch64MCExpr::getSymbolLoc(RefKind) != AArch64MCExpr::VK_SABS) {
-      if (!RefKind) {
-        // The fixup is an expression
-        if (SignedValue > 0xFFFF || SignedValue < -0xFFFF)
-          Ctx.reportError(Fixup.getLoc(),
-                          "fixup value out of range [-0xFFFF, 0xFFFF]");
-
-        // Invert the negative immediate because it will feed into a MOVN.
-        if (SignedValue < 0)
-          SignedValue = ~SignedValue;
-        Value = static_cast<uint64_t>(SignedValue);
-      } else
-        // VK_GOTTPREL, VK_TPREL, VK_DTPREL are movw fixups, but they can't
-        // ever be resolved in the assembler.
-        Ctx.reportError(Fixup.getLoc(),
-                        "relocation for a thread-local variable points to an "
-                        "absolute symbol");
+      // VK_GOTTPREL, VK_TPREL, VK_DTPREL are movw fixups, but they can't
+      // ever be resolved in the assembler.
+      Ctx.reportError(Fixup.getLoc(),
+                      "relocation for a thread-local variable points to an "
+                      "absolute symbol");
       return Value;
     }
 
@@ -316,6 +310,7 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
     if (Value & 0x3)
       Ctx.reportError(Fixup.getLoc(), "fixup not sufficiently aligned");
     return (Value >> 2) & 0x3ffffff;
+  case FK_NONE:
   case FK_Data_1:
   case FK_Data_2:
   case FK_Data_4:
@@ -327,21 +322,9 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, const MCValue &Target,
 }
 
 Optional<MCFixupKind> AArch64AsmBackend::getFixupKind(StringRef Name) const {
-  if (!TheTriple.isOSBinFormatELF())
-    return None;
-
-  unsigned Type = llvm::StringSwitch<unsigned>(Name)
-#define ELF_RELOC(X, Y)  .Case(#X, Y)
-#include "llvm/BinaryFormat/ELFRelocs/AArch64.def"
-#undef ELF_RELOC
-                      .Case("BFD_RELOC_NONE", ELF::R_AARCH64_NONE)
-                      .Case("BFD_RELOC_16", ELF::R_AARCH64_ABS16)
-                      .Case("BFD_RELOC_32", ELF::R_AARCH64_ABS32)
-                      .Case("BFD_RELOC_64", ELF::R_AARCH64_ABS64)
-                      .Default(-1u);
-  if (Type == -1u)
-    return None;
-  return static_cast<MCFixupKind>(FirstLiteralRelocationKind + Type);
+  if (TheTriple.isOSBinFormatELF() && Name == "R_AARCH64_NONE")
+    return FK_NONE;
+  return MCAsmBackend::getFixupKind(Name);
 }
 
 /// getFixupKindContainereSizeInBytes - The number of bytes of the
@@ -363,6 +346,7 @@ unsigned AArch64AsmBackend::getFixupKindContainereSizeInBytes(unsigned Kind) con
   case FK_Data_8:
     return 8;
 
+  case AArch64::fixup_aarch64_tlsdesc_call:
   case AArch64::fixup_aarch64_movw:
   case AArch64::fixup_aarch64_pcrel_branch14:
   case AArch64::fixup_aarch64_add_imm12:
@@ -387,12 +371,9 @@ void AArch64AsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
                                    MutableArrayRef<char> Data, uint64_t Value,
                                    bool IsResolved,
                                    const MCSubtargetInfo *STI) const {
+  unsigned NumBytes = getFixupKindNumBytes(Fixup.getKind());
   if (!Value)
     return; // Doesn't change encoding.
-  unsigned Kind = Fixup.getKind();
-  if (Kind >= FirstLiteralRelocationKind)
-    return;
-  unsigned NumBytes = getFixupKindNumBytes(Kind);
   MCFixupKindInfo Info = getFixupKindInfo(Fixup.getKind());
   MCContext &Ctx = Asm.getContext();
   int64_t SignedValue = static_cast<int64_t>(Value);
@@ -428,9 +409,8 @@ void AArch64AsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
   // FIXME: getFixupKindInfo() and getFixupKindNumBytes() could be fixed to
   // handle this more cleanly. This may affect the output of -show-mc-encoding.
   AArch64MCExpr::VariantKind RefKind =
-      static_cast<AArch64MCExpr::VariantKind>(Target.getRefKind());
-  if (AArch64MCExpr::getSymbolLoc(RefKind) == AArch64MCExpr::VK_SABS ||
-      (!RefKind && Fixup.getTargetKind() == AArch64::fixup_aarch64_movw)) {
+    static_cast<AArch64MCExpr::VariantKind>(Target.getRefKind());
+  if (AArch64MCExpr::getSymbolLoc(RefKind) == AArch64MCExpr::VK_SABS) {
     // If the immediate is negative, generate MOVN else MOVZ.
     // (Bit 30 = 0) ==> MOVN, (Bit 30 = 1) ==> MOVZ.
     if (SignedValue < 0)
@@ -438,6 +418,11 @@ void AArch64AsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
     else
       Data[Offset + 3] |= (1 << 6);
   }
+}
+
+bool AArch64AsmBackend::mayNeedRelaxation(const MCInst &Inst,
+                                          const MCSubtargetInfo &STI) const {
+  return false;
 }
 
 bool AArch64AsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup,
@@ -451,8 +436,9 @@ bool AArch64AsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup,
   return int64_t(Value) != int64_t(int8_t(Value));
 }
 
-void AArch64AsmBackend::relaxInstruction(MCInst &Inst,
-                                         const MCSubtargetInfo &STI) const {
+void AArch64AsmBackend::relaxInstruction(const MCInst &Inst,
+                                         const MCSubtargetInfo &STI,
+                                         MCInst &Res) const {
   llvm_unreachable("AArch64AsmBackend::relaxInstruction() unimplemented");
 }
 
@@ -473,7 +459,7 @@ bool AArch64AsmBackend::shouldForceRelocation(const MCAssembler &Asm,
                                               const MCFixup &Fixup,
                                               const MCValue &Target) {
   unsigned Kind = Fixup.getKind();
-  if (Kind >= FirstLiteralRelocationKind)
+  if (Kind == FK_NONE)
     return true;
 
   // The ADRP instruction adds some multiple of 0x1000 to the current PC &
@@ -491,6 +477,13 @@ bool AArch64AsmBackend::shouldForceRelocation(const MCAssembler &Asm,
   if (Kind == AArch64::fixup_aarch64_pcrel_adrp_imm21)
     return true;
 
+  AArch64MCExpr::VariantKind RefKind =
+      static_cast<AArch64MCExpr::VariantKind>(Target.getRefKind());
+  AArch64MCExpr::VariantKind SymLoc = AArch64MCExpr::getSymbolLoc(RefKind);
+  // LDR GOT relocations need a relocation
+  if (Kind == AArch64::fixup_aarch64_ldr_pcrel_imm19 &&
+      SymLoc == AArch64MCExpr::VK_GOT)
+    return true;
   return false;
 }
 
@@ -536,6 +529,7 @@ enum CompactUnwindEncodings {
 // FIXME: This should be in a separate file.
 class DarwinAArch64AsmBackend : public AArch64AsmBackend {
   const MCRegisterInfo &MRI;
+  bool IsILP32;
 
   /// Encode compact unwind stack adjustment for frameless functions.
   /// See UNWIND_ARM64_FRAMELESS_STACK_SIZE_MASK in compact_unwind_encoding.h.
@@ -546,15 +540,18 @@ class DarwinAArch64AsmBackend : public AArch64AsmBackend {
 
 public:
   DarwinAArch64AsmBackend(const Target &T, const Triple &TT,
-                          const MCRegisterInfo &MRI)
-      : AArch64AsmBackend(T, TT, /*IsLittleEndian*/ true), MRI(MRI) {}
+                          const MCRegisterInfo &MRI, bool IsILP32)
+      : AArch64AsmBackend(T, TT, /*IsLittleEndian*/ true), MRI(MRI),
+        IsILP32(IsILP32) {}
 
   std::unique_ptr<MCObjectTargetWriter>
   createObjectTargetWriter() const override {
-    uint32_t CPUType = cantFail(MachO::getCPUType(TheTriple));
-    uint32_t CPUSubType = cantFail(MachO::getCPUSubType(TheTriple));
-    return createAArch64MachObjectWriter(CPUType, CPUSubType,
-                                         TheTriple.isArch32Bit());
+    if (IsILP32)
+      return createAArch64MachObjectWriter(
+          MachO::CPU_TYPE_ARM64_32, MachO::CPU_SUBTYPE_ARM64_32_V8, true);
+    else
+      return createAArch64MachObjectWriter(MachO::CPU_TYPE_ARM64,
+                                           MachO::CPU_SUBTYPE_ARM64_ALL, false);
   }
 
   /// Generate the compact unwind encoding from the CFI directives.
@@ -567,7 +564,6 @@ public:
     unsigned StackSize = 0;
 
     uint32_t CompactUnwindEncoding = 0;
-    int CurOffset = 0;
     for (size_t i = 0, e = Instrs.size(); i != e; ++i) {
       const MCCFIInstruction &Inst = Instrs[i];
 
@@ -578,7 +574,7 @@ public:
       case MCCFIInstruction::OpDefCfa: {
         // Defines a frame pointer.
         unsigned XReg =
-            getXRegFromWReg(*MRI.getLLVMRegNum(Inst.getRegister(), true));
+            getXRegFromWReg(MRI.getLLVMRegNum(Inst.getRegister(), true));
 
         // Other CFA registers than FP are not supported by compact unwind.
         // Fallback on DWARF.
@@ -597,11 +593,8 @@ public:
         assert(FPPush.getOperation() == MCCFIInstruction::OpOffset &&
                "Frame pointer not pushed!");
 
-        assert(FPPush.getOffset() + 8 == LRPush.getOffset());
-        CurOffset = FPPush.getOffset();
-
-        unsigned LRReg = *MRI.getLLVMRegNum(LRPush.getRegister(), true);
-        unsigned FPReg = *MRI.getLLVMRegNum(FPPush.getRegister(), true);
+        unsigned LRReg = MRI.getLLVMRegNum(LRPush.getRegister(), true);
+        unsigned FPReg = MRI.getLLVMRegNum(FPPush.getRegister(), true);
 
         LRReg = getXRegFromWReg(LRReg);
         FPReg = getXRegFromWReg(FPReg);
@@ -622,22 +615,14 @@ public:
       case MCCFIInstruction::OpOffset: {
         // Registers are saved in pairs. We expect there to be two consecutive
         // `.cfi_offset' instructions with the appropriate registers specified.
-        unsigned Reg1 = *MRI.getLLVMRegNum(Inst.getRegister(), true);
+        unsigned Reg1 = MRI.getLLVMRegNum(Inst.getRegister(), true);
         if (i + 1 == e)
           return CU::UNWIND_ARM64_MODE_DWARF;
-
-        if (CurOffset != 0 && Inst.getOffset() != CurOffset - 8)
-          return CU::UNWIND_ARM64_MODE_DWARF;
-        CurOffset = Inst.getOffset();
 
         const MCCFIInstruction &Inst2 = Instrs[++i];
         if (Inst2.getOperation() != MCCFIInstruction::OpOffset)
           return CU::UNWIND_ARM64_MODE_DWARF;
-        unsigned Reg2 = *MRI.getLLVMRegNum(Inst2.getRegister(), true);
-
-        if (Inst2.getOffset() != CurOffset - 8)
-          return CU::UNWIND_ARM64_MODE_DWARF;
-        CurOffset = Inst2.getOffset();
+        unsigned Reg2 = MRI.getLLVMRegNum(Inst2.getRegister(), true);
 
         // N.B. The encodings must be in register number order, and the X
         // registers before the D registers.
@@ -749,7 +734,8 @@ MCAsmBackend *llvm::createAArch64leAsmBackend(const Target &T,
                                               const MCTargetOptions &Options) {
   const Triple &TheTriple = STI.getTargetTriple();
   if (TheTriple.isOSBinFormatMachO()) {
-    return new DarwinAArch64AsmBackend(T, TheTriple, MRI);
+    const bool IsILP32 = TheTriple.isArch32Bit();
+    return new DarwinAArch64AsmBackend(T, TheTriple, MRI, IsILP32);
   }
 
   if (TheTriple.isOSBinFormatCOFF())
@@ -758,7 +744,7 @@ MCAsmBackend *llvm::createAArch64leAsmBackend(const Target &T,
   assert(TheTriple.isOSBinFormatELF() && "Invalid target");
 
   uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TheTriple.getOS());
-  bool IsILP32 = STI.getTargetTriple().getEnvironment() == Triple::GNUILP32;
+  bool IsILP32 = Options.getABIName() == "ilp32";
   return new ELFAArch64AsmBackend(T, TheTriple, OSABI, /*IsLittleEndian=*/true,
                                   IsILP32);
 }
@@ -771,7 +757,7 @@ MCAsmBackend *llvm::createAArch64beAsmBackend(const Target &T,
   assert(TheTriple.isOSBinFormatELF() &&
          "Big endian is only supported for ELF targets!");
   uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TheTriple.getOS());
-  bool IsILP32 = STI.getTargetTriple().getEnvironment() == Triple::GNUILP32;
+  bool IsILP32 = Options.getABIName() == "ilp32";
   return new ELFAArch64AsmBackend(T, TheTriple, OSABI, /*IsLittleEndian=*/false,
                                   IsILP32);
 }

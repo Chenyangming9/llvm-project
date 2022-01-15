@@ -31,7 +31,7 @@ struct Y { // expected-note 2{{candidate constructor (the implicit copy construc
 // expected-note@-2 2 {{candidate constructor (the implicit move constructor) not viable}}
 #endif
 
-  explicit Y(int); // expected-note 2{{explicit constructor is not a candidate}}
+  explicit Y(int);
 };
 
 void k(Y y = 17); // expected-error{{no viable conversion}} \
@@ -95,12 +95,4 @@ void g2(int c = f2<int>()) {}
 template<typename T> int f3() { return T::error; } // expected-error {{no members}}
 void g3(int c = f3<int>()) {} // expected-note {{in instantiation of}}
 void use_g3() { g3(); }
-
-namespace PR47682 {
-  inline namespace A {
-    void f(int = 0);
-  }
-}
-void PR47682::f(int) {}
-void PR47682_test() { PR47682::f(); }
 #endif

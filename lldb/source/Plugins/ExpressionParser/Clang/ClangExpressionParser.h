@@ -6,9 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGEXPRESSIONPARSER_H
-#define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGEXPRESSIONPARSER_H
+#ifndef liblldb_ClangExpressionParser_h_
+#define liblldb_ClangExpressionParser_h_
 
+#include "lldb/Core/ClangForward.h"
 #include "lldb/Expression/DiagnosticManager.h"
 #include "lldb/Expression/ExpressionParser.h"
 #include "lldb/Utility/ArchSpec.h"
@@ -18,20 +19,13 @@
 #include <string>
 #include <vector>
 
-namespace llvm {
-class LLVMContext;
-}
-
 namespace clang {
-class CodeGenerator;
 class CodeCompleteConsumer;
-class CompilerInstance;
-} // namespace clang
+}
 
 namespace lldb_private {
 
 class IRExecutionUnit;
-class TypeSystemClang;
 
 /// \class ClangExpressionParser ClangExpressionParser.h
 /// "lldb/Expression/ClangExpressionParser.h" Encapsulates an instance of
@@ -48,7 +42,7 @@ public:
   ///
   /// Initializes class variables.
   ///
-  /// \param[in] exe_scope
+  /// \param[in] exe_scope,
   ///     If non-NULL, an execution context scope that can help to
   ///     correctly create an expression with a valid process for
   ///     optional tuning Objective-C runtime support. Can be NULL.
@@ -59,14 +53,9 @@ public:
   /// @param[in] include_directories
   ///     List of include directories that should be used when parsing the
   ///     expression.
-  ///
-  /// @param[in] filename
-  ///     Name of the source file that should be used when rendering
-  ///     diagnostics (i.e. errors, warnings or notes from Clang).
   ClangExpressionParser(ExecutionContextScope *exe_scope, Expression &expr,
                         bool generate_debug_info,
-                        std::vector<std::string> include_directories = {},
-                        std::string filename = "<clang expression>");
+                        std::vector<ConstString> include_directories = {});
 
   /// Destructor
   ~ClangExpressionParser() override;
@@ -83,7 +72,7 @@ public:
   /// \return
   ///     The number of errors encountered during parsing.  0 means
   ///     success.
-  unsigned Parse(DiagnosticManager &diagnostic_manager);
+  unsigned Parse(DiagnosticManager &diagnostic_manager) override;
 
   bool RewriteExpression(DiagnosticManager &diagnostic_manager) override;
 
@@ -104,6 +93,15 @@ public:
   ///
   /// \param[in] exe_ctx
   ///     The execution context to write the function into.
+  ///
+  /// \param[out] evaluated_statically
+  ///     Set to true if the expression could be interpreted statically;
+  ///     untouched otherwise.
+  ///
+  /// \param[out] const_result
+  ///     If the result of the expression is constant, and the
+  ///     expression has no side effects, this is set to the result of the
+  ///     expression.
   ///
   /// \param[in] execution_policy
   ///     Determines whether the expression must be JIT-compiled, must be
@@ -177,12 +175,10 @@ private:
   class LLDBPreprocessorCallbacks;
   LLDBPreprocessorCallbacks *m_pp_callbacks; ///< Called when the preprocessor
                                              ///encounters module imports
-  std::unique_ptr<TypeSystemClang> m_ast_context;
+  std::unique_ptr<ClangASTContext> m_ast_context;
 
-  std::vector<std::string> m_include_directories;
-  /// File name used for the user expression.
-  std::string m_filename;
+  std::vector<ConstString> m_include_directories;
 };
 }
 
-#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGEXPRESSIONPARSER_H
+#endif // liblldb_ClangExpressionParser_h_

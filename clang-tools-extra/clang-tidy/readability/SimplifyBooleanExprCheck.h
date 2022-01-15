@@ -27,9 +27,6 @@ public:
   void storeOptions(ClangTidyOptions::OptionMap &Options) override;
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
-  llvm::Optional<TraversalKind> getCheckTraversalKind() const override {
-    return TK_IgnoreUnlessSpelledInSource;
-  }
 
 private:
   class Visitor;
@@ -54,11 +51,11 @@ private:
 
   void
   replaceWithThenStatement(const ast_matchers::MatchFinder::MatchResult &Result,
-                           const Expr *BoolLiteral);
+                           const CXXBoolLiteralExpr *BoolLiteral);
 
   void
   replaceWithElseStatement(const ast_matchers::MatchFinder::MatchResult &Result,
-                           const Expr *FalseConditionRemoved);
+                           const CXXBoolLiteralExpr *FalseConditionRemoved);
 
   void
   replaceWithCondition(const ast_matchers::MatchFinder::MatchResult &Result,

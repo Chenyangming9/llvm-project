@@ -1,4 +1,4 @@
-//===-- CommandObjectRegister.cpp -----------------------------------------===//
+//===-- CommandObjectRegister.cpp -------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,6 +10,7 @@
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/DumpRegisterValue.h"
 #include "lldb/Host/OptionParser.h"
+#include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Interpreter/CommandReturnObject.h"
 #include "lldb/Interpreter/OptionGroupFormat.h"
 #include "lldb/Interpreter/OptionValueArray.h"
@@ -24,14 +25,21 @@
 #include "lldb/Utility/Args.h"
 #include "lldb/Utility/DataExtractor.h"
 #include "lldb/Utility/RegisterValue.h"
+#include "lldb/Utility/Scalar.h"
 #include "llvm/Support/Errno.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
 // "register read"
-#define LLDB_OPTIONS_register_read
-#include "CommandOptions.inc"
+
+static constexpr OptionDefinition g_register_read_options[] = {
+    // clang-format off
+  { LLDB_OPT_SET_ALL, false, "alternate", 'A', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,  "Display register names using the alternate register name if there is one." },
+  { LLDB_OPT_SET_1,   false, "set",       's', OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeIndex, "Specify which register sets to dump by index." },
+  { LLDB_OPT_SET_2,   false, "all",       'a', OptionParser::eNoArgument,       nullptr, {}, 0, eArgTypeNone,  "Show all register sets." },
+    // clang-format on
+};
 
 class CommandObjectRegisterRead : public CommandObjectParsed {
 public:
@@ -69,17 +77,6 @@ public:
   }
 
   ~CommandObjectRegisterRead() override = default;
-
-  void
-  HandleArgumentCompletion(CompletionRequest &request,
-                           OptionElementVector &opt_element_vector) override {
-    if (!m_exe_ctx.HasProcessScope())
-      return;
-
-    CommandCompletions::InvokeCommonCompletionCallbacks(
-        GetCommandInterpreter(), CommandCompletions::eRegisterCompletion,
-        request, nullptr);
-  }
 
   Options *GetOptions() override { return &m_option_group; }
 
@@ -178,11 +175,13 @@ protected:
                                               llvm::sys::StrError());
               else
                 result.AppendError("unknown error while reading registers.\n");
+              result.SetStatus(eReturnStatusFailed);
               break;
             }
           } else {
             result.AppendErrorWithFormat(
                 "invalid register set index: %" PRIu64 "\n", (uint64_t)set_idx);
+            result.SetStatus(eReturnStatusFailed);
             break;
           }
         }
@@ -201,9 +200,11 @@ protected:
       if (m_command_options.dump_all_sets) {
         result.AppendError("the --all option can't be used when registers "
                            "names are supplied as arguments\n");
+        result.SetStatus(eReturnStatusFailed);
       } else if (m_command_options.set_indexes.GetSize() > 0) {
         result.AppendError("the --set <set> option can't be used when "
                            "registers names are supplied as arguments\n");
+        result.SetStatus(eReturnStatusFailed);
       } else {
         for (auto &entry : command) {
           // in most LLDB commands we accept $rbx as the name for register RBX
@@ -211,7 +212,7 @@ protected:
           // consistent towards the user and allow them to say reg read $rbx -
           // internally, however, we should be strict and not allow ourselves
           // to call our registers $rbx in our own API
-          auto arg_str = entry.ref();
+          auto arg_str = entry.ref;
           arg_str.consume_front("$");
 
           reg_info = reg_ctx->GetRegisterInfoByName(arg_str);
@@ -277,7 +278,9 @@ protected:
         break;
 
       default:
-        llvm_unreachable("Unimplemented option");
+        error.SetErrorStringWithFormat("unrecognized short option '%c'",
+                                       short_option);
+        break;
       }
       return error;
     }
@@ -330,17 +333,6 @@ public:
 
   ~CommandObjectRegisterWrite() override = default;
 
-  void
-  HandleArgumentCompletion(CompletionRequest &request,
-                           OptionElementVector &opt_element_vector) override {
-    if (!m_exe_ctx.HasProcessScope() || request.GetCursorIndex() != 0)
-      return;
-
-    CommandCompletions::InvokeCommonCompletionCallbacks(
-        GetCommandInterpreter(), CommandCompletions::eRegisterCompletion,
-        request, nullptr);
-  }
-
 protected:
   bool DoExecute(Args &command, CommandReturnObject &result) override {
     DataExtractor reg_data;
@@ -349,9 +341,10 @@ protected:
     if (command.GetArgumentCount() != 2) {
       result.AppendError(
           "register write takes exactly 2 arguments: <reg-name> <value>");
+      result.SetStatus(eReturnStatusFailed);
     } else {
-      auto reg_name = command[0].ref();
-      auto value_str = command[1].ref();
+      auto reg_name = command[0].ref;
+      auto value_str = command[1].ref;
 
       // in most LLDB commands we accept $rbx as the name for register RBX -
       // and here we would reject it and non-existant. we should be more
@@ -385,9 +378,11 @@ protected:
               "Failed to write register '%s' with value '%s'",
               reg_name.str().c_str(), value_str.str().c_str());
         }
+        result.SetStatus(eReturnStatusFailed);
       } else {
         result.AppendErrorWithFormat("Register not found for '%s'.\n",
                                      reg_name.str().c_str());
+        result.SetStatus(eReturnStatusFailed);
       }
     }
     return result.Succeeded();

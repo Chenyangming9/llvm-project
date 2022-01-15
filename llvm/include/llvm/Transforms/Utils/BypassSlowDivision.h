@@ -32,8 +32,6 @@ struct DivRemMapKey {
   AssertingVH<Value> Dividend;
   AssertingVH<Value> Divisor;
 
-  DivRemMapKey() = default;
-
   DivRemMapKey(bool InSignedOp, Value *InDividend, Value *InDivisor)
       : SignedOp(InSignedOp), Dividend(InDividend), Divisor(InDivisor) {}
 };

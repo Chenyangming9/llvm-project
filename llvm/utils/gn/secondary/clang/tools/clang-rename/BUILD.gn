@@ -10,5 +10,7 @@ executable("clang-rename") {
     "//llvm/lib/Option",
     "//llvm/lib/Support",
   ]
-  sources = [ "ClangRename.cpp" ]
+  sources = [
+    "ClangRename.cpp",
+  ]
 }

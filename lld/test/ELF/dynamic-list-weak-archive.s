@@ -1,11 +1,7 @@
 # REQUIRES: x86
 
-## A weak reference does not fetch the lazy definition. Test foo is preemptable
-## even in the presence of a dynamic list, so a dynamic relocation will be
-## produced.
-
 # RUN: llvm-mc -filetype=obj -triple=x86_64-pc-linux %s -o %t1.o
-# RUN: echo '.globl foo; foo:' | llvm-mc -filetype=obj -triple=x86_64 - -o %t2.o
+# RUN: llvm-mc -filetype=obj -triple=x86_64-pc-linux %S/Inputs/dynamic-list-weak-archive.s -o %t2.o
 # RUN: rm -f %t.a
 # RUN: llvm-ar rcs %t.a %t2.o
 # RUN: echo "{ zed; };" > %t.list
@@ -14,7 +10,7 @@
 
 # CHECK:      Relocations [
 # CHECK-NEXT:   Section ({{.*}}) .rela.plt {
-# CHECK-NEXT:     R_X86_64_JUMP_SLOT foo
+# CHECK-NEXT:     0x3018 R_X86_64_JUMP_SLOT foo
 # CHECK-NEXT:   }
 # CHECK-NEXT: ]
 

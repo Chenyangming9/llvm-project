@@ -1,5 +1,4 @@
-; RUN: opt -prune-eh -enable-new-pm=0 -S < %s | FileCheck %s
-; RUN: opt < %s -passes='function-attrs,function(simplifycfg)' -S | FileCheck %s
+; RUN: opt -prune-eh -S < %s | FileCheck %s
 
 declare void @noreturn()
 

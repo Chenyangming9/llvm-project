@@ -1,4 +1,4 @@
-//===-- OptionGroupWatchpoint.cpp -----------------------------------------===//
+//===-- OptionGroupWatchpoint.cpp -------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,45 +16,16 @@ using namespace lldb;
 using namespace lldb_private;
 
 static constexpr OptionEnumValueElement g_watch_type[] = {
-    {
-        OptionGroupWatchpoint::eWatchRead,
-        "read",
-        "Watch for read",
-    },
-    {
-        OptionGroupWatchpoint::eWatchWrite,
-        "write",
-        "Watch for write",
-    },
-    {
-        OptionGroupWatchpoint::eWatchReadWrite,
-        "read_write",
-        "Watch for read/write",
-    },
-};
+    {OptionGroupWatchpoint::eWatchRead, "read", "Watch for read"},
+    {OptionGroupWatchpoint::eWatchWrite, "write", "Watch for write"},
+    {OptionGroupWatchpoint::eWatchReadWrite, "read_write",
+     "Watch for read/write"} };
 
 static constexpr OptionEnumValueElement g_watch_size[] = {
-    {
-        1,
-        "1",
-        "Watch for byte size of 1",
-    },
-    {
-        2,
-        "2",
-        "Watch for byte size of 2",
-    },
-    {
-        4,
-        "4",
-        "Watch for byte size of 4",
-    },
-    {
-        8,
-        "8",
-        "Watch for byte size of 8",
-    },
-};
+    {1, "1", "Watch for byte size of 1"},
+    {2, "2", "Watch for byte size of 2"},
+    {4, "4", "Watch for byte size of 4"},
+    {8, "8", "Watch for byte size of 8"} };
 
 static constexpr OptionDefinition g_option_table[] = {
     {LLDB_OPT_SET_1, false, "watch", 'w', OptionParser::eRequiredArgument,
@@ -73,6 +44,10 @@ bool OptionGroupWatchpoint::IsWatchSizeSupported(uint32_t watch_size) {
   }
   return false;
 }
+
+OptionGroupWatchpoint::OptionGroupWatchpoint() : OptionGroup() {}
+
+OptionGroupWatchpoint::~OptionGroupWatchpoint() {}
 
 Status
 OptionGroupWatchpoint::SetOptionValue(uint32_t option_idx,
@@ -97,7 +72,9 @@ OptionGroupWatchpoint::SetOptionValue(uint32_t option_idx,
     break;
 
   default:
-    llvm_unreachable("Unimplemented option");
+    error.SetErrorStringWithFormat("unrecognized short option '%c'",
+                                   short_option);
+    break;
   }
 
   return error;

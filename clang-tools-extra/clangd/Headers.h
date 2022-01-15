@@ -9,11 +9,10 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_HEADERS_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_HEADERS_H
 
+#include "Path.h"
 #include "Protocol.h"
 #include "SourceCode.h"
 #include "index/Symbol.h"
-#include "support/Path.h"
-#include "clang/Basic/TokenKinds.h"
 #include "clang/Format/Format.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/PPCallbacks.h"
@@ -23,7 +22,6 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/VirtualFileSystem.h"
-#include <string>
 
 namespace clang {
 namespace clangd {
@@ -52,15 +50,13 @@ llvm::SmallVector<llvm::StringRef, 1> getRankedIncludes(const Symbol &Sym);
 
 // An #include directive that we found in the main file.
 struct Inclusion {
-  tok::PPKeywordKind Directive; // Directive used for inclusion, e.g. import
-  std::string Written;          // Inclusion name as written e.g. <vector>.
-  Path Resolved; // Resolved path of included file. Empty if not resolved.
+  Range R;             // Inclusion range.
+  std::string Written; // Inclusion name as written e.g. <vector>.
+  Path Resolved;       // Resolved path of included file. Empty if not resolved.
   unsigned HashOffset = 0; // Byte offset from start of file to #.
-  int HashLine = 0;        // Line number containing the directive, 0-indexed.
   SrcMgr::CharacteristicKind FileKind = SrcMgr::C_User;
 };
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const Inclusion &);
-bool operator==(const Inclusion &LHS, const Inclusion &RHS);
 
 // Contains information about one file in the build grpah and its direct
 // dependencies. Doesn't own the strings it references (IncludeGraph is
@@ -114,9 +110,6 @@ class IncludeStructure {
 public:
   std::vector<Inclusion> MainFileIncludes;
 
-  // Return all transitively reachable files.
-  llvm::ArrayRef<std::string> allHeaders() const { return RealPathNames; }
-
   // Return all transitively reachable files, and their minimum include depth.
   // All transitive includes (absolute paths), with their minimum include depth.
   // Root --> 0, #included file --> 1, etc.
@@ -132,14 +125,14 @@ public:
 private:
   // Identifying files in a way that persists from preamble build to subsequent
   // builds is surprisingly hard. FileID is unavailable in InclusionDirective(),
-  // and RealPathName and UniqueID are not preserved in the preamble.
+  // and RealPathName and UniqueID are not preseved in the preamble.
   // We use the FileEntry::Name, which is stable, interned into a "file index".
   // The paths we want to expose are the RealPathName, so store those too.
   std::vector<std::string> RealPathNames; // In file index order.
   unsigned fileIndex(llvm::StringRef Name);
   llvm::StringMap<unsigned> NameToIndex; // Values are file indexes.
   // Maps a file's index to that of the files it includes.
-  llvm::DenseMap<unsigned, llvm::SmallVector<unsigned>> IncludeChildren;
+  llvm::DenseMap<unsigned, SmallVector<unsigned, 8>> IncludeChildren;
 };
 
 /// Returns a PPCallback that visits all inclusions in the main file.

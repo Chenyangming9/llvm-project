@@ -67,11 +67,12 @@ class SuperDeallocBRVisitor final : public BugReporterVisitor {
 
 public:
   SuperDeallocBRVisitor(SymbolRef ReceiverSymbol)
-      : ReceiverSymbol(ReceiverSymbol), Satisfied(false) {}
+      : ReceiverSymbol(ReceiverSymbol),
+        Satisfied(false) {}
 
-  PathDiagnosticPieceRef VisitNode(const ExplodedNode *Succ,
-                                   BugReporterContext &BRC,
-                                   PathSensitiveBugReport &BR) override;
+  std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *Succ,
+                                                 BugReporterContext &BRC,
+                                                 BugReport &BR) override;
 
   void Profile(llvm::FoldingSetNodeID &ID) const override {
     ID.Add(ReceiverSymbol);
@@ -116,14 +117,13 @@ void ObjCSuperDeallocChecker::checkPostObjCMessage(const ObjCMethodCall &M,
     return;
 
   ProgramStateRef State = C.getState();
-  const LocationContext *LC = C.getLocationContext();
-  SymbolRef SelfSymbol = State->getSelfSVal(LC).getAsSymbol();
-  assert(SelfSymbol && "No receiver symbol at call to [super dealloc]?");
+  SymbolRef ReceiverSymbol = M.getSelfSVal().getAsSymbol();
+  assert(ReceiverSymbol && "No receiver symbol at call to [super dealloc]?");
 
   // We add this transition in checkPostObjCMessage to avoid warning when
   // we inline a call to [super dealloc] where the inlined call itself
   // calls [super dealloc].
-  State = State->add<CalledSuperDealloc>(SelfSymbol);
+  State = State->add<CalledSuperDealloc>(ReceiverSymbol);
   C.addTransition(State);
 }
 
@@ -188,10 +188,10 @@ void ObjCSuperDeallocChecker::reportUseAfterDealloc(SymbolRef Sym,
     Desc = "Use of 'self' after it has been deallocated";
 
   // Generate the report.
-  auto BR = std::make_unique<PathSensitiveBugReport>(*DoubleSuperDeallocBugType,
-                                                     Desc, ErrNode);
+  std::unique_ptr<BugReport> BR(
+      new BugReport(*DoubleSuperDeallocBugType, Desc, ErrNode));
   BR->addRange(S->getSourceRange());
-  BR->addVisitor(std::make_unique<SuperDeallocBRVisitor>(Sym));
+  BR->addVisitor(llvm::make_unique<SuperDeallocBRVisitor>(Sym));
   C.emitReport(std::move(BR));
 }
 
@@ -243,10 +243,9 @@ ObjCSuperDeallocChecker::isSuperDeallocMessage(const ObjCMethodCall &M) const {
   return M.getSelector() == SELdealloc;
 }
 
-PathDiagnosticPieceRef
+std::shared_ptr<PathDiagnosticPiece>
 SuperDeallocBRVisitor::VisitNode(const ExplodedNode *Succ,
-                                 BugReporterContext &BRC,
-                                 PathSensitiveBugReport &) {
+                                 BugReporterContext &BRC, BugReport &) {
   if (Satisfied)
     return nullptr;
 
@@ -285,6 +284,6 @@ void ento::registerObjCSuperDeallocChecker(CheckerManager &Mgr) {
   Mgr.registerChecker<ObjCSuperDeallocChecker>();
 }
 
-bool ento::shouldRegisterObjCSuperDeallocChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterObjCSuperDeallocChecker(const LangOptions &LO) {
   return true;
 }

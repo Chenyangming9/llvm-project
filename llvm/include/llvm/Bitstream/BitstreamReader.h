@@ -18,7 +18,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Bitstream/BitCodes.h"
 #include "llvm/Support/Endian.h"
-#include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -40,7 +39,7 @@ public:
   /// This contains information emitted to BLOCKINFO_BLOCK blocks. These
   /// describe abbreviations that all blocks of the specified ID inherit.
   struct BlockInfo {
-    unsigned BlockID = 0;
+    unsigned BlockID;
     std::vector<std::shared_ptr<BitCodeAbbrev>> Abbrevs;
     std::string Name;
     std::vector<std::pair<unsigned, std::string>> RecordNames;
@@ -380,7 +379,6 @@ public:
   using SimpleBitstreamCursor::ReadVBR;
   using SimpleBitstreamCursor::ReadVBR64;
   using SimpleBitstreamCursor::SizeInBytes;
-  using SimpleBitstreamCursor::skipToEnd;
 
   /// Return the number of bits used to encode an abbrev #.
   unsigned getAbbrevIDWidth() const { return CurCodeSize; }

@@ -19,8 +19,8 @@
 #include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
 #include "llvm/ExecutionEngine/Orc/IRTransformLayer.h"
 #include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
+#include "llvm/ExecutionEngine/Orc/ObjectTransformLayer.h"
 #include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
-#include "llvm/Support/Debug.h"
 #include "llvm/Support/ThreadPool.h"
 
 namespace llvm {
@@ -28,8 +28,6 @@ namespace orc {
 
 class LLJITBuilderState;
 class LLLazyJITBuilderState;
-class ObjectTransformLayer;
-class ExecutorProcessControl;
 
 /// A pre-fabricated ORC JIT stack that can serve as an alternative to MCJIT.
 ///
@@ -37,22 +35,8 @@ class ExecutorProcessControl;
 class LLJIT {
   template <typename, typename, typename> friend class LLJITBuilderSetters;
 
-  friend void setUpGenericLLVMIRPlatform(LLJIT &J);
-
 public:
-  /// Initializer support for LLJIT.
-  class PlatformSupport {
-  public:
-    virtual ~PlatformSupport();
-
-    virtual Error initialize(JITDylib &JD) = 0;
-
-    virtual Error deinitialize(JITDylib &JD) = 0;
-
-  protected:
-    static void setInitTransform(LLJIT &J,
-                                 IRTransformLayer::TransformFunction T);
-  };
+  static Expected<std::unique_ptr<LLJIT>> Create(LLJITBuilderState &S);
 
   /// Destruct this instance. If a multi-threaded instance, waits for all
   /// compile threads to complete.
@@ -61,14 +45,11 @@ public:
   /// Returns the ExecutionSession for this instance.
   ExecutionSession &getExecutionSession() { return *ES; }
 
-  /// Returns a reference to the triple for this instance.
-  const Triple &getTargetTriple() const { return TT; }
-
   /// Returns a reference to the DataLayout for this instance.
   const DataLayout &getDataLayout() const { return DL; }
 
   /// Returns a reference to the JITDylib representing the JIT'd main program.
-  JITDylib &getMainJITDylib() { return *Main; }
+  JITDylib &getMainJITDylib() { return Main; }
 
   /// Returns the JITDylib with the given name, or nullptr if no JITDylib with
   /// that name exists.
@@ -82,49 +63,39 @@ public:
   /// input or elsewhere in the environment then the client should check
   /// (e.g. by calling getJITDylibByName) that the given name is not already in
   /// use.
-  Expected<JITDylib &> createJITDylib(std::string Name) {
+  JITDylib &createJITDylib(std::string Name) {
     return ES->createJITDylib(std::move(Name));
   }
 
-  /// Adds an IR module with the given ResourceTracker.
-  Error addIRModule(ResourceTrackerSP RT, ThreadSafeModule TSM);
+  /// Convenience method for defining an absolute symbol.
+  Error defineAbsolute(StringRef Name, JITEvaluatedSymbol Address);
 
   /// Adds an IR module to the given JITDylib.
   Error addIRModule(JITDylib &JD, ThreadSafeModule TSM);
 
   /// Adds an IR module to the Main JITDylib.
   Error addIRModule(ThreadSafeModule TSM) {
-    return addIRModule(*Main, std::move(TSM));
+    return addIRModule(Main, std::move(TSM));
   }
-
-  /// Adds an object file to the given JITDylib.
-  Error addObjectFile(ResourceTrackerSP RT, std::unique_ptr<MemoryBuffer> Obj);
 
   /// Adds an object file to the given JITDylib.
   Error addObjectFile(JITDylib &JD, std::unique_ptr<MemoryBuffer> Obj);
 
   /// Adds an object file to the given JITDylib.
   Error addObjectFile(std::unique_ptr<MemoryBuffer> Obj) {
-    return addObjectFile(*Main, std::move(Obj));
+    return addObjectFile(Main, std::move(Obj));
   }
 
   /// Look up a symbol in JITDylib JD by the symbol's linker-mangled name (to
   /// look up symbols based on their IR name use the lookup function instead).
   Expected<JITEvaluatedSymbol> lookupLinkerMangled(JITDylib &JD,
-                                                   SymbolStringPtr Name);
-
-  /// Look up a symbol in JITDylib JD by the symbol's linker-mangled name (to
-  /// look up symbols based on their IR name use the lookup function instead).
-  Expected<JITEvaluatedSymbol> lookupLinkerMangled(JITDylib &JD,
-                                                   StringRef Name) {
-    return lookupLinkerMangled(JD, ES->intern(Name));
-  }
+                                                   StringRef Name);
 
   /// Look up a symbol in the main JITDylib by the symbol's linker-mangled name
   /// (to look up symbols based on their IR name use the lookup function
   /// instead).
   Expected<JITEvaluatedSymbol> lookupLinkerMangled(StringRef Name) {
-    return lookupLinkerMangled(*Main, Name);
+    return lookupLinkerMangled(Main, Name);
   }
 
   /// Look up a symbol in JITDylib JD based on its IR symbol name.
@@ -134,85 +105,44 @@ public:
 
   /// Look up a symbol in the main JITDylib based on its IR symbol name.
   Expected<JITEvaluatedSymbol> lookup(StringRef UnmangledName) {
-    return lookup(*Main, UnmangledName);
+    return lookup(Main, UnmangledName);
   }
 
-  /// Set the PlatformSupport instance.
-  void setPlatformSupport(std::unique_ptr<PlatformSupport> PS) {
-    this->PS = std::move(PS);
-  }
+  /// Runs all not-yet-run static constructors.
+  Error runConstructors() { return CtorRunner.run(); }
 
-  /// Get the PlatformSupport instance.
-  PlatformSupport *getPlatformSupport() { return PS.get(); }
-
-  /// Run the initializers for the given JITDylib.
-  Error initialize(JITDylib &JD) {
-    DEBUG_WITH_TYPE("orc", {
-      dbgs() << "LLJIT running initializers for JITDylib \"" << JD.getName()
-             << "\"\n";
-    });
-    assert(PS && "PlatformSupport must be set to run initializers.");
-    return PS->initialize(JD);
-  }
-
-  /// Run the deinitializers for the given JITDylib.
-  Error deinitialize(JITDylib &JD) {
-    DEBUG_WITH_TYPE("orc", {
-      dbgs() << "LLJIT running deinitializers for JITDylib \"" << JD.getName()
-             << "\"\n";
-    });
-    assert(PS && "PlatformSupport must be set to run initializers.");
-    return PS->deinitialize(JD);
-  }
+  /// Runs all not-yet-run static destructors.
+  Error runDestructors() { return DtorRunner.run(); }
 
   /// Returns a reference to the ObjLinkingLayer
   ObjectLayer &getObjLinkingLayer() { return *ObjLinkingLayer; }
 
-  /// Returns a reference to the object transform layer.
-  ObjectTransformLayer &getObjTransformLayer() { return *ObjTransformLayer; }
-
-  /// Returns a reference to the IR transform layer.
-  IRTransformLayer &getIRTransformLayer() { return *TransformLayer; }
-
-  /// Returns a reference to the IR compile layer.
-  IRCompileLayer &getIRCompileLayer() { return *CompileLayer; }
-
-  /// Returns a linker-mangled version of UnmangledName.
-  std::string mangle(StringRef UnmangledName) const;
-
-  /// Returns an interned, linker-mangled version of UnmangledName.
-  SymbolStringPtr mangleAndIntern(StringRef UnmangledName) const {
-    return ES->intern(mangle(UnmangledName));
-  }
-
 protected:
-  static Expected<std::unique_ptr<ObjectLayer>>
+  static std::unique_ptr<ObjectLayer>
   createObjectLinkingLayer(LLJITBuilderState &S, ExecutionSession &ES);
 
-  static Expected<std::unique_ptr<IRCompileLayer::IRCompiler>>
+  static Expected<IRCompileLayer::CompileFunction>
   createCompileFunction(LLJITBuilderState &S, JITTargetMachineBuilder JTMB);
 
   /// Create an LLJIT instance with a single compile thread.
   LLJIT(LLJITBuilderState &S, Error &Err);
+
+  std::string mangle(StringRef UnmangledName);
 
   Error applyDataLayout(Module &M);
 
   void recordCtorDtors(Module &M);
 
   std::unique_ptr<ExecutionSession> ES;
-  std::unique_ptr<PlatformSupport> PS;
-
-  JITDylib *Main = nullptr;
+  JITDylib &Main;
 
   DataLayout DL;
-  Triple TT;
   std::unique_ptr<ThreadPool> CompileThreads;
 
   std::unique_ptr<ObjectLayer> ObjLinkingLayer;
-  std::unique_ptr<ObjectTransformLayer> ObjTransformLayer;
   std::unique_ptr<IRCompileLayer> CompileLayer;
-  std::unique_ptr<IRTransformLayer> TransformLayer;
-  std::unique_ptr<IRTransformLayer> InitHelperTransformLayer;
+
+  CtorDtorRunner CtorRunner, DtorRunner;
 };
 
 /// An extended version of LLJIT that supports lazy function-at-a-time
@@ -222,21 +152,24 @@ class LLLazyJIT : public LLJIT {
 
 public:
 
+  /// Set an IR transform (e.g. pass manager pipeline) to run on each function
+  /// when it is compiled.
+  void setLazyCompileTransform(IRTransformLayer::TransformFunction Transform) {
+    TransformLayer->setTransform(std::move(Transform));
+  }
+
   /// Sets the partition function.
   void
   setPartitionFunction(CompileOnDemandLayer::PartitionFunction Partition) {
     CODLayer->setPartitionFunction(std::move(Partition));
   }
 
-  /// Returns a reference to the on-demand layer.
-  CompileOnDemandLayer &getCompileOnDemandLayer() { return *CODLayer; }
-
   /// Add a module to be lazily compiled to JITDylib JD.
   Error addLazyIRModule(JITDylib &JD, ThreadSafeModule M);
 
   /// Add a module to be lazily compiled to the main JITDylib.
   Error addLazyIRModule(ThreadSafeModule M) {
-    return addLazyIRModule(*Main, std::move(M));
+    return addLazyIRModule(Main, std::move(M));
   }
 
 private:
@@ -245,28 +178,23 @@ private:
   LLLazyJIT(LLLazyJITBuilderState &S, Error &Err);
 
   std::unique_ptr<LazyCallThroughManager> LCTMgr;
+  std::unique_ptr<IRTransformLayer> TransformLayer;
   std::unique_ptr<CompileOnDemandLayer> CODLayer;
 };
 
 class LLJITBuilderState {
 public:
   using ObjectLinkingLayerCreator =
-      std::function<Expected<std::unique_ptr<ObjectLayer>>(ExecutionSession &,
-                                                           const Triple &)>;
+      std::function<std::unique_ptr<ObjectLayer>(ExecutionSession &)>;
 
   using CompileFunctionCreator =
-      std::function<Expected<std::unique_ptr<IRCompileLayer::IRCompiler>>(
+      std::function<Expected<IRCompileLayer::CompileFunction>(
           JITTargetMachineBuilder JTMB)>;
 
-  using PlatformSetupFunction = std::function<Error(LLJIT &J)>;
-
-  std::unique_ptr<ExecutorProcessControl> EPC;
   std::unique_ptr<ExecutionSession> ES;
   Optional<JITTargetMachineBuilder> JTMB;
-  Optional<DataLayout> DL;
   ObjectLinkingLayerCreator CreateObjectLinkingLayer;
   CompileFunctionCreator CreateCompileFunction;
-  PlatformSetupFunction SetUpPlatform;
   unsigned NumCompileThreads = 0;
 
   /// Called prior to JIT class construcion to fix up defaults.
@@ -276,24 +204,6 @@ public:
 template <typename JITType, typename SetterImpl, typename State>
 class LLJITBuilderSetters {
 public:
-  /// Set a ExecutorProcessControl for this instance.
-  /// This should not be called if ExecutionSession has already been set.
-  SetterImpl &
-  setExecutorProcessControl(std::unique_ptr<ExecutorProcessControl> EPC) {
-    assert(
-        !impl().ES &&
-        "setExecutorProcessControl should not be called if an ExecutionSession "
-        "has already been set");
-    impl().EPC = std::move(EPC);
-    return impl();
-  }
-
-  /// Set an ExecutionSession for this instance.
-  SetterImpl &setExecutionSession(std::unique_ptr<ExecutionSession> ES) {
-    impl().ES = std::move(ES);
-    return impl();
-  }
-
   /// Set the JITTargetMachineBuilder for this instance.
   ///
   /// If this method is not called, JITTargetMachineBuilder::detectHost will be
@@ -307,13 +217,6 @@ public:
   ///
   Optional<JITTargetMachineBuilder> &getJITTargetMachineBuilder() {
     return impl().JTMB;
-  }
-
-  /// Set a DataLayout for this instance. If no data layout is specified then
-  /// the target's default data layout will be used.
-  SetterImpl &setDataLayout(Optional<DataLayout> DL) {
-    impl().DL = std::move(DL);
-    return impl();
   }
 
   /// Set an ObjectLinkingLayer creation function.
@@ -338,16 +241,6 @@ public:
     return impl();
   }
 
-  /// Set up an PlatformSetupFunction.
-  ///
-  /// If this method is not called then setUpGenericLLVMIRPlatform
-  /// will be used to configure the JIT's platform support.
-  SetterImpl &
-  setPlatformSetUp(LLJITBuilderState::PlatformSetupFunction SetUpPlatform) {
-    impl().SetUpPlatform = std::move(SetUpPlatform);
-    return impl();
-  }
-
   /// Set the number of compile threads to use.
   ///
   /// If set to zero, compilation will be performed on the execution thread when
@@ -358,17 +251,6 @@ public:
   /// a zero argument.
   SetterImpl &setNumCompileThreads(unsigned NumCompileThreads) {
     impl().NumCompileThreads = NumCompileThreads;
-    return impl();
-  }
-
-  /// Set an ExecutorProcessControl object.
-  ///
-  /// If the platform uses ObjectLinkingLayer by default and no
-  /// ObjectLinkingLayerCreator has been set then the ExecutorProcessControl
-  /// object will be used to supply the memory manager for the
-  /// ObjectLinkingLayer.
-  SetterImpl &setExecutorProcessControl(ExecutorProcessControl &EPC) {
-    impl().EPC = &EPC;
     return impl();
   }
 
@@ -446,18 +328,6 @@ class LLLazyJITBuilder
     : public LLLazyJITBuilderState,
       public LLLazyJITBuilderSetters<LLLazyJIT, LLLazyJITBuilder,
                                      LLLazyJITBuilderState> {};
-
-/// Configure the LLJIT instance to scrape modules for llvm.global_ctors and
-/// llvm.global_dtors variables and (if present) build initialization and
-/// deinitialization functions. Platform specific initialization configurations
-/// should be preferred where available.
-void setUpGenericLLVMIRPlatform(LLJIT &J);
-
-/// Configure the LLJIT instance to disable platform support explicitly. This is
-/// useful in two cases: for platforms that don't have such requirements and for
-/// platforms, that we have no explicit support yet and that don't work well
-/// with the generic IR platform.
-Error setUpInactivePlatform(LLJIT &J);
 
 } // End namespace orc
 } // End namespace llvm

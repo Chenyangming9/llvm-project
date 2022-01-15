@@ -1,4 +1,4 @@
-//===-- UnwindPlan.cpp ----------------------------------------------------===//
+//===-- UnwindPlan.cpp ----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -15,7 +15,6 @@
 #include "lldb/Target/Thread.h"
 #include "lldb/Utility/ConstString.h"
 #include "lldb/Utility/Log.h"
-#include "llvm/DebugInfo/DWARF/DWARFExpression.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -80,10 +79,13 @@ GetByteOrderAndAddrSize(Thread *thread) {
 
 static void DumpDWARFExpr(Stream &s, llvm::ArrayRef<uint8_t> expr, Thread *thread) {
   if (auto order_and_width = GetByteOrderAndAddrSize(thread)) {
-    llvm::DataExtractor data(expr, order_and_width->first == eByteOrderLittle,
-                             order_and_width->second);
-    llvm::DWARFExpression(data, order_and_width->second, llvm::dwarf::DWARF32)
-        .print(s.AsRawOstream(), llvm::DIDumpOptions(), nullptr, nullptr);
+    DataExtractor extractor(expr.data(), expr.size(), order_and_width->first,
+                            order_and_width->second);
+    if (!DWARFExpression::PrintDWARFExpression(s, extractor,
+                                               order_and_width->second,
+                                               /*dwarf_ref_size*/ 4,
+                                               /*location_expression*/ false))
+      s.PutCString("invalid-dwarf-expr");
   } else
     s.PutCString("dwarf-expr");
 }
@@ -168,8 +170,7 @@ operator==(const UnwindPlan::Row::FAValue &rhs) const {
   if (m_type == rhs.m_type) {
     switch (m_type) {
     case unspecified:
-    case isRaSearch:
-      return m_value.ra_search_offset == rhs.m_value.ra_search_offset;
+      return true;
 
     case isRegisterPlusOffset:
       return m_value.reg.offset == rhs.m_value.reg.offset;
@@ -204,11 +205,8 @@ void UnwindPlan::Row::FAValue::Dump(Stream &s, const UnwindPlan *unwind_plan,
                   llvm::makeArrayRef(m_value.expr.opcodes, m_value.expr.length),
                   thread);
     break;
-  case unspecified:
+  default:
     s.PutCString("unspecified");
-    break;
-  case isRaSearch:
-    s.Printf("RaSearch@SP%+d", m_value.ra_search_offset);
     break;
   }
 }
@@ -217,7 +215,6 @@ void UnwindPlan::Row::Clear() {
   m_cfa_value.SetUnspecified();
   m_afa_value.SetUnspecified();
   m_offset = 0;
-  m_unspecified_registers_are_undefined = false;
   m_register_locations.clear();
 }
 
@@ -243,9 +240,11 @@ void UnwindPlan::Row::Dump(Stream &s, const UnwindPlan *unwind_plan,
     idx->second.Dump(s, unwind_plan, this, thread, verbose);
     s.PutChar(' ');
   }
+  s.EOL();
 }
 
-UnwindPlan::Row::Row() : m_cfa_value(), m_afa_value(), m_register_locations() {}
+UnwindPlan::Row::Row()
+    : m_offset(0), m_cfa_value(), m_afa_value(), m_register_locations() {}
 
 bool UnwindPlan::Row::GetRegisterInfo(
     uint32_t reg_num,
@@ -253,10 +252,6 @@ bool UnwindPlan::Row::GetRegisterInfo(
   collection::const_iterator pos = m_register_locations.find(reg_num);
   if (pos != m_register_locations.end()) {
     register_location = pos->second;
-    return true;
-  }
-  if (m_unspecified_registers_are_undefined) {
-    register_location.SetUndefined();
     return true;
   }
   return false;
@@ -351,11 +346,10 @@ bool UnwindPlan::Row::SetRegisterLocationToSame(uint32_t reg_num,
 }
 
 bool UnwindPlan::Row::operator==(const UnwindPlan::Row &rhs) const {
-  return m_offset == rhs.m_offset && m_cfa_value == rhs.m_cfa_value &&
-         m_afa_value == rhs.m_afa_value &&
-         m_unspecified_registers_are_undefined ==
-             rhs.m_unspecified_registers_are_undefined &&
-         m_register_locations == rhs.m_register_locations;
+  return m_offset == rhs.m_offset &&
+      m_cfa_value == rhs.m_cfa_value &&
+      m_afa_value == rhs.m_afa_value &&
+      m_register_locations == rhs.m_register_locations;
 }
 
 void UnwindPlan::AppendRow(const UnwindPlan::RowSP &row_sp) {
@@ -408,10 +402,10 @@ const UnwindPlan::RowSP UnwindPlan::GetRowAtIndex(uint32_t idx) const {
     return m_row_list[idx];
   else {
     Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
-    LLDB_LOGF(log,
-              "error: UnwindPlan::GetRowAtIndex(idx = %u) invalid index "
-              "(number rows is %u)",
-              idx, (uint32_t)m_row_list.size());
+    if (log)
+      log->Printf("error: UnwindPlan::GetRowAtIndex(idx = %u) invalid index "
+                  "(number rows is %u)",
+                  idx, (uint32_t)m_row_list.size());
     return UnwindPlan::RowSP();
   }
 }
@@ -419,7 +413,8 @@ const UnwindPlan::RowSP UnwindPlan::GetRowAtIndex(uint32_t idx) const {
 const UnwindPlan::RowSP UnwindPlan::GetLastRow() const {
   if (m_row_list.empty()) {
     Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
-    LLDB_LOGF(log, "UnwindPlan::GetLastRow() when rows are empty");
+    if (log)
+      log->Printf("UnwindPlan::GetLastRow() when rows are empty");
     return UnwindPlan::RowSP();
   }
   return m_row_list.back();
@@ -439,14 +434,13 @@ bool UnwindPlan::PlanValidAtAddress(Address addr) {
     if (log) {
       StreamString s;
       if (addr.Dump(&s, nullptr, Address::DumpStyleSectionNameOffset)) {
-        LLDB_LOGF(log,
-                  "UnwindPlan is invalid -- no unwind rows for UnwindPlan "
-                  "'%s' at address %s",
-                  m_source_name.GetCString(), s.GetData());
+        log->Printf("UnwindPlan is invalid -- no unwind rows for UnwindPlan "
+                    "'%s' at address %s",
+                    m_source_name.GetCString(), s.GetData());
       } else {
-        LLDB_LOGF(log,
-                  "UnwindPlan is invalid -- no unwind rows for UnwindPlan '%s'",
-                  m_source_name.GetCString());
+        log->Printf(
+            "UnwindPlan is invalid -- no unwind rows for UnwindPlan '%s'",
+            m_source_name.GetCString());
       }
     }
     return false;
@@ -462,15 +456,13 @@ bool UnwindPlan::PlanValidAtAddress(Address addr) {
     if (log) {
       StreamString s;
       if (addr.Dump(&s, nullptr, Address::DumpStyleSectionNameOffset)) {
-        LLDB_LOGF(log,
-                  "UnwindPlan is invalid -- no CFA register defined in row 0 "
-                  "for UnwindPlan '%s' at address %s",
-                  m_source_name.GetCString(), s.GetData());
+        log->Printf("UnwindPlan is invalid -- no CFA register defined in row 0 "
+                    "for UnwindPlan '%s' at address %s",
+                    m_source_name.GetCString(), s.GetData());
       } else {
-        LLDB_LOGF(log,
-                  "UnwindPlan is invalid -- no CFA register defined in row 0 "
-                  "for UnwindPlan '%s'",
-                  m_source_name.GetCString());
+        log->Printf("UnwindPlan is invalid -- no CFA register defined in row 0 "
+                    "for UnwindPlan '%s'",
+                    m_source_name.GetCString());
       }
     }
     return false;
@@ -531,18 +523,6 @@ void UnwindPlan::Dump(Stream &s, Thread *thread, lldb::addr_t base_addr) const {
     s.Printf("not specified.\n");
     break;
   }
-  s.Printf("This UnwindPlan is for a trap handler function: ");
-  switch (m_plan_is_for_signal_trap) {
-  case eLazyBoolYes:
-    s.Printf("yes.\n");
-    break;
-  case eLazyBoolNo:
-    s.Printf("no.\n");
-    break;
-  case eLazyBoolCalculate:
-    s.Printf("not specified.\n");
-    break;
-  }
   if (m_plan_valid_address_range.GetBaseAddress().IsValid() &&
       m_plan_valid_address_range.GetByteSize() > 0) {
     s.PutCString("Address range of this UnwindPlan: ");
@@ -556,7 +536,6 @@ void UnwindPlan::Dump(Stream &s, Thread *thread, lldb::addr_t base_addr) const {
   for (pos = begin; pos != end; ++pos) {
     s.Printf("row[%u]: ", (uint32_t)std::distance(begin, pos));
     (*pos)->Dump(s, this, thread, base_addr);
-    s.Printf("\n");
   }
 }
 

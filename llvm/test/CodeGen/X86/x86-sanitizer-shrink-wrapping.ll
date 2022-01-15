@@ -35,6 +35,6 @@ end:
   ret void
 }
 
-attributes #0 = { sanitize_address nounwind "frame-pointer"="all" }
+attributes #0 = { sanitize_address nounwind "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" }
 
 declare void @__asan_report_load4(i64)

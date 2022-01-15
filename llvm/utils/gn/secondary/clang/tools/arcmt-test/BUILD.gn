@@ -7,5 +7,7 @@ executable("arcmt-test") {
     "//clang/lib/Lex",
     "//llvm/lib/Support",
   ]
-  sources = [ "arcmt-test.cpp" ]
+  sources = [
+    "arcmt-test.cpp",
+  ]
 }

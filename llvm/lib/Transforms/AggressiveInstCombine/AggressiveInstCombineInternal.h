@@ -16,8 +16,14 @@
 #define LLVM_LIB_TRANSFORMS_AGGRESSIVEINSTCOMBINE_COMBINEINTERNAL_H
 
 #include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/SmallVector.h"
-
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/ConstantFolding.h"
+#include "llvm/Analysis/GlobalsModRef.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/Pass.h"
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -41,12 +47,7 @@ using namespace llvm;
 namespace llvm {
   class DataLayout;
   class DominatorTree;
-  class Function;
-  class Instruction;
   class TargetLibraryInfo;
-  class TruncInst;
-  class Type;
-  class Value;
 
 class TruncInstCombine {
   TargetLibraryInfo &TLI;

@@ -16,10 +16,8 @@
 
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
-#include "llvm/Transforms/IPO/FunctionImport.h"
 #include <cassert>
 #include <cstdint>
-#include <set>
 #include <utility>
 #include <vector>
 
@@ -30,7 +28,6 @@ template <typename T> class MutableArrayRef;
 class Function;
 class GlobalVariable;
 class ModuleSummaryIndex;
-struct ValueInfo;
 
 namespace wholeprogramdevirt {
 
@@ -223,9 +220,6 @@ void setAfterReturnValues(MutableArrayRef<VirtualCallTarget> Targets,
 struct WholeProgramDevirtPass : public PassInfoMixin<WholeProgramDevirtPass> {
   ModuleSummaryIndex *ExportSummary;
   const ModuleSummaryIndex *ImportSummary;
-  bool UseCommandLine = false;
-  WholeProgramDevirtPass()
-      : ExportSummary(nullptr), ImportSummary(nullptr), UseCommandLine(true) {}
   WholeProgramDevirtPass(ModuleSummaryIndex *ExportSummary,
                          const ModuleSummaryIndex *ImportSummary)
       : ExportSummary(ExportSummary), ImportSummary(ImportSummary) {
@@ -233,36 +227,6 @@ struct WholeProgramDevirtPass : public PassInfoMixin<WholeProgramDevirtPass> {
   }
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &);
 };
-
-struct VTableSlotSummary {
-  StringRef TypeID;
-  uint64_t ByteOffset;
-};
-
-void updateVCallVisibilityInModule(
-    Module &M, bool WholeProgramVisibilityEnabledInLTO,
-    const DenseSet<GlobalValue::GUID> &DynamicExportSymbols);
-void updateVCallVisibilityInIndex(
-    ModuleSummaryIndex &Index, bool WholeProgramVisibilityEnabledInLTO,
-    const DenseSet<GlobalValue::GUID> &DynamicExportSymbols);
-
-/// Perform index-based whole program devirtualization on the \p Summary
-/// index. Any devirtualized targets used by a type test in another module
-/// are added to the \p ExportedGUIDs set. For any local devirtualized targets
-/// only used within the defining module, the information necessary for
-/// locating the corresponding WPD resolution is recorded for the ValueInfo
-/// in case it is exported by cross module importing (in which case the
-/// devirtualized target name will need adjustment).
-void runWholeProgramDevirtOnIndex(
-    ModuleSummaryIndex &Summary, std::set<GlobalValue::GUID> &ExportedGUIDs,
-    std::map<ValueInfo, std::vector<VTableSlotSummary>> &LocalWPDTargetsMap);
-
-/// Call after cross-module importing to update the recorded single impl
-/// devirt target names for any locals that were exported.
-void updateIndexWPDForExports(
-    ModuleSummaryIndex &Summary,
-    function_ref<bool(StringRef, ValueInfo)> isExported,
-    std::map<ValueInfo, std::vector<VTableSlotSummary>> &LocalWPDTargetsMap);
 
 } // end namespace llvm
 

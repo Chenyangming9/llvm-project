@@ -14,7 +14,7 @@ DESCRIPTION
 The :program:`llvm-readobj` tool displays low-level format-specific information
 about one or more object files.
 
-If ``input`` is "``-``", :program:`llvm-readobj` reads from standard
+If ``input`` is "``-``" or omitted, :program:`llvm-readobj` reads from standard
 input. Otherwise, it will read from the specified ``filenames``.
 
 DIFFERENCES TO LLVM-READELF
@@ -56,23 +56,31 @@ file formats.
 
  Display the address-significance table.
 
+.. option:: --color
+
+ Use colors in the output for warnings and errors.
+
 .. option:: --expand-relocs
 
- When used with :option:`--relocs`, display each relocation in an expanded
+ When used with :option:`--relocations`, display each relocation in an expanded
  multi-line format.
 
-.. option:: --file-header, -h
+.. option:: --file-headers, -h
 
  Display file headers.
 
 .. option:: --headers, -e
 
- Equivalent to setting: :option:`--file-header`, :option:`--program-headers`,
+ Equivalent to setting: :option:`--file-headers`, :option:`--program-headers`,
  and :option:`--sections`.
 
 .. option:: --help
 
  Display a summary of command line options.
+
+.. option:: --help-list
+
+ Display an uncategorized summary of command line options.
 
 .. option:: --hex-dump=<section[,section,...]>, -x
 
@@ -87,7 +95,7 @@ file formats.
 
  Display the relocation entries in the file.
 
-.. option:: --sections, --section-headers, -S
+.. option:: --sections, --section-headers, -s, -S
 
  Display all sections.
 
@@ -115,11 +123,7 @@ file formats.
  Display the specified section(s) as a list of strings. ``section`` may be a
  section index or section name.
 
-.. option:: --string-table
- 
- Display contents of the string table.
-
-.. option:: --symbols, --syms, -s
+.. option:: --symbols, --syms, -t
 
  Display the symbol table.
 
@@ -129,7 +133,7 @@ file formats.
 
 .. option:: --version
 
- Display the version of the :program:`llvm-readobj` executable.
+ Display the version of this program.
 
 .. option:: @<FILE>
 
@@ -140,22 +144,13 @@ ELF SPECIFIC OPTIONS
 
 The following options are implemented only for the ELF file format.
 
-.. option:: --arch-specific, -A
+.. option:: --arm-attributes
 
- Display architecture-specific information, e.g. the ARM attributes section on ARM.
-
-.. option:: --bb-addr-map
-
- Display the contents of the basic block address map section(s), which contain the
- address of each function, along with the relative offset of each basic block.
+ Display the ARM attributes section. Only applicable for ARM architectures.
 
 .. option:: --demangle, -C
 
  Display demangled symbol names in the output.
-
-.. option:: --dependent-libraries
-
- Display the dependent libraries section.
 
 .. option:: --dyn-relocations
 
@@ -169,11 +164,11 @@ The following options are implemented only for the ELF file format.
 
  Display the dynamic table.
 
-.. option:: --cg-profile
+.. option:: --elf-cg-profile
 
  Display the callgraph profile section.
 
-.. option:: --histogram, -I
+.. option:: --elf-hash-histogram, --histogram, -I
 
  Display a bucket list histogram for dynamic symbol hash tables.
 
@@ -187,7 +182,7 @@ The following options are implemented only for the ELF file format.
  ``GNU``. ``LLVM`` output (the default) is an expanded and structured format,
  whilst ``GNU`` output mimics the equivalent GNU :program:`readelf` output.
 
-.. option:: --section-groups, -g
+.. option:: --elf-section-groups, --section-groups, -g
 
  Display section groups.
 
@@ -218,12 +213,6 @@ The following options are implemented only for the ELF file format.
 .. option:: --section-mapping
 
  Display the section to segment mapping.
-
-.. option:: --stack-sizes
-
- Display the contents of the stack sizes section(s), i.e. pairs of function
- names and the size of their stack frames. Currently only implemented for GNU
- style output.
 
 .. option:: --version-info, -V
 
@@ -286,10 +275,6 @@ The following options are implemented only for the PE/COFF file format.
 .. option:: --coff-debug-directory
 
  Display the debug directory.
-
-.. option:: --coff-tls-directory
-
- Display the TLS directory.
 
 .. option:: --coff-directives
 

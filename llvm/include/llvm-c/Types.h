@@ -15,9 +15,10 @@
 #define LLVM_C_TYPES_H
 
 #include "llvm-c/DataTypes.h"
-#include "llvm-c/ExternC.h"
 
-LLVM_C_EXTERN_C_BEGIN
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @defgroup LLVMCSupportTypes Types and Enumerations
@@ -171,6 +172,8 @@ typedef struct LLVMOpaqueBinary *LLVMBinaryRef;
  * @}
  */
 
-LLVM_C_EXTERN_C_END
+#ifdef __cplusplus
+}
+#endif
 
 #endif

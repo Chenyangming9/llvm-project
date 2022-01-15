@@ -135,9 +135,6 @@ public:
 /// \brief An opaque handle to a value.
 typedef uptr ValueHandle;
 
-/// Returns the class name of the given ObjC object, or null if the name
-/// cannot be found.
-const char *getObjCClassName(ValueHandle Pointer);
 
 /// \brief Representation of an operand value provided by the instrumented code.
 ///

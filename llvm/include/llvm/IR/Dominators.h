@@ -44,9 +44,6 @@ using BBPostDomTree = PostDomTreeBase<BasicBlock>;
 
 using BBUpdates = ArrayRef<llvm::cfg::Update<BasicBlock *>>;
 
-using BBDomTreeGraphDiff = GraphDiff<BasicBlock *, false>;
-using BBPostDomTreeGraphDiff = GraphDiff<BasicBlock *, true>;
-
 extern template void Calculate<BBDomTree>(BBDomTree &DT);
 extern template void CalculateWithUpdates<BBDomTree>(BBDomTree &DT,
                                                      BBUpdates U);
@@ -65,12 +62,8 @@ extern template void DeleteEdge<BBPostDomTree>(BBPostDomTree &DT,
                                                BasicBlock *From,
                                                BasicBlock *To);
 
-extern template void ApplyUpdates<BBDomTree>(BBDomTree &DT,
-                                             BBDomTreeGraphDiff &,
-                                             BBDomTreeGraphDiff *);
-extern template void ApplyUpdates<BBPostDomTree>(BBPostDomTree &DT,
-                                                 BBPostDomTreeGraphDiff &,
-                                                 BBPostDomTreeGraphDiff *);
+extern template void ApplyUpdates<BBDomTree>(BBDomTree &DT, BBUpdates);
+extern template void ApplyUpdates<BBPostDomTree>(BBPostDomTree &DT, BBUpdates);
 
 extern template bool Verify<BBDomTree>(const BBDomTree &DT,
                                        BBDomTree::VerificationLevel VL);
@@ -165,24 +158,12 @@ class DominatorTree : public DominatorTreeBase<BasicBlock, false> {
   // Ensure base-class overloads are visible.
   using Base::dominates;
 
-  /// Return true if the (end of the) basic block BB dominates the use U.
-  bool dominates(const BasicBlock *BB, const Use &U) const;
-
-  /// Return true if value Def dominates use U, in the sense that Def is
-  /// available at U, and could be substituted as the used value without
-  /// violating the SSA dominance requirement.
+  /// Return true if Def dominates a use in User.
   ///
-  /// In particular, it is worth noting that:
-  ///  * Non-instruction Defs dominate everything.
-  ///  * Def does not dominate a use in Def itself (outside of degenerate cases
-  ///    like unreachable code or trivial phi cycles).
-  ///  * Invoke/callbr Defs only dominate uses in their default destination.
-  bool dominates(const Value *Def, const Use &U) const;
-  /// Return true if value Def dominates all possible uses inside instruction
-  /// User. Same comments as for the Use-based API apply.
-  bool dominates(const Value *Def, const Instruction *User) const;
-  // Does not accept Value to avoid ambiguity with dominance checks between
-  // two basic blocks.
+  /// This performs the special checks necessary if Def and User are in the same
+  /// basic block. Note that Def doesn't dominate a use in Def itself!
+  bool dominates(const Instruction *Def, const Use &U) const;
+  bool dominates(const Instruction *Def, const Instruction *User) const;
   bool dominates(const Instruction *Def, const BasicBlock *BB) const;
 
   /// Return true if an edge dominates a use.
@@ -191,8 +172,6 @@ class DominatorTree : public DominatorTreeBase<BasicBlock, false> {
   /// never dominate the use.
   bool dominates(const BasicBlockEdge &BBE, const Use &U) const;
   bool dominates(const BasicBlockEdge &BBE, const BasicBlock *BB) const;
-  /// Returns true if edge \p BBE1 dominates edge \p BBE2.
-  bool dominates(const BasicBlockEdge &BBE1, const BasicBlockEdge &BBE2) const;
 
   // Ensure base class overloads are visible.
   using Base::isReachableFromEntry;
@@ -227,8 +206,7 @@ template <class Node, class ChildIterator> struct DomTreeGraphTraitsBase {
 
 template <>
 struct GraphTraits<DomTreeNode *>
-    : public DomTreeGraphTraitsBase<DomTreeNode, DomTreeNode::const_iterator> {
-};
+    : public DomTreeGraphTraitsBase<DomTreeNode, DomTreeNode::iterator> {};
 
 template <>
 struct GraphTraits<const DomTreeNode *>
@@ -284,7 +262,9 @@ class DominatorTreeWrapperPass : public FunctionPass {
 public:
   static char ID;
 
-  DominatorTreeWrapperPass();
+  DominatorTreeWrapperPass() : FunctionPass(ID) {
+    initializeDominatorTreeWrapperPassPass(*PassRegistry::getPassRegistry());
+  }
 
   DominatorTree &getDomTree() { return DT; }
   const DominatorTree &getDomTree() const { return DT; }
@@ -297,7 +277,7 @@ public:
     AU.setPreservesAll();
   }
 
-  void releaseMemory() override { DT.reset(); }
+  void releaseMemory() override { DT.releaseMemory(); }
 
   void print(raw_ostream &OS, const Module *M = nullptr) const override;
 };

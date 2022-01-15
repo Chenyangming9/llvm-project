@@ -11,7 +11,7 @@
 
 #include "lldb/lldb-types.h"
 
-#include <csignal>
+#include <signal.h>
 
 #include <string>
 
@@ -22,8 +22,6 @@ enum class CrashReason {
   eInvalidAddress,
   ePrivilegedAddress,
   eBoundViolation,
-  eAsyncTagCheckFault,
-  eSyncTagCheckFault,
 
   // SIGILL crash reasons.
   eIllegalOpcode,

@@ -12,7 +12,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/AutoUpgrade.h"
@@ -24,7 +23,6 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
-#include "llvm/Object/Archive.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
@@ -41,25 +39,21 @@
 #include <utility>
 using namespace llvm;
 
-static cl::OptionCategory LinkCategory("Link Options");
-
-static cl::list<std::string> InputFilenames(cl::Positional, cl::OneOrMore,
-                                            cl::desc("<input bitcode files>"),
-                                            cl::cat(LinkCategory));
+static cl::list<std::string>
+InputFilenames(cl::Positional, cl::OneOrMore,
+               cl::desc("<input bitcode files>"));
 
 static cl::list<std::string> OverridingInputs(
     "override", cl::ZeroOrMore, cl::value_desc("filename"),
     cl::desc(
-        "input bitcode file which can override previously defined symbol(s)"),
-    cl::cat(LinkCategory));
+        "input bitcode file which can override previously defined symbol(s)"));
 
 // Option to simulate function importing for testing. This enables using
 // llvm-link to simulate ThinLTO backend processes.
 static cl::list<std::string> Imports(
     "import", cl::ZeroOrMore, cl::value_desc("function:filename"),
     cl::desc("Pair of function name and filename, where function should be "
-             "imported from bitcode in filename"),
-    cl::cat(LinkCategory));
+             "imported from bitcode in filename"));
 
 // Option to support testing of function importing. The module summary
 // must be specified in the case were we request imports via the -import
@@ -68,61 +62,51 @@ static cl::list<std::string> Imports(
 // consistent promotion and renaming of locals.
 static cl::opt<std::string>
     SummaryIndex("summary-index", cl::desc("Module summary index filename"),
-                 cl::init(""), cl::value_desc("filename"),
-                 cl::cat(LinkCategory));
+                 cl::init(""), cl::value_desc("filename"));
 
 static cl::opt<std::string>
-    OutputFilename("o", cl::desc("Override output filename"), cl::init("-"),
-                   cl::value_desc("filename"), cl::cat(LinkCategory));
+OutputFilename("o", cl::desc("Override output filename"), cl::init("-"),
+               cl::value_desc("filename"));
 
-static cl::opt<bool> Internalize("internalize",
-                                 cl::desc("Internalize linked symbols"),
-                                 cl::cat(LinkCategory));
+static cl::opt<bool>
+Internalize("internalize", cl::desc("Internalize linked symbols"));
 
 static cl::opt<bool>
     DisableDITypeMap("disable-debug-info-type-map",
-                     cl::desc("Don't use a uniquing type map for debug info"),
-                     cl::cat(LinkCategory));
+                     cl::desc("Don't use a uniquing type map for debug info"));
 
-static cl::opt<bool> OnlyNeeded("only-needed",
-                                cl::desc("Link only needed symbols"),
-                                cl::cat(LinkCategory));
+static cl::opt<bool>
+OnlyNeeded("only-needed", cl::desc("Link only needed symbols"));
 
-static cl::opt<bool> Force("f", cl::desc("Enable binary output on terminals"),
-                           cl::cat(LinkCategory));
+static cl::opt<bool>
+Force("f", cl::desc("Enable binary output on terminals"));
 
-static cl::opt<bool> DisableLazyLoad("disable-lazy-loading",
-                                     cl::desc("Disable lazy module loading"),
-                                     cl::cat(LinkCategory));
+static cl::opt<bool>
+    DisableLazyLoad("disable-lazy-loading",
+                    cl::desc("Disable lazy module loading"));
 
-static cl::opt<bool> OutputAssembly("S",
-                                    cl::desc("Write output as LLVM assembly"),
-                                    cl::Hidden, cl::cat(LinkCategory));
+static cl::opt<bool>
+    OutputAssembly("S", cl::desc("Write output as LLVM assembly"), cl::Hidden);
 
-static cl::opt<bool> Verbose("v",
-                             cl::desc("Print information about actions taken"),
-                             cl::cat(LinkCategory));
+static cl::opt<bool>
+Verbose("v", cl::desc("Print information about actions taken"));
 
-static cl::opt<bool> DumpAsm("d", cl::desc("Print assembly as linked"),
-                             cl::Hidden, cl::cat(LinkCategory));
+static cl::opt<bool>
+DumpAsm("d", cl::desc("Print assembly as linked"), cl::Hidden);
 
-static cl::opt<bool> SuppressWarnings("suppress-warnings",
-                                      cl::desc("Suppress all linking warnings"),
-                                      cl::init(false), cl::cat(LinkCategory));
+static cl::opt<bool>
+SuppressWarnings("suppress-warnings", cl::desc("Suppress all linking warnings"),
+                 cl::init(false));
 
 static cl::opt<bool> PreserveBitcodeUseListOrder(
     "preserve-bc-uselistorder",
     cl::desc("Preserve use-list order when writing LLVM bitcode."),
-    cl::init(true), cl::Hidden, cl::cat(LinkCategory));
+    cl::init(true), cl::Hidden);
 
 static cl::opt<bool> PreserveAssemblyUseListOrder(
     "preserve-ll-uselistorder",
     cl::desc("Preserve use-list order when writing LLVM assembly."),
-    cl::init(false), cl::Hidden, cl::cat(LinkCategory));
-
-static cl::opt<bool> NoVerify("disable-verify",
-                              cl::desc("Do not run the verifier"), cl::Hidden,
-                              cl::cat(LinkCategory));
+    cl::init(false), cl::Hidden);
 
 static ExitOnError ExitOnErr;
 
@@ -130,18 +114,17 @@ static ExitOnError ExitOnErr;
 // link path for the specified file to try to find it...
 //
 static std::unique_ptr<Module> loadFile(const char *argv0,
-                                        std::unique_ptr<MemoryBuffer> Buffer,
+                                        const std::string &FN,
                                         LLVMContext &Context,
                                         bool MaterializeMetadata = true) {
   SMDiagnostic Err;
   if (Verbose)
-    errs() << "Loading '" << Buffer->getBufferIdentifier() << "'\n";
+    errs() << "Loading '" << FN << "'\n";
   std::unique_ptr<Module> Result;
   if (DisableLazyLoad)
-    Result = parseIR(*Buffer, Err, Context);
+    Result = parseIRFile(FN, Err, Context);
   else
-    Result =
-        getLazyIRModule(std::move(Buffer), Err, Context, !MaterializeMetadata);
+    Result = getLazyIRFileModule(FN, Err, Context, !MaterializeMetadata);
 
   if (!Result) {
     Err.print(argv0, errs());
@@ -153,73 +136,6 @@ static std::unique_ptr<Module> loadFile(const char *argv0,
     UpgradeDebugInfo(*Result);
   }
 
-  return Result;
-}
-
-static std::unique_ptr<Module> loadArFile(const char *Argv0,
-                                          std::unique_ptr<MemoryBuffer> Buffer,
-                                          LLVMContext &Context) {
-  std::unique_ptr<Module> Result(new Module("ArchiveModule", Context));
-  StringRef ArchiveName = Buffer->getBufferIdentifier();
-  if (Verbose)
-    errs() << "Reading library archive file '" << ArchiveName
-           << "' to memory\n";
-  Error Err = Error::success();
-  object::Archive Archive(*Buffer, Err);
-  ExitOnErr(std::move(Err));
-  Linker L(*Result);
-  for (const object::Archive::Child &C : Archive.children(Err)) {
-    Expected<StringRef> Ename = C.getName();
-    if (Error E = Ename.takeError()) {
-      errs() << Argv0 << ": ";
-      WithColor::error() << " failed to read name of archive member"
-                         << ArchiveName << "'\n";
-      return nullptr;
-    }
-    std::string ChildName = Ename.get().str();
-    if (Verbose)
-      errs() << "Parsing member '" << ChildName
-             << "' of archive library to module.\n";
-    SMDiagnostic ParseErr;
-    Expected<MemoryBufferRef> MemBuf = C.getMemoryBufferRef();
-    if (Error E = MemBuf.takeError()) {
-      errs() << Argv0 << ": ";
-      WithColor::error() << " loading memory for member '" << ChildName
-                         << "' of archive library failed'" << ArchiveName
-                         << "'\n";
-      return nullptr;
-    };
-
-    if (!isBitcode(reinterpret_cast<const unsigned char *>(
-                       MemBuf.get().getBufferStart()),
-                   reinterpret_cast<const unsigned char *>(
-                       MemBuf.get().getBufferEnd()))) {
-      errs() << Argv0 << ": ";
-      WithColor::error() << "  member of archive is not a bitcode file: '"
-                         << ChildName << "'\n";
-      return nullptr;
-    }
-
-    std::unique_ptr<Module> M;
-    if (DisableLazyLoad)
-      M = parseIR(MemBuf.get(), ParseErr, Context);
-    else
-      M = getLazyIRModule(MemoryBuffer::getMemBuffer(MemBuf.get(), false),
-                          ParseErr, Context);
-
-    if (!M.get()) {
-      errs() << Argv0 << ": ";
-      WithColor::error() << " parsing member '" << ChildName
-                         << "' of archive library failed'" << ArchiveName
-                         << "'\n";
-      return nullptr;
-    }
-    if (Verbose)
-      errs() << "Linking member '" << ChildName << "' of archive library.\n";
-    if (L.linkInModule(std::move(M)))
-      return nullptr;
-  } // end for each child
-  ExitOnErr(std::move(Err));
   return Result;
 }
 
@@ -259,10 +175,8 @@ public:
 Module &ModuleLazyLoaderCache::operator()(const char *argv0,
                                           const std::string &Identifier) {
   auto &Module = ModuleMap[Identifier];
-  if (!Module) {
+  if (!Module)
     Module = createLazyModule(argv0, Identifier);
-    assert(Module && "Failed to create lazy module!");
-  }
   return *Module;
 }
 } // anonymous namespace
@@ -291,7 +205,7 @@ struct LLVMLinkDiagnosticHandler : public DiagnosticHandler {
     return true;
   }
 };
-} // namespace
+}
 
 /// Import any functions requested via the -import option.
 static bool importFunctions(const char *argv0, Module &DestModule) {
@@ -305,9 +219,7 @@ static bool importFunctions(const char *argv0, Module &DestModule) {
 
   auto ModuleLoader = [&DestModule](const char *argv0,
                                     const std::string &Identifier) {
-    std::unique_ptr<MemoryBuffer> Buffer =
-        ExitOnErr(errorOrToExpected(MemoryBuffer::getFileOrSTDIN(Identifier)));
-    return loadFile(argv0, std::move(Buffer), DestModule.getContext(), false);
+    return loadFile(argv0, Identifier, DestModule.getContext(), false);
   };
 
   ModuleLazyLoaderCache ModuleLoaderCache(ModuleLoader);
@@ -324,7 +236,7 @@ static bool importFunctions(const char *argv0, Module &DestModule) {
     // Load the specified source module.
     auto &SrcModule = ModuleLoaderCache(argv0, FileName);
 
-    if (!NoVerify && verifyModule(SrcModule, &errs())) {
+    if (verifyModule(SrcModule, &errs())) {
       errs() << argv0 << ": " << FileName;
       WithColor::error() << "input module is broken!\n";
       return false;
@@ -352,29 +264,23 @@ static bool importFunctions(const char *argv0, Module &DestModule) {
     Entry.insert(F->getGUID());
   }
   auto CachedModuleLoader = [&](StringRef Identifier) {
-    return ModuleLoaderCache.takeModule(std::string(Identifier));
+    return ModuleLoaderCache.takeModule(Identifier);
   };
-  FunctionImporter Importer(*Index, CachedModuleLoader,
-                            /*ClearDSOLocalOnDeclarations=*/false);
+  FunctionImporter Importer(*Index, CachedModuleLoader);
   ExitOnErr(Importer.importFunctions(DestModule, ImportList));
 
   return true;
 }
 
 static bool linkFiles(const char *argv0, LLVMContext &Context, Linker &L,
-                      const cl::list<std::string> &Files, unsigned Flags) {
+                      const cl::list<std::string> &Files,
+                      unsigned Flags) {
   // Filter out flags that don't apply to the first file we load.
   unsigned ApplicableFlags = Flags & Linker::Flags::OverrideFromSrc;
   // Similar to some flags, internalization doesn't apply to the first file.
   bool InternalizeLinkedSymbols = false;
   for (const auto &File : Files) {
-    std::unique_ptr<MemoryBuffer> Buffer =
-        ExitOnErr(errorOrToExpected(MemoryBuffer::getFileOrSTDIN(File)));
-
-    std::unique_ptr<Module> M =
-        identify_magic(Buffer->getBuffer()) == file_magic::archive
-            ? loadArFile(argv0, std::move(Buffer), Context)
-            : loadFile(argv0, std::move(Buffer), Context);
+    std::unique_ptr<Module> M = loadFile(argv0, File, Context);
     if (!M.get()) {
       errs() << argv0 << ": ";
       WithColor::error() << " loading file '" << File << "'\n";
@@ -384,7 +290,7 @@ static bool linkFiles(const char *argv0, LLVMContext &Context, Linker &L,
     // Note that when ODR merging types cannot verify input files in here When
     // doing that debug metadata in the src module might already be pointing to
     // the destination.
-    if (DisableDITypeMap && !NoVerify && verifyModule(*M, &errs())) {
+    if (DisableDITypeMap && verifyModule(*M, &errs())) {
       errs() << argv0 << ": " << File << ": ";
       WithColor::error() << "input module is broken!\n";
       return false;
@@ -407,8 +313,7 @@ static bool linkFiles(const char *argv0, LLVMContext &Context, Linker &L,
       }
 
       // Promotion
-      if (renameModuleForThinLTO(*M, *Index,
-                                 /*ClearDSOLocalOnDeclarations=*/false))
+      if (renameModuleForThinLTO(*M, *Index))
         return true;
     }
 
@@ -445,15 +350,14 @@ int main(int argc, char **argv) {
   ExitOnErr.setBanner(std::string(argv[0]) + ": ");
 
   LLVMContext Context;
-  Context.setDiagnosticHandler(std::make_unique<LLVMLinkDiagnosticHandler>(),
-                               true);
-  cl::HideUnrelatedOptions({&LinkCategory, &getColorCategory()});
+  Context.setDiagnosticHandler(
+    llvm::make_unique<LLVMLinkDiagnosticHandler>(), true);
   cl::ParseCommandLineOptions(argc, argv, "llvm linker\n");
 
   if (!DisableDITypeMap)
     Context.enableDebugTypeODRUniquing();
 
-  auto Composite = std::make_unique<Module>("llvm-link", Context);
+  auto Composite = make_unique<Module>("llvm-link", Context);
   Linker L(*Composite);
 
   unsigned Flags = Linker::Flags::None;
@@ -477,15 +381,13 @@ int main(int argc, char **argv) {
     errs() << "Here's the assembly:\n" << *Composite;
 
   std::error_code EC;
-  ToolOutputFile Out(OutputFilename, EC,
-                     OutputAssembly ? sys::fs::OF_TextWithCRLF
-                                    : sys::fs::OF_None);
+  ToolOutputFile Out(OutputFilename, EC, sys::fs::F_None);
   if (EC) {
     WithColor::error() << EC.message() << '\n';
     return 1;
   }
 
-  if (!NoVerify && verifyModule(*Composite, &errs())) {
+  if (verifyModule(*Composite, &errs())) {
     errs() << argv[0] << ": ";
     WithColor::error() << "linked module is broken!\n";
     return 1;
@@ -495,7 +397,7 @@ int main(int argc, char **argv) {
     errs() << "Writing bitcode...\n";
   if (OutputAssembly) {
     Composite->print(Out.os(), nullptr, PreserveAssemblyUseListOrder);
-  } else if (Force || !CheckBitcodeOutputToConsole(Out.os()))
+  } else if (Force || !CheckBitcodeOutputToConsole(Out.os(), true))
     WriteBitcodeToFile(*Composite, Out.os(), PreserveBitcodeUseListOrder);
 
   // Declare success.

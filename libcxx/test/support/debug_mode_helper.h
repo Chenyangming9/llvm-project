@@ -19,18 +19,18 @@
 #endif
 
 #include <__debug>
-#include <cassert>
-#include <cstddef>
-#include <cstdio>
-#include <cstdlib>
-#include <string>
-#include <string_view>
 #include <utility>
+#include <cstddef>
+#include <cstdlib>
+#include <cassert>
+#include <string_view>
+#include <sstream>
+#include <iostream>
 
 #include <unistd.h>
-#include <errno.h>
 #include <sys/wait.h>
 #include "test_macros.h"
+#include "assert_checkpoint.h"
 #include "test_allocator.h"
 
 #if TEST_STD_VER < 11
@@ -43,8 +43,8 @@ struct DebugInfoMatcher {
   static constexpr const char* any_msg = "*";
 
   constexpr DebugInfoMatcher() : is_empty(true), msg(any_msg, __builtin_strlen(any_msg)), file(any_file, __builtin_strlen(any_file)), line(any_line) { }
-  constexpr DebugInfoMatcher(const char* msg_, const char* file_ = any_file, int line_ = any_line)
-    : is_empty(false), msg(msg_, __builtin_strlen(msg_)), file(file_, __builtin_strlen(file_)), line(line_) {}
+  constexpr DebugInfoMatcher(const char* msg, const char* file = any_file, int line = any_line)
+    : is_empty(false), msg(msg, __builtin_strlen(msg)), file(file, __builtin_strlen(file)), line(line) {}
 
   bool Matches(std::__libcpp_debug_info const& got) const {
     assert(!empty() && "empty matcher");
@@ -54,15 +54,19 @@ struct DebugInfoMatcher {
         return true;
     // Write to stdout because that's the file descriptor captured by the parent
     // process.
-    std::printf("Failed to match debug info!\n%s\nVS\n%s\n", ToString().data(), got.what().data());
-    return false;
-  }
+    std::cout << "Failed to match debug info!\n"
+              << ToString() << "\n"
+              << "VS\n"
+              << got.what() << "\n";
+      return false;
+    }
 
   std::string ToString() const {
-    std::string result = "msg = \""; result += msg; result += "\"\n";
-    result += "line = " + (line == any_line ? "'*'" : std::to_string(line)) + "\n";
-    result += "file = " + (file == any_file ? "'*'" : std::string(any_file));
-    return result;
+    std::stringstream ss;
+    ss << "msg = \"" << msg << "\"\n"
+       << "line = " << (line == any_line ? "'*'" : std::to_string(line)) << "\n"
+       << "file = " << (file == any_file ? "'*'" : any_file) << "";
+    return ss.str();
   }
 
   bool empty() const { return is_empty; }
@@ -257,15 +261,17 @@ inline bool ExpectDeath(const char* stmt, Func&& func, DebugInfoMatcher Matcher)
   DeathTest DT(Matcher);
   DeathTest::ResultKind RK = DT.Run(func);
   auto OnFailure = [&](const char* msg) {
-    std::fprintf(stderr, "EXPECT_DEATH( %s ) failed! (%s)\n\n", stmt, msg);
+    std::cerr << "EXPECT_DEATH( " << stmt << " ) failed! (" << msg << ")\n\n";
     if (RK != DeathTest::RK_Unknown) {
-      std::fprintf(stderr, "child exit code: %d\n", DT.getChildExitCode());
+      std::cerr << "child exit code: " << DT.getChildExitCode() << "\n";
     }
     if (!DT.getChildStdErr().empty()) {
-      std::fprintf(stderr, "---------- standard err ----------\n%s\n", DT.getChildStdErr().c_str());
+      std::cerr << "---------- standard err ----------\n";
+      std::cerr << DT.getChildStdErr() << "\n";
     }
     if (!DT.getChildStdOut().empty()) {
-      std::fprintf(stderr, "---------- standard out ----------\n%s\n", DT.getChildStdOut().c_str());
+      std::cerr << "---------- standard out ----------\n";
+      std::cerr << DT.getChildStdOut() << "\n";
     }
     return false;
   };
@@ -281,7 +287,6 @@ inline bool ExpectDeath(const char* stmt, Func&& func, DebugInfoMatcher Matcher)
   case DeathTest::RK_MatchFailure:
       return OnFailure("matcher failed");
   }
-  assert(false && "unreachable");
 }
 
 template <class Func>

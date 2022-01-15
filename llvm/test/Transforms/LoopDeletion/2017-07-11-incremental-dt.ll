@@ -1,7 +1,6 @@
 ; RUN: opt < %s -loop-deletion -S
-; RUN: opt < %s -loop-deletion -analyze -domtree 2>&1 -enable-new-pm=0 | FileCheck -check-prefix=DT %s
-; RUN: opt < %s -passes='loop(loop-deletion),print<domtree>' 2>&1 | FileCheck -check-prefix=DT %s
-; RUN: opt < %s -loop-deletion -verify-dom-info
+; RUN: opt < %s -loop-deletion -analyze -domtree 2>&1 | FileCheck -check-prefix=DT %s
+; RUN: opt < %s -loop-deletion -analyze -verify-dom-info
 
 ; CHECK: for.body
 ; CHECK-NOT: for.cond1

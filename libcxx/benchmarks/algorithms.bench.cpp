@@ -7,30 +7,21 @@
 #include <utility>
 #include <vector>
 
-#include "CartesianBenchmarks.h"
-#include "GenerateInput.h"
+#include "CartesianBenchmarks.hpp"
+#include "GenerateInput.hpp"
 #include "benchmark/benchmark.h"
 #include "test_macros.h"
 
 namespace {
 
-enum class ValueType { Uint32, Uint64, Pair, Tuple, String };
-struct AllValueTypes : EnumValuesAsTuple<AllValueTypes, ValueType, 5> {
-  static constexpr const char* Names[] = {
-      "uint32", "uint64", "pair<uint32, uint32>",
-      "tuple<uint32, uint64, uint32>", "string"};
+enum class ValueType { Uint32, String };
+struct AllValueTypes : EnumValuesAsTuple<AllValueTypes, ValueType, 2> {
+  static constexpr const char* Names[] = {"uint32", "string"};
 };
 
 template <class V>
-using Value = std::conditional_t<
-    V() == ValueType::Uint32, uint32_t,
-    std::conditional_t<
-        V() == ValueType::Uint64, uint64_t,
-        std::conditional_t<
-            V() == ValueType::Pair, std::pair<uint32_t, uint32_t>,
-            std::conditional_t<V() == ValueType::Tuple,
-                               std::tuple<uint32_t, uint64_t, uint32_t>,
-                               std::string> > > >;
+using Value =
+    std::conditional_t<V() == ValueType::Uint32, uint32_t, std::string>;
 
 enum class Order {
   Random,
@@ -46,8 +37,7 @@ struct AllOrders : EnumValuesAsTuple<AllOrders, Order, 6> {
                                           "PipeOrgan",  "Heap"};
 };
 
-template <typename T>
-void fillValues(std::vector<T>& V, size_t N, Order O) {
+void fillValues(std::vector<uint32_t>& V, size_t N, Order O) {
   if (O == Order::SingleElement) {
     V.resize(N, 0);
   } else {
@@ -56,49 +46,13 @@ void fillValues(std::vector<T>& V, size_t N, Order O) {
   }
 }
 
-template <typename T>
-void fillValues(std::vector<std::pair<T, T> >& V, size_t N, Order O) {
-  if (O == Order::SingleElement) {
-    V.resize(N, std::make_pair(0, 0));
-  } else {
-    while (V.size() < N)
-      // Half of array will have the same first element.
-      if (V.size() % 2) {
-        V.push_back(std::make_pair(V.size(), V.size()));
-      } else {
-        V.push_back(std::make_pair(0, V.size()));
-      }
-  }
-}
-
-template <typename T1, typename T2, typename T3>
-void fillValues(std::vector<std::tuple<T1, T2, T3> >& V, size_t N, Order O) {
-  if (O == Order::SingleElement) {
-    V.resize(N, std::make_tuple(0, 0, 0));
-  } else {
-    while (V.size() < N)
-      // One third of array will have the same first element.
-      // One third of array will have the same first element and the same second element.
-      switch (V.size() % 3) {
-      case 0:
-        V.push_back(std::make_tuple(V.size(), V.size(), V.size()));
-        break;
-      case 1:
-        V.push_back(std::make_tuple(0, V.size(), V.size()));
-        break;
-      case 2:
-        V.push_back(std::make_tuple(0, 0, V.size()));
-        break;
-      }
-  }
-}
-
 void fillValues(std::vector<std::string>& V, size_t N, Order O) {
+
   if (O == Order::SingleElement) {
-    V.resize(N, getRandomString(64));
+    V.resize(N, getRandomString(1024));
   } else {
     while (V.size() < N)
-      V.push_back(getRandomString(64));
+      V.push_back(getRandomString(1024));
   }
 }
 
@@ -131,24 +85,21 @@ void sortValues(T& V, Order O) {
   }
 }
 
-constexpr size_t TestSetElements =
-#if !TEST_HAS_FEATURE(memory_sanitizer)
-    1 << 18;
-#else
-    1 << 14;
-#endif
-
 template <class ValueType>
 std::vector<std::vector<Value<ValueType> > > makeOrderedValues(size_t N,
                                                                Order O) {
-  std::vector<std::vector<Value<ValueType> > > Ret;
-  const size_t NumCopies = std::max(size_t{1}, TestSetElements / N);
-  Ret.resize(NumCopies);
-  for (auto& V : Ret) {
-    fillValues(V, N, O);
-    sortValues(V, O);
-  }
-  return Ret;
+  // Let's make sure that all random sequences of the same size are the same.
+  // That way we can compare the different algorithms with the same input.
+  static std::map<std::pair<size_t, Order>, std::vector<Value<ValueType> > >
+      Cached;
+
+  auto& Values = Cached[{N, O}];
+  if (Values.empty()) {
+    fillValues(Values, N, O);
+    sortValues(Values, O);
+  };
+  const size_t NumCopies = std::max(size_t{1}, 1000 / N);
+  return { NumCopies, Values };
 }
 
 template <class T, class U>
@@ -160,28 +111,19 @@ TEST_ALWAYS_INLINE void resetCopies(benchmark::State& state, T& Copies,
   state.ResumeTiming();
 }
 
-enum class BatchSize {
-  CountElements,
-  CountBatch,
-};
-
 template <class ValueType, class F>
 void runOpOnCopies(benchmark::State& state, size_t Quantity, Order O,
-                   BatchSize Count, F Body) {
+                   bool CountElements, F f) {
   auto Copies = makeOrderedValues<ValueType>(Quantity, O);
-  auto Orig = Copies;
+  const auto Orig = Copies[0];
 
-  const size_t Batch = Count == BatchSize::CountElements
-                           ? Copies.size() * Quantity
-                           : Copies.size();
+  const size_t Batch = CountElements ? Copies.size() * Quantity : Copies.size();
   while (state.KeepRunningBatch(Batch)) {
     for (auto& Copy : Copies) {
-      Body(Copy);
+      f(Copy);
       benchmark::DoNotOptimize(Copy);
     }
-    state.PauseTiming();
-    Copies = Orig;
-    state.ResumeTiming();
+    resetCopies(state, Copies, Orig);
   }
 }
 
@@ -190,9 +132,9 @@ struct Sort {
   size_t Quantity;
 
   void run(benchmark::State& state) const {
-    runOpOnCopies<ValueType>(
-        state, Quantity, Order(), BatchSize::CountElements,
-        [](auto& Copy) { std::sort(Copy.begin(), Copy.end()); });
+    runOpOnCopies<ValueType>(state, Quantity, Order(), false, [](auto& Copy) {
+      std::sort(Copy.begin(), Copy.end());
+    });
   }
 
   bool skip() const { return Order() == ::Order::Heap; }
@@ -208,9 +150,9 @@ struct StableSort {
   size_t Quantity;
 
   void run(benchmark::State& state) const {
-    runOpOnCopies<ValueType>(
-        state, Quantity, Order(), BatchSize::CountElements,
-        [](auto& Copy) { std::stable_sort(Copy.begin(), Copy.end()); });
+    runOpOnCopies<ValueType>(state, Quantity, Order(), false, [](auto& Copy) {
+      std::stable_sort(Copy.begin(), Copy.end());
+    });
   }
 
   bool skip() const { return Order() == ::Order::Heap; }
@@ -226,9 +168,9 @@ struct MakeHeap {
   size_t Quantity;
 
   void run(benchmark::State& state) const {
-    runOpOnCopies<ValueType>(
-        state, Quantity, Order(), BatchSize::CountElements,
-        [](auto& Copy) { std::make_heap(Copy.begin(), Copy.end()); });
+    runOpOnCopies<ValueType>(state, Quantity, Order(), false, [](auto& Copy) {
+      std::make_heap(Copy.begin(), Copy.end());
+    });
   }
 
   std::string name() const {
@@ -243,7 +185,7 @@ struct SortHeap {
 
   void run(benchmark::State& state) const {
     runOpOnCopies<ValueType>(
-        state, Quantity, Order::Heap, BatchSize::CountElements,
+        state, Quantity, Order::Heap, false,
         [](auto& Copy) { std::sort_heap(Copy.begin(), Copy.end()); });
   }
 
@@ -257,11 +199,10 @@ struct MakeThenSortHeap {
   size_t Quantity;
 
   void run(benchmark::State& state) const {
-    runOpOnCopies<ValueType>(state, Quantity, Order(), BatchSize::CountElements,
-                             [](auto& Copy) {
-                               std::make_heap(Copy.begin(), Copy.end());
-                               std::sort_heap(Copy.begin(), Copy.end());
-                             });
+    runOpOnCopies<ValueType>(state, Quantity, Order(), false, [](auto& Copy) {
+      std::make_heap(Copy.begin(), Copy.end());
+      std::sort_heap(Copy.begin(), Copy.end());
+    });
   }
 
   std::string name() const {
@@ -275,12 +216,11 @@ struct PushHeap {
   size_t Quantity;
 
   void run(benchmark::State& state) const {
-    runOpOnCopies<ValueType>(
-        state, Quantity, Order(), BatchSize::CountElements, [](auto& Copy) {
-          for (auto I = Copy.begin(), E = Copy.end(); I != E; ++I) {
-            std::push_heap(Copy.begin(), I + 1);
-          }
-        });
+    runOpOnCopies<ValueType>(state, Quantity, Order(), true, [](auto& Copy) {
+      for (auto I = Copy.begin(), E = Copy.end(); I != E; ++I) {
+        std::push_heap(Copy.begin(), I + 1);
+      }
+    });
   }
 
   bool skip() const { return Order() == ::Order::Heap; }
@@ -296,12 +236,11 @@ struct PopHeap {
   size_t Quantity;
 
   void run(benchmark::State& state) const {
-    runOpOnCopies<ValueType>(
-        state, Quantity, Order(), BatchSize::CountElements, [](auto& Copy) {
-          for (auto B = Copy.begin(), I = Copy.end(); I != B; --I) {
-            std::pop_heap(B, I);
-          }
-        });
+    runOpOnCopies<ValueType>(state, Quantity, Order(), true, [](auto& Copy) {
+      for (auto B = Copy.begin(), I = Copy.end(); I != B; --I) {
+        std::pop_heap(B, I);
+      }
+    });
   }
 
   std::string name() const {
@@ -317,13 +256,7 @@ int main(int argc, char** argv) {
     return 1;
 
   const std::vector<size_t> Quantities = {1 << 0, 1 << 2,  1 << 4,  1 << 6,
-                                          1 << 8, 1 << 10, 1 << 14,
-    // Running each benchmark in parallel consumes too much memory with MSAN
-    // and can lead to the test process being killed.
-#if !TEST_HAS_FEATURE(memory_sanitizer)
-                                          1 << 18
-#endif
-  };
+                                          1 << 8, 1 << 10, 1 << 14, 1 << 18};
   makeCartesianProductBenchmark<Sort, AllValueTypes, AllOrders>(Quantities);
   makeCartesianProductBenchmark<StableSort, AllValueTypes, AllOrders>(
       Quantities);

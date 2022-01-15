@@ -3,5 +3,7 @@ executable("llvm-undname") {
     "//llvm/lib/Demangle",
     "//llvm/lib/Support",
   ]
-  sources = [ "llvm-undname.cpp" ]
+  sources = [
+    "llvm-undname.cpp",
+  ]
 }

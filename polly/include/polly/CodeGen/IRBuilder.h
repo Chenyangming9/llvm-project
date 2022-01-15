@@ -25,7 +25,6 @@ class ScalarEvolution;
 
 namespace polly {
 class Scop;
-struct BandAttr;
 
 /// Helper class to annotate newly generated SCoPs with metadata.
 ///
@@ -44,7 +43,6 @@ struct BandAttr;
 class ScopAnnotator {
 public:
   ScopAnnotator();
-  ~ScopAnnotator();
 
   /// Build all alias scopes for the given SCoP.
   void buildAliasScopes(Scop &S);
@@ -85,13 +83,6 @@ public:
   /// Add inter iteration alias-free base pointer @p BasePtr.
   void addInterIterationAliasFreeBasePtr(llvm::Value *BasePtr);
 
-  /// Stack for surrounding BandAttr annotations.
-  llvm::SmallVector<BandAttr *, 8> LoopAttrEnv;
-  BandAttr *&getStagingAttrEnv() { return LoopAttrEnv.back(); }
-  BandAttr *getActiveAttrEnv() const {
-    return LoopAttrEnv[LoopAttrEnv.size() - 2];
-  }
-
 private:
   /// Annotate with the second level alias metadata
   ///
@@ -109,7 +100,7 @@ private:
   /// All loops currently under construction.
   llvm::SmallVector<llvm::Loop *, 8> ActiveLoops;
 
-  /// Access groups for the parallel loops currently under construction.
+  /// Metadata pointing to parallel loops currently under construction.
   llvm::SmallVector<llvm::MDNode *, 8> ParallelLoops;
 
   /// The alias scope domain for the current SCoP.
@@ -140,14 +131,15 @@ private:
 ///
 /// This is used to add additional items such as e.g. the llvm.loop.parallel
 /// metadata.
-class IRInserter final : public llvm::IRBuilderDefaultInserter {
+class IRInserter : protected llvm::IRBuilderDefaultInserter {
 public:
   IRInserter() = default;
   IRInserter(class ScopAnnotator &A) : Annotator(&A) {}
 
+protected:
   void InsertHelper(llvm::Instruction *I, const llvm::Twine &Name,
                     llvm::BasicBlock *BB,
-                    llvm::BasicBlock::iterator InsertPt) const override {
+                    llvm::BasicBlock::iterator InsertPt) const {
     llvm::IRBuilderDefaultInserter::InsertHelper(I, Name, BB, InsertPt);
     if (Annotator)
       Annotator->annotate(I);
@@ -163,5 +155,13 @@ private:
 // matches for certain names.
 typedef llvm::IRBuilder<llvm::ConstantFolder, IRInserter> PollyIRBuilder;
 
+/// Return an IR builder pointed before the @p BB terminator.
+static inline PollyIRBuilder createPollyIRBuilder(llvm::BasicBlock *BB,
+                                                  ScopAnnotator &LA) {
+  PollyIRBuilder Builder(BB->getContext(), llvm::ConstantFolder(),
+                         polly::IRInserter(LA));
+  Builder.SetInsertPoint(BB->getTerminator());
+  return Builder;
+}
 } // namespace polly
 #endif

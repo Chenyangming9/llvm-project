@@ -1,18 +1,18 @@
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 set(LLVM_LINK_COMPONENTS
-  FrontendOpenMP
   Support
   )
 
-add_clang_tool(clang-change-namespace
+add_clang_executable(clang-change-namespace
   ClangChangeNamespace.cpp
   )
-clang_target_link_libraries(clang-change-namespace
+target_link_libraries(clang-change-namespace
   PRIVATE
   clangAST
   clangASTMatchers
   clangBasic
+  clangChangeNamespace
   clangFormat
   clangFrontend
   clangRewrite
@@ -20,7 +20,6 @@ clang_target_link_libraries(clang-change-namespace
   clangTooling
   clangToolingCore
   )
-target_link_libraries(clang-change-namespace
-  PRIVATE
-  clangChangeNamespace
-  )
+
+install(TARGETS clang-change-namespace
+  RUNTIME DESTINATION bin)

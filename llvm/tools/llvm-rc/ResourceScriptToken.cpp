@@ -12,7 +12,6 @@
 //===---------------------------------------------------------------------===//
 
 #include "ResourceScriptToken.h"
-#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
@@ -85,7 +84,7 @@ namespace {
 
 class Tokenizer {
 public:
-  Tokenizer(StringRef Input) : Data(Input), DataLength(Input.size()), Pos(0) {}
+  Tokenizer(StringRef Input) : Data(Input), DataLength(Input.size()) {}
 
   Expected<std::vector<RCToken>> run();
 
@@ -202,7 +201,7 @@ bool Tokenizer::advance(size_t Amount) {
 }
 
 bool Tokenizer::skipWhitespaces() {
-  while (!streamEof() && isSpace(Data[Pos]))
+  while (!streamEof() && std::isspace(Data[Pos]))
     advance();
   return !streamEof();
 }
@@ -288,7 +287,7 @@ bool Tokenizer::canContinueIdentifier() const {
   assert(!streamEof());
   const char CurChar = Data[Pos];
   return std::isalnum(CurChar) || CurChar == '_' || CurChar == '.' ||
-         CurChar == '/' || CurChar == '\\' || CurChar == '-';
+         CurChar == '/' || CurChar == '\\';
 }
 
 bool Tokenizer::canStartInt() const {
@@ -350,9 +349,9 @@ void Tokenizer::processIdentifier(RCToken &Token) const {
   assert(Token.kind() == Kind::Identifier);
   StringRef Name = Token.value();
 
-  if (Name.equals_insensitive("begin"))
+  if (Name.equals_lower("begin"))
     Token = RCToken(Kind::BlockBegin, Name);
-  else if (Name.equals_insensitive("end"))
+  else if (Name.equals_lower("end"))
     Token = RCToken(Kind::BlockEnd, Name);
 }
 

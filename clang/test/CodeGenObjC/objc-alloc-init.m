@@ -22,22 +22,13 @@ void f() {
 }
 
 @interface Y : X
-+(Class)class;
 +(void)meth;
 -(void)instanceMeth;
 @end
 
 @implementation Y
-+(Class)class {
-  return self;
-}
 +(void)meth {
   [[self alloc] init];
-  // OPTIMIZED: call i8* @objc_alloc_init(
-  // NOT_OPTIMIZED: call i8* @objc_alloc(
-}
-+ (void)meth2 {
-  [[[self class] alloc] init];
   // OPTIMIZED: call i8* @objc_alloc_init(
   // NOT_OPTIMIZED: call i8* @objc_alloc(
 }
@@ -45,7 +36,7 @@ void f() {
   // EITHER-NOT: call i8* @objc_alloc
   // EITHER: call {{.*}} @objc_msgSend
   // EITHER: call {{.*}} @objc_msgSend
-  [[(id)self alloc] init];
+  [[self alloc] init];
 }
 @end
 

@@ -1,4 +1,4 @@
-//===-- TestUtilities.cpp -------------------------------------------------===//
+//===- TestUtilities.cpp ----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,14 +8,9 @@
 
 #include "TestUtilities.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ObjectYAML/yaml2obj.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Program.h"
-#include "llvm/Support/YAMLTraits.h"
-#include "gtest/gtest.h"
-
-using namespace lldb_private;
 
 extern const char *TestMainArgv0;
 
@@ -23,24 +18,26 @@ std::string lldb_private::GetInputFilePath(const llvm::Twine &name) {
   llvm::SmallString<128> result = llvm::sys::path::parent_path(TestMainArgv0);
   llvm::sys::fs::make_absolute(result);
   llvm::sys::path::append(result, "Inputs", name);
-  return std::string(result.str());
+  return result.str();
 }
 
-llvm::Expected<TestFile> TestFile::fromYaml(llvm::StringRef Yaml) {
-  std::string Buffer;
-  llvm::raw_string_ostream OS(Buffer);
-  llvm::yaml::Input YIn(Yaml);
-  if (!llvm::yaml::convertYAML(YIn, OS, [](const llvm::Twine &Msg) {}))
+llvm::Error
+lldb_private::ReadYAMLObjectFile(const llvm::Twine &yaml_name,
+                                 llvm::SmallString<128> &object_file) {
+  std::string yaml = GetInputFilePath(yaml_name);
+  llvm::StringRef args[] = {YAML2OBJ, yaml};
+  llvm::StringRef obj_ref = object_file;
+  const llvm::Optional<llvm::StringRef> redirects[] = {llvm::None, obj_ref,
+                                                       llvm::None};
+  if (llvm::sys::ExecuteAndWait(YAML2OBJ, args, llvm::None, redirects) != 0)
     return llvm::createStringError(llvm::inconvertibleErrorCode(),
-                                   "convertYAML() failed");
-  return TestFile(std::move(Buffer));
-}
-
-llvm::Expected<TestFile> TestFile::fromYamlFile(const llvm::Twine &Name) {
-  auto BufferOrError =
-      llvm::MemoryBuffer::getFile(GetInputFilePath(Name), /*IsText=*/false,
-                                  /*RequiresNullTerminator=*/false);
-  if (!BufferOrError)
-    return llvm::errorCodeToError(BufferOrError.getError());
-  return fromYaml(BufferOrError.get()->getBuffer());
+                                   "Error running yaml2obj %s.", yaml.c_str());
+  uint64_t size;
+  if (auto ec = llvm::sys::fs::file_size(object_file, size))
+    return llvm::errorCodeToError(ec);
+  if (size == 0)
+    return llvm::createStringError(
+        llvm::inconvertibleErrorCode(),
+        "Empty object file created from yaml2obj %s.", yaml.c_str());
+  return llvm::Error::success();
 }

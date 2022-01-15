@@ -11,14 +11,3 @@ entry:
 }
 
 declare void @llvm.trap() noreturn nounwind 
-
-define dso_local i32 @getValue() nounwind sspstrong uwtable {
-; CHECK-LABEL: getValue
-; CHECK-NOT: .seh_proc
-; CHECK-NOT: .seh_endprologue
-; CHECK-NOT: .seh_startepilogue
-; CHECK-NOT: .seh_endepilogue
-; CHECK-NOT: .seh_endproc
-entry:
-  ret i32 42
-}

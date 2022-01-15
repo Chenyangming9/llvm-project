@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_DYNAMICLOADER_STATIC_DYNAMICLOADERSTATIC_H
-#define LLDB_SOURCE_PLUGINS_DYNAMICLOADER_STATIC_DYNAMICLOADERSTATIC_H
+#ifndef liblldb_DynamicLoaderStatic_h_
+#define liblldb_DynamicLoaderStatic_h_
 
 #include "lldb/Target/DynamicLoader.h"
 #include "lldb/Target/Process.h"
@@ -17,6 +17,8 @@
 class DynamicLoaderStatic : public lldb_private::DynamicLoader {
 public:
   DynamicLoaderStatic(lldb_private::Process *process);
+
+  ~DynamicLoaderStatic() override;
 
   // Static Functions
   static void Initialize();
@@ -50,6 +52,8 @@ public:
 
 private:
   void LoadAllImagesAtFileAddresses();
+
+  DISALLOW_COPY_AND_ASSIGN(DynamicLoaderStatic);
 };
 
-#endif // LLDB_SOURCE_PLUGINS_DYNAMICLOADER_STATIC_DYNAMICLOADERSTATIC_H
+#endif // liblldb_DynamicLoaderStatic_h_

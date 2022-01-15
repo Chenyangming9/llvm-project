@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONGROUPVALUEOBJECTDISPLAY_H
-#define LLDB_INTERPRETER_OPTIONGROUPVALUEOBJECTDISPLAY_H
+#ifndef liblldb_OptionGroupValueObjectDisplay_h_
+#define liblldb_OptionGroupValueObjectDisplay_h_
 
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Interpreter/Options.h"
@@ -18,14 +18,15 @@ namespace lldb_private {
 
 class OptionGroupValueObjectDisplay : public OptionGroup {
 public:
-  OptionGroupValueObjectDisplay() = default;
+  OptionGroupValueObjectDisplay();
 
-  ~OptionGroupValueObjectDisplay() override = default;
+  ~OptionGroupValueObjectDisplay() override;
 
   llvm::ArrayRef<OptionDefinition> GetDefinitions() override;
 
   Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
                         ExecutionContext *execution_context) override;
+  Status SetOptionValue(uint32_t, const char *, ExecutionContext *) = delete;
 
   void OptionParsingStarting(ExecutionContext *execution_context) override;
 
@@ -54,4 +55,4 @@ public:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONGROUPVALUEOBJECTDISPLAY_H
+#endif // liblldb_OptionGroupValueObjectDisplay_h_

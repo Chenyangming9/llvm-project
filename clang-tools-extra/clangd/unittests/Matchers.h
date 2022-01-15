@@ -89,12 +89,12 @@ public:
 
   template <typename T> operator Matcher<const std::vector<T> &>() const {
     return ::testing::MakeMatcher(new SubsequenceMatcher<T>(
-        TypedMatchers<T>(std::index_sequence_for<M...>{})));
+        TypedMatchers<T>(llvm::index_sequence_for<M...>{})));
   }
 
 private:
   template <typename T, size_t... I>
-  std::vector<Matcher<T>> TypedMatchers(std::index_sequence<I...>) const {
+  std::vector<Matcher<T>> TypedMatchers(llvm::index_sequence<I...>) const {
     return {std::get<I>(Matchers)...};
   }
 };
@@ -132,8 +132,6 @@ PolySubsequenceMatcher<Args...> HasSubsequence(Args &&... M) {
 template <typename InnerMatcher> class OptionalMatcher {
 public:
   explicit OptionalMatcher(const InnerMatcher &matcher) : matcher_(matcher) {}
-  OptionalMatcher(const OptionalMatcher&) = default;
-  OptionalMatcher &operator=(const OptionalMatcher&) = delete;
 
   // This type conversion operator template allows Optional(m) to be
   // used as a matcher for any Optional type whose value type is
@@ -157,9 +155,6 @@ private:
     explicit Impl(const InnerMatcher &matcher)
         : matcher_(::testing::MatcherCast<const Value &>(matcher)) {}
 
-    Impl(const Impl&) = default;
-    Impl &operator=(const Impl&) = delete;
-
     virtual void DescribeTo(::std::ostream *os) const {
       *os << "has a value that ";
       matcher_.DescribeTo(os);
@@ -182,9 +177,13 @@ private:
 
   private:
     const Matcher<const Value &> matcher_;
+
+    GTEST_DISALLOW_ASSIGN_(Impl);
   };
 
   const InnerMatcher matcher_;
+
+  GTEST_DISALLOW_ASSIGN_(OptionalMatcher);
 };
 
 // Creates a matcher that matches an Optional that has a value

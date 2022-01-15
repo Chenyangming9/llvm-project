@@ -3,11 +3,10 @@
 // RUN: %clang_hwasan %s -DTEST_NO=3 -mllvm -hwasan-instrument-mem-intrinsics -o %t && not %run %t 2>&1 | FileCheck %s --check-prefix=WRITE
 // RUN: %clang_hwasan %s -DTEST_NO=2 -mllvm -hwasan-instrument-mem-intrinsics -o %t && not %env_hwasan_opts=halt_on_error=0 %run %t 2>&1 | FileCheck %s --check-prefix=RECOVER
 
-// REQUIRES: stable-runtime, pointer-tagging
+// REQUIRES: stable-runtime
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 int main() {

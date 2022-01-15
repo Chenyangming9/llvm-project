@@ -3,7 +3,7 @@
 
 ---
 name:            testLXSSPX
-alignment:       16
+alignment:       4
 exposesReturnsTwice: false
 legalized:       false
 regBankSelected: false
@@ -102,7 +102,7 @@ body:             |
 
 ---
 name:            testSTXSSPX
-alignment:       16
+alignment:       4
 exposesReturnsTwice: false
 legalized:       false
 regBankSelected: false
@@ -133,7 +133,7 @@ body:             |
 
 ---
 name:            testSTXSDX
-alignment:       16
+alignment:       4
 exposesReturnsTwice: false
 legalized:       false
 regBankSelected: false

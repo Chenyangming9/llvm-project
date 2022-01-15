@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <filesystem>
 
@@ -14,14 +14,14 @@
 
 // void disable_recursion_pending();
 
-#include "filesystem_include.h"
+#include "filesystem_include.hpp"
 #include <type_traits>
 #include <set>
 #include <cassert>
 
 #include "test_macros.h"
-#include "rapid-cxx-test.h"
-#include "filesystem_test_helper.h"
+#include "rapid-cxx-test.hpp"
+#include "filesystem_test_helper.hpp"
 
 using namespace fs;
 
@@ -31,8 +31,7 @@ TEST_SUITE(recursive_directory_iterator_disable_recursion_pending_tests)
 // in the 'recursion_pending()' tests.
 TEST_CASE(basic_test)
 {
-    static_test_env static_env;
-    recursive_directory_iterator it(static_env.Dir);
+    recursive_directory_iterator it(StaticEnv::Dir);
     TEST_REQUIRE(it.recursion_pending() == true);
     it.disable_recursion_pending();
     TEST_CHECK(it.recursion_pending() == false);

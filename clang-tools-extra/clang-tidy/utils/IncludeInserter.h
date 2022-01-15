@@ -11,30 +11,31 @@
 
 #include "IncludeSorter.h"
 #include "clang/Basic/Diagnostic.h"
-#include "llvm/ADT/StringSet.h"
+#include "clang/Basic/LangOptions.h"
+#include "clang/Basic/SourceManager.h"
+#include "clang/Lex/PPCallbacks.h"
 #include <memory>
+#include <string>
 
 namespace clang {
-class Preprocessor;
 namespace tidy {
 namespace utils {
 
-/// Produces fixes to insert specified includes to source files, if not
+/// \brief Produces fixes to insert specified includes to source files, if not
 /// yet present.
 ///
 /// ``IncludeInserter`` can be used in clang-tidy checks in the following way:
 /// \code
-/// #include "../ClangTidyCheck.h"
 /// #include "../utils/IncludeInserter.h"
-///
-/// namespace clang {
-/// namespace tidy {
+/// #include "clang/Frontend/CompilerInstance.h"
 ///
 /// class MyCheck : public ClangTidyCheck {
 ///  public:
 ///   void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
 ///                            Preprocessor *ModuleExpanderPP) override {
-///     Inserter.registerPreprocessor(PP);
+///     Inserter = llvm::make_unique<IncludeInserter>(
+///         SM, getLangOpts(), utils::IncludeSorter::IS_Google);
+///     PP->addPPCallbacks(Inserter->CreatePPCallbacks());
 ///   }
 ///
 ///   void registerMatchers(ast_matchers::MatchFinder* Finder) override { ... }
@@ -42,56 +43,38 @@ namespace utils {
 ///   void check(
 ///       const ast_matchers::MatchFinder::MatchResult& Result) override {
 ///     ...
-///     Inserter.createMainFileIncludeInsertion("path/to/Header.h");
+///     Inserter->CreateIncludeInsertion(
+///         Result.SourceManager->getMainFileID(), "path/to/Header.h",
+///         /*IsAngled=*/false);
 ///     ...
 ///   }
 ///
 ///  private:
-///   utils::IncludeInserter Inserter{utils::IncludeSorter::IS_Google};
+///   std::unique_ptr<clang::tidy::utils::IncludeInserter> Inserter;
 /// };
-/// } // namespace tidy
-/// } // namespace clang
 /// \endcode
 class IncludeInserter {
 public:
-  /// Initializes the IncludeInserter using the IncludeStyle \p Style.
-  /// In most cases the \p Style will be retrieved from the ClangTidyOptions
-  /// using \code
-  ///   Options.getLocalOrGlobal("IncludeStyle", <DefaultStyle>)
-  /// \endcode
-  explicit IncludeInserter(IncludeSorter::IncludeStyle Style);
+  IncludeInserter(const SourceManager &SourceMgr, const LangOptions &LangOpts,
+                  IncludeSorter::IncludeStyle Style);
+  ~IncludeInserter();
 
-  /// Registers this with the Preprocessor \p PP, must be called before this
-  /// class is used.
-  void registerPreprocessor(Preprocessor *PP);
+  /// Create ``PPCallbacks`` for registration with the compiler's preprocessor.
+  std::unique_ptr<PPCallbacks> CreatePPCallbacks();
 
-  /// Creates a \p Header inclusion directive fixit in the File \p FileID.
-  /// When \p Header is enclosed in angle brackets, uses angle brackets in the
-  /// inclusion directive, otherwise uses quotes.
-  /// Returns ``llvm::None`` on error or if the inclusion directive already
-  /// exists.
-  llvm::Optional<FixItHint> createIncludeInsertion(FileID FileID,
-                                                   llvm::StringRef Header);
-
-  /// Creates a \p Header inclusion directive fixit in the main file.
-  /// When \p Header is enclosed in angle brackets, uses angle brackets in the
-  /// inclusion directive, otherwise uses quotes.
-  /// Returns ``llvm::None`` on error or if the inclusion directive already
-  /// exists.
+  /// Creates a \p Header inclusion directive fixit. Returns ``llvm::None`` on
+  /// error or if inclusion directive already exists.
   llvm::Optional<FixItHint>
-  createMainFileIncludeInsertion(llvm::StringRef Header);
-
-  IncludeSorter::IncludeStyle getStyle() const { return Style; }
+  CreateIncludeInsertion(FileID FileID, llvm::StringRef Header, bool IsAngled);
 
 private:
-  void addInclude(StringRef FileName, bool IsAngled,
+  void AddInclude(StringRef FileName, bool IsAngled,
                   SourceLocation HashLocation, SourceLocation EndLocation);
 
-  IncludeSorter &getOrCreate(FileID FileID);
-
   llvm::DenseMap<FileID, std::unique_ptr<IncludeSorter>> IncludeSorterByFile;
-  llvm::DenseMap<FileID, llvm::StringSet<>> InsertedHeaders;
-  const SourceManager *SourceMgr{nullptr};
+  llvm::DenseMap<FileID, std::set<std::string>> InsertedHeaders;
+  const SourceManager &SourceMgr;
+  const LangOptions &LangOpts;
   const IncludeSorter::IncludeStyle Style;
   friend class IncludeInserterCallback;
 };

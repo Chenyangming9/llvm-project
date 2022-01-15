@@ -9,12 +9,9 @@ unittest("BasicTests") {
   ]
   sources = [
     "CharInfoTest.cpp",
-    "DarwinSDKInfoTest.cpp",
     "DiagnosticTest.cpp",
-    "FileEntryTest.cpp",
     "FileManagerTest.cpp",
-    "LineOffsetMappingTest.cpp",
-    "SanitizersTest.cpp",
+    "FixedPointTest.cpp",
     "SourceManagerTest.cpp",
   ]
 }

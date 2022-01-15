@@ -15,7 +15,7 @@
 ...
 ---
 name:            test_fdiv_float
-alignment:       16
+alignment:       4
 legalized:       false
 regBankSelected: false
 registers:
@@ -54,7 +54,7 @@ body:             |
 ...
 ---
 name:            test_fdiv_double
-alignment:       16
+alignment:       4
 legalized:       false
 regBankSelected: false
 registers:

@@ -133,8 +133,8 @@ private:
 
 void addTLVPass(PassManager &pm, const MachOLinkingContext &ctx) {
   assert(ctx.needsTLVPass());
-  pm.add(std::make_unique<TLVPass>(ctx));
+  pm.add(llvm::make_unique<TLVPass>(ctx));
 }
 
-} // end namespace mach_o
-} // end namespace lld
+} // end namesapce mach_o
+} // end namesapce lld

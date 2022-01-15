@@ -139,10 +139,6 @@ static bool typesCompatible(ASTContext &C, QualType A, QualType B) {
   if (B->isVoidPointerType() && A->getAs<PointerType>())
     return true;
 
-  // sizeof(pointer type) is compatible with void*
-  if (A->isVoidPointerType() && B->getAs<PointerType>())
-    return true;
-
   while (true) {
     A = A.getCanonicalType();
     B = B.getCanonicalType();
@@ -187,7 +183,7 @@ public:
       QualType CastedType = i->CastedExpr->getType();
       if (!CastedType->isPointerType())
         continue;
-      QualType PointeeType = CastedType->getPointeeType();
+      QualType PointeeType = CastedType->getAs<PointerType>()->getPointeeType();
       if (PointeeType->isVoidType())
         continue;
 
@@ -254,6 +250,6 @@ void ento::registerMallocSizeofChecker(CheckerManager &mgr) {
   mgr.registerChecker<MallocSizeofChecker>();
 }
 
-bool ento::shouldRegisterMallocSizeofChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterMallocSizeofChecker(const LangOptions &LO) {
   return true;
 }

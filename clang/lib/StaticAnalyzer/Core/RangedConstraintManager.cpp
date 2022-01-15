@@ -23,14 +23,12 @@ RangedConstraintManager::~RangedConstraintManager() {}
 ProgramStateRef RangedConstraintManager::assumeSym(ProgramStateRef State,
                                                    SymbolRef Sym,
                                                    bool Assumption) {
-  Sym = simplify(State, Sym);
-
   // Handle SymbolData.
-  if (isa<SymbolData>(Sym))
+  if (isa<SymbolData>(Sym)) {
     return assumeSymUnsupported(State, Sym, Assumption);
 
-  // Handle symbolic expression.
-  if (const SymIntExpr *SIE = dyn_cast<SymIntExpr>(Sym)) {
+    // Handle symbolic expression.
+  } else if (const SymIntExpr *SIE = dyn_cast<SymIntExpr>(Sym)) {
     // We can only simplify expressions whose RHS is an integer.
 
     BinaryOperator::Opcode op = SIE->getOpcode();
@@ -42,20 +40,19 @@ ProgramStateRef RangedConstraintManager::assumeSym(ProgramStateRef State,
     }
 
   } else if (const SymSymExpr *SSE = dyn_cast<SymSymExpr>(Sym)) {
+    // Translate "a != b" to "(b - a) != 0".
+    // We invert the order of the operands as a heuristic for how loop
+    // conditions are usually written ("begin != end") as compared to length
+    // calculations ("end - begin"). The more correct thing to do would be to
+    // canonicalize "a - b" and "b - a", which would allow us to treat
+    // "a != b" and "b != a" the same.
+    SymbolManager &SymMgr = getSymbolManager();
     BinaryOperator::Opcode Op = SSE->getOpcode();
     assert(BinaryOperator::isComparisonOp(Op));
 
-    // We convert equality operations for pointers only.
+    // For now, we only support comparing pointers.
     if (Loc::isLocType(SSE->getLHS()->getType()) &&
         Loc::isLocType(SSE->getRHS()->getType())) {
-      // Translate "a != b" to "(b - a) != 0".
-      // We invert the order of the operands as a heuristic for how loop
-      // conditions are usually written ("begin != end") as compared to length
-      // calculations ("end - begin"). The more correct thing to do would be to
-      // canonicalize "a - b" and "b - a", which would allow us to treat
-      // "a != b" and "b != a" the same.
-
-      SymbolManager &SymMgr = getSymbolManager();
       QualType DiffTy = SymMgr.getContext().getPointerDiffType();
       SymbolRef Subtraction =
           SymMgr.getSymSymExpr(SSE->getRHS(), BO_Sub, SSE->getLHS(), DiffTy);
@@ -65,25 +62,6 @@ ProgramStateRef RangedConstraintManager::assumeSym(ProgramStateRef State,
       if (!Assumption)
         Op = BinaryOperator::negateComparisonOp(Op);
       return assumeSymRel(State, Subtraction, Op, Zero);
-    }
-
-    if (BinaryOperator::isEqualityOp(Op)) {
-      SymbolManager &SymMgr = getSymbolManager();
-
-      QualType ExprType = SSE->getType();
-      SymbolRef CanonicalEquality =
-          SymMgr.getSymSymExpr(SSE->getLHS(), BO_EQ, SSE->getRHS(), ExprType);
-
-      bool WasEqual = SSE->getOpcode() == BO_EQ;
-      bool IsExpectedEqual = WasEqual == Assumption;
-
-      const llvm::APSInt &Zero = getBasicVals().getValue(0, ExprType);
-
-      if (IsExpectedEqual) {
-        return assumeSymNE(State, CanonicalEquality, Zero, Zero);
-      }
-
-      return assumeSymEQ(State, CanonicalEquality, Zero, Zero);
     }
   }
 
@@ -95,9 +73,6 @@ ProgramStateRef RangedConstraintManager::assumeSym(ProgramStateRef State,
 ProgramStateRef RangedConstraintManager::assumeSymInclusiveRange(
     ProgramStateRef State, SymbolRef Sym, const llvm::APSInt &From,
     const llvm::APSInt &To, bool InRange) {
-
-  Sym = simplify(State, Sym);
-
   // Get the type used for calculating wraparound.
   BasicValueFactory &BVF = getBasicVals();
   APSIntType WraparoundType = BVF.getAPSIntType(Sym->getType());
@@ -126,8 +101,6 @@ ProgramStateRef RangedConstraintManager::assumeSymInclusiveRange(
 ProgramStateRef
 RangedConstraintManager::assumeSymUnsupported(ProgramStateRef State,
                                               SymbolRef Sym, bool Assumption) {
-  Sym = simplify(State, Sym);
-
   BasicValueFactory &BVF = getBasicVals();
   QualType T = Sym->getType();
 
@@ -226,13 +199,11 @@ void RangedConstraintManager::computeAdjustment(SymbolRef &Sym,
   }
 }
 
-SymbolRef simplify(ProgramStateRef State, SymbolRef Sym) {
-  SValBuilder &SVB = State->getStateManager().getSValBuilder();
-  SVal SimplifiedVal = SVB.simplifySVal(State, SVB.makeSymbolVal(Sym));
-  if (SymbolRef SimplifiedSym = SimplifiedVal.getAsSymbol())
-    return SimplifiedSym;
-  return Sym;
+void *ProgramStateTrait<ConstraintRange>::GDMIndex() {
+  static int Index;
+  return &Index;
 }
 
 } // end of namespace ento
+
 } // end of namespace clang

@@ -41,7 +41,6 @@ public:
 
 private:
   const unsigned StrictMode : 1;
-  const unsigned IgnoreSingleArgument : 1;
   const unsigned CommentBoolLiterals : 1;
   const unsigned CommentIntegerLiterals : 1;
   const unsigned CommentFloatLiterals : 1;

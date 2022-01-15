@@ -48,8 +48,8 @@ struct ChecksFilter {
   /// Check that all ivars are invalidated.
   DefaultBool check_InstanceVariableInvalidation;
 
-  CheckerNameRef checkName_MissingInvalidationMethod;
-  CheckerNameRef checkName_InstanceVariableInvalidation;
+  CheckName checkName_MissingInvalidationMethod;
+  CheckName checkName_InstanceVariableInvalidation;
 };
 
 class IvarInvalidationCheckerImpl {
@@ -199,7 +199,7 @@ class IvarInvalidationCheckerImpl {
                         const ObjCIvarDecl *IvarDecl,
                         const IvarToPropMapTy &IvarToPopertyMap);
 
-  void reportNoInvalidationMethod(CheckerNameRef CheckName,
+  void reportNoInvalidationMethod(CheckName CheckName,
                                   const ObjCIvarDecl *FirstIvarDecl,
                                   const IvarToPropMapTy &IvarToPopertyMap,
                                   const ObjCInterfaceDecl *InterfaceD,
@@ -526,7 +526,7 @@ visit(const ObjCImplementationDecl *ImplD) const {
 }
 
 void IvarInvalidationCheckerImpl::reportNoInvalidationMethod(
-    CheckerNameRef CheckName, const ObjCIvarDecl *FirstIvarDecl,
+    CheckName CheckName, const ObjCIvarDecl *FirstIvarDecl,
     const IvarToPropMapTy &IvarToPopertyMap,
     const ObjCInterfaceDecl *InterfaceD, bool MissingDeclaration) const {
   SmallString<128> sbuf;
@@ -739,7 +739,7 @@ void ento::registerIvarInvalidationModeling(CheckerManager &mgr) {
   mgr.registerChecker<IvarInvalidationChecker>();
 }
 
-bool ento::shouldRegisterIvarInvalidationModeling(const CheckerManager &mgr) {
+bool ento::shouldRegisterIvarInvalidationModeling(const LangOptions &LO) {
   return true;
 }
 
@@ -748,10 +748,12 @@ bool ento::shouldRegisterIvarInvalidationModeling(const CheckerManager &mgr) {
     IvarInvalidationChecker *checker =                                         \
         mgr.getChecker<IvarInvalidationChecker>();                             \
     checker->Filter.check_##name = true;                                       \
-    checker->Filter.checkName_##name = mgr.getCurrentCheckerName();            \
+    checker->Filter.checkName_##name = mgr.getCurrentCheckName();              \
   }                                                                            \
                                                                                \
-  bool ento::shouldRegister##name(const CheckerManager &mgr) { return true; }
+  bool ento::shouldRegister##name(const LangOptions &LO) {                     \
+    return true;                                                               \
+  }
 
 REGISTER_CHECKER(InstanceVariableInvalidation)
 REGISTER_CHECKER(MissingInvalidationMethod)

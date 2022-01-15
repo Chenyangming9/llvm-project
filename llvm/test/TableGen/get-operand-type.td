@@ -16,8 +16,6 @@ def RegClass : RegisterClass<"foo", [i32], 0, (add Reg)>;
 def OpA : Operand<i32>;
 def OpB : Operand<i32>;
 
-def RegOp : RegisterOperand<RegClass>;
-
 def InstA : Instruction {
   let Size = 1;
   let OutOperandList = (outs OpA:$a);
@@ -36,17 +34,7 @@ def InstB : Instruction {
   let Namespace = "MyNamespace";
 }
 
-def InstC : Instruction {
-  let Size = 1;
-  let OutOperandList = (outs RegClass:$d);
-  let InOperandList = (ins RegOp:$x);
-  field bits<8> Inst;
-  field bits<8> SoftFail = 0;
-  let Namespace = "MyNamespace";
-}
-
 // CHECK: #ifdef GET_INSTRINFO_OPERAND_TYPE
 // CHECK:        OpTypes::OpA, OpTypes::OpB, OpTypes::i32imm,
 // CHECK-NEXT:   OpTypes::i32imm, -1,
-// CHECK-NEXT:   OpTypes::RegClass, OpTypes::RegOp,
-// CHECK: #endif // GET_INSTRINFO_OPERAND_TYPE
+// CHECK: #endif //GET_INSTRINFO_OPERAND_TYPE

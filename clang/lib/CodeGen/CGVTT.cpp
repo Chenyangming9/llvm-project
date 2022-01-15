@@ -42,8 +42,10 @@ CodeGenVTables::EmitVTTDefinition(llvm::GlobalVariable *VTT,
                                   llvm::GlobalVariable::LinkageTypes Linkage,
                                   const CXXRecordDecl *RD) {
   VTTBuilder Builder(CGM.getContext(), RD, /*GenerateDefinition=*/true);
+
+  llvm::Type *Int8PtrTy = CGM.Int8PtrTy, *Int32Ty = CGM.Int32Ty;
   llvm::ArrayType *ArrayType =
-      llvm::ArrayType::get(CGM.Int8PtrTy, Builder.getVTTComponents().size());
+    llvm::ArrayType::get(Int8PtrTy, Builder.getVTTComponents().size());
 
   SmallVector<llvm::GlobalVariable *, 8> VTables;
   SmallVector<VTableAddressPointsMapTy, 8> VTableAddressPoints;
@@ -72,17 +74,16 @@ CodeGenVTables::EmitVTTDefinition(llvm::GlobalVariable *VTT,
     }
 
      llvm::Value *Idxs[] = {
-       llvm::ConstantInt::get(CGM.Int32Ty, 0),
-       llvm::ConstantInt::get(CGM.Int32Ty, AddressPoint.VTableIndex),
-       llvm::ConstantInt::get(CGM.Int32Ty, AddressPoint.AddressPointIndex),
+       llvm::ConstantInt::get(Int32Ty, 0),
+       llvm::ConstantInt::get(Int32Ty, AddressPoint.VTableIndex),
+       llvm::ConstantInt::get(Int32Ty, AddressPoint.AddressPointIndex),
      };
 
      llvm::Constant *Init = llvm::ConstantExpr::getGetElementPtr(
          VTable->getValueType(), VTable, Idxs, /*InBounds=*/true,
          /*InRangeIndex=*/1);
 
-     Init = llvm::ConstantExpr::getPointerBitCastOrAddrSpaceCast(Init,
-                                                                 CGM.Int8PtrTy);
+     Init = llvm::ConstantExpr::getBitCast(Init, Int8PtrTy);
 
      VTTComponents.push_back(Init);
   }

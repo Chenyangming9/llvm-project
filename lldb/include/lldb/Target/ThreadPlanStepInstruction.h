@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TARGET_THREADPLANSTEPINSTRUCTION_H
-#define LLDB_TARGET_THREADPLANSTEPINSTRUCTION_H
+#ifndef liblldb_ThreadPlanStepInstruction_h_
+#define liblldb_ThreadPlanStepInstruction_h_
 
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadPlan.h"
@@ -18,7 +18,7 @@ namespace lldb_private {
 class ThreadPlanStepInstruction : public ThreadPlan {
 public:
   ThreadPlanStepInstruction(Thread &thread, bool step_over, bool stop_others,
-                            Vote report_stop_vote, Vote report_run_vote);
+                            Vote stop_vote, Vote run_vote);
 
   ~ThreadPlanStepInstruction() override;
 
@@ -49,11 +49,9 @@ private:
   StackID m_stack_id;
   StackID m_parent_frame_id;
 
-  ThreadPlanStepInstruction(const ThreadPlanStepInstruction &) = delete;
-  const ThreadPlanStepInstruction &
-  operator=(const ThreadPlanStepInstruction &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(ThreadPlanStepInstruction);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_TARGET_THREADPLANSTEPINSTRUCTION_H
+#endif // liblldb_ThreadPlanStepInstruction_h_

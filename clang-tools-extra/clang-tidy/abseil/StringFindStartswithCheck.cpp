@@ -12,8 +12,8 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Frontend/CompilerInstance.h"
-#include "clang/Lex/Lexer.h"
-#include "clang/Lex/Preprocessor.h"
+
+#include <cassert>
 
 using namespace clang::ast_matchers;
 
@@ -26,8 +26,8 @@ StringFindStartswithCheck::StringFindStartswithCheck(StringRef Name,
     : ClangTidyCheck(Name, Context),
       StringLikeClasses(utils::options::parseStringList(
           Options.get("StringLikeClasses", "::std::basic_string"))),
-      IncludeInserter(Options.getLocalOrGlobal("IncludeStyle",
-                                               utils::IncludeSorter::IS_LLVM)),
+      IncludeStyle(utils::IncludeSorter::parseIncludeStyle(
+          Options.getLocalOrGlobal("IncludeStyle", "llvm"))),
       AbseilStringsMatchHeader(
           Options.get("AbseilStringsMatchHeader", "absl/strings/match.h")) {}
 
@@ -50,9 +50,9 @@ void StringFindStartswithCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(
       // Match [=!]= with a zero on one side and a string.find on the other.
       binaryOperator(
-          hasAnyOperatorName("==", "!="),
-          hasOperands(ignoringParenImpCasts(ZeroLiteral),
-                      ignoringParenImpCasts(StringFind.bind("findexpr"))))
+          anyOf(hasOperatorName("=="), hasOperatorName("!=")),
+          hasEitherOperand(ignoringParenImpCasts(ZeroLiteral)),
+          hasEitherOperand(ignoringParenImpCasts(StringFind.bind("findexpr"))))
           .bind("expr"),
       this);
 }
@@ -83,37 +83,49 @@ void StringFindStartswithCheck::check(const MatchFinder::MatchResult &Result) {
       Context.getLangOpts());
 
   // Create the StartsWith string, negating if comparison was "!=".
-  bool Neg = ComparisonExpr->getOpcode() == BO_NE;
+  bool Neg = ComparisonExpr->getOpcodeStr() == "!=";
+  StringRef StartswithStr;
+  if (Neg) {
+    StartswithStr = "!absl::StartsWith";
+  } else {
+    StartswithStr = "absl::StartsWith";
+  }
 
   // Create the warning message and a FixIt hint replacing the original expr.
-  auto Diagnostic = diag(ComparisonExpr->getBeginLoc(),
-                         "use %select{absl::StartsWith|!absl::StartsWith}0 "
-                         "instead of find() %select{==|!=}0 0")
-                    << Neg;
+  auto Diagnostic =
+      diag(ComparisonExpr->getBeginLoc(),
+           (StringRef("use ") + StartswithStr + " instead of find() " +
+            ComparisonExpr->getOpcodeStr() + " 0")
+               .str());
 
   Diagnostic << FixItHint::CreateReplacement(
       ComparisonExpr->getSourceRange(),
-      ((Neg ? "!absl::StartsWith(" : "absl::StartsWith(") + HaystackExprCode +
-       ", " + NeedleExprCode + ")")
+      (StartswithStr + "(" + HaystackExprCode + ", " + NeedleExprCode + ")")
           .str());
 
   // Create a preprocessor #include FixIt hint (CreateIncludeInsertion checks
   // whether this already exists).
-  Diagnostic << IncludeInserter.createIncludeInsertion(
-      Source.getFileID(ComparisonExpr->getBeginLoc()),
-      AbseilStringsMatchHeader);
+  auto IncludeHint = IncludeInserter->CreateIncludeInsertion(
+      Source.getFileID(ComparisonExpr->getBeginLoc()), AbseilStringsMatchHeader,
+      false);
+  if (IncludeHint) {
+    Diagnostic << *IncludeHint;
+  }
 }
 
 void StringFindStartswithCheck::registerPPCallbacks(
     const SourceManager &SM, Preprocessor *PP, Preprocessor *ModuleExpanderPP) {
-  IncludeInserter.registerPreprocessor(PP);
+  IncludeInserter = llvm::make_unique<utils::IncludeInserter>(SM, getLangOpts(),
+                                                              IncludeStyle);
+  PP->addPPCallbacks(IncludeInserter->CreatePPCallbacks());
 }
 
 void StringFindStartswithCheck::storeOptions(
     ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "StringLikeClasses",
                 utils::options::serializeStringList(StringLikeClasses));
-  Options.store(Opts, "IncludeStyle", IncludeInserter.getStyle());
+  Options.store(Opts, "IncludeStyle",
+                utils::IncludeSorter::toString(IncludeStyle));
   Options.store(Opts, "AbseilStringsMatchHeader", AbseilStringsMatchHeader);
 }
 

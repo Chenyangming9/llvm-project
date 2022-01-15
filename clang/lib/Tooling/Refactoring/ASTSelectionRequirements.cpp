@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Tooling/Refactoring/RefactoringActionRuleRequirements.h"
-#include "clang/AST/Attr.h"
 
 using namespace clang;
 using namespace tooling;
@@ -36,7 +35,7 @@ Expected<CodeRangeASTSelection> CodeRangeASTSelectionRequirement::evaluate(
   if (!ASTSelection)
     return ASTSelection.takeError();
   std::unique_ptr<SelectedASTNode> StoredSelection =
-      std::make_unique<SelectedASTNode>(std::move(*ASTSelection));
+      llvm::make_unique<SelectedASTNode>(std::move(*ASTSelection));
   Optional<CodeRangeASTSelection> CodeRange = CodeRangeASTSelection::create(
       Context.getSelectionRange(), *StoredSelection);
   if (!CodeRange)

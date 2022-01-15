@@ -14,7 +14,6 @@
 #ifndef LLVM_CLANG_LIB_CODEGEN_TARGETINFO_H
 #define LLVM_CLANG_LIB_CODEGEN_TARGETINFO_H
 
-#include "CGBuilder.h"
 #include "CodeGenModule.h"
 #include "CGValue.h"
 #include "clang/AST/Type.h"
@@ -44,10 +43,11 @@ class CGFunctionInfo;
 /// codegeneration issues, like target-specific attributes, builtins and so
 /// on.
 class TargetCodeGenInfo {
-  std::unique_ptr<ABIInfo> Info = nullptr;
+  ABIInfo *Info;
 
 public:
-  TargetCodeGenInfo(std::unique_ptr<ABIInfo> Info) : Info(std::move(Info)) {}
+  // WARNING: Acquires the ownership of ABIInfo.
+  TargetCodeGenInfo(ABIInfo *info = nullptr) : Info(info) {}
   virtual ~TargetCodeGenInfo();
 
   /// getABIInfo() - Returns ABI info helper for the target.
@@ -58,18 +58,10 @@ public:
   virtual void setTargetAttributes(const Decl *D, llvm::GlobalValue *GV,
                                    CodeGen::CodeGenModule &M) const {}
 
-  /// emitTargetMetadata - Provides a convenient hook to handle extra
-  /// target-specific metadata for the given globals.
-  virtual void emitTargetMetadata(
-      CodeGen::CodeGenModule &CGM,
-      const llvm::MapVector<GlobalDecl, StringRef> &MangledDeclNames) const {}
-
-  /// Any further codegen related checks that need to be done on a function call
-  /// in a target specific manner.
-  virtual void checkFunctionCallABI(CodeGenModule &CGM, SourceLocation CallLoc,
-                                    const FunctionDecl *Caller,
-                                    const FunctionDecl *Callee,
-                                    const CallArgList &Args) const {}
+  /// emitTargetMD - Provides a convenient hook to handle extra
+  /// target-specific metadata for the given global.
+  virtual void emitTargetMD(const Decl *D, llvm::GlobalValue *GV,
+                            CodeGen::CodeGenModule &M) const {}
 
   /// Determines the size of struct _Unwind_Exception on this platform,
   /// in 8-bit units.  The Itanium ABI defines this as:
@@ -127,16 +119,6 @@ public:
     return Address;
   }
 
-  /// Performs a target specific test of a floating point value for things
-  /// like IsNaN, Infinity, ... Nullptr is returned if no implementation
-  /// exists.
-  virtual llvm::Value *
-  testFPKind(llvm::Value *V, unsigned BuiltinID, CGBuilderTy &Builder,
-             CodeGenModule &CGM) const {
-    assert(V->getType()->isFloatingPointTy() && "V should have an FP type.");
-    return nullptr;
-  }
-
   /// Corrects the low-level LLVM type for a given constraint and "usual"
   /// type.
   ///
@@ -146,13 +128,6 @@ public:
                                           StringRef Constraint,
                                           llvm::Type *Ty) const {
     return Ty;
-  }
-
-  /// Target hook to decide whether an inline asm operand can be passed
-  /// by value.
-  virtual bool isScalarizableAsmOperand(CodeGen::CodeGenFunction &CGF,
-                                        llvm::Type *Ty) const {
-    return false;
   }
 
   /// Adds constraints and types for result registers.
@@ -181,9 +156,11 @@ public:
     return "";
   }
 
-  /// Determine whether a call to objc_retainAutoreleasedReturnValue or
-  /// objc_unsafeClaimAutoreleasedReturnValue should be marked as 'notail'.
-  virtual bool markARCOptimizedReturnCallsAsNoTail() const { return false; }
+  /// Determine whether a call to objc_retainAutoreleasedReturnValue should be
+  /// marked as 'notail'.
+  virtual bool shouldSuppressTailCallsOfRetainAutoreleasedReturnValue() const {
+    return false;
+  }
 
   /// Return a constant used by UBSan as a signature to identify functions
   /// possessing type information, or 0 if the platform is unsupported.
@@ -338,32 +315,6 @@ public:
   virtual bool shouldEmitStaticExternCAliases() const { return true; }
 
   virtual void setCUDAKernelCallingConvention(const FunctionType *&FT) const {}
-
-  /// Return the device-side type for the CUDA device builtin surface type.
-  virtual llvm::Type *getCUDADeviceBuiltinSurfaceDeviceType() const {
-    // By default, no change from the original one.
-    return nullptr;
-  }
-  /// Return the device-side type for the CUDA device builtin texture type.
-  virtual llvm::Type *getCUDADeviceBuiltinTextureDeviceType() const {
-    // By default, no change from the original one.
-    return nullptr;
-  }
-
-  /// Emit the device-side copy of the builtin surface type.
-  virtual bool emitCUDADeviceBuiltinSurfaceDeviceCopy(CodeGenFunction &CGF,
-                                                      LValue Dst,
-                                                      LValue Src) const {
-    // DO NOTHING by default.
-    return false;
-  }
-  /// Emit the device-side copy of the builtin texture type.
-  virtual bool emitCUDADeviceBuiltinTextureDeviceCopy(CodeGenFunction &CGF,
-                                                      LValue Dst,
-                                                      LValue Src) const {
-    // DO NOTHING by default.
-    return false;
-  }
 };
 
 } // namespace CodeGen

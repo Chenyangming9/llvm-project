@@ -20,6 +20,7 @@ Error CodeViewRecordIO::beginRecord(Optional<uint32_t> MaxLength) {
   Limit.MaxLength = MaxLength;
   Limit.BeginOffset = getCurrentOffset();
   Limits.push_back(Limit);
+  resetStreamedLen();
   return Error::success();
 }
 
@@ -46,10 +47,9 @@ Error CodeViewRecordIO::endRecord() {
     while (PaddingBytes > 0) {
       char Pad = static_cast<uint8_t>(LF_PAD0 + PaddingBytes);
       StringRef BytesSR = StringRef(&Pad, sizeof(Pad));
-      Streamer->emitBytes(BytesSR);
+      Streamer->EmitBytes(BytesSR);
       --PaddingBytes;
     }
-    resetStreamedLen();
   }
   return Error::success();
 }
@@ -101,7 +101,7 @@ Error CodeViewRecordIO::mapByteVectorTail(ArrayRef<uint8_t> &Bytes,
                                           const Twine &Comment) {
   if (isStreaming()) {
     emitComment(Comment);
-    Streamer->emitBinaryData(toStringRef(Bytes));
+    Streamer->EmitBinaryData(toStringRef(Bytes));
     incrStreamedLen(Bytes.size());
   } else if (isWriting()) {
     if (auto EC = Writer->writeBytes(Bytes))
@@ -126,12 +126,8 @@ Error CodeViewRecordIO::mapByteVectorTail(std::vector<uint8_t> &Bytes,
 
 Error CodeViewRecordIO::mapInteger(TypeIndex &TypeInd, const Twine &Comment) {
   if (isStreaming()) {
-    std::string TypeNameStr = Streamer->getTypeName(TypeInd);
-    if (!TypeNameStr.empty())
-      emitComment(Comment + ": " + TypeNameStr);
-    else
-      emitComment(Comment);
-    Streamer->emitIntValue(TypeInd.getIndex(), sizeof(TypeInd.getIndex()));
+    emitComment(Comment);
+    Streamer->EmitIntValue(TypeInd.getIndex(), sizeof(TypeInd.getIndex()));
     incrStreamedLen(sizeof(TypeInd.getIndex()));
   } else if (isWriting()) {
     if (auto EC = Writer->writeInteger(TypeInd.getIndex()))
@@ -188,17 +184,14 @@ Error CodeViewRecordIO::mapEncodedInteger(uint64_t &Value,
 
 Error CodeViewRecordIO::mapEncodedInteger(APSInt &Value, const Twine &Comment) {
   if (isStreaming()) {
-    // FIXME: We also need to handle big values here, but it's
-    //        not clear how we can excercise this code path yet.
     if (Value.isSigned())
       emitEncodedSignedInteger(Value.getSExtValue(), Comment);
     else
       emitEncodedUnsignedInteger(Value.getZExtValue(), Comment);
   } else if (isWriting()) {
     if (Value.isSigned())
-      return writeEncodedSignedInteger(
-          Value.isSingleWord() ? Value.getSExtValue() : INT64_MIN);
-    return writeEncodedUnsignedInteger(Value.getLimitedValue());
+      return writeEncodedSignedInteger(Value.getSExtValue());
+    return writeEncodedUnsignedInteger(Value.getZExtValue());
   } else
     return consume(*Reader, Value);
   return Error::success();
@@ -208,7 +201,7 @@ Error CodeViewRecordIO::mapStringZ(StringRef &Value, const Twine &Comment) {
   if (isStreaming()) {
     auto NullTerminatedString = StringRef(Value.data(), Value.size() + 1);
     emitComment(Comment);
-    Streamer->emitBytes(NullTerminatedString);
+    Streamer->EmitBytes(NullTerminatedString);
     incrStreamedLen(NullTerminatedString.size());
   } else if (isWriting()) {
     // Truncate if we attempt to write too much.
@@ -229,7 +222,7 @@ Error CodeViewRecordIO::mapGuid(GUID &Guid, const Twine &Comment) {
     StringRef GuidSR =
         StringRef((reinterpret_cast<const char *>(&Guid)), GuidSize);
     emitComment(Comment);
-    Streamer->emitBytes(GuidSR);
+    Streamer->EmitBytes(GuidSR);
     incrStreamedLen(GuidSize);
     return Error::success();
   }
@@ -276,29 +269,27 @@ Error CodeViewRecordIO::mapStringZVectorZ(std::vector<StringRef> &Value,
 
 void CodeViewRecordIO::emitEncodedSignedInteger(const int64_t &Value,
                                                 const Twine &Comment) {
-  // FIXME: There are no test cases covering this function.
-  // This may be because we always consider enumerators to be unsigned.
-  // See FIXME at CodeViewDebug.cpp : CodeViewDebug::lowerTypeEnum.
+  assert(Value < 0 && "Encoded integer is not signed!");
   if (Value >= std::numeric_limits<int8_t>::min()) {
-    Streamer->emitIntValue(LF_CHAR, 2);
+    Streamer->EmitIntValue(LF_CHAR, 2);
     emitComment(Comment);
-    Streamer->emitIntValue(Value, 1);
+    Streamer->EmitIntValue(Value, 1);
     incrStreamedLen(3);
   } else if (Value >= std::numeric_limits<int16_t>::min()) {
-    Streamer->emitIntValue(LF_SHORT, 2);
+    Streamer->EmitIntValue(LF_SHORT, 2);
     emitComment(Comment);
-    Streamer->emitIntValue(Value, 2);
+    Streamer->EmitIntValue(Value, 2);
     incrStreamedLen(4);
   } else if (Value >= std::numeric_limits<int32_t>::min()) {
-    Streamer->emitIntValue(LF_LONG, 2);
+    Streamer->EmitIntValue(LF_LONG, 2);
     emitComment(Comment);
-    Streamer->emitIntValue(Value, 4);
+    Streamer->EmitIntValue(Value, 4);
     incrStreamedLen(6);
   } else {
-    Streamer->emitIntValue(LF_QUADWORD, 2);
+    Streamer->EmitIntValue(LF_QUADWORD, 2);
     emitComment(Comment);
-    Streamer->emitIntValue(Value, 4); // FIXME: Why not 8 (size of quadword)?
-    incrStreamedLen(6);               // FIXME: Why not 10 (8 + 2)?
+    Streamer->EmitIntValue(Value, 4);
+    incrStreamedLen(6);
   }
 }
 
@@ -306,28 +297,28 @@ void CodeViewRecordIO::emitEncodedUnsignedInteger(const uint64_t &Value,
                                                   const Twine &Comment) {
   if (Value < LF_NUMERIC) {
     emitComment(Comment);
-    Streamer->emitIntValue(Value, 2);
+    Streamer->EmitIntValue(Value, 2);
     incrStreamedLen(2);
   } else if (Value <= std::numeric_limits<uint16_t>::max()) {
-    Streamer->emitIntValue(LF_USHORT, 2);
+    Streamer->EmitIntValue(LF_USHORT, 2);
     emitComment(Comment);
-    Streamer->emitIntValue(Value, 2);
+    Streamer->EmitIntValue(Value, 2);
     incrStreamedLen(4);
   } else if (Value <= std::numeric_limits<uint32_t>::max()) {
-    Streamer->emitIntValue(LF_ULONG, 2);
+    Streamer->EmitIntValue(LF_ULONG, 2);
     emitComment(Comment);
-    Streamer->emitIntValue(Value, 4);
+    Streamer->EmitIntValue(Value, 4);
     incrStreamedLen(6);
   } else {
-    // FIXME: There are no test cases covering this block.
-    Streamer->emitIntValue(LF_UQUADWORD, 2);
+    Streamer->EmitIntValue(LF_UQUADWORD, 2);
     emitComment(Comment);
-    Streamer->emitIntValue(Value, 8);
-    incrStreamedLen(6); // FIXME: Why not 10 (8 + 2)?
+    Streamer->EmitIntValue(Value, 8);
+    incrStreamedLen(6);
   }
 }
 
 Error CodeViewRecordIO::writeEncodedSignedInteger(const int64_t &Value) {
+  assert(Value < 0 && "Encoded integer is not signed!");
   if (Value >= std::numeric_limits<int8_t>::min()) {
     if (auto EC = Writer->writeInteger<uint16_t>(LF_CHAR))
       return EC;

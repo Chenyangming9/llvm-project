@@ -22,31 +22,27 @@ UseBoolLiteralsCheck::UseBoolLiteralsCheck(StringRef Name,
     : ClangTidyCheck(Name, Context),
       IgnoreMacros(Options.getLocalOrGlobal("IgnoreMacros", true)) {}
 
-void UseBoolLiteralsCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
-  Options.store(Opts, "IgnoreMacros", IgnoreMacros);
-}
-
 void UseBoolLiteralsCheck::registerMatchers(MatchFinder *Finder) {
+  if (!getLangOpts().CPlusPlus)
+    return;
+
   Finder->addMatcher(
-      traverse(
-          TK_AsIs,
-          implicitCastExpr(
-              has(ignoringParenImpCasts(integerLiteral().bind("literal"))),
-              hasImplicitDestinationType(qualType(booleanType())),
-              unless(isInTemplateInstantiation()),
-              anyOf(hasParent(explicitCastExpr().bind("cast")), anything()))),
+      implicitCastExpr(
+          has(ignoringParenImpCasts(integerLiteral().bind("literal"))),
+          hasImplicitDestinationType(qualType(booleanType())),
+          unless(isInTemplateInstantiation()),
+          anyOf(hasParent(explicitCastExpr().bind("cast")), anything())),
       this);
 
   Finder->addMatcher(
-      traverse(TK_AsIs,
-               conditionalOperator(
-                   hasParent(implicitCastExpr(
-                       hasImplicitDestinationType(qualType(booleanType())),
-                       unless(isInTemplateInstantiation()))),
-                   eachOf(hasTrueExpression(ignoringParenImpCasts(
-                              integerLiteral().bind("literal"))),
-                          hasFalseExpression(ignoringParenImpCasts(
-                              integerLiteral().bind("literal")))))),
+      conditionalOperator(
+          hasParent(implicitCastExpr(
+              hasImplicitDestinationType(qualType(booleanType())),
+              unless(isInTemplateInstantiation()))),
+          eachOf(hasTrueExpression(
+                     ignoringParenImpCasts(integerLiteral().bind("literal"))),
+                 hasFalseExpression(
+                     ignoringParenImpCasts(integerLiteral().bind("literal"))))),
       this);
 }
 

@@ -13,11 +13,11 @@ void test_signed() {
   // UNSIGNED: add nsw i32
   // UNSIGNED-NOT: overflow
   // TRAPV: sadd.with.overflow.i32
-  // TRAPV-NOT: @__ubsan
-  // TRAPV: llvm.ubsantrap
+  // TRAPV-NOT: ubsan
+  // TRAPV: llvm.trap
   // BOTH: sadd.with.overflow.i32
-  // BOTH-NOT: @__ubsan
-  // BOTH: llvm.ubsantrap
+  // BOTH-NOT: ubsan
+  // BOTH: llvm.trap
   a = b + c;
 }
 
@@ -32,7 +32,7 @@ void test_unsigned() {
   // TRAPV-NOT: overflow
   // TRAPV-NOT: llvm.trap
   // BOTH: uadd.with.overflow.i32
-  // BOTH: @__ubsan
-  // BOTH-NOT: llvm.ubsantrap
+  // BOTH: ubsan
+  // BOTH-NOT: llvm.trap
   x = y + z;
 }

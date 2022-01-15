@@ -1,5 +1,3 @@
-add_llvm_component_group(AVR)
-
 set(LLVM_TARGET_DEFINITIONS AVR.td)
 
 tablegen(LLVM AVRGenAsmMatcher.inc -gen-asm-matcher)
@@ -24,27 +22,12 @@ add_llvm_target(AVRCodeGen
   AVRMCInstLower.cpp
   AVRRelaxMemOperations.cpp
   AVRRegisterInfo.cpp
-  AVRShiftExpand.cpp
   AVRSubtarget.cpp
   AVRTargetMachine.cpp
   AVRTargetObjectFile.cpp
 
   DEPENDS
   intrinsics_gen
-
-  LINK_COMPONENTS
-  AsmPrinter
-  CodeGen
-  Core
-  MC
-  AVRDesc
-  AVRInfo
-  SelectionDAG
-  Support
-  Target
-
-  ADD_TO_COMPONENT
-  AVR
 )
 
 add_subdirectory(AsmParser)

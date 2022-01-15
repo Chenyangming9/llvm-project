@@ -18,8 +18,6 @@
 // RUN:             | FileCheck -check-prefix=G_STANDALONE -check-prefix=G_LLDB %s
 // RUN: %clang -### -c -gsce %s -target x86_64-linux-gnu 2>&1 \
 // RUN:             | FileCheck -check-prefix=G_LIMITED -check-prefix=G_SCE %s
-// RUN: %clang -### -c -gdbx %s -target x86_64-linux-gnu 2>&1 \
-// RUN:             | FileCheck -check-prefix=G_LIMITED -check-prefix=G_DBX %s
 
 // Android.
 // Android should always generate DWARF4.
@@ -66,20 +64,10 @@
 // RUN: %clang -### -c -g %s -target arm64-apple-tvos9.0 2>&1 \
 // RUN:             | FileCheck -check-prefix=G_STANDALONE \
 // RUN:                         -check-prefix=G_DWARF4 %s
-// RUN: %clang -### -c -fsave-optimization-record %s \
-// RUN:        -target x86_64-apple-darwin 2>&1 \
-// RUN:             | FileCheck -check-prefix=GLTO_ONLY %s
-// RUN: %clang -### -c -g -fsave-optimization-record %s \
-// RUN:        -target x86_64-apple-darwin 2>&1 \
-// RUN:             | FileCheck -check-prefix=G_STANDALONE %s
 
 // FreeBSD.
-// RUN: %clang -### -c -g %s -target x86_64-pc-freebsd11.0 2>&1 \
-// RUN:             | FileCheck -check-prefix=G_GDB \
-// RUN:                         -check-prefix=G_DWARF2 %s
-// RUN: %clang -### -c -g %s -target x86_64-pc-freebsd12.0 2>&1 \
-// RUN:             | FileCheck -check-prefix=G_GDB \
-// RUN:                         -check-prefix=G_DWARF4 %s
+// RUN: %clang -### -c -g %s -target x86_64-pc-freebsd10.0 2>&1 \
+// RUN:             | FileCheck -check-prefix=G_GDB %s
 
 // Windows.
 // RUN: %clang -### -c -g %s -target x86_64-w64-windows-gnu 2>&1 \
@@ -104,34 +92,6 @@
 // RUN: %clang -### -c %s -gsce -target x86_64-unknown-linux 2>&1 \
 // RUN:             | FileCheck -check-prefix=NOCI %s
 
-// On the AIX, -g defaults to -gdbx and limited debug info.
-// RUN: %clang -### -c -g %s -target powerpc-ibm-aix-xcoff 2>&1 \
-// RUN:             | FileCheck -check-prefix=G_LIMITED -check-prefix=G_DBX %s
-// RUN: %clang -### -c -g %s -target powerpc64-ibm-aix-xcoff 2>&1 \
-// RUN:             | FileCheck -check-prefix=G_LIMITED -check-prefix=G_DBX %s
-
-// For DBX, -g defaults to -gstrict-dwarf.
-// RUN: %clang -### -c -g %s -target powerpc-ibm-aix-xcoff 2>&1 \
-// RUN:             | FileCheck -check-prefix=STRICT %s
-// RUN: %clang -### -c -g %s -target powerpc64-ibm-aix-xcoff 2>&1 \
-// RUN:             | FileCheck -check-prefix=STRICT %s
-// RUN: %clang -### -c -g -gno-strict-dwarf %s -target powerpc-ibm-aix-xcoff \
-// RUN:             2>&1 | FileCheck -check-prefix=NOSTRICT %s
-// RUN: %clang -### -c -g %s -target x86_64-linux-gnu 2>&1 \
-// RUN:             | FileCheck -check-prefix=NOSTRICT %s
-// RUN: %clang -### -c -g -ggdb %s -target powerpc-ibm-aix-xcoff 2>&1 \
-// RUN:             | FileCheck -check-prefix=NOSTRICT %s
-
-// On the AIX, -g defaults to -gno-column-info.
-// RUN: %clang -### -c -g %s -target powerpc-ibm-aix-xcoff 2>&1 \
-// RUN:             | FileCheck -check-prefix=NOCI %s
-// RUN: %clang -### -c -g %s -target powerpc64-ibm-aix-xcoff 2>&1 \
-// RUN:             | FileCheck -check-prefix=NOCI %s
-// RUN: %clang -### -c -g %s -target powerpc-ibm-aix-xcoff -gcolumn-info 2>&1 \
-// RUN:             | FileCheck -check-prefix=CI %s
-// RUN: %clang -### -c -g %s -target powerpc64-ibm-aix-xcoff -gcolumn-info \
-// RUN:             2>&1 | FileCheck -check-prefix=CI %s
-
 // RUN: %clang -### -c -gdwarf-2 %s 2>&1 \
 // RUN:             | FileCheck -check-prefix=G_ONLY_DWARF2 %s
 //
@@ -145,7 +105,7 @@
 // PS4 defaults to sce; -ggdb0 changes tuning but turns off debug info,
 // then -g turns it back on without affecting tuning.
 // RUN: %clang -### -c -ggdb0 -g -target x86_64-scei-ps4 %s 2>&1 \
-// RUN:             | FileCheck -check-prefix=G_GDB %s
+// RUN:             | FileCheck -check-prefix=G -check-prefix=G_GDB %s
 //
 // RUN: %clang -### -c -g1 %s 2>&1 \
 // RUN:             | FileCheck -check-prefix=GLTO_ONLY %s
@@ -226,13 +186,14 @@
 // RUN: %clang -### -c -gpubnames -gno-gnu-pubnames %s 2>&1 | FileCheck -check-prefix=NOPUB %s
 // RUN: %clang -### -c -gpubnames -gno-pubnames %s 2>&1 | FileCheck -check-prefix=NOPUB %s
 //
-// RUN: %clang -### -c -gsplit-dwarf -g -gno-pubnames %s 2>&1 | FileCheck -check-prefix=NOPUB %s
+// RUN: %clang -### -c -gsplit-dwarf %s 2>&1 | FileCheck -check-prefix=GPUB %s
+// RUN: %clang -### -c -gsplit-dwarf -gno-pubnames %s 2>&1 | FileCheck -check-prefix=NOPUB %s
 //
 // RUN: %clang -### -c -fdebug-ranges-base-address %s 2>&1 | FileCheck -check-prefix=RNGBSE %s
 // RUN: %clang -### -c %s 2>&1 | FileCheck -check-prefix=NORNGBSE %s
 // RUN: %clang -### -c -fdebug-ranges-base-address -fno-debug-ranges-base-address %s 2>&1 | FileCheck -check-prefix=NORNGBSE %s
 //
-// RUN: %clang -### -c -glldb %s 2>&1 | FileCheck -check-prefix=NOPUB %s
+// RUN: %clang -### -c -glldb %s 2>&1 | FileCheck -check-prefix=GPUB %s
 // RUN: %clang -### -c -glldb -gno-pubnames %s 2>&1 | FileCheck -check-prefix=NOPUB %s
 //
 // RUN: %clang -### -c -gdwarf-aranges %s 2>&1 | FileCheck -check-prefix=GARANGE %s
@@ -242,9 +203,6 @@
 //
 // RUN: %clang -### -fdebug-types-section -fno-debug-types-section -target x86_64-unknown-linux %s 2>&1 \
 // RUN:        | FileCheck -check-prefix=NOFDTS %s
-//
-// RUN: %clang -### -fdebug-types-section -target wasm32-unknown-unknown %s 2>&1 \
-// RUN:        | FileCheck -check-prefix=FDTS %s
 //
 // RUN: %clang -### -fdebug-types-section -target x86_64-apple-darwin %s 2>&1 \
 // RUN:        | FileCheck -check-prefix=FDTSE %s
@@ -274,7 +232,7 @@
 // RUN:        | FileCheck -check-prefix=GLIO_ONLY %s
 //
 // NOG_PS4: "-cc1"
-// NOG_PS4-NOT: "-dwarf-version=
+// NOG_PS4-NOT "-dwarf-version=
 // NOG_PS4: "-generate-arange-section"
 // NOG_PS4-NOT: "-dwarf-version=
 //
@@ -306,28 +264,24 @@
 // GLIO_ONLY_DWARF2: "-dwarf-version=2"
 //
 // G_ONLY: "-cc1"
-// G_ONLY: "-debug-info-kind=constructor"
+// G_ONLY: "-debug-info-kind=limited"
 //
 // These tests assert that "-gline-tables-only" "-g" uses the latter,
 // but otherwise not caring about the DebugInfoKind.
 // G_ONLY_DWARF2: "-cc1"
-// G_ONLY_DWARF2: "-debug-info-kind={{standalone|constructor}}"
+// G_ONLY_DWARF2: "-debug-info-kind={{standalone|limited}}"
 // G_ONLY_DWARF2: "-dwarf-version=2"
 //
 // G_STANDALONE: "-cc1"
 // G_STANDALONE: "-debug-info-kind=standalone"
 // G_LIMITED: "-cc1"
-// G_LIMITED: "-debug-info-kind=constructor"
+// G_LIMITED: "-debug-info-kind=limited"
 // G_DWARF2: "-dwarf-version=2"
 // G_DWARF4: "-dwarf-version=4"
 //
 // G_GDB:  "-debugger-tuning=gdb"
 // G_LLDB: "-debugger-tuning=lldb"
 // G_SCE:  "-debugger-tuning=sce"
-// G_DBX:  "-debugger-tuning=dbx"
-//
-// STRICT:  "-gstrict-dwarf"
-// NOSTRICT-NOT:  "-gstrict-dwarf"
 //
 // G_NOTUNING: "-cc1"
 // G_NOTUNING-NOT: "-debugger-tuning="
@@ -370,12 +324,12 @@
 // NOFDTS-NOT: "-mllvm" "-generate-type-units"
 // NOFDTSE-NOT: error: unsupported option '-fdebug-types-section' for target 'x86_64-apple-darwin'
 //
-// CI-NOT: "-gno-column-info"
+// CI: "-dwarf-column-info"
 //
-// NOCI: "-gno-column-info"
+// NOCI-NOT: "-dwarf-column-info"
 //
 // GEXTREFS: "-dwarf-ext-refs" "-fmodule-format=obj"
-// GEXTREFS: "-debug-info-kind={{standalone|constructor}}"
+// GEXTREFS: "-debug-info-kind={{standalone|limited}}"
 
 // RUN: not %clang -cc1 -debug-info-kind=watkind 2>&1 | FileCheck -check-prefix=BADSTRING1 %s
 // BADSTRING1: error: invalid value 'watkind' in '-debug-info-kind=watkind'
@@ -397,41 +351,3 @@
 // GEMBED_2:  error: invalid argument '-gembed-source' only allowed with '-gdwarf-5'
 // NOGEMBED_5-NOT:  "-gembed-source"
 // NOGEMBED_2-NOT:  error: invalid argument '-gembed-source' only allowed with '-gdwarf-5'
-//
-// RUN: %clang -### -g -fno-eliminate-unused-debug-types -c %s 2>&1 \
-// RUN:        | FileCheck -check-prefix=DEBUG_UNUSED_TYPES %s
-// DEBUG_UNUSED_TYPES: "-debug-info-kind=unused-types"
-// DEBUG_UNUSED_TYPES-NOT: "-debug-info-kind=limited"
-// RUN: %clang -### -g -feliminate-unused-debug-types -c %s 2>&1 \
-// RUN:        | FileCheck -check-prefix=NO_DEBUG_UNUSED_TYPES %s
-// RUN: %clang -### -fno-eliminate-unused-debug-types -g1 -c %s 2>&1 \
-// RUN:        | FileCheck -check-prefix=NO_DEBUG_UNUSED_TYPES %s
-// NO_DEBUG_UNUSED_TYPES: "-debug-info-kind={{constructor|line-tables-only|standalone}}"
-// NO_DEBUG_UNUSED_TYPES-NOT: "-debug-info-kind=unused-types"
-//
-// RUN: %clang -### -c -gdwarf-5 -gdwarf64 -target x86_64 %s 2>&1 | FileCheck -check-prefix=GDWARF64_ON %s
-// RUN: %clang -### -c -gdwarf-4 -gdwarf64 -target x86_64 %s 2>&1 | FileCheck -check-prefix=GDWARF64_ON %s
-// RUN: %clang -### -c -gdwarf-3 -gdwarf64 -target x86_64 %s 2>&1 | FileCheck -check-prefix=GDWARF64_ON %s
-// RUN: %clang -### -c -gdwarf-2 -gdwarf64 -target x86_64 %s 2>&1 | FileCheck -check-prefix=GDWARF64_VER %s
-// RUN: %clang -### -c -gdwarf-4 -gdwarf64 -target x86_64 -target x86_64 %s 2>&1 \
-// RUN:       | FileCheck -check-prefix=GDWARF64_ON %s
-// RUN: %clang -### -c -gdwarf-4 -gdwarf64 -target i386-linux-gnu %s 2>&1 \
-// RUN:       | FileCheck -check-prefix=GDWARF64_32ARCH %s
-// RUN: %clang -### -c -gdwarf-4 -gdwarf64 -target x86_64-apple-darwin %s 2>&1 \
-// RUN:       | FileCheck -check-prefix=GDWARF64_ELF %s
-//
-// GDWARF64_ON:  "-gdwarf64"
-// GDWARF64_VER:  error: invalid argument '-gdwarf64' only allowed with 'DWARFv3 or greater'
-// GDWARF64_32ARCH: error: invalid argument '-gdwarf64' only allowed with '64 bit architecture'
-// GDWARF64_ELF: error: invalid argument '-gdwarf64' only allowed with 'ELF platforms'
-
-/// Default to -fno-dwarf-directory-asm for -fno-integrated-as before DWARF v5.
-// RUN: %clang -### -target x86_64 -c -gdwarf-2 %s 2>&1 | FileCheck --check-prefix=DIRECTORY %s
-// RUN: %clang -### -target x86_64 -c -gdwarf-5 %s 2>&1 | FileCheck --check-prefix=DIRECTORY %s
-// RUN: %clang -### -target x86_64 -c -gdwarf-4 -fno-integrated-as %s 2>&1 | FileCheck --check-prefix=NODIRECTORY %s
-// RUN: %clang -### -target x86_64 -c -gdwarf-5 -fno-integrated-as %s 2>&1 | FileCheck --check-prefix=DIRECTORY %s
-
-// RUN: %clang -### -target x86_64 -c -gdwarf-4 -fno-dwarf-directory-asm %s 2>&1 | FileCheck --check-prefix=NODIRECTORY %s
-
-// DIRECTORY-NOT: "-fno-dwarf-directory-asm"
-// NODIRECTORY: "-fno-dwarf-directory-asm"

@@ -12,7 +12,7 @@
 
 #include "MachVMRegion.h"
 #include "DNBLog.h"
-#include <cassert>
+#include <assert.h>
 #include <mach/mach_vm.h>
 
 MachVMRegion::MachVMRegion(task_t task)

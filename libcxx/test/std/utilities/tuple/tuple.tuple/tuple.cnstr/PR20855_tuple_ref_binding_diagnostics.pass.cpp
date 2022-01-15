@@ -7,11 +7,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <tuple>
 
-// See https://llvm.org/PR20855.
+// See llvm.org/PR20855
 
 #include <functional>
 #include <tuple>
@@ -86,7 +86,7 @@ void compile_tests() {
 }
 
 void allocator_tests() {
-    std::allocator<int> alloc;
+    std::allocator<void> alloc;
     int x = 42;
     {
         std::tuple<int&> t(std::ref(x));

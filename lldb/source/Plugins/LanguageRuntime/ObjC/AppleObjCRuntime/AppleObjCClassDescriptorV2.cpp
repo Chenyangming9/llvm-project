@@ -1,4 +1,5 @@
-//===-- AppleObjCClassDescriptorV2.cpp ------------------------------------===//
+//===-- AppleObjCClassDescriptorV2.cpp -----------------------------*- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,7 +17,7 @@ using namespace lldb_private;
 
 bool ClassDescriptorV2::Read_objc_class(
     Process *process, std::unique_ptr<objc_class_t> &objc_class) const {
-  objc_class = std::make_unique<objc_class_t>();
+  objc_class.reset(new objc_class_t);
 
   bool ret = objc_class->Read(process, m_objc_class_ptr);
 
@@ -110,18 +111,6 @@ bool ClassDescriptorV2::class_rw_t::Read(Process *process, lldb::addr_t addr) {
   m_firstSubclass = extractor.GetAddress_unchecked(&cursor);
   m_nextSiblingClass = extractor.GetAddress_unchecked(&cursor);
 
-  if (m_ro_ptr & 1) {
-    DataBufferHeap buffer(ptr_size, '\0');
-    process->ReadMemory(m_ro_ptr ^ 1, buffer.GetBytes(), ptr_size, error);
-    if (error.Fail())
-      return false;
-    cursor = 0;
-    DataExtractor extractor(buffer.GetBytes(), ptr_size,
-                            process->GetByteOrder(),
-                            process->GetAddressByteSize());
-    m_ro_ptr = extractor.GetAddress_unchecked(&cursor);
-  }
-
   return true;
 }
 
@@ -197,14 +186,14 @@ bool ClassDescriptorV2::Read_class_row(
     return false;
 
   if (class_row_t_flags & RW_REALIZED) {
-    class_rw = std::make_unique<class_rw_t>();
+    class_rw.reset(new class_rw_t);
 
     if (!class_rw->Read(process, objc_class.m_data_ptr)) {
       class_rw.reset();
       return false;
     }
 
-    class_ro = std::make_unique<class_ro_t>();
+    class_ro.reset(new class_ro_t);
 
     if (!class_ro->Read(process, class_rw->m_ro_ptr)) {
       class_rw.reset();
@@ -212,7 +201,7 @@ bool ClassDescriptorV2::Read_class_row(
       return false;
     }
   } else {
-    class_ro = std::make_unique<class_ro_t>();
+    class_ro.reset(new class_ro_t);
 
     if (!class_ro->Read(process, objc_class.m_data_ptr)) {
       class_ro.reset();
@@ -241,21 +230,15 @@ bool ClassDescriptorV2::method_list_t::Read(Process *process,
 
   lldb::offset_t cursor = 0;
 
-  uint32_t entsize = extractor.GetU32_unchecked(&cursor);
-  m_is_small = (entsize & 0x80000000) != 0;
-  m_has_direct_selector = (entsize & 0x40000000) != 0;
-  m_entsize = entsize & 0xfffc;
+  m_entsize = extractor.GetU32_unchecked(&cursor) & ~(uint32_t)3;
   m_count = extractor.GetU32_unchecked(&cursor);
   m_first_ptr = addr + cursor;
 
   return true;
 }
 
-bool ClassDescriptorV2::method_t::Read(Process *process, lldb::addr_t addr,
-                                       lldb::addr_t relative_selector_base_addr,
-                                       bool is_small, bool has_direct_sel) {
-  size_t ptr_size = process->GetAddressByteSize();
-  size_t size = GetSize(process, is_small);
+bool ClassDescriptorV2::method_t::Read(Process *process, lldb::addr_t addr) {
+  size_t size = GetSize(process);
 
   DataBufferHeap buffer(size, '\0');
   Status error;
@@ -266,32 +249,13 @@ bool ClassDescriptorV2::method_t::Read(Process *process, lldb::addr_t addr,
   }
 
   DataExtractor extractor(buffer.GetBytes(), size, process->GetByteOrder(),
-                          ptr_size);
+                          process->GetAddressByteSize());
+
   lldb::offset_t cursor = 0;
 
-  if (is_small) {
-    uint32_t nameref_offset = extractor.GetU32_unchecked(&cursor);
-    uint32_t types_offset = extractor.GetU32_unchecked(&cursor);
-    uint32_t imp_offset = extractor.GetU32_unchecked(&cursor);
-
-    m_name_ptr = addr + nameref_offset;
-
-    if (!has_direct_sel) {
-      // The SEL offset points to a SELRef. We need to dereference twice.
-      m_name_ptr = process->ReadUnsignedIntegerFromMemory(m_name_ptr, ptr_size,
-                                                          0, error);
-      if (!error.Success())
-        return false;
-    } else if (relative_selector_base_addr != LLDB_INVALID_ADDRESS) {
-      m_name_ptr = relative_selector_base_addr + nameref_offset;
-    }
-    m_types_ptr = addr + 4 + types_offset;
-    m_imp_ptr = addr + 8 + imp_offset;
-  } else {
-    m_name_ptr = extractor.GetAddress_unchecked(&cursor);
-    m_types_ptr = extractor.GetAddress_unchecked(&cursor);
-    m_imp_ptr = extractor.GetAddress_unchecked(&cursor);
-  }
+  m_name_ptr = extractor.GetAddress_unchecked(&cursor);
+  m_types_ptr = extractor.GetAddress_unchecked(&cursor);
+  m_imp_ptr = extractor.GetAddress_unchecked(&cursor);
 
   process->ReadCStringFromMemory(m_name_ptr, m_name, error);
   if (error.Fail()) {
@@ -382,24 +346,19 @@ bool ClassDescriptorV2::Describe(
   if (instance_method_func) {
     std::unique_ptr<method_list_t> base_method_list;
 
-    base_method_list = std::make_unique<method_list_t>();
+    base_method_list.reset(new method_list_t);
     if (!base_method_list->Read(process, class_ro->m_baseMethods_ptr))
       return false;
 
-    bool is_small = base_method_list->m_is_small;
-    bool has_direct_selector = base_method_list->m_has_direct_selector;
-
-    if (base_method_list->m_entsize != method_t::GetSize(process, is_small))
+    if (base_method_list->m_entsize != method_t::GetSize(process))
       return false;
 
-    std::unique_ptr<method_t> method = std::make_unique<method_t>();
-    lldb::addr_t relative_selector_base_addr =
-        m_runtime.GetRelativeSelectorBaseAddr();
+    std::unique_ptr<method_t> method;
+    method.reset(new method_t);
+
     for (uint32_t i = 0, e = base_method_list->m_count; i < e; ++i) {
-      method->Read(process,
-                   base_method_list->m_first_ptr +
-                       (i * base_method_list->m_entsize),
-                   relative_selector_base_addr, is_small, has_direct_selector);
+      method->Read(process, base_method_list->m_first_ptr +
+                                (i * base_method_list->m_entsize));
 
       if (instance_method_func(method->m_name.c_str(), method->m_types.c_str()))
         break;
@@ -517,7 +476,8 @@ uint64_t ClassDescriptorV2::GetInstanceSize() {
   return 0;
 }
 
-ClassDescriptorV2::iVarsStorage::iVarsStorage() : m_ivars(), m_mutex() {}
+ClassDescriptorV2::iVarsStorage::iVarsStorage()
+    : m_filled(false), m_ivars(), m_mutex() {}
 
 size_t ClassDescriptorV2::iVarsStorage::size() { return m_ivars.size(); }
 

@@ -14,10 +14,10 @@
 #ifndef LLVM_CLANG_LIB_STATICANALYZER_CHECKERS_RETAINCOUNTCHECKER_DIAGNOSTICS_H
 #define LLVM_CLANG_LIB_STATICANALYZER_CHECKERS_RETAINCOUNTCHECKER_DIAGNOSTICS_H
 
-#include "clang/Analysis/PathDiagnostic.h"
 #include "clang/Analysis/RetainSummaryManager.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporterVisitors.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/PathDiagnostic.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 
 namespace clang {
@@ -26,7 +26,7 @@ namespace retaincountchecker {
 
 class RefCountBug : public BugType {
 public:
-  enum RefCountBugKind {
+  enum RefCountBugType {
     UseAfterRelease,
     ReleaseNotOwned,
     DeallocNotOwned,
@@ -36,17 +36,24 @@ public:
     LeakWithinFunction,
     LeakAtReturn,
   };
-  RefCountBug(CheckerNameRef Checker, RefCountBugKind BT);
+  RefCountBug(const CheckerBase *checker, RefCountBugType BT);
   StringRef getDescription() const;
 
-  RefCountBugKind getBugType() const { return BT; }
+  RefCountBugType getBugType() const {
+    return BT;
+  }
+
+  const CheckerBase *getChecker() const {
+    return Checker;
+  }
 
 private:
-  RefCountBugKind BT;
-  static StringRef bugTypeToName(RefCountBugKind BT);
+  RefCountBugType BT;
+  const CheckerBase *Checker;
+  static StringRef bugTypeToName(RefCountBugType BT);
 };
 
-class RefCountReport : public PathSensitiveBugReport {
+class RefCountReport : public BugReport {
 protected:
   SymbolRef Sym;
   bool isLeak = false;
@@ -60,39 +67,32 @@ public:
               ExplodedNode *n, SymbolRef sym,
               StringRef endText);
 
-  ArrayRef<SourceRange> getRanges() const override {
+  llvm::iterator_range<ranges_iterator> getRanges() override {
     if (!isLeak)
-      return PathSensitiveBugReport::getRanges();
-    return {};
+      return BugReport::getRanges();
+    return llvm::make_range(ranges_iterator(), ranges_iterator());
   }
 };
 
 class RefLeakReport : public RefCountReport {
-  const MemRegion *AllocFirstBinding = nullptr;
-  const MemRegion *AllocBindingToReport = nullptr;
-  const Stmt *AllocStmt = nullptr;
-  PathDiagnosticLocation Location;
+  const MemRegion* AllocBinding;
+  const Stmt *AllocStmt;
 
   // Finds the function declaration where a leak warning for the parameter
   // 'sym' should be raised.
-  void deriveParamLocation(CheckerContext &Ctx);
-  // Finds the location where the leaking object is allocated.
-  void deriveAllocLocation(CheckerContext &Ctx);
+  void deriveParamLocation(CheckerContext &Ctx, SymbolRef sym);
+  // Finds the location where a leak warning for 'sym' should be raised.
+  void deriveAllocLocation(CheckerContext &Ctx, SymbolRef sym);
   // Produces description of a leak warning which is printed on the console.
   void createDescription(CheckerContext &Ctx);
-  // Finds the binding that we should use in a leak warning.
-  void findBindingToReport(CheckerContext &Ctx, ExplodedNode *Node);
 
 public:
   RefLeakReport(const RefCountBug &D, const LangOptions &LOpts, ExplodedNode *n,
                 SymbolRef sym, CheckerContext &Ctx);
-  PathDiagnosticLocation getLocation() const override {
+
+  PathDiagnosticLocation getLocation(const SourceManager &SM) const override {
     assert(Location.isValid());
     return Location;
-  }
-
-  PathDiagnosticLocation getEndOfPath() const {
-    return PathSensitiveBugReport::getLocation();
   }
 };
 

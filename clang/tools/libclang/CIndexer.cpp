@@ -17,13 +17,12 @@
 #include "clang/Driver/Driver.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MD5.h"
+#include "llvm/Support/MutexGuard.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/YAMLParser.h"
 #include <cstdio>
-#include <mutex>
 
 #ifdef __CYGWIN__
 #include <cygwin/version.h>
@@ -53,7 +52,7 @@ void getClangResourcesPathImplAIX(LibClangPathType &LibClangPath) {
   size_t BufSize = 2048u;
   std::unique_ptr<char[]> Buf;
   while (true) {
-    Buf = std::make_unique<char []>(BufSize);
+    Buf = llvm::make_unique<char []>(BufSize);
     errno = 0;
     int Ret = loadquery(L_GETXINFO, Buf.get(), (unsigned int)BufSize);
     if (Ret != -1)
@@ -143,9 +142,8 @@ StringRef CIndexer::getClangToolchainPath() {
   if (!ToolchainPath.empty())
     return ToolchainPath;
   StringRef ResourcePath = getClangResourcesPath();
-  ToolchainPath =
-      std::string(llvm::sys::path::parent_path(llvm::sys::path::parent_path(
-          llvm::sys::path::parent_path(ResourcePath))));
+  ToolchainPath = llvm::sys::path::parent_path(
+      llvm::sys::path::parent_path(llvm::sys::path::parent_path(ResourcePath)));
   return ToolchainPath;
 }
 
@@ -163,8 +161,7 @@ LibclangInvocationReporter::LibclangInvocationReporter(
   TempPath = Path;
   llvm::sys::path::append(TempPath, "libclang-%%%%%%%%%%%%");
   int FD;
-  if (llvm::sys::fs::createUniqueFile(TempPath, FD, TempPath,
-                                      llvm::sys::fs::OF_Text))
+  if (llvm::sys::fs::createUniqueFile(TempPath, FD, TempPath))
     return;
   File = std::string(TempPath.begin(), TempPath.end());
   llvm::raw_fd_ostream OS(FD, /*ShouldClose=*/true);

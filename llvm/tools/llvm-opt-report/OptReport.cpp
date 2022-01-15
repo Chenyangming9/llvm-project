@@ -15,7 +15,6 @@
 
 #include "llvm-c/Remarks.h"
 #include "llvm/Demangle/Demangle.h"
-#include "llvm/Remarks/RemarkFormat.h"
 #include "llvm/Remarks/RemarkParser.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
@@ -28,12 +27,14 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/WithColor.h"
+#include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cstdlib>
 #include <map>
 #include <set>
 
 using namespace llvm;
+using namespace llvm::yaml;
 
 // Mark all our options with this category, everything else (except for -version
 // and -help) will be hidden.
@@ -59,11 +60,6 @@ static cl::opt<bool>
 static cl::opt<bool>
   NoDemangle("no-demangle", cl::desc("Don't demangle function names"),
              cl::init(false), cl::cat(OptReportCategory));
-
-static cl::opt<std::string> ParserFormat("format",
-                                         cl::desc("The format of the remarks."),
-                                         cl::init("yaml"),
-                                         cl::cat(OptReportCategory));
 
 namespace {
 // For each location in the source file, the common per-transformation state
@@ -154,25 +150,15 @@ static bool readLocationInfo(LocationInfoTy &LocationInfo) {
     return false;
   }
 
-  Expected<remarks::Format> Format = remarks::parseFormat(ParserFormat);
-  if (!Format) {
-    handleAllErrors(Format.takeError(), [&](const ErrorInfoBase &PE) {
-      PE.log(WithColor::error());
-      errs() << '\n';
-    });
-    return false;
-  }
-
-  Expected<std::unique_ptr<remarks::RemarkParser>> MaybeParser =
-      remarks::createRemarkParserFromMeta(*Format, (*Buf)->getBuffer());
+  Expected<std::unique_ptr<remarks::Parser>> MaybeParser =
+      remarks::createRemarkParser(remarks::Format::YAML, (*Buf)->getBuffer());
   if (!MaybeParser) {
     handleAllErrors(MaybeParser.takeError(), [&](const ErrorInfoBase &PE) {
       PE.log(WithColor::error());
-      errs() << '\n';
     });
     return false;
   }
-  remarks::RemarkParser &Parser = **MaybeParser;
+  remarks::Parser &Parser = **MaybeParser;
 
   while (true) {
     Expected<std::unique_ptr<remarks::Remark>> MaybeRemark = Parser.next();
@@ -183,9 +169,8 @@ static bool readLocationInfo(LocationInfoTy &LocationInfo) {
         consumeError(std::move(E));
         break;
       }
-      handleAllErrors(std::move(E), [&](const ErrorInfoBase &PE) {
+      handleAllErrors(MaybeRemark.takeError(), [&](const ErrorInfoBase &PE) {
         PE.log(WithColor::error());
-        errs() << '\n';
       });
       return false;
     }
@@ -225,17 +210,14 @@ static bool readLocationInfo(LocationInfoTy &LocationInfo) {
     };
 
     if (Remark.PassName == "inline") {
-      auto &LI = LocationInfo[std::string(File)][Line]
-                             [std::string(Remark.FunctionName)][Column];
+      auto &LI = LocationInfo[File][Line][Remark.FunctionName][Column];
       UpdateLLII(LI.Inlined);
     } else if (Remark.PassName == "loop-unroll") {
-      auto &LI = LocationInfo[std::string(File)][Line]
-                             [std::string(Remark.FunctionName)][Column];
+      auto &LI = LocationInfo[File][Line][Remark.FunctionName][Column];
       LI.UnrollCount = UnrollCount;
       UpdateLLII(LI.Unrolled);
     } else if (Remark.PassName == "loop-vectorize") {
-      auto &LI = LocationInfo[std::string(File)][Line]
-                             [std::string(Remark.FunctionName)][Column];
+      auto &LI = LocationInfo[File][Line][Remark.FunctionName][Column];
       LI.VectorizationFactor = VectorizationFactor;
       LI.InterleaveCount = InterleaveCount;
       UpdateLLII(LI.Vectorized);
@@ -247,7 +229,8 @@ static bool readLocationInfo(LocationInfoTy &LocationInfo) {
 
 static bool writeReport(LocationInfoTy &LocationInfo) {
   std::error_code EC;
-  llvm::raw_fd_ostream OS(OutputFileName, EC, llvm::sys::fs::OF_TextWithCRLF);
+  llvm::raw_fd_ostream OS(OutputFileName, EC,
+              llvm::sys::fs::F_Text);
   if (EC) {
     WithColor::error() << "Can't open file " << OutputFileName << ": "
                        << EC.message() << "\n";

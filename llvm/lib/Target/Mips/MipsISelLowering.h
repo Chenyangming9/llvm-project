@@ -40,6 +40,8 @@
 namespace llvm {
 
 class Argument;
+class CCState;
+class CCValAssign;
 class FastISel;
 class FunctionLoweringInfo;
 class MachineBasicBlock;
@@ -302,17 +304,20 @@ class TargetRegisterClass;
         unsigned &NumIntermediates, MVT &RegisterVT) const override;
 
     /// Return the correct alignment for the current calling convention.
-    Align getABIAlignmentForCallingConv(Type *ArgTy,
-                                        const DataLayout &DL) const override {
-      const Align ABIAlign = DL.getABITypeAlign(ArgTy);
+    unsigned getABIAlignmentForCallingConv(Type *ArgTy,
+                                           DataLayout DL) const override {
       if (ArgTy->isVectorTy())
-        return std::min(ABIAlign, Align(8));
-      return ABIAlign;
+        return std::min(DL.getABITypeAlignment(ArgTy), 8U);
+      return DL.getABITypeAlignment(ArgTy);
     }
 
     ISD::NodeType getExtendForAtomicOps() const override {
       return ISD::SIGN_EXTEND;
     }
+
+    void LowerOperationWrapper(SDNode *N,
+                               SmallVectorImpl<SDValue> &Results,
+                               SelectionDAG &DAG) const override;
 
     /// LowerOperation - Provide custom lowering hooks for some operations.
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
@@ -340,23 +345,31 @@ class TargetRegisterClass;
     void AdjustInstrPostInstrSelection(MachineInstr &MI,
                                        SDNode *Node) const override;
 
-    void HandleByVal(CCState *, unsigned &, Align) const override;
+    void HandleByVal(CCState *, unsigned &, unsigned) const override;
 
-    Register getRegisterByName(const char* RegName, LLT VT,
-                               const MachineFunction &MF) const override;
+    unsigned getRegisterByName(const char* RegName, EVT VT,
+                               SelectionDAG &DAG) const override;
 
     /// If a physical register, this returns the register that receives the
     /// exception address on entry to an EH pad.
-    Register
+    unsigned
     getExceptionPointerRegister(const Constant *PersonalityFn) const override {
       return ABI.IsN64() ? Mips::A0_64 : Mips::A0;
     }
 
     /// If a physical register, this returns the register that receives the
     /// exception typeid on entry to a landing pad.
-    Register
+    unsigned
     getExceptionSelectorRegister(const Constant *PersonalityFn) const override {
       return ABI.IsN64() ? Mips::A1_64 : Mips::A1;
+    }
+
+    /// Returns true if a cast between SrcAS and DestAS is a noop.
+    bool isNoopAddrSpaceCast(unsigned SrcAS, unsigned DestAS) const override {
+      // Mips doesn't have any special address spaces so we just reserve
+      // the first 256 for software use (e.g. OpenCL) and treat casts
+      // between them as noops.
+      return SrcAS < 256 && DestAS < 256;
     }
 
     bool isJumpTableRelative() const override {
@@ -655,7 +668,10 @@ class TargetRegisterClass;
 
     bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
 
-    EVT getOptimalMemOpType(const MemOp &Op,
+    EVT getOptimalMemOpType(uint64_t Size, unsigned DstAlign,
+                            unsigned SrcAlign,
+                            bool IsMemset, bool ZeroMemset,
+                            bool MemcpyStrSrc,
                             const AttributeList &FuncAttributes) const override;
 
     /// isFPImmLegal - Returns true if the target can instruction select the
@@ -692,10 +708,6 @@ class TargetRegisterClass;
                                         bool isFPCmp, unsigned Opc) const;
     MachineBasicBlock *emitPseudoD_SELECT(MachineInstr &MI,
                                           MachineBasicBlock *BB) const;
-    MachineBasicBlock *emitLDR_W(MachineInstr &MI, MachineBasicBlock *BB) const;
-    MachineBasicBlock *emitLDR_D(MachineInstr &MI, MachineBasicBlock *BB) const;
-    MachineBasicBlock *emitSTR_W(MachineInstr &MI, MachineBasicBlock *BB) const;
-    MachineBasicBlock *emitSTR_D(MachineInstr &MI, MachineBasicBlock *BB) const;
   };
 
   /// Create MipsTargetLowering objects.

@@ -2,7 +2,6 @@
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
@@ -48,7 +47,7 @@ static void targetOptionsTest(bool EnableIPRA) {
   std::unique_ptr<TargetMachine> TM = createTargetMachine(EnableIPRA);
   // This test is designed for the X86 backend; stop if it is not available.
   if (!TM)
-    GTEST_SKIP();
+    return;
   legacy::PassManager PM;
   LLVMTargetMachine *LLVMTM = static_cast<LLVMTargetMachine *>(TM.get());
 

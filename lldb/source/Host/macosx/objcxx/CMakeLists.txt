@@ -14,5 +14,3 @@ add_lldb_library(lldbHostMacOSXObjCXX
   LINK_COMPONENTS
     Support
   )
-
-target_compile_options(lldbHostMacOSXObjCXX PRIVATE -fno-objc-exceptions)

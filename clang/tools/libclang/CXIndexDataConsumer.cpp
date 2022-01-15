@@ -154,7 +154,7 @@ CXSymbolRole getSymbolRole(SymbolRoleSet Role) {
 }
 }
 
-bool CXIndexDataConsumer::handleDeclOccurrence(
+bool CXIndexDataConsumer::handleDeclOccurence(
     const Decl *D, SymbolRoleSet Roles, ArrayRef<SymbolRelation> Relations,
     SourceLocation Loc, ASTNodeInfo ASTNode) {
   Loc = getASTContext().getSourceManager().getFileLoc(Loc);
@@ -220,10 +220,10 @@ bool CXIndexDataConsumer::handleDeclOccurrence(
   return !shouldAbort();
 }
 
-bool CXIndexDataConsumer::handleModuleOccurrence(const ImportDecl *ImportD,
-                                                 const Module *Mod,
-                                                 SymbolRoleSet Roles,
-                                                 SourceLocation Loc) {
+bool CXIndexDataConsumer::handleModuleOccurence(const ImportDecl *ImportD,
+                                                const Module *Mod,
+                                                SymbolRoleSet Roles,
+                                                SourceLocation Loc) {
   if (Roles & (SymbolRoleSet)SymbolRole::Declaration)
     IndexingDeclVisitor(*this, SourceLocation(), nullptr).Visit(ImportD);
   return !shouldAbort();
@@ -491,12 +491,13 @@ void CXIndexDataConsumer::importedModule(const ImportDecl *ImportD) {
     if (SrcMod->getTopLevelModule() == Mod->getTopLevelModule())
       return;
 
-  FileEntry *FE = nullptr;
-  if (auto File = Mod->getASTFile())
-    FE = const_cast<FileEntry *>(&File->getFileEntry());
-  CXIdxImportedASTFileInfo Info = {static_cast<CXFile>(FE), Mod,
-                                   getIndexLoc(ImportD->getLocation()),
-                                   ImportD->isImplicit()};
+  CXIdxImportedASTFileInfo Info = {
+                                    static_cast<CXFile>(
+                                    const_cast<FileEntry *>(Mod->getASTFile())),
+                                    Mod,
+                                    getIndexLoc(ImportD->getLocation()),
+                                    ImportD->isImplicit()
+                                  };
   CXIdxClientASTFile astFile = CB.importedASTFile(ClientData, &Info);
   (void)astFile;
 }
@@ -627,6 +628,12 @@ bool CXIndexDataConsumer::handleVar(const VarDecl *D) {
 }
 
 bool CXIndexDataConsumer::handleField(const FieldDecl *D) {
+  DeclInfo DInfo(/*isRedeclaration=*/false, /*isDefinition=*/true,
+                 /*isContainer=*/false);
+  return handleDecl(D, D->getLocation(), getCursor(D), DInfo);
+}
+
+bool CXIndexDataConsumer::handleMSProperty(const MSPropertyDecl *D) {
   DeclInfo DInfo(/*isRedeclaration=*/false, /*isDefinition=*/true,
                  /*isContainer=*/false);
   return handleDecl(D, D->getLocation(), getCursor(D), DInfo);
@@ -879,6 +886,20 @@ bool CXIndexDataConsumer::handleTypeAliasTemplate(const TypeAliasTemplateDecl *D
   DeclInfo DInfo(/*isRedeclaration=*/!D->isCanonicalDecl(),
                  /*isDefinition=*/true, /*isContainer=*/false);
   return handleDecl(D, D->getLocation(), getCursor(D), DInfo);
+}
+
+bool CXIndexDataConsumer::handleReference(const NamedDecl *D, SourceLocation Loc,
+                                      const NamedDecl *Parent,
+                                      const DeclContext *DC,
+                                      const Expr *E,
+                                      CXIdxEntityRefKind Kind,
+                                      CXSymbolRole Role) {
+  if (!D || !DC)
+    return false;
+
+  CXCursor Cursor = E ? MakeCXCursor(E, cast<Decl>(DC), CXTU)
+                      : getRefCursor(D, Loc);
+  return handleReference(D, Loc, Cursor, Parent, DC, E, Kind, Role);
 }
 
 bool CXIndexDataConsumer::handleReference(const NamedDecl *D, SourceLocation Loc,
@@ -1244,9 +1265,6 @@ static CXIdxEntityKind getEntityKindFromSymbolKind(SymbolKind K, SymbolLanguage 
   case SymbolKind::Macro:
   case SymbolKind::ClassProperty:
   case SymbolKind::Using:
-  case SymbolKind::TemplateTypeParm:
-  case SymbolKind::TemplateTemplateParm:
-  case SymbolKind::NonTypeTemplateParm:
     return CXIdxEntity_Unexposed;
 
   case SymbolKind::Enum: return CXIdxEntity_Enum;

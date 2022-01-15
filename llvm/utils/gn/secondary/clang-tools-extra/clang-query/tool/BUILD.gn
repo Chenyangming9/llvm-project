@@ -11,5 +11,7 @@ executable("clang-query") {
     "//clang/lib/Tooling",
   ]
   include_dirs = [ ".." ]
-  sources = [ "ClangQuery.cpp" ]
+  sources = [
+    "ClangQuery.cpp",
+  ]
 }

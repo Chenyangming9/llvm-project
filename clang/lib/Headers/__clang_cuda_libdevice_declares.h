@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-#if defined(__OPENMP_NVPTX__)
+#if defined(_OPENMP)
 #define __DEVICE__
 #elif defined(__CUDA__)
 #define __DEVICE__ __device__

@@ -17,10 +17,11 @@
 #include "llvm/MC/MCAsmInfo.h"
 
 namespace llvm {
+class Target;
 
 class BPFMCAsmInfo : public MCAsmInfo {
 public:
-  explicit BPFMCAsmInfo(const Triple &TT, const MCTargetOptions &Options) {
+  explicit BPFMCAsmInfo(const Triple &TT) {
     if (TT.getArch() == Triple::bpfeb)
       IsLittleEndian = false;
 
@@ -41,8 +42,6 @@ public:
     // section will be parsable, but with odd offsets and
     // line numbers, etc.
     CodePointerSize = 8;
-
-    UseIntegratedAssembler = false;
   }
 
   void setDwarfUsesRelocationsAcrossSections(bool enable) {

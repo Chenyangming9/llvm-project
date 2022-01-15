@@ -10,7 +10,6 @@
 #define LLVM_CLANG_SERIALIZATION_MODULEFILEEXTENSION_H
 
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
-#include "llvm/Support/ExtensibleRTTI.h"
 #include <memory>
 #include <string>
 
@@ -60,14 +59,8 @@ class ModuleFileExtensionWriter;
 /// compiled module files (.pcm) and precompiled headers (.pch) via a
 /// custom writer that can then be accessed via a custom reader when
 /// the module file or precompiled header is loaded.
-///
-/// Subclasses must use LLVM RTTI for open class hierarchies.
-class ModuleFileExtension
-    : public llvm::RTTIExtends<ModuleFileExtension, llvm::RTTIRoot> {
+class ModuleFileExtension {
 public:
-  /// Discriminator for LLVM RTTI.
-  static char ID;
-
   virtual ~ModuleFileExtension();
 
   /// Retrieves the metadata for this module file extension.

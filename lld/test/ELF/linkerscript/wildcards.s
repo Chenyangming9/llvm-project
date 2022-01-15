@@ -1,12 +1,11 @@
 # REQUIRES: x86
-# RUN: split-file %s %t
-# RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %t/asm -o %t.o
+# RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %s -o %t
 
 ## Default case: abc and abx included in text.
 # RUN: echo "SECTIONS { \
 # RUN:      .text : { *(.abc .abx) } }" > %t.script
-# RUN: ld.lld -o %t.out --script %t.script %t.o
-# RUN: llvm-objdump --section-headers %t.out | \
+# RUN: ld.lld -o %t.out --script %t.script %t
+# RUN: llvm-objdump -section-headers %t.out | \
 # RUN:   FileCheck -check-prefix=SEC-DEFAULT %s
 # SEC-DEFAULT:      Sections:
 # SEC-DEFAULT-NEXT: Idx Name          Size
@@ -23,15 +22,15 @@
 ## Now replace the symbol with '?' and check that results are the same.
 # RUN: echo "SECTIONS { \
 # RUN:      .text : { *(.abc .ab?) } }" > %t.script
-# RUN: ld.lld -o %t.out --script %t.script %t.o
-# RUN: llvm-objdump --section-headers %t.out | \
+# RUN: ld.lld -o %t.out --script %t.script %t
+# RUN: llvm-objdump -section-headers %t.out | \
 # RUN:   FileCheck -check-prefix=SEC-DEFAULT %s
 
 ## Now see how replacing '?' with '*' will consume whole abcd.
 # RUN: echo "SECTIONS { \
 # RUN:      .text : { *(.abc .ab*) } }" > %t.script
-# RUN: ld.lld -o %t.out --script %t.script %t.o
-# RUN: llvm-objdump --section-headers %t.out | \
+# RUN: ld.lld -o %t.out --script %t.script %t
+# RUN: llvm-objdump -section-headers %t.out | \
 # RUN:   FileCheck -check-prefix=SEC-ALL %s
 # SEC-ALL:      Sections:
 # SEC-ALL-NEXT: Idx Name          Size
@@ -47,8 +46,8 @@
 ## All sections started with .a are merged.
 # RUN: echo "SECTIONS { \
 # RUN:      .text : { *(.a*) } }" > %t.script
-# RUN: ld.lld -o %t.out --script %t.script %t.o
-# RUN: llvm-objdump --section-headers %t.out | \
+# RUN: ld.lld -o %t.out --script %t.script %t
+# RUN: llvm-objdump -section-headers %t.out | \
 # RUN:   FileCheck -check-prefix=SEC-NO %s
 # SEC-NO: Sections:
 # SEC-NO-NEXT: Idx Name          Size
@@ -59,7 +58,6 @@
 # SEC-NO-NEXT:   4 .shstrtab     0000002a
 # SEC-NO-NEXT:   5 .strtab       00000008
 
-#--- asm
 .text
 .section .abc,"ax",@progbits
 .long 0
@@ -83,11 +81,3 @@
 
 .globl _start
 _start:
-
-#--- lparen.lds
-## ( is recognized as a section name pattern. Note, ( is rejected by GNU ld.
-# RUN: ld.lld -T %t/lparen.lds %t.o -o %t.out
-# RUN: llvm-objdump --section-headers %t.out | FileCheck --check-prefix=SEC-NO %s
-SECTIONS {
- .text : { *(.a* ( ) }
-}

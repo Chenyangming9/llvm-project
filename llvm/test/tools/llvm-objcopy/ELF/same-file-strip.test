@@ -9,11 +9,10 @@
 
 # ERR: error: cannot specify '-' as an input file more than once
 
-# RUN: cp %t %t2
-# RUN: llvm-strip %t %t %t %t2 %t2 2>&1 | FileCheck -check-prefix=WARN %s -DFILE=%t -DFILE2=%t2
+# RUN: llvm-strip %t %t 2>&1 | FileCheck -check-prefix=WARN %s -DFILE=%t
+# RUN: llvm-strip %t %t %t 2>&1 | FileCheck -check-prefix=WARN %s -DFILE=%t
 
-# WARN:      warning: '[[FILE]]' was already specified
-# WARN-NEXT: warning: '[[FILE2]]' was already specified
+# WARN: warning: '[[FILE]]' was already specified
 
 --- !ELF
 FileHeader:

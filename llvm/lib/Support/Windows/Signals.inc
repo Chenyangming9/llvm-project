@@ -23,7 +23,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 // The Windows.h header must be after LLVM and standard headers.
-#include "llvm/Support/Windows/WindowsSupport.h"
+#include "WindowsSupport.h"
 
 #ifdef __MINGW32__
  #include <imagehlp.h>
@@ -460,7 +460,7 @@ bool sys::RemoveFileOnSignal(StringRef Filename, std::string* ErrMsg) {
   if (FilesToRemove == NULL)
     FilesToRemove = new std::vector<std::string>;
 
-  FilesToRemove->push_back(std::string(Filename));
+  FilesToRemove->push_back(Filename);
 
   LeaveCriticalSection(&CriticalSection);
   return false;
@@ -521,13 +521,10 @@ void sys::PrintStackTraceOnErrorSignal(StringRef Argv0,
 extern "C" VOID WINAPI RtlCaptureContext(PCONTEXT ContextRecord);
 #endif
 
-static void LocalPrintStackTrace(raw_ostream &OS, PCONTEXT C) {
-  STACKFRAME64 StackFrame{};
-  CONTEXT Context{};
-  if (!C) {
-    ::RtlCaptureContext(&Context);
-    C = &Context;
-  }
+void llvm::sys::PrintStackTrace(raw_ostream &OS) {
+  STACKFRAME64 StackFrame = {};
+  CONTEXT Context = {};
+  ::RtlCaptureContext(&Context);
 #if defined(_M_X64)
   StackFrame.AddrPC.Offset = Context.Rip;
   StackFrame.AddrStack.Offset = Context.Rsp;
@@ -549,13 +546,9 @@ static void LocalPrintStackTrace(raw_ostream &OS, PCONTEXT C) {
   StackFrame.AddrStack.Mode = AddrModeFlat;
   StackFrame.AddrFrame.Mode = AddrModeFlat;
   PrintStackTraceForThread(OS, GetCurrentProcess(), GetCurrentThread(),
-                           StackFrame, C);
+                           StackFrame, &Context);
 }
 
-void llvm::sys::PrintStackTrace(raw_ostream &OS, int Depth) {
-  // FIXME: Handle "Depth" parameter to print stack trace upto specified Depth
-  LocalPrintStackTrace(OS, nullptr);
-}
 
 void llvm::sys::SetInterruptFunction(void (*IF)()) {
   RegisterHandler();
@@ -567,13 +560,6 @@ void llvm::sys::SetInfoSignalFunction(void (*Handler)()) {
   // Unimplemented.
 }
 
-void llvm::sys::SetOneShotPipeSignalFunction(void (*Handler)()) {
-  // Unimplemented.
-}
-
-void llvm::sys::DefaultOneShotPipeSignalHandler() {
-  // Unimplemented.
-}
 
 /// Add a function to be called when a signal is delivered to the process. The
 /// handler can have a cookie passed to it to identify what instance of the
@@ -585,7 +571,7 @@ void llvm::sys::AddSignalHandler(sys::SignalHandlerCallback FnPtr,
   LeaveCriticalSection(&CriticalSection);
 }
 
-static void Cleanup(bool ExecuteSignalHandlers) {
+static void Cleanup() {
   if (CleanupExecuted)
     return;
 
@@ -601,10 +587,7 @@ static void Cleanup(bool ExecuteSignalHandlers) {
       llvm::sys::fs::remove(FilesToRemove->back());
       FilesToRemove->pop_back();
     }
-
-  if (ExecuteSignalHandlers)
-    llvm::sys::RunSignalHandlers();
-
+  llvm::sys::RunSignalHandlers();
   LeaveCriticalSection(&CriticalSection);
 }
 
@@ -614,7 +597,7 @@ void llvm::sys::RunInterruptHandlers() {
   // error handler). We must ensure that the critical section is properly
   // initialized.
   InitializeThreading();
-  Cleanup(true);
+  Cleanup();
 }
 
 /// Find the Windows Registry Key for a given location.
@@ -766,18 +749,16 @@ WriteWindowsDumpFile(PMINIDUMP_EXCEPTION_INFORMATION ExceptionInfo) {
     if (!GetDumpType(DefaultLocalDumpsKey, DumpType))
       DumpType = MiniDumpNormal;
 
-  // Look to see if a dump location is specified on the command line.  If not,
-  // look to see if a dump location is specified in the registry; first with the
+  // Look to see if a dump location is specified in the registry; first with the
   // app-specific key and failing that with the global key.  If none are found
   // we'll just create the dump file in the default temporary file location
   // (GetDumpFolder will return false either if the key is NULL or if there is
   // no valid DumpFolder value at its location).
   bool ExplicitDumpDirectorySet = true;
-  SmallString<MAX_PATH> DumpDirectory(*CrashDiagnosticsDirectory);
-  if (DumpDirectory.empty())
-    if (!GetDumpFolder(AppSpecificKey, DumpDirectory))
-      if (!GetDumpFolder(DefaultLocalDumpsKey, DumpDirectory))
-        ExplicitDumpDirectorySet = false;
+  SmallString<MAX_PATH> DumpDirectory;
+  if (!GetDumpFolder(AppSpecificKey, DumpDirectory))
+    if (!GetDumpFolder(DefaultLocalDumpsKey, DumpDirectory))
+      ExplicitDumpDirectorySet = false;
 
   int FD;
   SmallString<MAX_PATH> DumpPath;
@@ -804,12 +785,8 @@ WriteWindowsDumpFile(PMINIDUMP_EXCEPTION_INFORMATION ExceptionInfo) {
   return std::error_code();
 }
 
-void sys::CleanupOnSignal(uintptr_t Context) {
-  LLVMUnhandledExceptionFilter((LPEXCEPTION_POINTERS)Context);
-}
-
 static LONG WINAPI LLVMUnhandledExceptionFilter(LPEXCEPTION_POINTERS ep) {
-  Cleanup(true);
+  Cleanup();
 
   // We'll automatically write a Minidump file here to help diagnose
   // the nasty sorts of crashes that aren't 100% reproducible from a set of
@@ -826,24 +803,48 @@ static LONG WINAPI LLVMUnhandledExceptionFilter(LPEXCEPTION_POINTERS ep) {
                    << "\n";
   }
 
-  // Stack unwinding appears to modify the context. Copy it to preserve the
-  // caller's context.
-  CONTEXT ContextCopy;
-  if (ep)
-    memcpy(&ContextCopy, ep->ContextRecord, sizeof(ContextCopy));
+  // Initialize the STACKFRAME structure.
+  STACKFRAME64 StackFrame = {};
 
-  LocalPrintStackTrace(llvm::errs(), ep ? &ContextCopy : nullptr);
+#if defined(_M_X64)
+  StackFrame.AddrPC.Offset = ep->ContextRecord->Rip;
+  StackFrame.AddrPC.Mode = AddrModeFlat;
+  StackFrame.AddrStack.Offset = ep->ContextRecord->Rsp;
+  StackFrame.AddrStack.Mode = AddrModeFlat;
+  StackFrame.AddrFrame.Offset = ep->ContextRecord->Rbp;
+  StackFrame.AddrFrame.Mode = AddrModeFlat;
+#elif defined(_M_IX86)
+  StackFrame.AddrPC.Offset = ep->ContextRecord->Eip;
+  StackFrame.AddrPC.Mode = AddrModeFlat;
+  StackFrame.AddrStack.Offset = ep->ContextRecord->Esp;
+  StackFrame.AddrStack.Mode = AddrModeFlat;
+  StackFrame.AddrFrame.Offset = ep->ContextRecord->Ebp;
+  StackFrame.AddrFrame.Mode = AddrModeFlat;
+#elif defined(_M_ARM64) || defined(_M_ARM)
+  StackFrame.AddrPC.Offset = ep->ContextRecord->Pc;
+  StackFrame.AddrPC.Mode = AddrModeFlat;
+  StackFrame.AddrStack.Offset = ep->ContextRecord->Sp;
+  StackFrame.AddrStack.Mode = AddrModeFlat;
+#if defined(_M_ARM64)
+  StackFrame.AddrFrame.Offset = ep->ContextRecord->Fp;
+#else
+  StackFrame.AddrFrame.Offset = ep->ContextRecord->R11;
+#endif
+  StackFrame.AddrFrame.Mode = AddrModeFlat;
+#endif
 
-  return EXCEPTION_EXECUTE_HANDLER;
+  HANDLE hProcess = GetCurrentProcess();
+  HANDLE hThread = GetCurrentThread();
+  PrintStackTraceForThread(llvm::errs(), hProcess, hThread, StackFrame,
+                           ep->ContextRecord);
+
+  _exit(ep->ExceptionRecord->ExceptionCode);
 }
 
 static BOOL WINAPI LLVMConsoleCtrlHandler(DWORD dwCtrlType) {
   // We are running in our very own thread, courtesy of Windows.
   EnterCriticalSection(&CriticalSection);
-  // This function is only ever called when a CTRL-C or similar control signal
-  // is fired. Killing a process in this way is normal, so don't trigger the
-  // signal handlers.
-  Cleanup(false);
+  Cleanup();
 
   // If an interrupt function has been set, go and run one it; otherwise,
   // the process dies.
@@ -871,5 +872,3 @@ static BOOL WINAPI LLVMConsoleCtrlHandler(DWORD dwCtrlType) {
  #pragma GCC diagnostic warning "-Wformat"
  #pragma GCC diagnostic warning "-Wformat-extra-args"
 #endif
-
-void sys::unregisterHandlers() {}

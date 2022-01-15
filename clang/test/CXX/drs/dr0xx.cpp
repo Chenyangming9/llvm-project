@@ -118,10 +118,10 @@ namespace dr9 { // dr9: yes
     int m; // expected-note {{here}}
     friend int R1();
   };
-  struct N : protected B { // expected-note {{protected}}
+  struct N : protected B { // expected-note 2{{protected}}
     friend int R2();
   } n;
-  int R1() { return n.m; } // expected-error {{protected member}}
+  int R1() { return n.m; } // expected-error {{protected base class}} expected-error {{protected member}}
   int R2() { return n.m; }
 }
 
@@ -204,10 +204,10 @@ namespace dr16 { // dr16: yes
     void f(); // expected-note {{here}}
     friend class C;
   };
-  class B : A {}; // expected-note 3{{here}}
+  class B : A {}; // expected-note 4{{here}}
   class C : B {
     void g() {
-      f(); // expected-error {{private member}}
+      f(); // expected-error {{private member}} expected-error {{private base}}
       A::f(); // expected-error {{private member}} expected-error {{private base}}
     }
   };
@@ -316,16 +316,15 @@ namespace dr25 { // dr25: yes
 namespace dr26 { // dr26: yes
   struct A { A(A, const A & = A()); }; // expected-error {{must pass its first argument by reference}}
   struct B {
-    B();
-    // FIXME: In C++98, we diagnose this twice.
+    B(); // expected-note 0-1{{candidate}}
     B(const B &, B = B());
 #if __cplusplus <= 201402L
-    // expected-error@-2 1+{{recursive evaluation of default argument}} expected-note@-2 1+{{used here}}
+    // expected-error@-2 {{no matching constructor}} expected-note@-2 {{candidate}} expected-note@-2 {{here}}
 #endif
   };
   struct C {
     static C &f();
-    C(const C &, C = f()); // expected-error {{recursive evaluation of default argument}} expected-note {{used here}}
+    C(const C &, C = f()); // expected-error {{no matching constructor}} expected-note {{candidate}} expected-note {{here}}
   };
 }
 
@@ -915,7 +914,7 @@ namespace dr75 { // dr75: yes
 
 namespace dr76 { // dr76: yes
   const volatile int n = 1;
-  int arr[n]; // expected-error +{{variable length array}} expected-note {{read of volatile}}
+  int arr[n]; // expected-error +{{variable length array}}
 }
 
 namespace dr77 { // dr77: yes

@@ -64,10 +64,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Analysis/LegacyDivergenceAnalysis.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/DivergenceAnalysis.h"
+#include "llvm/Analysis/LegacyDivergenceAnalysis.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -75,8 +75,6 @@
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Value.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include <vector>
@@ -95,9 +93,8 @@ namespace {
 class DivergencePropagator {
 public:
   DivergencePropagator(Function &F, TargetTransformInfo &TTI, DominatorTree &DT,
-                       PostDominatorTree &PDT, DenseSet<const Value *> &DV,
-                       DenseSet<const Use *> &DU)
-      : F(F), TTI(TTI), DT(DT), PDT(PDT), DV(DV), DU(DU) {}
+                       PostDominatorTree &PDT, DenseSet<const Value *> &DV)
+      : F(F), TTI(TTI), DT(DT), PDT(PDT), DV(DV) {}
   void populateWithSourcesOfDivergence();
   void propagate();
 
@@ -121,14 +118,11 @@ private:
   PostDominatorTree &PDT;
   std::vector<Value *> Worklist; // Stack for DFS.
   DenseSet<const Value *> &DV;   // Stores all divergent values.
-  DenseSet<const Use *> &DU;   // Stores divergent uses of possibly uniform
-                               // values.
 };
 
 void DivergencePropagator::populateWithSourcesOfDivergence() {
   Worklist.clear();
   DV.clear();
-  DU.clear();
   for (auto &I : instructions(F)) {
     if (TTI.isSourceOfDivergence(&I)) {
       Worklist.push_back(&I);
@@ -203,10 +197,8 @@ void DivergencePropagator::exploreSyncDependency(Instruction *TI) {
   // dominators of TI until it is outside the influence region.
   BasicBlock *InfluencedBB = ThisBB;
   while (InfluenceRegion.count(InfluencedBB)) {
-    for (auto &I : *InfluencedBB) {
-      if (!DV.count(&I))
-        findUsersOutsideInfluenceRegion(I, InfluenceRegion);
-    }
+    for (auto &I : *InfluencedBB)
+      findUsersOutsideInfluenceRegion(I, InfluenceRegion);
     DomTreeNode *IDomNode = DT.getNode(InfluencedBB)->getIDom();
     if (IDomNode == nullptr)
       break;
@@ -216,10 +208,9 @@ void DivergencePropagator::exploreSyncDependency(Instruction *TI) {
 
 void DivergencePropagator::findUsersOutsideInfluenceRegion(
     Instruction &I, const DenseSet<BasicBlock *> &InfluenceRegion) {
-  for (Use &Use : I.uses()) {
-    Instruction *UserInst = cast<Instruction>(Use.getUser());
+  for (User *U : I.users()) {
+    Instruction *UserInst = cast<Instruction>(U);
     if (!InfluenceRegion.count(UserInst->getParent())) {
-      DU.insert(&Use);
       if (DV.insert(UserInst).second)
         Worklist.push_back(UserInst);
     }
@@ -259,8 +250,9 @@ void DivergencePropagator::computeInfluenceRegion(
 void DivergencePropagator::exploreDataDependency(Value *V) {
   // Follow def-use chains of V.
   for (User *U : V->users()) {
-    if (!TTI.isAlwaysUniform(U) && DV.insert(U).second)
-      Worklist.push_back(U);
+    Instruction *UserInst = cast<Instruction>(U);
+    if (!TTI.isAlwaysUniform(U) && DV.insert(UserInst).second)
+      Worklist.push_back(UserInst);
   }
 }
 
@@ -283,9 +275,6 @@ void DivergencePropagator::propagate() {
 
 // Register this pass.
 char LegacyDivergenceAnalysis::ID = 0;
-LegacyDivergenceAnalysis::LegacyDivergenceAnalysis() : FunctionPass(ID) {
-  initializeLegacyDivergenceAnalysisPass(*PassRegistry::getPassRegistry());
-}
 INITIALIZE_PASS_BEGIN(LegacyDivergenceAnalysis, "divergence",
                       "Legacy Divergence Analysis", false, true)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
@@ -299,15 +288,16 @@ FunctionPass *llvm::createLegacyDivergenceAnalysisPass() {
 }
 
 void LegacyDivergenceAnalysis::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequiredTransitive<DominatorTreeWrapperPass>();
-  AU.addRequiredTransitive<PostDominatorTreeWrapperPass>();
-  AU.addRequiredTransitive<LoopInfoWrapperPass>();
+  AU.addRequired<DominatorTreeWrapperPass>();
+  AU.addRequired<PostDominatorTreeWrapperPass>();
+  if (UseGPUDA)
+    AU.addRequired<LoopInfoWrapperPass>();
   AU.setPreservesAll();
 }
 
 bool LegacyDivergenceAnalysis::shouldUseGPUDivergenceAnalysis(
-    const Function &F, const TargetTransformInfo &TTI) const {
-  if (!(UseGPUDA || TTI.useGPUDivergenceAnalysis()))
+    const Function &F) const {
+  if (!UseGPUDA)
     return false;
 
   // GPUDivergenceAnalysis requires a reducible CFG.
@@ -330,21 +320,19 @@ bool LegacyDivergenceAnalysis::runOnFunction(Function &F) {
     return false;
 
   DivergentValues.clear();
-  DivergentUses.clear();
   gpuDA = nullptr;
 
   auto &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
   auto &PDT = getAnalysis<PostDominatorTreeWrapperPass>().getPostDomTree();
 
-  if (shouldUseGPUDivergenceAnalysis(F, TTI)) {
+  if (shouldUseGPUDivergenceAnalysis(F)) {
     // run the new GPU divergence analysis
     auto &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-    gpuDA = std::make_unique<DivergenceInfo>(F, DT, PDT, LI, TTI,
-                                             /* KnownReducible  = */ true);
+    gpuDA = llvm::make_unique<GPUDivergenceAnalysis>(F, DT, PDT, LI, TTI);
 
   } else {
     // run LLVM's existing DivergenceAnalysis
-    DivergencePropagator DP(F, TTI, DT, PDT, DivergentValues, DivergentUses);
+    DivergencePropagator DP(F, TTI, DT, PDT, DivergentValues);
     DP.populateWithSourcesOfDivergence();
     DP.propagate();
   }
@@ -361,13 +349,6 @@ bool LegacyDivergenceAnalysis::isDivergent(const Value *V) const {
     return gpuDA->isDivergent(*V);
   }
   return DivergentValues.count(V);
-}
-
-bool LegacyDivergenceAnalysis::isDivergentUse(const Use *U) const {
-  if (gpuDA) {
-    return gpuDA->isDivergentUse(*U);
-  }
-  return DivergentValues.count(U->get()) || DivergentUses.count(U);
 }
 
 void LegacyDivergenceAnalysis::print(raw_ostream &OS, const Module *) const {
@@ -397,7 +378,8 @@ void LegacyDivergenceAnalysis::print(raw_ostream &OS, const Module *) const {
     OS << Arg << "\n";
   }
   // Iterate instructions using instructions() to ensure a deterministic order.
-  for (const BasicBlock &BB : *F) {
+  for (auto BI = F->begin(), BE = F->end(); BI != BE; ++BI) {
+    auto &BB = *BI;
     OS << "\n           " << BB.getName() << ":\n";
     for (auto &I : BB.instructionsWithoutDebug()) {
       OS << (isDivergent(&I) ? "DIVERGENT:     " : "               ");

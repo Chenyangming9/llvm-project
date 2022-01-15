@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13.4)
+cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 
 # Add cmake directory to search for custom cmake functions.
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
@@ -53,50 +53,31 @@ set(OPENMP_TEST_FLAGS "" CACHE STRING
 set(OPENMP_TEST_OPENMP_FLAGS ${OPENMP_TEST_COMPILER_OPENMP_FLAGS} CACHE STRING
   "OpenMP compiler flag to use for testing OpenMP runtime libraries.")
 
+
+# Build host runtime library.
+add_subdirectory(runtime)
+
+
 set(ENABLE_LIBOMPTARGET ON)
 # Currently libomptarget cannot be compiled on Windows or MacOS X.
 # Since the device plugins are only supported on Linux anyway,
 # there is no point in trying to compile libomptarget on other OSes.
-if (APPLE OR WIN32 OR NOT OPENMP_HAVE_STD_CPP14_FLAG)
+if (APPLE OR WIN32 OR NOT OPENMP_HAVE_STD_CPP11_FLAG)
   set(ENABLE_LIBOMPTARGET OFF)
 endif()
 
 option(OPENMP_ENABLE_LIBOMPTARGET "Enable building libomptarget for offloading."
        ${ENABLE_LIBOMPTARGET})
-option(OPENMP_ENABLE_LIBOMPTARGET_PROFILING "Enable time profiling for libomptarget."
-       ${ENABLE_LIBOMPTARGET})
-option(OPENMP_ENABLE_LIBOMP_PROFILING "Enable time profiling for libomp." OFF)
-
-# Build host runtime library, after LIBOMPTARGET variables are set since they are needed
-# to enable time profiling support in the OpenMP runtime.
-add_subdirectory(runtime)
-
 if (OPENMP_ENABLE_LIBOMPTARGET)
-  # Check that the library can actually be built.
+  # Check that the library can acutally be built.
   if (APPLE OR WIN32)
     message(FATAL_ERROR "libomptarget cannot be built on Windows and MacOS X!")
-  elseif (NOT OPENMP_HAVE_STD_CPP14_FLAG)
-    message(FATAL_ERROR "Host compiler must support C++14 to build libomptarget!")
+  elseif (NOT OPENMP_HAVE_STD_CPP11_FLAG)
+    message(FATAL_ERROR "Host compiler must support C++11 to build libomptarget!")
   endif()
 
   add_subdirectory(libomptarget)
 endif()
 
-set(ENABLE_OMPT_TOOLS ON)
-# Currently tools are not tested well on Windows or MacOS X.
-if (APPLE OR WIN32)
-  set(ENABLE_OMPT_TOOLS OFF)
-endif()
-
-option(OPENMP_ENABLE_OMPT_TOOLS "Enable building ompt based tools for OpenMP."
-       ${ENABLE_OMPT_TOOLS})
-if (OPENMP_ENABLE_OMPT_TOOLS)
-  add_subdirectory(tools)
-endif()
-
-
-# Build documentation
-add_subdirectory(docs)
-
-# Now that we have seen all testsuites, create the check-openmp target.
+# Now that we have seen all testuites, create the check-openmp target.
 construct_check_openmp_target()

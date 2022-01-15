@@ -8,9 +8,9 @@
 
 #include "index/BackgroundIndexLoader.h"
 #include "GlobalCompilationDatabase.h"
+#include "Logger.h"
+#include "Path.h"
 #include "index/Background.h"
-#include "support/Logger.h"
-#include "support/Path.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallString.h"
@@ -23,6 +23,16 @@
 namespace clang {
 namespace clangd {
 namespace {
+
+llvm::Optional<Path> uriToAbsolutePath(llvm::StringRef URI, PathRef HintPath) {
+  auto U = URI::parse(URI);
+  if (!U)
+    return llvm::None;
+  auto AbsolutePath = URI::resolve(*U, HintPath);
+  if (!AbsolutePath)
+    return llvm::None;
+  return *AbsolutePath;
+}
 
 /// A helper class to cache BackgroundIndexStorage operations and keep the
 /// inverse dependency mapping.
@@ -59,7 +69,7 @@ BackgroundIndexLoader::loadShard(PathRef StartSourceFile, PathRef DependentTU) {
     return {LS, Edges};
 
   LS.AbsolutePath = StartSourceFile.str();
-  LS.DependentTU = std::string(DependentTU);
+  LS.DependentTU = DependentTU;
   BackgroundIndexStorage *Storage = IndexStorageFactory(LS.AbsolutePath);
   auto Shard = Storage->loadShard(StartSourceFile);
   if (!Shard || !Shard->Sources) {
@@ -69,11 +79,9 @@ BackgroundIndexLoader::loadShard(PathRef StartSourceFile, PathRef DependentTU) {
 
   LS.Shard = std::move(Shard);
   for (const auto &It : *LS.Shard->Sources) {
-    auto AbsPath = URI::resolve(It.getKey(), StartSourceFile);
-    if (!AbsPath) {
-      elog("Failed to resolve URI: {0}", AbsPath.takeError());
+    auto AbsPath = uriToAbsolutePath(It.getKey(), StartSourceFile);
+    if (!AbsPath)
       continue;
-    }
     // A shard contains only edges for non main-file sources.
     if (*AbsPath != StartSourceFile) {
       Edges.push_back(*AbsPath);

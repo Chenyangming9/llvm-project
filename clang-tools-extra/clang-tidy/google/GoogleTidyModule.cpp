@@ -23,10 +23,10 @@
 #include "GlobalNamesInHeadersCheck.h"
 #include "GlobalVariableDeclarationCheck.h"
 #include "IntegerTypesCheck.h"
+#include "NonConstReferences.h"
 #include "OverloadedUnaryAndCheck.h"
 #include "TodoCommentCheck.h"
 #include "UnnamedNamespaceInHeaderCheck.h"
-#include "UpgradeGoogletestCaseCheck.h"
 #include "UsingNamespaceDirectiveCheck.h"
 
 using namespace clang::ast_matchers;
@@ -62,6 +62,8 @@ class GoogleModule : public ClangTidyModule {
         "google-runtime-int");
     CheckFactories.registerCheck<runtime::OverloadedUnaryAndCheck>(
         "google-runtime-operator");
+    CheckFactories.registerCheck<runtime::NonConstReferences>(
+        "google-runtime-references");
     CheckFactories
         .registerCheck<readability::AvoidUnderscoreInGoogletestNameCheck>(
             "google-readability-avoid-underscore-in-googletest-name");
@@ -77,8 +79,6 @@ class GoogleModule : public ClangTidyModule {
     CheckFactories
         .registerCheck<clang::tidy::readability::NamespaceCommentCheck>(
             "google-readability-namespace-comments");
-    CheckFactories.registerCheck<UpgradeGoogletestCaseCheck>(
-        "google-upgrade-googletest-case");
   }
 
   ClangTidyOptions getModuleOptions() override {

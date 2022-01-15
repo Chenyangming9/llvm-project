@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_API_SBLISTENER_H
-#define LLDB_API_SBLISTENER_H
+#ifndef LLDB_SBListener_h_
+#define LLDB_SBListener_h_
 
 #include "lldb/API/SBDefines.h"
 
@@ -100,9 +100,9 @@ private:
   void reset(lldb::ListenerSP listener_sp);
 
   lldb::ListenerSP m_opaque_sp;
-  lldb_private::Listener *m_unused_ptr = nullptr;
+  lldb_private::Listener *m_unused_ptr;
 };
 
 } // namespace lldb
 
-#endif // LLDB_API_SBLISTENER_H
+#endif // LLDB_SBListener_h_

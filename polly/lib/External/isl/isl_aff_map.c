@@ -132,15 +132,13 @@ __isl_give isl_basic_map *isl_basic_map_from_multi_aff2(
 	__isl_take isl_multi_aff *maff, int rational)
 {
 	int i;
-	isl_size dim;
 	isl_space *space;
 	isl_basic_map *bmap;
 
-	dim = isl_multi_aff_dim(maff, isl_dim_out);
-	if (dim < 0)
-		goto error;
+	if (!maff)
+		return NULL;
 
-	if (dim != maff->n)
+	if (isl_space_dim(maff->space, isl_dim_out) != maff->n)
 		isl_die(isl_multi_aff_get_ctx(maff), isl_error_internal,
 			"invalid space", goto error);
 
@@ -200,7 +198,7 @@ __isl_give isl_basic_set *isl_basic_set_from_multi_aff(
 {
 	if (check_input_is_set(isl_multi_aff_peek_space(ma)) < 0)
 		ma = isl_multi_aff_free(ma);
-	return bset_from_bmap(basic_map_from_multi_aff(ma));
+	return bset_from_bmap(isl_basic_map_from_multi_aff(ma));
 }
 
 /* Construct a map mapping the domain of the multi-affine expression
@@ -228,14 +226,6 @@ __isl_give isl_map *isl_map_from_multi_aff(__isl_take isl_multi_aff *ma)
 	return isl_map_from_multi_aff_internal(ma);
 }
 
-/* This function performs the same operation as isl_map_from_multi_aff,
- * but is considered as a function on an isl_multi_aff when exported.
- */
-__isl_give isl_map *isl_multi_aff_as_map(__isl_take isl_multi_aff *ma)
-{
-	return isl_map_from_multi_aff(ma);
-}
-
 /* Construct a set mapping the parameter domain the multi-affine expression
  * to its space, with each dimension in the space equated to the
  * corresponding affine expression.
@@ -245,14 +235,6 @@ __isl_give isl_set *isl_set_from_multi_aff(__isl_take isl_multi_aff *ma)
 	if (check_input_is_set(isl_multi_aff_peek_space(ma)) < 0)
 		ma = isl_multi_aff_free(ma);
 	return isl_map_from_multi_aff_internal(ma);
-}
-
-/* This function performs the same operation as isl_set_from_multi_aff,
- * but is considered as a function on an isl_multi_aff when exported.
- */
-__isl_give isl_set *isl_multi_aff_as_set(__isl_take isl_multi_aff *ma)
-{
-	return isl_set_from_multi_aff(ma);
 }
 
 /* Construct a basic map mapping a domain in the given space to
@@ -331,14 +313,6 @@ __isl_give isl_map *isl_map_from_pw_aff(__isl_take isl_pw_aff *pwaff)
 	return isl_map_from_pw_aff_internal(pwaff);
 }
 
-/* This function performs the same operation as isl_map_from_pw_aff,
- * but is considered as a function on an isl_pw_aff when exported.
- */
-__isl_give isl_map *isl_pw_aff_as_map(__isl_take isl_pw_aff *pa)
-{
-	return isl_map_from_pw_aff(pa);
-}
-
 /* Construct a one-dimensional set with as parameter domain
  * the domain of pwaff and the single set dimension
  * corresponding to the affine expressions.
@@ -353,12 +327,10 @@ __isl_give isl_set *isl_set_from_pw_aff(__isl_take isl_pw_aff *pwaff)
 /* Construct a map mapping the domain of the piecewise multi-affine expression
  * to its range, with each dimension in the range equated to the
  * corresponding affine expression on its cell.
- * If "pma" lives in a set space, then the result is actually a set.
  *
  * If the domain of "pma" is rational, then so is the constructed "map".
  */
-__isl_give isl_map *isl_map_from_pw_multi_aff_internal(
-	__isl_take isl_pw_multi_aff *pma)
+__isl_give isl_map *isl_map_from_pw_multi_aff(__isl_take isl_pw_multi_aff *pma)
 {
 	int i;
 	isl_map *map;
@@ -389,38 +361,11 @@ __isl_give isl_map *isl_map_from_pw_multi_aff_internal(
 	return map;
 }
 
-/* Construct a map mapping the domain of the piecewise multi-affine expression
- * to its range, with each dimension in the range equated to the
- * corresponding affine expression on its cell.
- */
-__isl_give isl_map *isl_map_from_pw_multi_aff(__isl_take isl_pw_multi_aff *pma)
-{
-	if (check_input_is_map(isl_pw_multi_aff_peek_space(pma)) < 0)
-		pma = isl_pw_multi_aff_free(pma);
-	return isl_map_from_pw_multi_aff_internal(pma);
-}
-
-/* This function performs the same operation as isl_map_from_pw_multi_aff,
- * but is considered as a function on an isl_pw_multi_aff when exported.
- */
-__isl_give isl_map *isl_pw_multi_aff_as_map(__isl_take isl_pw_multi_aff *pma)
-{
-	return isl_map_from_pw_multi_aff(pma);
-}
-
 __isl_give isl_set *isl_set_from_pw_multi_aff(__isl_take isl_pw_multi_aff *pma)
 {
 	if (check_input_is_set(isl_pw_multi_aff_peek_space(pma)) < 0)
 		pma = isl_pw_multi_aff_free(pma);
-	return set_from_map(isl_map_from_pw_multi_aff_internal(pma));
-}
-
-/* This function performs the same operation as isl_set_from_pw_multi_aff,
- * but is considered as a function on an isl_pw_multi_aff when exported.
- */
-__isl_give isl_set *isl_pw_multi_aff_as_set(__isl_take isl_pw_multi_aff *pma)
-{
-	return isl_set_from_pw_multi_aff(pma);
+	return set_from_map(isl_map_from_pw_multi_aff(pma));
 }
 
 /* Construct a set or map mapping the shared (parameter) domain
@@ -432,13 +377,11 @@ static __isl_give isl_map *map_from_multi_pw_aff(
 	__isl_take isl_multi_pw_aff *mpa)
 {
 	int i;
-	isl_size dim;
 	isl_space *space;
 	isl_map *map;
 
-	dim = isl_multi_pw_aff_dim(mpa, isl_dim_out);
-	if (dim < 0)
-		goto error;
+	if (!mpa)
+		return NULL;
 
 	if (isl_space_dim(mpa->space, isl_dim_out) != mpa->n)
 		isl_die(isl_multi_pw_aff_get_ctx(mpa), isl_error_internal,
@@ -478,14 +421,6 @@ __isl_give isl_map *isl_map_from_multi_pw_aff(__isl_take isl_multi_pw_aff *mpa)
 	return map_from_multi_pw_aff(mpa);
 }
 
-/* This function performs the same operation as isl_map_from_multi_pw_aff,
- * but is considered as a function on an isl_multi_pw_aff when exported.
- */
-__isl_give isl_map *isl_multi_pw_aff_as_map(__isl_take isl_multi_pw_aff *mpa)
-{
-	return isl_map_from_multi_pw_aff(mpa);
-}
-
 /* Construct a set mapping the shared parameter domain
  * of the piecewise affine expressions to the space of "mpa"
  * with each dimension in the range equated to the
@@ -496,14 +431,6 @@ __isl_give isl_set *isl_set_from_multi_pw_aff(__isl_take isl_multi_pw_aff *mpa)
 	if (check_input_is_set(isl_multi_pw_aff_peek_space(mpa)) < 0)
 		mpa = isl_multi_pw_aff_free(mpa);
 	return set_from_map(map_from_multi_pw_aff(mpa));
-}
-
-/* This function performs the same operation as isl_set_from_multi_pw_aff,
- * but is considered as a function on an isl_multi_pw_aff when exported.
- */
-__isl_give isl_set *isl_multi_pw_aff_as_set(__isl_take isl_multi_pw_aff *mpa)
-{
-	return isl_set_from_multi_pw_aff(mpa);
 }
 
 /* Convert "pa" to an isl_map and add it to *umap.
@@ -583,14 +510,4 @@ error:
 	isl_union_pw_multi_aff_free(upma);
 	isl_union_map_free(umap);
 	return NULL;
-}
-
-/* This function performs the same operation as
- * isl_union_map_from_union_pw_multi_aff,
- * but is considered as a function on an isl_union_pw_multi_aff when exported.
- */
-__isl_give isl_union_map *isl_union_pw_multi_aff_as_union_map(
-	__isl_take isl_union_pw_multi_aff *upma)
-{
-	return isl_union_map_from_union_pw_multi_aff(upma);
 }

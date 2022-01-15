@@ -14,6 +14,7 @@
 
 #include "CriticalAntiDepBreaker.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -32,7 +33,9 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
+#include <map>
 #include <utility>
+#include <vector>
 
 using namespace llvm;
 
@@ -65,8 +68,9 @@ void CriticalAntiDepBreaker::StartBlock(MachineBasicBlock *BB) {
   bool IsReturnBlock = BB->isReturnBlock();
 
   // Examine the live-in regs of all successors.
-  for (const MachineBasicBlock *Succ : BB->successors())
-    for (const auto &LI : Succ->liveins()) {
+  for (MachineBasicBlock::succ_iterator SI = BB->succ_begin(),
+         SE = BB->succ_end(); SI != SE; ++SI)
+    for (const auto &LI : (*SI)->liveins()) {
       for (MCRegAliasIterator AI(LI.PhysReg, TRI, true); AI.isValid(); ++AI) {
         unsigned Reg = *AI;
         Classes[Reg] = reinterpret_cast<TargetRegisterClass *>(-1);
@@ -142,16 +146,17 @@ static const SDep *CriticalPathStep(const SUnit *SU) {
   const SDep *Next = nullptr;
   unsigned NextDepth = 0;
   // Find the predecessor edge with the greatest depth.
-  for (const SDep &P : SU->Preds) {
-    const SUnit *PredSU = P.getSUnit();
-    unsigned PredLatency = P.getLatency();
+  for (SUnit::const_pred_iterator P = SU->Preds.begin(), PE = SU->Preds.end();
+       P != PE; ++P) {
+    const SUnit *PredSU = P->getSUnit();
+    unsigned PredLatency = P->getLatency();
     unsigned PredTotalLatency = PredSU->getDepth() + PredLatency;
     // In the case of a latency tie, prefer an anti-dependency edge over
     // other types of edges.
     if (NextDepth < PredTotalLatency ||
-        (NextDepth == PredTotalLatency && P.getKind() == SDep::Anti)) {
+        (NextDepth == PredTotalLatency && P->getKind() == SDep::Anti)) {
       NextDepth = PredTotalLatency;
-      Next = &P;
+      Next = &*P;
     }
   }
   return Next;
@@ -182,7 +187,7 @@ void CriticalAntiDepBreaker::PrescanInstruction(MachineInstr &MI) {
   for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
     MachineOperand &MO = MI.getOperand(i);
     if (!MO.isReg()) continue;
-    Register Reg = MO.getReg();
+    unsigned Reg = MO.getReg();
     if (Reg == 0) continue;
     const TargetRegisterClass *NewRC = nullptr;
 
@@ -256,28 +261,18 @@ void CriticalAntiDepBreaker::ScanInstruction(MachineInstr &MI, unsigned Count) {
     for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
       MachineOperand &MO = MI.getOperand(i);
 
-      if (MO.isRegMask()) {
-        auto ClobbersPhysRegAndSubRegs = [&](unsigned PhysReg) {
-          for (MCSubRegIterator SRI(PhysReg, TRI, true); SRI.isValid(); ++SRI)
-            if (!MO.clobbersPhysReg(*SRI))
-              return false;
-
-          return true;
-        };
-
-        for (unsigned i = 0, e = TRI->getNumRegs(); i != e; ++i) {
-          if (ClobbersPhysRegAndSubRegs(i)) {
+      if (MO.isRegMask())
+        for (unsigned i = 0, e = TRI->getNumRegs(); i != e; ++i)
+          if (MO.clobbersPhysReg(i)) {
             DefIndices[i] = Count;
             KillIndices[i] = ~0u;
             KeepRegs.reset(i);
             Classes[i] = nullptr;
             RegRefs.erase(i);
           }
-        }
-      }
 
       if (!MO.isReg()) continue;
-      Register Reg = MO.getReg();
+      unsigned Reg = MO.getReg();
       if (Reg == 0) continue;
       if (!MO.isDef()) continue;
 
@@ -308,7 +303,7 @@ void CriticalAntiDepBreaker::ScanInstruction(MachineInstr &MI, unsigned Count) {
   for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
     MachineOperand &MO = MI.getOperand(i);
     if (!MO.isReg()) continue;
-    Register Reg = MO.getReg();
+    unsigned Reg = MO.getReg();
     if (Reg == 0) continue;
     if (!MO.isUse()) continue;
 
@@ -424,8 +419,9 @@ findSuitableFreeRegister(RegRefIter RegRefBegin,
       continue;
     // If NewReg overlaps any of the forbidden registers, we can't use it.
     bool Forbidden = false;
-    for (unsigned R : Forbid)
-      if (TRI->regsOverlap(NewReg, R)) {
+    for (SmallVectorImpl<unsigned>::iterator it = Forbid.begin(),
+           ite = Forbid.end(); it != ite; ++it)
+      if (TRI->regsOverlap(NewReg, *it)) {
         Forbidden = true;
         break;
       }
@@ -461,7 +457,6 @@ BreakAntiDependencies(const std::vector<SUnit> &SUnits,
     if (!Max || SU->getDepth() + SU->Latency > Max->getDepth() + Max->Latency)
       Max = SU;
   }
-  assert(Max && "Failed to find bottom of the critical path");
 
 #ifndef NDEBUG
   {
@@ -579,11 +574,11 @@ BreakAntiDependencies(const std::vector<SUnit> &SUnits,
             // Also, if there are dependencies on other SUnits with the
             // same register as the anti-dependency, don't attempt to
             // break it.
-            for (const SDep &P : CriticalPathSU->Preds)
-              if (P.getSUnit() == NextSU
-                      ? (P.getKind() != SDep::Anti || P.getReg() != AntiDepReg)
-                      : (P.getKind() == SDep::Data &&
-                         P.getReg() == AntiDepReg)) {
+            for (SUnit::const_pred_iterator P = CriticalPathSU->Preds.begin(),
+                 PE = CriticalPathSU->Preds.end(); P != PE; ++P)
+              if (P->getSUnit() == NextSU ?
+                    (P->getKind() != SDep::Anti || P->getReg() != AntiDepReg) :
+                    (P->getKind() == SDep::Data && P->getReg() == AntiDepReg)) {
                 AntiDepReg = 0;
                 break;
               }
@@ -617,7 +612,7 @@ BreakAntiDependencies(const std::vector<SUnit> &SUnits,
       for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
         MachineOperand &MO = MI.getOperand(i);
         if (!MO.isReg()) continue;
-        Register Reg = MO.getReg();
+        unsigned Reg = MO.getReg();
         if (Reg == 0) continue;
         if (MO.isUse() && TRI->regsOverlap(AntiDepReg, Reg)) {
           AntiDepReg = 0;
@@ -695,10 +690,4 @@ BreakAntiDependencies(const std::vector<SUnit> &SUnits,
   }
 
   return Broken;
-}
-
-AntiDepBreaker *
-llvm::createCriticalAntiDepBreaker(MachineFunction &MFi,
-                                   const RegisterClassInfo &RCI) {
-  return new CriticalAntiDepBreaker(MFi, RCI);
 }

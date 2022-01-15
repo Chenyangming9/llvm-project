@@ -69,7 +69,6 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Type.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Compiler.h"
@@ -89,11 +88,9 @@ using namespace llvm::cflaa;
 
 #define DEBUG_TYPE "cfl-anders-aa"
 
-CFLAndersAAResult::CFLAndersAAResult(
-    std::function<const TargetLibraryInfo &(Function &F)> GetTLI)
-    : GetTLI(std::move(GetTLI)) {}
+CFLAndersAAResult::CFLAndersAAResult(const TargetLibraryInfo &TLI) : TLI(TLI) {}
 CFLAndersAAResult::CFLAndersAAResult(CFLAndersAAResult &&RHS)
-    : AAResultBase(std::move(RHS)), GetTLI(std::move(RHS.GetTLI)) {}
+    : AAResultBase(std::move(RHS)), TLI(RHS.TLI) {}
 CFLAndersAAResult::~CFLAndersAAResult() = default;
 
 namespace {
@@ -552,14 +549,15 @@ bool CFLAndersAAResult::FunctionInfo::mayAlias(
       return std::less<const Value *>()(LHS.Val, RHS.Val);
     };
 #ifdef EXPENSIVE_CHECKS
-    assert(llvm::is_sorted(Itr->second, Comparator));
+    assert(std::is_sorted(Itr->second.begin(), Itr->second.end(), Comparator));
 #endif
     auto RangePair = std::equal_range(Itr->second.begin(), Itr->second.end(),
                                       OffsetValue{RHS, 0}, Comparator);
 
     if (RangePair.first != RangePair.second) {
       // Be conservative about unknown sizes
-      if (!MaybeLHSSize.hasValue() || !MaybeRHSSize.hasValue())
+      if (MaybeLHSSize == LocationSize::unknown() ||
+          MaybeRHSSize == LocationSize::unknown())
         return true;
 
       const uint64_t LHSSize = MaybeLHSSize.getValue();
@@ -781,7 +779,7 @@ static AliasAttrMap buildAttrMap(const CFLGraph &Graph,
 CFLAndersAAResult::FunctionInfo
 CFLAndersAAResult::buildInfoFrom(const Function &Fn) {
   CFLGraphBuilder<CFLAndersAAResult> GraphBuilder(
-      *this, GetTLI(const_cast<Function &>(Fn)),
+      *this, TLI,
       // Cast away the constness here due to GraphBuilder's API requirement
       const_cast<Function &>(Fn));
   auto &Graph = GraphBuilder.getCFLGraph();
@@ -850,7 +848,7 @@ AliasResult CFLAndersAAResult::query(const MemoryLocation &LocA,
   auto *ValB = LocB.Ptr;
 
   if (!ValA->getType()->isPointerTy() || !ValB->getType()->isPointerTy())
-    return AliasResult::NoAlias;
+    return NoAlias;
 
   auto *Fn = parentFunctionOfValue(ValA);
   if (!Fn) {
@@ -861,7 +859,7 @@ AliasResult CFLAndersAAResult::query(const MemoryLocation &LocA,
       LLVM_DEBUG(
           dbgs()
           << "CFLAndersAA: could not extract parent function information.\n");
-      return AliasResult::MayAlias;
+      return MayAlias;
     }
   } else {
     assert(!parentFunctionOfValue(ValB) || parentFunctionOfValue(ValB) == Fn);
@@ -872,15 +870,15 @@ AliasResult CFLAndersAAResult::query(const MemoryLocation &LocA,
 
   // AliasMap lookup
   if (FunInfo->mayAlias(ValA, LocA.Size, ValB, LocB.Size))
-    return AliasResult::MayAlias;
-  return AliasResult::NoAlias;
+    return MayAlias;
+  return NoAlias;
 }
 
 AliasResult CFLAndersAAResult::alias(const MemoryLocation &LocA,
                                      const MemoryLocation &LocB,
                                      AAQueryInfo &AAQI) {
   if (LocA.Ptr == LocB.Ptr)
-    return AliasResult::MustAlias;
+    return MustAlias;
 
   // Comparisons between global variables and other constants should be
   // handled by BasicAA.
@@ -891,7 +889,7 @@ AliasResult CFLAndersAAResult::alias(const MemoryLocation &LocA,
     return AAResultBase::alias(LocA, LocB, AAQI);
 
   AliasResult QueryResult = query(LocA, LocB);
-  if (QueryResult == AliasResult::MayAlias)
+  if (QueryResult == MayAlias)
     return AAResultBase::alias(LocA, LocB, AAQI);
 
   return QueryResult;
@@ -900,10 +898,7 @@ AliasResult CFLAndersAAResult::alias(const MemoryLocation &LocA,
 AnalysisKey CFLAndersAA::Key;
 
 CFLAndersAAResult CFLAndersAA::run(Function &F, FunctionAnalysisManager &AM) {
-  auto GetTLI = [&AM](Function &F) -> TargetLibraryInfo & {
-    return AM.getResult<TargetLibraryAnalysis>(F);
-  };
-  return CFLAndersAAResult(GetTLI);
+  return CFLAndersAAResult(AM.getResult<TargetLibraryAnalysis>(F));
 }
 
 char CFLAndersAAWrapperPass::ID = 0;
@@ -919,10 +914,8 @@ CFLAndersAAWrapperPass::CFLAndersAAWrapperPass() : ImmutablePass(ID) {
 }
 
 void CFLAndersAAWrapperPass::initializePass() {
-  auto GetTLI = [this](Function &F) -> TargetLibraryInfo & {
-    return this->getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
-  };
-  Result.reset(new CFLAndersAAResult(GetTLI));
+  auto &TLIWP = getAnalysis<TargetLibraryInfoWrapperPass>();
+  Result.reset(new CFLAndersAAResult(TLIWP.getTLI()));
 }
 
 void CFLAndersAAWrapperPass::getAnalysisUsage(AnalysisUsage &AU) const {

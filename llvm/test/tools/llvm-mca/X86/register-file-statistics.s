@@ -4,8 +4,6 @@
 # RUN: llvm-mca %s -mtriple=x86_64-unknown-unknown -mcpu=bdver2 -iterations=1 -all-stats=false -all-views=false -register-file-stats < %s | FileCheck --check-prefixes=ALL,BDVER2 %s
 # RUN: llvm-mca %s -mtriple=x86_64-unknown-unknown -mcpu=btver2 -iterations=1 -all-stats=false -all-views=false -register-file-stats < %s | FileCheck --check-prefixes=ALL,BTVER2 %s
 # RUN: llvm-mca %s -mtriple=x86_64-unknown-unknown -mcpu=znver1 -iterations=1 -all-stats=false -all-views=false -register-file-stats < %s | FileCheck --check-prefixes=ALL,ZNVER1 %s
-# RUN: llvm-mca %s -mtriple=x86_64-unknown-unknown -mcpu=znver2 -iterations=1 -all-stats=false -all-views=false -register-file-stats < %s | FileCheck --check-prefixes=ALL,ZNVER2 %s
-# RUN: llvm-mca %s -mtriple=x86_64-unknown-unknown -mcpu=znver3 -iterations=1 -all-stats=false -all-views=false -register-file-stats < %s | FileCheck --check-prefixes=ALL,ZNVER3 %s
 # RUN: llvm-mca %s -mtriple=x86_64-unknown-unknown -mcpu=sandybridge -iterations=1 -all-stats=false -all-views=false -register-file-stats < %s | FileCheck --check-prefixes=ALL %s
 # RUN: llvm-mca %s -mtriple=x86_64-unknown-unknown -mcpu=ivybridge -iterations=1 -all-stats=false -all-views=false -register-file-stats < %s | FileCheck --check-prefixes=ALL %s
 # RUN: llvm-mca %s -mtriple=x86_64-unknown-unknown -mcpu=haswell -iterations=1 -all-stats=false -all-views=false -register-file-stats < %s | FileCheck --check-prefixes=ALL %s
@@ -40,16 +38,6 @@ xor %eax, %ebx
 # ZNVER1-NEXT:       Total number of mappings created: 0
 # ZNVER1-NEXT:       Max number of mappings used:      0
 
-# ZNVER2:         *  Register File #1 -- Zn2FpuPRF:
-# ZNVER2-NEXT:       Number of physical registers:     160
-# ZNVER2-NEXT:       Total number of mappings created: 0
-# ZNVER2-NEXT:       Max number of mappings used:      0
-
-# ZNVER3:         *  Register File #1 -- Zn3FpPRF:
-# ZNVER3-NEXT:       Number of physical registers:     160
-# ZNVER3-NEXT:       Total number of mappings created: 0
-# ZNVER3-NEXT:       Max number of mappings used:      0
-
 # BDVER2:         *  Register File #2 -- PdIntegerPRF:
 # BDVER2-NEXT:       Number of physical registers:     96
 # BDVER2-NEXT:       Total number of mappings created: 2
@@ -64,13 +52,3 @@ xor %eax, %ebx
 # ZNVER1-NEXT:       Number of physical registers:     168
 # ZNVER1-NEXT:       Total number of mappings created: 2
 # ZNVER1-NEXT:       Max number of mappings used:      2
-
-# ZNVER2:         *  Register File #2 -- Zn2IntegerPRF:
-# ZNVER2-NEXT:       Number of physical registers:     168
-# ZNVER2-NEXT:       Total number of mappings created: 2
-# ZNVER2-NEXT:       Max number of mappings used:      2
-
-# ZNVER3:         *  Register File #2 -- Zn3IntegerPRF:
-# ZNVER3-NEXT:       Number of physical registers:     192
-# ZNVER3-NEXT:       Total number of mappings created: 2
-# ZNVER3-NEXT:       Max number of mappings used:      2

@@ -25,6 +25,7 @@ namespace llvm {
 class MachineFunction;
 class HexagonInstrInfo;
 class HexagonRegisterInfo;
+class HexagonTargetLowering;
 
 class HexagonDAGToDAGISel : public SelectionDAGISel {
   const HexagonSubtarget *HST;
@@ -42,7 +43,6 @@ public:
     HII = HST->getInstrInfo();
     HRI = HST->getRegisterInfo();
     SelectionDAGISel::runOnMachineFunction(MF);
-    updateAligna();
     return true;
   }
 
@@ -50,7 +50,7 @@ public:
     return true;
   }
   void PreprocessISelDAG() override;
-  void emitFunctionEntryCode() override;
+  void EmitFunctionEntryCode() override;
 
   void Select(SDNode *N) override;
 
@@ -59,8 +59,9 @@ public:
   inline bool SelectAddrGP(SDValue &N, SDValue &R);
   inline bool SelectAnyImm(SDValue &N, SDValue &R);
   inline bool SelectAnyInt(SDValue &N, SDValue &R);
-  bool SelectAnyImmediate(SDValue &N, SDValue &R, Align Alignment);
-  bool SelectGlobalAddress(SDValue &N, SDValue &R, bool UseGP, Align Alignment);
+  bool SelectAnyImmediate(SDValue &N, SDValue &R, uint32_t LogAlign);
+  bool SelectGlobalAddress(SDValue &N, SDValue &R, bool UseGP,
+                           uint32_t LogAlign);
   bool SelectAddrFI(SDValue &N, SDValue &R);
   bool DetectUseSxtw(SDValue &N, SDValue &R);
 
@@ -142,9 +143,6 @@ private:
   void ppAddrReorderAddShl(std::vector<SDNode*> &&Nodes);
   void ppAddrRewriteAndSrl(std::vector<SDNode*> &&Nodes);
   void ppHoistZextI1(std::vector<SDNode*> &&Nodes);
-
-  // Function postprocessing.
-  void updateAligna();
 
   SmallDenseMap<SDNode *,int> RootWeights;
   SmallDenseMap<SDNode *,int> RootHeights;

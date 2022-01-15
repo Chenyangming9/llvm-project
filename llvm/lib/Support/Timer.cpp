@@ -11,12 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/Timer.h"
-
-#include "DebugOptions.h"
-
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/Config/config.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
@@ -27,14 +23,6 @@
 #include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
 #include <limits>
-
-#if HAVE_UNISTD_H
-#include <unistd.h>
-#endif
-
-#ifdef HAVE_PROC_PID_RUSAGE
-#include <libproc.h>
-#endif
 
 using namespace llvm;
 
@@ -56,63 +44,37 @@ static ManagedStatic<sys::SmartMutex<true> > TimerLock;
 static ManagedStatic<SignpostEmitter> Signposts;
 
 namespace {
-struct CreateTrackSpace {
-  static void *call() {
-    return new cl::opt<bool>("track-memory",
-                             cl::desc("Enable -time-passes memory "
+  static cl::opt<bool>
+  TrackSpace("track-memory", cl::desc("Enable -time-passes memory "
                                       "tracking (this may be slow)"),
-                             cl::Hidden);
-  }
-};
-static ManagedStatic<cl::opt<bool>, CreateTrackSpace> TrackSpace;
-struct CreateInfoOutputFilename {
-  static void *call() {
-    return new cl::opt<std::string, true>(
-        "info-output-file", cl::value_desc("filename"),
-        cl::desc("File to append -stats and -timer output to"), cl::Hidden,
-        cl::location(getLibSupportInfoOutputFilename()));
-  }
-};
-static ManagedStatic<cl::opt<std::string, true>, CreateInfoOutputFilename>
-    InfoOutputFilename;
-struct CreateSortTimers {
-  static void *call() {
-    return new cl::opt<bool>(
-        "sort-timers",
-        cl::desc("In the report, sort the timers in each group "
-                 "in wall clock time order"),
-        cl::init(true), cl::Hidden);
-  }
-};
-ManagedStatic<cl::opt<bool>, CreateSortTimers> SortTimers;
-} // namespace
+             cl::Hidden);
 
-void llvm::initTimerOptions() {
-  *TrackSpace;
-  *InfoOutputFilename;
-  *SortTimers;
+  static cl::opt<std::string, true>
+  InfoOutputFilename("info-output-file", cl::value_desc("filename"),
+                     cl::desc("File to append -stats and -timer output to"),
+                   cl::Hidden, cl::location(getLibSupportInfoOutputFilename()));
 }
 
 std::unique_ptr<raw_fd_ostream> llvm::CreateInfoOutputFile() {
   const std::string &OutputFilename = getLibSupportInfoOutputFilename();
   if (OutputFilename.empty())
-    return std::make_unique<raw_fd_ostream>(2, false); // stderr.
+    return llvm::make_unique<raw_fd_ostream>(2, false); // stderr.
   if (OutputFilename == "-")
-    return std::make_unique<raw_fd_ostream>(1, false); // stdout.
+    return llvm::make_unique<raw_fd_ostream>(1, false); // stdout.
 
   // Append mode is used because the info output file is opened and closed
   // each time -stats or -time-passes wants to print output to it. To
   // compensate for this, the test-suite Makefiles have code to delete the
   // info output file before running commands which write to it.
   std::error_code EC;
-  auto Result = std::make_unique<raw_fd_ostream>(
-      OutputFilename, EC, sys::fs::OF_Append | sys::fs::OF_TextWithCRLF);
+  auto Result = llvm::make_unique<raw_fd_ostream>(
+      OutputFilename, EC, sys::fs::F_Append | sys::fs::F_Text);
   if (!EC)
     return Result;
 
   errs() << "Error opening info-output-file '"
     << OutputFilename << " for appending!\n";
-  return std::make_unique<raw_fd_ostream>(2, false); // stderr.
+  return llvm::make_unique<raw_fd_ostream>(2, false); // stderr.
 }
 
 namespace {
@@ -129,15 +91,14 @@ static TimerGroup *getDefaultTimerGroup() { return &*DefaultTimerGroup; }
 // Timer Implementation
 //===----------------------------------------------------------------------===//
 
-void Timer::init(StringRef TimerName, StringRef TimerDescription) {
-  init(TimerName, TimerDescription, *getDefaultTimerGroup());
+void Timer::init(StringRef Name, StringRef Description) {
+  init(Name, Description, *getDefaultTimerGroup());
 }
 
-void Timer::init(StringRef TimerName, StringRef TimerDescription,
-                 TimerGroup &tg) {
+void Timer::init(StringRef Name, StringRef Description, TimerGroup &tg) {
   assert(!TG && "Timer already initialized");
-  Name.assign(TimerName.begin(), TimerName.end());
-  Description.assign(TimerDescription.begin(), TimerDescription.end());
+  this->Name.assign(Name.begin(), Name.end());
+  this->Description.assign(Description.begin(), Description.end());
   Running = Triggered = false;
   TG = &tg;
   TG->addTimer(*this);
@@ -149,20 +110,8 @@ Timer::~Timer() {
 }
 
 static inline size_t getMemUsage() {
-  if (!*TrackSpace)
-    return 0;
+  if (!TrackSpace) return 0;
   return sys::Process::GetMallocUsage();
-}
-
-static uint64_t getCurInstructionsExecuted() {
-#if defined(HAVE_UNISTD_H) && defined(HAVE_PROC_PID_RUSAGE) &&                 \
-    defined(RUSAGE_INFO_V4)
-  struct rusage_info_v4 ru;
-  if (proc_pid_rusage(getpid(), RUSAGE_INFO_V4, (rusage_info_t *)&ru) == 0) {
-    return ru.ri_instructions;
-  }
-#endif
-  return 0;
 }
 
 TimeRecord TimeRecord::getCurrentTime(bool Start) {
@@ -173,11 +122,9 @@ TimeRecord TimeRecord::getCurrentTime(bool Start) {
 
   if (Start) {
     Result.MemUsed = getMemUsage();
-    Result.InstructionsExecuted = getCurInstructionsExecuted();
     sys::Process::GetTimeUsage(now, user, sys);
   } else {
     sys::Process::GetTimeUsage(now, user, sys);
-    Result.InstructionsExecuted = getCurInstructionsExecuted();
     Result.MemUsed = getMemUsage();
   }
 
@@ -190,7 +137,7 @@ TimeRecord TimeRecord::getCurrentTime(bool Start) {
 void Timer::startTimer() {
   assert(!Running && "Cannot start a running timer");
   Running = Triggered = true;
-  Signposts->startInterval(this, getName());
+  Signposts->startTimerInterval(this);
   StartTime = TimeRecord::getCurrentTime(true);
 }
 
@@ -199,7 +146,7 @@ void Timer::stopTimer() {
   Running = false;
   Time += TimeRecord::getCurrentTime(false);
   Time -= StartTime;
-  Signposts->endInterval(this);
+  Signposts->endTimerInterval(this);
 }
 
 void Timer::clear() {
@@ -227,8 +174,6 @@ void TimeRecord::print(const TimeRecord &Total, raw_ostream &OS) const {
 
   if (Total.getMemUsed())
     OS << format("%9" PRId64 "  ", (int64_t)getMemUsed());
-  if (Total.getInstructionsExecuted())
-    OS << format("%9" PRId64 "  ", (int64_t)getInstructionsExecuted());
 }
 
 
@@ -301,8 +246,7 @@ TimerGroup::TimerGroup(StringRef Name, StringRef Description,
     : TimerGroup(Name, Description) {
   TimersToPrint.reserve(Records.size());
   for (const auto &P : Records)
-    TimersToPrint.emplace_back(P.getValue(), std::string(P.getKey()),
-                               std::string(P.getKey()));
+    TimersToPrint.emplace_back(P.getValue(), P.getKey(), P.getKey());
   assert(TimersToPrint.size() == Records.size() && "Size mismatch");
 }
 
@@ -355,9 +299,8 @@ void TimerGroup::addTimer(Timer &T) {
 }
 
 void TimerGroup::PrintQueuedTimers(raw_ostream &OS) {
-  // Perhaps sort the timers in descending order by amount of time taken.
-  if (*SortTimers)
-    llvm::sort(TimersToPrint);
+  // Sort the timers in descending order by amount of time taken.
+  llvm::sort(TimersToPrint);
 
   TimeRecord Total;
   for (const PrintRecord &Record : TimersToPrint)
@@ -388,8 +331,6 @@ void TimerGroup::PrintQueuedTimers(raw_ostream &OS) {
   OS << "   ---Wall Time---";
   if (Total.getMemUsed())
     OS << "  ---Mem---";
-  if (Total.getInstructionsExecuted())
-    OS << "  ---Instr---";
   OS << "  --- Name ---\n";
 
   // Loop through all of the timing data, printing it out.
@@ -484,10 +425,6 @@ const char *TimerGroup::printJSONValues(raw_ostream &OS, const char *delim) {
       OS << delim;
       printJSONValue(OS, R, ".mem", T.getMemUsed());
     }
-    if (T.getInstructionsExecuted()) {
-      OS << delim;
-      printJSONValue(OS, R, ".instr", T.getInstructionsExecuted());
-    }
   }
   TimersToPrint.clear();
   return delim;
@@ -502,8 +439,4 @@ const char *TimerGroup::printAllJSONValues(raw_ostream &OS, const char *delim) {
 
 void TimerGroup::ConstructTimerLists() {
   (void)*NamedGroupedTimers;
-}
-
-std::unique_ptr<TimerGroup> TimerGroup::aquireDefaultGroup() {
-  return std::unique_ptr<TimerGroup>(DefaultTimerGroup.claim());
 }

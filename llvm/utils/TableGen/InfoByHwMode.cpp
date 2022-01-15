@@ -91,10 +91,13 @@ void ValueTypeByHwMode::writeToStream(raw_ostream &OS) const {
   llvm::sort(Pairs, deref<std::less<PairType>>());
 
   OS << '{';
-  ListSeparator LS(",");
-  for (const PairType *P : Pairs)
-    OS << LS << '(' << getModeName(P->first) << ':'
-       << getMVTName(P->second).str() << ')';
+  for (unsigned i = 0, e = Pairs.size(); i != e; ++i) {
+    const PairType *P = Pairs[i];
+    OS << '(' << getModeName(P->first)
+       << ':' << getMVTName(P->second).str() << ')';
+    if (i != e-1)
+      OS << ',';
+  }
   OS << '}';
 }
 
@@ -180,21 +183,13 @@ void RegSizeInfoByHwMode::writeToStream(raw_ostream &OS) const {
   llvm::sort(Pairs, deref<std::less<PairType>>());
 
   OS << '{';
-  ListSeparator LS(",");
-  for (const PairType *P : Pairs)
-    OS << LS << '(' << getModeName(P->first) << ':' << P->second << ')';
-  OS << '}';
-}
-
-EncodingInfoByHwMode::EncodingInfoByHwMode(Record *R, const CodeGenHwModes &CGH) {
-  const HwModeSelect &MS = CGH.getHwModeSelect(R);
-  for (const HwModeSelect::PairType &P : MS.Items) {
-    assert(P.second && P.second->isSubClassOf("InstructionEncoding") &&
-           "Encoding must subclass InstructionEncoding");
-    auto I = Map.insert({P.first, P.second});
-    assert(I.second && "Duplicate entry?");
-    (void)I;
+  for (unsigned i = 0, e = Pairs.size(); i != e; ++i) {
+    const PairType *P = Pairs[i];
+    OS << '(' << getModeName(P->first) << ':' << P->second << ')';
+    if (i != e-1)
+      OS << ',';
   }
+  OS << '}';
 }
 
 namespace llvm {

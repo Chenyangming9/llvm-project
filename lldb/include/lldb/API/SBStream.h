@@ -6,10 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_API_SBSTREAM_H
-#define LLDB_API_SBSTREAM_H
+#ifndef LLDB_SBStream_h_
+#define LLDB_SBStream_h_
 
-#include <cstdio>
+#include <stdio.h>
 
 #include "lldb/API/SBDefines.h"
 
@@ -37,13 +37,7 @@ public:
 
   void Printf(const char *format, ...) __attribute__((format(printf, 2, 3)));
 
-  void Print(const char *str);
-
   void RedirectToFile(const char *path, bool append);
-
-  void RedirectToFile(lldb::SBFile file);
-
-  void RedirectToFile(lldb::FileSP file);
 
   void RedirectToFileHandle(FILE *fh, bool transfer_fh_ownership);
 
@@ -72,7 +66,6 @@ protected:
   friend class SBFunction;
   friend class SBInstruction;
   friend class SBInstructionList;
-  friend class SBLaunchInfo;
   friend class SBLineEntry;
   friend class SBMemoryRegionInfo;
   friend class SBModule;
@@ -102,12 +95,11 @@ protected:
   lldb_private::Stream &ref();
 
 private:
-  SBStream(const SBStream &) = delete;
-  const SBStream &operator=(const SBStream &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(SBStream);
   std::unique_ptr<lldb_private::Stream> m_opaque_up;
-  bool m_is_file = false;
+  bool m_is_file;
 };
 
 } // namespace lldb
 
-#endif // LLDB_API_SBSTREAM_H
+#endif // LLDB_SBStream_h_

@@ -14,9 +14,9 @@
 #ifndef LLVM_C_ERROR_H
 #define LLVM_C_ERROR_H
 
-#include "llvm-c/ExternC.h"
-
-LLVM_C_EXTERN_C_BEGIN
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define LLVMErrorSuccess 0
 
@@ -62,11 +62,8 @@ void LLVMDisposeErrorMessage(char *ErrMsg);
  */
 LLVMErrorTypeId LLVMGetStringErrorTypeId(void);
 
-/**
- * Create a StringError.
- */
-LLVMErrorRef LLVMCreateStringError(const char *ErrMsg);
-
-LLVM_C_EXTERN_C_END
+#ifdef __cplusplus
+}
+#endif
 
 #endif

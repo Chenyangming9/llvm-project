@@ -88,8 +88,8 @@ public:
       return false;
 
     SourceLocation Loc = OwnershipAttr->getLocation();
-    SourceLocation OrigLoc = Loc;
-    if (MigrateCtx.AttrSet.count(OrigLoc))
+    unsigned RawLoc = Loc.getRawEncoding();
+    if (MigrateCtx.AttrSet.count(RawLoc))
       return true;
 
     ASTContext &Ctx = MigrateCtx.Pass.Ctx;
@@ -105,7 +105,7 @@ public:
     else
       return false;
 
-    MigrateCtx.AttrSet.insert(OrigLoc);
+    MigrateCtx.AttrSet.insert(RawLoc);
     MigrateCtx.GCAttrs.push_back(MigrationContext::GCAttrOccurrence());
     MigrationContext::GCAttrOccurrence &Attr = MigrateCtx.GCAttrs.back();
 
@@ -204,7 +204,7 @@ static void checkWeakGCAttrs(MigrationContext &MigrateCtx) {
       if (!canApplyWeak(MigrateCtx.Pass.Ctx, Attr.ModifiedType,
                         /*AllowOnUnknownClass=*/true)) {
         Transaction Trans(TA);
-        if (!MigrateCtx.RemovedAttrSet.count(Attr.Loc))
+        if (!MigrateCtx.RemovedAttrSet.count(Attr.Loc.getRawEncoding()))
           TA.replaceText(Attr.Loc, "__weak", "__unsafe_unretained");
         TA.clearDiagnostic(diag::err_arc_weak_no_runtime,
                            diag::err_arc_unsupported_weak_class,
@@ -231,7 +231,8 @@ static void checkAllAtProps(MigrationContext &MigrateCtx,
 
   SmallVector<std::pair<AttributedTypeLoc, ObjCPropertyDecl *>, 4> ATLs;
   bool hasWeak = false, hasStrong = false;
-  ObjCPropertyAttribute::Kind Attrs = ObjCPropertyAttribute::kind_noattr;
+  ObjCPropertyDecl::PropertyAttributeKind
+    Attrs = ObjCPropertyDecl::OBJC_PR_noattr;
   for (IndivPropsTy::iterator
          PI = IndProps.begin(), PE = IndProps.end(); PI != PE; ++PI) {
     ObjCPropertyDecl *PD = *PI;
@@ -262,7 +263,7 @@ static void checkAllAtProps(MigrationContext &MigrateCtx,
   if (GCAttrsCollector::hasObjCImpl(
                               cast<Decl>(IndProps.front()->getDeclContext()))) {
     if (hasWeak)
-      MigrateCtx.AtPropsWeak.insert(AtLoc);
+      MigrateCtx.AtPropsWeak.insert(AtLoc.getRawEncoding());
 
   } else {
     StringRef toAttr = "strong";
@@ -273,7 +274,7 @@ static void checkAllAtProps(MigrationContext &MigrateCtx,
       else
         toAttr = "unsafe_unretained";
     }
-    if (Attrs & ObjCPropertyAttribute::kind_assign)
+    if (Attrs & ObjCPropertyDecl::OBJC_PR_assign)
       MigrateCtx.rewritePropertyAttribute("assign", toAttr, AtLoc);
     else
       MigrateCtx.addPropertyAttribute(toAttr, AtLoc);
@@ -289,29 +290,31 @@ static void checkAllAtProps(MigrationContext &MigrateCtx,
     TA.clearDiagnostic(diag::err_objc_property_attr_mutually_exclusive, AtLoc);
     TA.clearDiagnostic(diag::err_arc_inconsistent_property_ownership,
                        ATLs[i].second->getLocation());
-    MigrateCtx.RemovedAttrSet.insert(Loc);
+    MigrateCtx.RemovedAttrSet.insert(Loc.getRawEncoding());
   }
 }
 
 static void checkAllProps(MigrationContext &MigrateCtx,
                           std::vector<ObjCPropertyDecl *> &AllProps) {
   typedef llvm::TinyPtrVector<ObjCPropertyDecl *> IndivPropsTy;
-  llvm::DenseMap<SourceLocation, IndivPropsTy> AtProps;
+  llvm::DenseMap<unsigned, IndivPropsTy> AtProps;
 
   for (unsigned i = 0, e = AllProps.size(); i != e; ++i) {
     ObjCPropertyDecl *PD = AllProps[i];
     if (PD->getPropertyAttributesAsWritten() &
-        (ObjCPropertyAttribute::kind_assign |
-         ObjCPropertyAttribute::kind_readonly)) {
+          (ObjCPropertyDecl::OBJC_PR_assign |
+           ObjCPropertyDecl::OBJC_PR_readonly)) {
       SourceLocation AtLoc = PD->getAtLoc();
       if (AtLoc.isInvalid())
         continue;
-      AtProps[AtLoc].push_back(PD);
+      unsigned RawAt = AtLoc.getRawEncoding();
+      AtProps[RawAt].push_back(PD);
     }
   }
 
-  for (auto I = AtProps.begin(), E = AtProps.end(); I != E; ++I) {
-    SourceLocation AtLoc = I->first;
+  for (llvm::DenseMap<unsigned, IndivPropsTy>::iterator
+         I = AtProps.begin(), E = AtProps.end(); I != E; ++I) {
+    SourceLocation AtLoc = SourceLocation::getFromRawEncoding(I->first);
     IndivPropsTy &IndProps = I->second;
     checkAllAtProps(MigrateCtx, AtLoc, IndProps);
   }

@@ -1,4 +1,4 @@
-//===-- CompilerDecl.cpp --------------------------------------------------===//
+//===-- CompilerDecl.cpp ----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,6 +11,10 @@
 #include "lldb/Symbol/TypeSystem.h"
 
 using namespace lldb_private;
+
+bool CompilerDecl::IsClang() const {
+  return IsValid() && m_type_system->getKind() == TypeSystem::eKindClang;
+}
 
 ConstString CompilerDecl::GetName() const {
   return m_type_system->DeclGetName(m_opaque_decl);

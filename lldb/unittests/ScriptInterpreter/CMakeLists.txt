@@ -1,6 +1,3 @@
-if (LLDB_ENABLE_PYTHON)
+if (NOT LLDB_DISABLE_PYTHON)
   add_subdirectory(Python)
-endif()
-if (LLDB_ENABLE_LUA)
-  add_subdirectory(Lua)
 endif()

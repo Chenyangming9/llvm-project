@@ -3,16 +3,15 @@
 // RUN: ld.lld %t.o -o %t --export-dynamic --gc-sections --icf=all
 // RUN: llvm-readelf -S -s %t | FileCheck %s
 
-// CHECK: part1
+// CHECK: [[MAIN:[0-9]+]]] .text
 // CHECK: [[P1:[0-9]+]]] .text
-// CHECK: part2
 // CHECK: [[P2:[0-9]+]]] .text
 
 // CHECK: Symbol table '.symtab'
 // CHECK:   [[P1]] f1
 // CHECK:   [[P2]] f2
-// CHECK:   [[P1]] g1
-// CHECK:   [[P2]] g2
+// CHECK: [[MAIN]] g1
+// CHECK: [[MAIN]] g2
 
 .section .llvm_sympart.f1,"",@llvm_sympart
 .asciz "part1"

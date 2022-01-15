@@ -16,9 +16,9 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "count_new.h"
+#include "count_new.hpp"
 #include "min_allocator.h"
-#include "private_constructor.h"
+#include "private_constructor.hpp"
 #if TEST_STD_VER >= 11
 #include "container_test_types.h"
 #endif

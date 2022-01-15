@@ -6,19 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <queue>
 
-// explicit priority_queue(const Compare& comp, Container&& c); // before C++20
-// priority_queue(const Compare& comp, Container&& c);          // C++20
+// explicit priority_queue(const Compare& comp, container_type&& c);
 
 #include <queue>
 #include <cassert>
 
 #include "test_macros.h"
 #include "MoveOnly.h"
-#include "test_convertible.h"
+
 
 template <class C>
 C
@@ -30,16 +29,12 @@ make(int n)
     return c;
 }
 
+
 int main(int, char**)
 {
-    typedef std::vector<MoveOnly> Container;
-    typedef std::less<MoveOnly> Compare;
-    typedef std::priority_queue<MoveOnly> Q;
-    Q q(Compare(), make<Container>(5));
+    std::priority_queue<MoveOnly> q(std::less<MoveOnly>(), make<std::vector<MoveOnly> >(5));
     assert(q.size() == 5);
     assert(q.top() == MoveOnly(4));
 
-    static_assert(test_convertible<Q, const Compare&, Container&&>(), "");
-
-    return 0;
+  return 0;
 }

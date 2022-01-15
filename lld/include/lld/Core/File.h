@@ -16,7 +16,6 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/Support/Allocator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <functional>
 #include <memory>
@@ -78,7 +77,7 @@ public:
   /// Returns the path of the archive file name if this file is instantiated
   /// from an archive file. Otherwise returns the empty string.
   StringRef archivePath() const { return _archivePath; }
-  void setArchivePath(StringRef path) { _archivePath = std::string(path); }
+  void setArchivePath(StringRef path) { _archivePath = path; }
 
   /// Returns the path name of this file. It doesn't include archive file name.
   StringRef memberPath() const { return _path; }

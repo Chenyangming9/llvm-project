@@ -11,7 +11,9 @@
 ; no longer used function 'bar' (due to incorrect reference
 ; count in the CallGraph).
 
-define void @foo() {
+attributes #0 = { noinline norecurse nounwind readnone }
+
+define void @foo() #0 {
 ; CHECK-LABEL: @foo(
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    ret void
@@ -21,7 +23,7 @@ entry:
   ret void
 }
 
-define internal i32 @bar() {
+define internal i32 @bar() #0 {
 ; CHECK-NOT: bar
 entry:
   ret i32 42

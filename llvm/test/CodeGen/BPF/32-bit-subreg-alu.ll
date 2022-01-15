@@ -1,5 +1,4 @@
 ; RUN: llc -O2 -march=bpfel -mattr=+alu32 < %s | FileCheck %s
-; RUN: llc -O2 -march=bpfel -mcpu=v3 < %s | FileCheck %s
 ;
 ; int mov(int a)
 ; {

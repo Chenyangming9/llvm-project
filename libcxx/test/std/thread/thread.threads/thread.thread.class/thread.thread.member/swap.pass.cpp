@@ -19,7 +19,6 @@
 #include <cstdlib>
 #include <cassert>
 
-#include "make_test_thread.h"
 #include "test_macros.h"
 
 class G
@@ -48,7 +47,7 @@ int main(int, char**)
 {
     {
         G g;
-        std::thread t0 = support::make_test_thread(g);
+        std::thread t0(g);
         std::thread::id id0 = t0.get_id();
         std::thread t1;
         std::thread::id id1 = t1.get_id();

@@ -1,4 +1,4 @@
-//===-- SBLanguageRuntime.cpp ---------------------------------------------===//
+//===-- SBLanguageRuntime.cpp -----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -18,7 +18,8 @@ SBLanguageRuntime::GetLanguageTypeFromString(const char *string) {
   LLDB_RECORD_STATIC_METHOD(lldb::LanguageType, SBLanguageRuntime,
                             GetLanguageTypeFromString, (const char *), string);
 
-  return Language::GetLanguageTypeFromString(llvm::StringRef(string));
+  return Language::GetLanguageTypeFromString(
+      llvm::StringRef::withNullAsEmpty(string));
 }
 
 const char *

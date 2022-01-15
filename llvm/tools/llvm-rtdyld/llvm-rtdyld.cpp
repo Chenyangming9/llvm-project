@@ -23,19 +23,16 @@
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Object/SymbolSize.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/DynamicLibrary.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/MSVCErrorWorkarounds.h"
 #include "llvm/Support/Memory.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/MSVCErrorWorkarounds.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <future>
@@ -44,11 +41,9 @@
 using namespace llvm;
 using namespace llvm::object;
 
-static cl::OptionCategory RTDyldCategory("RTDyld Options");
-
-static cl::list<std::string> InputFileList(cl::Positional, cl::ZeroOrMore,
-                                           cl::desc("<input files>"),
-                                           cl::cat(RTDyldCategory));
+static cl::list<std::string>
+InputFileList(cl::Positional, cl::ZeroOrMore,
+              cl::desc("<input files>"));
 
 enum ActionType {
   AC_Execute,
@@ -58,104 +53,92 @@ enum ActionType {
   AC_Verify
 };
 
-static cl::opt<ActionType> Action(
-    cl::desc("Action to perform:"), cl::init(AC_Execute),
-    cl::values(
-        clEnumValN(AC_Execute, "execute",
-                   "Load, link, and execute the inputs."),
-        clEnumValN(AC_PrintLineInfo, "printline",
-                   "Load, link, and print line information for each function."),
-        clEnumValN(AC_PrintDebugLineInfo, "printdebugline",
-                   "Load, link, and print line information for each function "
-                   "using the debug object"),
-        clEnumValN(AC_PrintObjectLineInfo, "printobjline",
-                   "Like -printlineinfo but does not load the object first"),
-        clEnumValN(AC_Verify, "verify",
-                   "Load, link and verify the resulting memory image.")),
-    cl::cat(RTDyldCategory));
+static cl::opt<ActionType>
+Action(cl::desc("Action to perform:"),
+       cl::init(AC_Execute),
+       cl::values(clEnumValN(AC_Execute, "execute",
+                             "Load, link, and execute the inputs."),
+                  clEnumValN(AC_PrintLineInfo, "printline",
+                             "Load, link, and print line information for each function."),
+                  clEnumValN(AC_PrintDebugLineInfo, "printdebugline",
+                             "Load, link, and print line information for each function using the debug object"),
+                  clEnumValN(AC_PrintObjectLineInfo, "printobjline",
+                             "Like -printlineinfo but does not load the object first"),
+                  clEnumValN(AC_Verify, "verify",
+                             "Load, link and verify the resulting memory image.")));
 
 static cl::opt<std::string>
-    EntryPoint("entry", cl::desc("Function to call as entry point."),
-               cl::init("_main"), cl::cat(RTDyldCategory));
+EntryPoint("entry",
+           cl::desc("Function to call as entry point."),
+           cl::init("_main"));
 
-static cl::list<std::string> Dylibs("dylib", cl::desc("Add library."),
-                                    cl::ZeroOrMore, cl::cat(RTDyldCategory));
+static cl::list<std::string>
+Dylibs("dylib",
+       cl::desc("Add library."),
+       cl::ZeroOrMore);
 
 static cl::list<std::string> InputArgv("args", cl::Positional,
                                        cl::desc("<program arguments>..."),
-                                       cl::ZeroOrMore, cl::PositionalEatsArgs,
-                                       cl::cat(RTDyldCategory));
+                                       cl::ZeroOrMore, cl::PositionalEatsArgs);
 
 static cl::opt<std::string>
-    TripleName("triple", cl::desc("Target triple for disassembler"),
-               cl::cat(RTDyldCategory));
+TripleName("triple", cl::desc("Target triple for disassembler"));
 
 static cl::opt<std::string>
-    MCPU("mcpu",
-         cl::desc("Target a specific cpu type (-mcpu=help for details)"),
-         cl::value_desc("cpu-name"), cl::init(""), cl::cat(RTDyldCategory));
+MCPU("mcpu",
+     cl::desc("Target a specific cpu type (-mcpu=help for details)"),
+     cl::value_desc("cpu-name"),
+     cl::init(""));
 
 static cl::list<std::string>
-    CheckFiles("check",
-               cl::desc("File containing RuntimeDyld verifier checks."),
-               cl::ZeroOrMore, cl::cat(RTDyldCategory));
+CheckFiles("check",
+           cl::desc("File containing RuntimeDyld verifier checks."),
+           cl::ZeroOrMore);
 
 static cl::opt<uint64_t>
     PreallocMemory("preallocate",
                    cl::desc("Allocate memory upfront rather than on-demand"),
-                   cl::init(0), cl::cat(RTDyldCategory));
+                   cl::init(0));
 
 static cl::opt<uint64_t> TargetAddrStart(
     "target-addr-start",
     cl::desc("For -verify only: start of phony target address "
              "range."),
     cl::init(4096), // Start at "page 1" - no allocating at "null".
-    cl::Hidden, cl::cat(RTDyldCategory));
+    cl::Hidden);
 
 static cl::opt<uint64_t> TargetAddrEnd(
     "target-addr-end",
     cl::desc("For -verify only: end of phony target address range."),
-    cl::init(~0ULL), cl::Hidden, cl::cat(RTDyldCategory));
+    cl::init(~0ULL), cl::Hidden);
 
 static cl::opt<uint64_t> TargetSectionSep(
     "target-section-sep",
     cl::desc("For -verify only: Separation between sections in "
              "phony target address space."),
-    cl::init(0), cl::Hidden, cl::cat(RTDyldCategory));
+    cl::init(0), cl::Hidden);
 
 static cl::list<std::string>
-    SpecificSectionMappings("map-section",
-                            cl::desc("For -verify only: Map a section to a "
-                                     "specific address."),
-                            cl::ZeroOrMore, cl::Hidden,
-                            cl::cat(RTDyldCategory));
+SpecificSectionMappings("map-section",
+                        cl::desc("For -verify only: Map a section to a "
+                                 "specific address."),
+                        cl::ZeroOrMore,
+                        cl::Hidden);
 
-static cl::list<std::string> DummySymbolMappings(
-    "dummy-extern",
-    cl::desc("For -verify only: Inject a symbol into the extern "
-             "symbol table."),
-    cl::ZeroOrMore, cl::Hidden, cl::cat(RTDyldCategory));
+static cl::list<std::string>
+DummySymbolMappings("dummy-extern",
+                    cl::desc("For -verify only: Inject a symbol into the extern "
+                             "symbol table."),
+                    cl::ZeroOrMore,
+                    cl::Hidden);
 
-static cl::opt<bool> PrintAllocationRequests(
-    "print-alloc-requests",
-    cl::desc("Print allocation requests made to the memory "
-             "manager by RuntimeDyld"),
-    cl::Hidden, cl::cat(RTDyldCategory));
-
-static cl::opt<bool> ShowTimes("show-times",
-                               cl::desc("Show times for llvm-rtdyld phases"),
-                               cl::init(false), cl::cat(RTDyldCategory));
+static cl::opt<bool>
+PrintAllocationRequests("print-alloc-requests",
+                        cl::desc("Print allocation requests made to the memory "
+                                 "manager by RuntimeDyld"),
+                        cl::Hidden);
 
 ExitOnError ExitOnErr;
-
-struct RTDyldTimers {
-  TimerGroup RTDyldTG{"llvm-rtdyld timers", "timers for llvm-rtdyld phases"};
-  Timer LoadObjectsTimer{"load", "time to load/add object files", RTDyldTG};
-  Timer LinkTimer{"link", "time to link object files", RTDyldTG};
-  Timer RunTimer{"run", "time to execute jitlink'd code", RTDyldTG};
-};
-
-std::unique_ptr<RTDyldTimers> Timers;
 
 /* *** */
 
@@ -191,7 +174,7 @@ class TrivialMemoryManager : public RTDyldMemoryManager {
 public:
   struct SectionInfo {
     SectionInfo(StringRef Name, sys::MemoryBlock MB, unsigned SectionID)
-        : Name(std::string(Name)), MB(std::move(MB)), SectionID(SectionID) {}
+      : Name(Name), MB(std::move(MB)), SectionID(SectionID) {}
     std::string Name;
     sys::MemoryBlock MB;
     unsigned SectionID = ~0U;
@@ -458,6 +441,8 @@ static int printLineInfoForInput(bool LoadObjects, bool UseDebugObj) {
             continue;
           }
           object::section_iterator Sec = *SecOrErr;
+          StringRef SecName;
+          Sec->getName(SecName);
           Address.SectionIndex = Sec->getIndex();
           uint64_t SectionLoadAddress =
             LoadedObjInfo->getSectionLoadAddress(*Sec);
@@ -506,41 +491,35 @@ static int executeInput() {
   // If we don't have any input files, read from stdin.
   if (!InputFileList.size())
     InputFileList.push_back("-");
-  {
-    TimeRegion TR(Timers ? &Timers->LoadObjectsTimer : nullptr);
-    for (auto &File : InputFileList) {
-      // Load the input memory buffer.
-      ErrorOr<std::unique_ptr<MemoryBuffer>> InputBuffer =
-          MemoryBuffer::getFileOrSTDIN(File);
-      if (std::error_code EC = InputBuffer.getError())
-        ErrorAndExit("unable to read input: '" + EC.message() + "'");
-      Expected<std::unique_ptr<ObjectFile>> MaybeObj(
-          ObjectFile::createObjectFile((*InputBuffer)->getMemBufferRef()));
+  for (auto &File : InputFileList) {
+    // Load the input memory buffer.
+    ErrorOr<std::unique_ptr<MemoryBuffer>> InputBuffer =
+        MemoryBuffer::getFileOrSTDIN(File);
+    if (std::error_code EC = InputBuffer.getError())
+      ErrorAndExit("unable to read input: '" + EC.message() + "'");
+    Expected<std::unique_ptr<ObjectFile>> MaybeObj(
+      ObjectFile::createObjectFile((*InputBuffer)->getMemBufferRef()));
 
-      if (!MaybeObj) {
-        std::string Buf;
-        raw_string_ostream OS(Buf);
-        logAllUnhandledErrors(MaybeObj.takeError(), OS);
-        OS.flush();
-        ErrorAndExit("unable to create object file: '" + Buf + "'");
-      }
+    if (!MaybeObj) {
+      std::string Buf;
+      raw_string_ostream OS(Buf);
+      logAllUnhandledErrors(MaybeObj.takeError(), OS);
+      OS.flush();
+      ErrorAndExit("unable to create object file: '" + Buf + "'");
+    }
 
-      ObjectFile &Obj = **MaybeObj;
+    ObjectFile &Obj = **MaybeObj;
 
-      // Load the object file
-      Dyld.loadObject(Obj);
-      if (Dyld.hasError()) {
-        ErrorAndExit(Dyld.getErrorString());
-      }
+    // Load the object file
+    Dyld.loadObject(Obj);
+    if (Dyld.hasError()) {
+      ErrorAndExit(Dyld.getErrorString());
     }
   }
 
-  {
-    TimeRegion TR(Timers ? &Timers->LinkTimer : nullptr);
-    // Resove all the relocations we can.
-    // FIXME: Error out if there are unresolved relocations.
-    Dyld.resolveRelocations();
-  }
+  // Resove all the relocations we can.
+  // FIXME: Error out if there are unresolved relocations.
+  Dyld.resolveRelocations();
 
   // Get the address of the entry point (_main by default).
   void *MainAddress = Dyld.getSymbolLocalAddress(EntryPoint);
@@ -572,13 +551,7 @@ static int executeInput() {
   for (auto &Arg : InputArgv)
     Argv.push_back(Arg.data());
   Argv.push_back(nullptr);
-  int Result = 0;
-  {
-    TimeRegion TR(Timers ? &Timers->RunTimer : nullptr);
-    Result = Main(Argv.size() - 1, Argv.data());
-  }
-
-  return Result;
+  return Main(Argv.size() - 1, Argv.data());
 }
 
 static int checkAllExpressions(RuntimeDyldChecker &Checker) {
@@ -601,7 +574,7 @@ void applySpecificSectionMappings(RuntimeDyld &Dyld,
 
   for (StringRef Mapping : SpecificSectionMappings) {
     size_t EqualsIdx = Mapping.find_first_of("=");
-    std::string SectionIDStr = std::string(Mapping.substr(0, EqualsIdx));
+    std::string SectionIDStr = Mapping.substr(0, EqualsIdx);
     size_t ComaIdx = Mapping.find_first_of(",");
 
     if (ComaIdx == StringRef::npos)
@@ -614,7 +587,7 @@ void applySpecificSectionMappings(RuntimeDyld &Dyld,
       ExitOnErr(getSectionId(FileToSecIDMap, FileName, SectionName));
 
     auto* OldAddr = Dyld.getSectionContent(SectionID).data();
-    std::string NewAddrStr = std::string(Mapping.substr(EqualsIdx + 1));
+    std::string NewAddrStr = Mapping.substr(EqualsIdx + 1);
     uint64_t NewAddr;
 
     if (StringRef(NewAddrStr).getAsInteger(0, NewAddr))
@@ -752,13 +725,11 @@ static int linkAndVerify() {
   if (!MRI)
     ErrorAndExit("Unable to create target register info!");
 
-  MCTargetOptions MCOptions;
-  std::unique_ptr<MCAsmInfo> MAI(
-      TheTarget->createMCAsmInfo(*MRI, TripleName, MCOptions));
+  std::unique_ptr<MCAsmInfo> MAI(TheTarget->createMCAsmInfo(*MRI, TripleName));
   if (!MAI)
     ErrorAndExit("Unable to create target asm info!");
 
-  MCContext Ctx(Triple(TripleName), MAI.get(), MRI.get(), STI.get());
+  MCContext Ctx(MAI.get(), MRI.get(), nullptr);
 
   std::unique_ptr<MCDisassembler> Disassembler(
     TheTarget->createMCDisassembler(*STI, Ctx));
@@ -766,8 +737,6 @@ static int linkAndVerify() {
     ErrorAndExit("Unable to create disassembler!");
 
   std::unique_ptr<MCInstrInfo> MII(TheTarget->createMCInstrInfo());
-  if (!MII)
-    ErrorAndExit("Unable to create target instruction info!");
 
   std::unique_ptr<MCInstPrinter> InstPrinter(
       TheTarget->createMCInstPrinter(Triple(TripleName), 0, *MAI, *MII, *MRI));
@@ -842,7 +811,7 @@ static int linkAndVerify() {
         char *CSymAddr = static_cast<char *>(SymAddr);
         StringRef SecContent = Dyld.getSectionContent(SectionID);
         uint64_t SymSize = SecContent.size() - (CSymAddr - SecContent.data());
-        SymInfo.setContent(ArrayRef<char>(CSymAddr, SymSize));
+        SymInfo.setContent(StringRef(CSymAddr, SymSize));
       }
     }
     return SymInfo;
@@ -869,8 +838,7 @@ static int linkAndVerify() {
       return SectionID.takeError();
     RuntimeDyldChecker::MemoryRegionInfo SecInfo;
     SecInfo.setTargetAddress(Dyld.getSectionLoadAddress(*SectionID));
-    StringRef SecContent = Dyld.getSectionContent(*SectionID);
-    SecInfo.setContent(ArrayRef<char>(SecContent.data(), SecContent.size()));
+    SecInfo.setContent(Dyld.getSectionContent(*SectionID));
     return SecInfo;
   };
 
@@ -889,10 +857,8 @@ static int linkAndVerify() {
     RuntimeDyldChecker::MemoryRegionInfo StubMemInfo;
     StubMemInfo.setTargetAddress(Dyld.getSectionLoadAddress(SI.SectionID) +
                                  SI.Offset);
-    StringRef SecContent =
-        Dyld.getSectionContent(SI.SectionID).substr(SI.Offset);
     StubMemInfo.setContent(
-        ArrayRef<char>(SecContent.data(), SecContent.size()));
+        Dyld.getSectionContent(SI.SectionID).substr(SI.Offset));
     return StubMemInfo;
   };
 
@@ -925,7 +891,7 @@ static int linkAndVerify() {
     ObjectFile &Obj = **MaybeObj;
 
     if (!Checker)
-      Checker = std::make_unique<RuntimeDyldChecker>(
+      Checker = llvm::make_unique<RuntimeDyldChecker>(
           IsSymbolValid, GetSymbolInfo, GetSectionInfo, GetStubInfo,
           GetStubInfo, Obj.isLittleEndian() ? support::little : support::big,
           Disassembler.get(), InstPrinter.get(), dbgs());
@@ -967,33 +933,20 @@ int main(int argc, char **argv) {
   llvm::InitializeAllTargetMCs();
   llvm::InitializeAllDisassemblers();
 
-  cl::HideUnrelatedOptions({&RTDyldCategory, &getColorCategory()});
   cl::ParseCommandLineOptions(argc, argv, "llvm MC-JIT tool\n");
 
   ExitOnErr.setBanner(std::string(argv[0]) + ": ");
 
-  Timers = ShowTimes ? std::make_unique<RTDyldTimers>() : nullptr;
-
-  int Result;
   switch (Action) {
   case AC_Execute:
-    Result = executeInput();
-    break;
+    return executeInput();
   case AC_PrintDebugLineInfo:
-    Result =
-        printLineInfoForInput(/* LoadObjects */ true, /* UseDebugObj */ true);
-    break;
+    return printLineInfoForInput(/* LoadObjects */ true,/* UseDebugObj */ true);
   case AC_PrintLineInfo:
-    Result =
-        printLineInfoForInput(/* LoadObjects */ true, /* UseDebugObj */ false);
-    break;
+    return printLineInfoForInput(/* LoadObjects */ true,/* UseDebugObj */false);
   case AC_PrintObjectLineInfo:
-    Result =
-        printLineInfoForInput(/* LoadObjects */ false, /* UseDebugObj */ false);
-    break;
+    return printLineInfoForInput(/* LoadObjects */false,/* UseDebugObj */false);
   case AC_Verify:
-    Result = linkAndVerify();
-    break;
+    return linkAndVerify();
   }
-  return Result;
 }

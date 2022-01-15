@@ -7,7 +7,7 @@
 ...
 ---
 name:            sub_i32
-alignment:       4
+alignment:       2
 legalized:       true
 regBankSelected: true
 tracksRegLiveness: true

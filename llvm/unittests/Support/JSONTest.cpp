@@ -8,7 +8,6 @@
 
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Testing/Support/Error.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -72,7 +71,7 @@ TEST(JSONTest, CanonicalOutput) {
 }
 
 TEST(JSONTest, Escaping) {
-  std::string Test = {
+  std::string test = {
       0,                    // Strings may contain nulls.
       '\b',   '\f',         // Have mnemonics, but we escape numerically.
       '\r',   '\n',   '\t', // Escaped with mnemonics.
@@ -81,17 +80,17 @@ TEST(JSONTest, Escaping) {
       '\xce', '\x94',       // Non-ASCII UTF-8 is not escaped.
   };
 
-  std::string TestString = R"("\u0000\u0008\u000c\r\n\tS\"\\)"
+  std::string teststring = R"("\u0000\u0008\u000c\r\n\tS\"\\)"
                            "\x7f\xCE\x94\"";
 
-  EXPECT_EQ(TestString, s(Test));
+  EXPECT_EQ(teststring, s(test));
 
   EXPECT_EQ(R"({"object keys are\nescaped":true})",
             s(Object{{"object keys are\nescaped", true}}));
 }
 
 TEST(JSONTest, PrettyPrinting) {
-  const char Str[] = R"({
+  const char str[] = R"({
   "empty_array": [],
   "empty_object": {},
   "full_array": [
@@ -107,7 +106,7 @@ TEST(JSONTest, PrettyPrinting) {
   }
 })";
 
-  EXPECT_EQ(Str, sp(Object{
+  EXPECT_EQ(str, sp(Object{
                      {"empty_object", Object{}},
                      {"empty_array", {}},
                      {"full_array", {1, nullptr}},
@@ -119,33 +118,6 @@ TEST(JSONTest, PrettyPrinting) {
                            }}},
                       }},
                  }));
-}
-
-TEST(JSONTest, Array) {
-  Array A{1, 2};
-  A.emplace_back(3);
-  A.emplace(++A.begin(), 0);
-  A.push_back(4);
-  A.insert(++++A.begin(), 99);
-
-  EXPECT_EQ(A.size(), 6u);
-  EXPECT_EQ(R"([1,0,99,2,3,4])", s(std::move(A)));
-}
-
-TEST(JSONTest, Object) {
-  Object O{{"a", 1}, {"b", 2}, {"c", 3}};
-  EXPECT_TRUE(O.try_emplace("d", 4).second);
-  EXPECT_FALSE(O.try_emplace("a", 4).second);
-
-  auto D = O.find("d");
-  EXPECT_FALSE(D == O.end());
-  auto E = O.find("e");
-  EXPECT_TRUE(E == O.end());
-
-  O.erase("b");
-  O.erase(D);
-  EXPECT_EQ(O.size(), 2u);
-  EXPECT_EQ(R"({"a":1,"c":3})", s(std::move(O)));
 }
 
 TEST(JSONTest, Parse) {
@@ -197,7 +169,7 @@ TEST(JSONTest, ParseErrors) {
       FAIL() << "Parsed JSON >>> " << S << " <<< but wanted error: " << Msg;
     } else {
       handleAllErrors(E.takeError(), [S, Msg](const llvm::ErrorInfoBase &E) {
-        EXPECT_THAT(E.message(), testing::HasSubstr(std::string(Msg))) << S;
+        EXPECT_THAT(E.message(), testing::HasSubstr(Msg)) << S;
       });
     }
   };
@@ -325,9 +297,6 @@ TEST(JSONTest, Integers) {
           double{-0x4000000000000000},
       },
 
-      // PR46470,
-      // https://developercommunity.visualstudio.com/content/problem/1093399/incorrect-result-when-printing-6917529027641081856.html
-#if !defined(_MSC_VER) || _MSC_VER < 1926
       {
           "Dynamically exact integer. Stored as double, convertible.",
           double{0x6000000000000000},
@@ -335,7 +304,6 @@ TEST(JSONTest, Integers) {
           int64_t{0x6000000000000000},
           double{0x6000000000000000},
       },
-#endif
 
       {
           "Dynamically integer, >64 bits. Stored as double, not convertible.",
@@ -373,91 +341,47 @@ inline llvm::raw_ostream &operator<<(llvm::raw_ostream &OS,
   return OS << "(" << S.S << ", " << (S.I ? std::to_string(*S.I) : "None")
             << ", " << S.B << ")";
 }
-bool fromJSON(const Value &E, CustomStruct &R, Path P) {
-  ObjectMapper O(E, P);
-  return O && O.map("str", R.S) && O.map("int", R.I) &&
-         O.mapOptional("bool", R.B);
-}
-
-static std::string errorContext(const Value &V, const Path::Root &R) {
-  std::string Context;
-  llvm::raw_string_ostream OS(Context);
-  R.printErrorContext(V, OS);
-  return OS.str();
+bool fromJSON(const Value &E, CustomStruct &R) {
+  ObjectMapper O(E);
+  if (!O || !O.map("str", R.S) || !O.map("int", R.I))
+    return false;
+  O.map("bool", R.B);
+  return true;
 }
 
 TEST(JSONTest, Deserialize) {
   std::map<std::string, std::vector<CustomStruct>> R;
   CustomStruct ExpectedStruct = {"foo", 42, true};
   std::map<std::string, std::vector<CustomStruct>> Expected;
-  Value J = Object{{"foo", Array{
-                               Object{
-                                   {"str", "foo"},
-                                   {"int", 42},
-                                   {"bool", true},
-                                   {"unknown", "ignored"},
-                               },
-                               Object{{"str", "bar"}},
-                           }}};
+  Value J = Object{
+      {"foo",
+       Array{
+           Object{
+               {"str", "foo"},
+               {"int", 42},
+               {"bool", true},
+               {"unknown", "ignored"},
+           },
+           Object{{"str", "bar"}},
+           Object{
+               {"str", "baz"}, {"bool", "string"}, // OK, deserialize ignores.
+           },
+       }}};
   Expected["foo"] = {
       CustomStruct("foo", 42, true),
       CustomStruct("bar", llvm::None, false),
+      CustomStruct("baz", llvm::None, false),
   };
-  Path::Root Root("CustomStruct");
-  ASSERT_TRUE(fromJSON(J, R, Root));
+  ASSERT_TRUE(fromJSON(J, R));
   EXPECT_EQ(R, Expected);
 
-  (*J.getAsObject()->getArray("foo"))[0] = 123;
-  ASSERT_FALSE(fromJSON(J, R, Root));
-  EXPECT_EQ("expected object at CustomStruct.foo[0]",
-            toString(Root.getError()));
-  const char *ExpectedDump = R"({
-  "foo": [
-    /* error: expected object */
-    123,
-    { ... }
-  ]
-})";
-  EXPECT_EQ(ExpectedDump, errorContext(J, Root));
-
   CustomStruct V;
-  EXPECT_FALSE(fromJSON(nullptr, V, Root));
-  EXPECT_EQ("expected object when parsing CustomStruct",
-            toString(Root.getError()));
-
-  EXPECT_FALSE(fromJSON(Object{}, V, Root));
-  EXPECT_EQ("missing value at CustomStruct.str", toString(Root.getError()));
-
-  EXPECT_FALSE(fromJSON(Object{{"str", 1}}, V, Root));
-  EXPECT_EQ("expected string at CustomStruct.str", toString(Root.getError()));
-
+  EXPECT_FALSE(fromJSON(nullptr, V)) << "Not an object " << V;
+  EXPECT_FALSE(fromJSON(Object{}, V)) << "Missing required field " << V;
+  EXPECT_FALSE(fromJSON(Object{{"str", 1}}, V)) << "Wrong type " << V;
   // Optional<T> must parse as the correct type if present.
-  EXPECT_FALSE(fromJSON(Object{{"str", "1"}, {"int", "string"}}, V, Root));
-  EXPECT_EQ("expected integer at CustomStruct.int", toString(Root.getError()));
-
-  // mapOptional must parse as the correct type if present.
-  EXPECT_FALSE(fromJSON(Object{{"str", "1"}, {"bool", "string"}}, V, Root));
-  EXPECT_EQ("expected boolean at CustomStruct.bool", toString(Root.getError()));
-}
-
-TEST(JSONTest, ParseDeserialize) {
-  auto E = parse<std::vector<CustomStruct>>(R"json(
-    [{"str": "foo", "int": 42}, {"int": 42}]
-  )json");
-  EXPECT_THAT_EXPECTED(E, FailedWithMessage("missing value at (root)[1].str"));
-
-  E = parse<std::vector<CustomStruct>>(R"json(
-    [{"str": "foo", "int": 42}, {"str": "bar"}
-  )json");
-  EXPECT_THAT_EXPECTED(
-      E,
-      FailedWithMessage("[3:2, byte=50]: Expected , or ] after array element"));
-
-  E = parse<std::vector<CustomStruct>>(R"json(
-    [{"str": "foo", "int": 42}]
-  )json");
-  EXPECT_THAT_EXPECTED(E, Succeeded());
-  EXPECT_THAT(*E, testing::SizeIs(1));
+  EXPECT_FALSE(fromJSON(Object{{"str", 1}, {"int", "string"}}, V))
+      << "Wrong type for Optional<T> " << V;
 }
 
 TEST(JSONTest, Stream) {
@@ -465,20 +389,15 @@ TEST(JSONTest, Stream) {
     std::string S;
     llvm::raw_string_ostream OS(S);
     OStream J(OS, Indent);
-    J.comment("top*/level");
     J.object([&] {
       J.attributeArray("foo", [&] {
         J.value(nullptr);
-        J.comment("element");
         J.value(42.5);
         J.arrayBegin();
         J.value(43);
         J.arrayEnd();
-        J.rawValue([](raw_ostream &OS) { OS << "'unverified\nraw value'"; });
       });
-      J.comment("attribute");
       J.attributeBegin("bar");
-      J.comment("attribute value");
       J.objectBegin();
       J.objectEnd();
       J.attributeEnd();
@@ -487,61 +406,20 @@ TEST(JSONTest, Stream) {
     return OS.str();
   };
 
-  const char *Plain =
-      R"(/*top* /level*/{"foo":[null,/*element*/42.5,[43],'unverified
-raw value'],/*attribute*/"bar":/*attribute value*/{},"baz":"xyz"})";
+  const char *Plain = R"({"foo":[null,42.5,[43]],"bar":{},"baz":"xyz"})";
   EXPECT_EQ(Plain, StreamStuff(0));
-  const char *Pretty = R"(/* top* /level */
-{
+  const char *Pretty = R"({
   "foo": [
     null,
-    /* element */
     42.5,
     [
       43
-    ],
-    'unverified
-raw value'
+    ]
   ],
-  /* attribute */
-  "bar": /* attribute value */ {},
+  "bar": {},
   "baz": "xyz"
 })";
   EXPECT_EQ(Pretty, StreamStuff(2));
-}
-
-TEST(JSONTest, Path) {
-  Path::Root R("foo");
-  Path P = R, A = P.field("a"), B = P.field("b");
-  P.report("oh no");
-  EXPECT_THAT_ERROR(R.getError(), FailedWithMessage("oh no when parsing foo"));
-  A.index(1).field("c").index(2).report("boom");
-  EXPECT_THAT_ERROR(R.getError(), FailedWithMessage("boom at foo.a[1].c[2]"));
-  B.field("d").field("e").report("bam");
-  EXPECT_THAT_ERROR(R.getError(), FailedWithMessage("bam at foo.b.d.e"));
-
-  Value V = Object{
-      {"a", Array{42}},
-      {"b",
-       Object{{"d",
-               Object{
-                   {"e", Array{1, Object{{"x", "y"}}}},
-                   {"f", "a moderately long string: 48 characters in total"},
-               }}}},
-  };
-  const char *Expected = R"({
-  "a": [ ... ],
-  "b": {
-    "d": {
-      "e": /* error: bam */ [
-        1,
-        { ... }
-      ],
-      "f": "a moderately long string: 48 characte..."
-    }
-  }
-})";
-  EXPECT_EQ(Expected, errorContext(V, R));
 }
 
 } // namespace

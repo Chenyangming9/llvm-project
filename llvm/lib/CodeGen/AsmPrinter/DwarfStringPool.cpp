@@ -8,6 +8,7 @@
 
 #include "DwarfStringPool.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -32,6 +33,7 @@ DwarfStringPool::getEntryImpl(AsmPrinter &Asm, StringRef Str) {
     Entry.Symbol = ShouldCreateSymbols ? Asm.createTempSymbol(Prefix) : nullptr;
 
     NumBytes += Str.size() + 1;
+    assert(NumBytes > Entry.Offset && "Unexpected overflow");
   }
   return *I.first;
 }
@@ -56,20 +58,20 @@ void DwarfStringPool::emitStringOffsetsTableHeader(AsmPrinter &Asm,
   if (getNumIndexedStrings() == 0)
     return;
   Asm.OutStreamer->SwitchSection(Section);
-  unsigned EntrySize = Asm.getDwarfOffsetByteSize();
+  unsigned EntrySize = 4;
+  // FIXME: DWARF64
   // We are emitting the header for a contribution to the string offsets
   // table. The header consists of an entry with the contribution's
   // size (not including the size of the length field), the DWARF version and
   // 2 bytes of padding.
-  Asm.emitDwarfUnitLength(getNumIndexedStrings() * EntrySize + 4,
-                          "Length of String Offsets Set");
+  Asm.emitInt32(getNumIndexedStrings() * EntrySize + 4);
   Asm.emitInt16(Asm.getDwarfVersion());
   Asm.emitInt16(0);
   // Define the symbol that marks the start of the contribution. It is
   // referenced by most unit headers via DW_AT_str_offsets_base.
   // Split units do not use the attribute.
   if (StartSym)
-    Asm.OutStreamer->emitLabel(StartSym);
+    Asm.OutStreamer->EmitLabel(StartSym);
 }
 
 void DwarfStringPool::emit(AsmPrinter &Asm, MCSection *StrSection,
@@ -98,12 +100,12 @@ void DwarfStringPool::emit(AsmPrinter &Asm, MCSection *StrSection,
 
     // Emit a label for reference from debug information entries.
     if (ShouldCreateSymbols)
-      Asm.OutStreamer->emitLabel(Entry->getValue().Symbol);
+      Asm.OutStreamer->EmitLabel(Entry->getValue().Symbol);
 
     // Emit the string itself with a terminating null byte.
     Asm.OutStreamer->AddComment("string offset=" +
                                 Twine(Entry->getValue().Offset));
-    Asm.OutStreamer->emitBytes(
+    Asm.OutStreamer->EmitBytes(
         StringRef(Entry->getKeyData(), Entry->getKeyLength() + 1));
   }
 
@@ -118,11 +120,11 @@ void DwarfStringPool::emit(AsmPrinter &Asm, MCSection *StrSection,
     }
 
     Asm.OutStreamer->SwitchSection(OffsetSection);
-    unsigned size = Asm.getDwarfOffsetByteSize();
+    unsigned size = 4; // FIXME: DWARF64 is 8.
     for (const auto &Entry : Entries)
       if (UseRelativeOffsets)
         Asm.emitDwarfStringOffset(Entry->getValue());
       else
-        Asm.OutStreamer->emitIntValue(Entry->getValue().Offset, size);
+        Asm.OutStreamer->EmitIntValue(Entry->getValue().Offset, size);
   }
 }

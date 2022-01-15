@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_SOURCEMANAGER_H
-#define LLDB_CORE_SOURCEMANAGER_H
+#ifndef liblldb_SourceManager_h_
+#define liblldb_SourceManager_h_
 
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/lldb-defines.h"
@@ -15,10 +15,10 @@
 
 #include "llvm/Support/Chrono.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <stddef.h>
 #include <string>
 #include <vector>
 
@@ -53,6 +53,8 @@ public:
     uint32_t GetLineOffset(uint32_t line);
 
     bool LineIsValid(uint32_t line);
+
+    bool FileSpecMatches(const FileSpec &file_spec);
 
     const FileSpec &GetFileSpec() { return m_file_spec; }
 
@@ -101,9 +103,6 @@ public:
     void AddSourceFile(const FileSP &file_sp);
     FileSP FindSourceFile(const FileSpec &file_spec) const;
 
-    // Removes all elements from the cache.
-    void Clear() { m_file_cache.clear(); }
-
   protected:
     typedef std::map<FileSpec, FileSP> FileCache;
     FileCache m_file_cache;
@@ -119,7 +118,7 @@ public:
 
   ~SourceManager();
 
-  FileSP GetLastFile() { return GetFile(m_last_file_spec); }
+  FileSP GetLastFile() { return m_last_file_sp; }
 
   size_t
   DisplaySourceLinesWithLineNumbers(const FileSpec &file, uint32_t line,
@@ -141,9 +140,7 @@ public:
 
   bool GetDefaultFileAndLine(FileSpec &file_spec, uint32_t &line);
 
-  bool DefaultFileAndLineSet() {
-    return (GetFile(m_last_file_spec).get() != nullptr);
-  }
+  bool DefaultFileAndLineSet() { return (m_last_file_sp.get() != nullptr); }
 
   void FindLinesMatchingRegex(FileSpec &file_spec, RegularExpression &regex,
                               uint32_t start_line, uint32_t end_line,
@@ -152,7 +149,7 @@ public:
   FileSP GetFile(const FileSpec &file_spec);
 
 protected:
-  FileSpec m_last_file_spec;
+  FileSP m_last_file_sp;
   uint32_t m_last_line;
   uint32_t m_last_count;
   bool m_default_set;
@@ -160,12 +157,11 @@ protected:
   lldb::DebuggerWP m_debugger_wp;
 
 private:
-  SourceManager(const SourceManager &) = delete;
-  const SourceManager &operator=(const SourceManager &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(SourceManager);
 };
 
 bool operator==(const SourceManager::File &lhs, const SourceManager::File &rhs);
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_SOURCEMANAGER_H
+#endif // liblldb_SourceManager_h_

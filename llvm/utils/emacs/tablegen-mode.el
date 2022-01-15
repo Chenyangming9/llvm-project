@@ -18,8 +18,7 @@
 
 (defvar tablegen-font-lock-keywords
   (let ((kw (regexp-opt '("class" "defm" "def" "field" "include" "in"
-                         "let" "multiclass" "foreach" "if" "then" "else"
-                         "defvar" "defset")
+                         "let" "multiclass" "foreach")
                         'words))
         (type-kw (regexp-opt '("bit" "bits" "code" "dag" "int" "list" "string")
                              'words))
@@ -40,14 +39,17 @@
 
      '("^[ \t]*\\(@.+\\)" 1 'td-decorators-face)
      ;; Keywords
-     kw
+     (cons (concat kw "[ \n\t(]") 1)
+
      ;; Type keywords
-     type-kw
+     (cons (concat type-kw "[ \n\t(]") 1)
      ))
   "Additional expressions to highlight in TableGen mode.")
 (put 'tablegen-mode 'font-lock-defaults '(tablegen-font-lock-keywords))
 
 ;; ---------------------- Syntax table ---------------------------
+;; Shamelessly ripped from jasmin.el
+;; URL: http://www.neilvandyke.org/jasmin-emacs/jasmin.el
 
 (defvar tablegen-mode-syntax-table nil
   "Syntax table used in `tablegen-mode' buffers.")

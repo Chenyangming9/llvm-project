@@ -1,4 +1,4 @@
-//===-- ValueObjectDynamicValue.cpp ---------------------------------------===//
+//===-- ValueObjectDynamicValue.cpp ------------------------------*- C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -22,7 +22,7 @@
 #include "lldb/Utility/Status.h"
 #include "lldb/lldb-types.h"
 
-#include <cstring>
+#include <string.h>
 namespace lldb_private {
 class Declaration;
 }
@@ -98,7 +98,7 @@ size_t ValueObjectDynamicValue::CalculateNumChildren(uint32_t max) {
     return m_parent->GetNumChildren(max);
 }
 
-llvm::Optional<uint64_t> ValueObjectDynamicValue::GetByteSize() {
+uint64_t ValueObjectDynamicValue::GetByteSize() {
   const bool success = UpdateValueIfNeeded(false);
   if (success && m_dynamic_type_info.HasType()) {
     ExecutionContext exe_ctx(GetExecutionContextRef());
@@ -199,7 +199,7 @@ bool ValueObjectDynamicValue::UpdateValue() {
     ClearDynamicTypeInformation();
     m_dynamic_type_info.Clear();
     m_value = m_parent->GetValue();
-    m_error = m_value.GetValueAsData(&exe_ctx, m_data, GetModule().get());
+    m_error = m_value.GetValueAsData(&exe_ctx, m_data, 0, GetModule().get());
     return m_error.Success();
   }
 
@@ -237,18 +237,19 @@ bool ValueObjectDynamicValue::UpdateValue() {
     m_dynamic_type_info =
         runtime->FixUpDynamicType(m_dynamic_type_info, *m_parent);
 
+  // m_value.SetContext (Value::eContextTypeClangType, corrected_type);
   m_value.SetCompilerType(m_dynamic_type_info.GetCompilerType());
 
   m_value.SetValueType(value_type);
 
   if (has_changed_type && log)
-    LLDB_LOGF(log, "[%s %p] has a new dynamic type %s", GetName().GetCString(),
-              static_cast<void *>(this), GetTypeName().GetCString());
+    log->Printf("[%s %p] has a new dynamic type %s", GetName().GetCString(),
+                static_cast<void *>(this), GetTypeName().GetCString());
 
   if (m_address.IsValid() && m_dynamic_type_info) {
     // The variable value is in the Scalar value inside the m_value. We can
     // point our m_data right to it.
-    m_error = m_value.GetValueAsData(&exe_ctx, m_data, GetModule().get());
+    m_error = m_value.GetValueAsData(&exe_ctx, m_data, 0, GetModule().get());
     if (m_error.Success()) {
       if (!CanProvideValue()) {
         // this value object represents an aggregate type whose children have
@@ -327,7 +328,7 @@ bool ValueObjectDynamicValue::SetData(DataExtractor &data, Status &error) {
     // but NULL'ing out a value should always be allowed
     lldb::offset_t offset = 0;
 
-    if (data.GetAddress(&offset) != 0) {
+    if (data.GetPointer(&offset) != 0) {
       error.SetErrorString(
           "unable to modify dynamic value, use 'expression' command");
       return false;

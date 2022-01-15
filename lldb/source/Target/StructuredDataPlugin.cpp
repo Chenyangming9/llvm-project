@@ -1,4 +1,4 @@
-//===-- StructuredDataPlugin.cpp ------------------------------------------===//
+//===-- StructuredDataPlugin.cpp --------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -23,14 +23,14 @@ public:
                                "Parent for per-plugin structured data commands",
                                "plugin structured-data <plugin>") {}
 
-  ~CommandStructuredData() override = default;
+  ~CommandStructuredData() override {}
 };
 }
 
 StructuredDataPlugin::StructuredDataPlugin(const ProcessWP &process_wp)
     : PluginInterface(), m_process_wp(process_wp) {}
 
-StructuredDataPlugin::~StructuredDataPlugin() = default;
+StructuredDataPlugin::~StructuredDataPlugin() {}
 
 bool StructuredDataPlugin::GetEnabled(ConstString type_name) const {
   // By default, plugins are always enabled.  Plugin authors should override

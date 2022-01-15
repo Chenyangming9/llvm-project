@@ -9,5 +9,7 @@ unittest("ClangdXpcTests") {
     "//llvm/lib/Testing/Support",
   ]
   include_dirs = [ "//clang-tools-extra/clangd" ]
-  sources = [ "ConversionTests.cpp" ]
+  sources = [
+    "ConversionTests.cpp",
+  ]
 }

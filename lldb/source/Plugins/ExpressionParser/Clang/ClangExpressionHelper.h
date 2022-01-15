@@ -6,24 +6,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGEXPRESSIONHELPER_H
-#define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGEXPRESSIONHELPER_H
+#ifndef liblldb_ClangExpression_h_
+#define liblldb_ClangExpression_h_
 
 #include <map>
 #include <string>
 #include <vector>
 
+
+#include "lldb/Core/ClangForward.h"
 #include "lldb/Expression/ExpressionTypeSystemHelper.h"
 #include "lldb/lldb-forward.h"
 #include "lldb/lldb-private.h"
 
-namespace clang {
-class ASTConsumer;
-}
-
 namespace lldb_private {
 
-class ClangExpressionDeclMap;
 class RecordingMemoryManager;
 
 // ClangExpressionHelper
@@ -38,7 +35,7 @@ public:
             ExpressionTypeSystemHelper::LLVMCastKind::eKindClangHelper) {}
 
   /// Destructor
-  virtual ~ClangExpressionHelper() = default;
+  virtual ~ClangExpressionHelper() {}
 
   /// Return the object that the parser should use when resolving external
   /// values.  May be NULL if everything should be self-contained.
@@ -60,4 +57,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGEXPRESSIONHELPER_H
+#endif // liblldb_ClangExpression_h_

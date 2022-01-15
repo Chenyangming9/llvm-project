@@ -53,30 +53,13 @@ Expected<std::string> MinidumpFile::getString(size_t Offset) const {
   return Result;
 }
 
-Expected<iterator_range<MinidumpFile::MemoryInfoIterator>>
-MinidumpFile::getMemoryInfoList() const {
-  Optional<ArrayRef<uint8_t>> Stream = getRawStream(StreamType::MemoryInfoList);
-  if (!Stream)
-    return createError("No such stream");
-  auto ExpectedHeader =
-      getDataSliceAs<minidump::MemoryInfoListHeader>(*Stream, 0, 1);
-  if (!ExpectedHeader)
-    return ExpectedHeader.takeError();
-  const minidump::MemoryInfoListHeader &H = ExpectedHeader.get()[0];
-  Expected<ArrayRef<uint8_t>> Data =
-      getDataSlice(*Stream, H.SizeOfHeader, H.SizeOfEntry * H.NumberOfEntries);
-  if (!Data)
-    return Data.takeError();
-  return make_range(MemoryInfoIterator(*Data, H.SizeOfEntry),
-                    MemoryInfoIterator({}, H.SizeOfEntry));
-}
-
 template <typename T>
-Expected<ArrayRef<T>> MinidumpFile::getListStream(StreamType Type) const {
-  Optional<ArrayRef<uint8_t>> Stream = getRawStream(Type);
-  if (!Stream)
+Expected<ArrayRef<T>> MinidumpFile::getListStream(StreamType Stream) const {
+  auto OptionalStream = getRawStream(Stream);
+  if (!OptionalStream)
     return createError("No such stream");
-  auto ExpectedSize = getDataSliceAs<support::ulittle32_t>(*Stream, 0, 1);
+  auto ExpectedSize =
+      getDataSliceAs<support::ulittle32_t>(*OptionalStream, 0, 1);
   if (!ExpectedSize)
     return ExpectedSize.takeError();
 
@@ -86,10 +69,10 @@ Expected<ArrayRef<T>> MinidumpFile::getListStream(StreamType Type) const {
   // Some producers insert additional padding bytes to align the list to an
   // 8-byte boundary. Check for that by comparing the list size with the overall
   // stream size.
-  if (ListOffset + sizeof(T) * ListSize < Stream->size())
+  if (ListOffset + sizeof(T) * ListSize < OptionalStream->size())
     ListOffset = 8;
 
-  return getDataSliceAs<T>(*Stream, ListOffset, ListSize);
+  return getDataSliceAs<T>(*OptionalStream, ListOffset, ListSize);
 }
 template Expected<ArrayRef<Module>>
     MinidumpFile::getListStream(StreamType) const;
@@ -126,14 +109,13 @@ MinidumpFile::create(MemoryBufferRef Source) {
     return ExpectedStreams.takeError();
 
   DenseMap<StreamType, std::size_t> StreamMap;
-  for (const auto &StreamDescriptor : llvm::enumerate(*ExpectedStreams)) {
-    StreamType Type = StreamDescriptor.value().Type;
-    const LocationDescriptor &Loc = StreamDescriptor.value().Location;
+  for (const auto &Stream : llvm::enumerate(*ExpectedStreams)) {
+    StreamType Type = Stream.value().Type;
+    const LocationDescriptor &Loc = Stream.value().Location;
 
-    Expected<ArrayRef<uint8_t>> Stream =
-        getDataSlice(Data, Loc.RVA, Loc.DataSize);
-    if (!Stream)
-      return Stream.takeError();
+    auto ExpectedStream = getDataSlice(Data, Loc.RVA, Loc.DataSize);
+    if (!ExpectedStream)
+      return ExpectedStream.takeError();
 
     if (Type == StreamType::Unused && Loc.DataSize == 0) {
       // Ignore dummy streams. This is technically ill-formed, but a number of
@@ -146,7 +128,7 @@ MinidumpFile::create(MemoryBufferRef Source) {
       return createError("Cannot handle one of the minidump streams");
 
     // Update the directory map, checking for duplicate stream types.
-    if (!StreamMap.try_emplace(Type, StreamDescriptor.index()).second)
+    if (!StreamMap.try_emplace(Type, Stream.index()).second)
       return createError("Duplicate stream type");
   }
 

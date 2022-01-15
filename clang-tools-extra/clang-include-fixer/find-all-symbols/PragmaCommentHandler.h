@@ -18,7 +18,7 @@ namespace find_all_symbols {
 
 class HeaderMapCollector;
 
-/// PragmaCommentHandler parses pragma comment on include files to
+/// \brief PragmaCommentHandler parses pragma comment on include files to
 /// determine when we should include a different header from the header that
 /// directly defines a symbol.
 ///

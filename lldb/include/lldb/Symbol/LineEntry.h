@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SYMBOL_LINEENTRY_H
-#define LLDB_SYMBOL_LINEENTRY_H
+#ifndef liblldb_LineEntry_h_
+#define liblldb_LineEntry_h_
 
 #include "lldb/Core/AddressRange.h"
 #include "lldb/Utility/FileSpec.h"
@@ -42,6 +42,11 @@ struct LineEntry {
   /// \param[in] s
   ///     The stream to which to dump the object description.
   ///
+  /// \param[in] comp_unit
+  ///     The compile unit object that contains the support file
+  ///     list so the line entry can dump the file name (since this
+  ///     object contains a file index into the support file list).
+  ///
   /// \param[in] show_file
   ///     If \b true, display the filename with the line entry which
   ///     requires that the compile unit object \a comp_unit be a
@@ -70,6 +75,11 @@ struct LineEntry {
   /// \param[in] s
   ///     The stream to which to dump the object description.
   ///
+  /// \param[in] comp_unit
+  ///     The compile unit object that contains the support file
+  ///     list so the line entry can dump the file name (since this
+  ///     object contains a file index into the support file list).
+  ///
   /// \return
   ///     Returns \b true if the file and line were properly dumped,
   ///     \b false otherwise.
@@ -92,9 +102,9 @@ struct LineEntry {
   ///     The Right Hand Side const LineEntry object reference.
   ///
   /// \return
-  ///     -1 if lhs < rhs
-  ///     0 if lhs == rhs
-  ///     1 if lhs > rhs
+  ///     \li -1 if lhs < rhs
+  ///     \li 0 if lhs == rhs
+  ///     \li 1 if lhs > rhs
   static int Compare(const LineEntry &lhs, const LineEntry &rhs);
 
   /// Give the range for this LineEntry + any additional LineEntries for this
@@ -118,7 +128,7 @@ struct LineEntry {
   /// range.
   ///
   /// If the initial LineEntry this method is called on is a line #0, only the
-  /// range of continuous LineEntries with line #0 will be included in the
+  /// range of contiuous LineEntries with line #0 will be included in the
   /// complete range.
   ///
   /// @param[in] include_inlined_functions
@@ -133,6 +143,7 @@ struct LineEntry {
   ///
   /// \param[in] target_sp
   ///     Shared pointer to the target this LineEntry belongs to.
+
   void ApplyFileMappings(lldb::TargetSP target_sp);
 
   // Member variables.
@@ -140,12 +151,10 @@ struct LineEntry {
   FileSpec file; ///< The source file, possibly mapped by the target.source-map
                  ///setting
   FileSpec original_file; ///< The original source file, from debug info.
-  uint32_t line = LLDB_INVALID_LINE_NUMBER; ///< The source line number, or zero
-                                            ///< if there is no line number
-                                            /// information.
-  uint16_t column =
-      0; ///< The column number of the source line, or zero if there
-         /// is no column information.
+  uint32_t line; ///< The source line number, or zero if there is no line number
+                 ///information.
+  uint16_t column; ///< The column number of the source line, or zero if there
+                   ///is no column information.
   uint16_t is_start_of_statement : 1, ///< Indicates this entry is the beginning
                                       ///of a statement.
       is_start_of_basic_block : 1, ///< Indicates this entry is the beginning of
@@ -175,4 +184,4 @@ bool operator<(const LineEntry &lhs, const LineEntry &rhs);
 
 } // namespace lldb_private
 
-#endif // LLDB_SYMBOL_LINEENTRY_H
+#endif // liblldb_LineEntry_h_

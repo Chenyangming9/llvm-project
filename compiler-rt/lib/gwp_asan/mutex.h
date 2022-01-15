@@ -9,11 +9,14 @@
 #ifndef GWP_ASAN_MUTEX_H_
 #define GWP_ASAN_MUTEX_H_
 
-#include "gwp_asan/platform_specific/mutex_fuchsia.h" // IWYU pragma: keep
-#include "gwp_asan/platform_specific/mutex_posix.h"   // IWYU pragma: keep
+#ifdef __unix__
+#include <pthread.h>
+#else
+#error "GWP-ASan is not supported on this platform."
+#endif
 
 namespace gwp_asan {
-class Mutex final : PlatformMutex {
+class Mutex {
 public:
   constexpr Mutex() = default;
   ~Mutex() = default;
@@ -25,6 +28,11 @@ public:
   bool tryLock();
   // Unlock the mutex.
   void unlock();
+
+private:
+#ifdef __unix__
+  pthread_mutex_t Mu = PTHREAD_MUTEX_INITIALIZER;
+#endif // defined(__unix__)
 };
 
 class ScopedLock {

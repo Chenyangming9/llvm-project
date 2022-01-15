@@ -65,7 +65,6 @@ Value *GlobalValue::handleOperandChangeImpl(Value *From, Value *To) {
 void GlobalValue::copyAttributesFrom(const GlobalValue *Src) {
   setVisibility(Src->getVisibility());
   setUnnamedAddr(Src->getUnnamedAddr());
-  setThreadLocalMode(Src->getThreadLocalMode());
   setDLLStorageClass(Src->getDLLStorageClass());
   setDSOLocal(Src->isDSOLocal());
   setPartition(Src->getPartition());
@@ -95,18 +94,18 @@ void GlobalValue::eraseFromParent() {
   llvm_unreachable("not a global");
 }
 
-bool GlobalValue::isInterposable() const {
-  if (isInterposableLinkage(getLinkage()))
-    return true;
-  return getParent() && getParent()->getSemanticInterposition() &&
-         !isDSOLocal();
-}
+unsigned GlobalValue::getAlignment() const {
+  if (auto *GA = dyn_cast<GlobalAlias>(this)) {
+    // In general we cannot compute this at the IR level, but we try.
+    if (const GlobalObject *GO = GA->getBaseObject())
+      return GO->getAlignment();
 
-bool GlobalValue::canBenefitFromLocalAlias() const {
-  // See AsmPrinter::getSymbolPreferLocal().
-  return hasDefaultVisibility() &&
-         GlobalObject::isExternalLinkage(getLinkage()) && !isDeclaration() &&
-         !isa<GlobalIFunc>(this) && !hasComdat();
+    // FIXME: we should also be able to handle:
+    // Alias = Global + Offset
+    // Alias = Absolute
+    return 0;
+  }
+  return cast<GlobalObject>(this)->getAlignment();
 }
 
 unsigned GlobalValue::getAddressSpace() const {
@@ -114,19 +113,19 @@ unsigned GlobalValue::getAddressSpace() const {
   return PtrTy->getAddressSpace();
 }
 
-void GlobalObject::setAlignment(MaybeAlign Align) {
-  assert((!Align || *Align <= MaximumAlignment) &&
+void GlobalObject::setAlignment(unsigned Align) {
+  assert((Align & (Align-1)) == 0 && "Alignment is not a power of 2!");
+  assert(Align <= MaximumAlignment &&
          "Alignment is greater than MaximumAlignment!");
-  unsigned AlignmentData = encode(Align);
+  unsigned AlignmentData = Log2_32(Align) + 1;
   unsigned OldData = getGlobalValueSubClassData();
   setGlobalValueSubClassData((OldData & ~AlignmentMask) | AlignmentData);
-  assert(MaybeAlign(getAlignment()) == Align &&
-         "Alignment representation error!");
+  assert(getAlignment() == Align && "Alignment representation error!");
 }
 
 void GlobalObject::copyAttributesFrom(const GlobalObject *Src) {
   GlobalValue::copyAttributesFrom(Src);
-  setAlignment(MaybeAlign(Src->getAlignment()));
+  setAlignment(Src->getAlignment());
   setSection(Src->getSection());
 }
 
@@ -140,7 +139,7 @@ std::string GlobalValue::getGlobalIdentifier(StringRef Name,
   if (Name[0] == '\1')
     Name = Name.substr(1);
 
-  std::string NewName = std::string(Name);
+  std::string NewName = Name;
   if (llvm::GlobalValue::isLocalLinkage(Linkage)) {
     // For local symbols, prepend the main file name to distinguish them.
     // Do not include the full path in the file name since there's no guarantee
@@ -239,7 +238,7 @@ bool GlobalValue::isDeclaration() const {
   return false;
 }
 
-bool GlobalObject::canIncreaseAlignment() const {
+bool GlobalValue::canIncreaseAlignment() const {
   // Firstly, can only increase the alignment of a global if it
   // is a strong definition.
   if (!isStrongDefinitionForLinker())
@@ -352,15 +351,11 @@ GlobalVariable::GlobalVariable(Type *Ty, bool constant, LinkageTypes Link,
 GlobalVariable::GlobalVariable(Module &M, Type *Ty, bool constant,
                                LinkageTypes Link, Constant *InitVal,
                                const Twine &Name, GlobalVariable *Before,
-                               ThreadLocalMode TLMode,
-                               Optional<unsigned> AddressSpace,
+                               ThreadLocalMode TLMode, unsigned AddressSpace,
                                bool isExternallyInitialized)
     : GlobalObject(Ty, Value::GlobalVariableVal,
                    OperandTraits<GlobalVariable>::op_begin(this),
-                   InitVal != nullptr, Link, Name,
-                   AddressSpace
-                       ? *AddressSpace
-                       : M.getDataLayout().getDefaultGlobalsAddressSpace()),
+                   InitVal != nullptr, Link, Name, AddressSpace),
       isConstantGlobal(constant),
       isExternallyInitializedConstant(isExternallyInitialized) {
   assert(!Ty->isFunctionTy() && PointerType::isValidElementType(Ty) &&
@@ -411,6 +406,7 @@ void GlobalVariable::setInitializer(Constant *InitVal) {
 /// from the GlobalVariable Src to this one.
 void GlobalVariable::copyAttributesFrom(const GlobalVariable *Src) {
   GlobalObject::copyAttributesFrom(Src);
+  setThreadLocalMode(Src->getThreadLocalMode());
   setExternallyInitialized(Src->isExternallyInitialized());
   setAttributes(Src->getAttributes());
 }
@@ -431,43 +427,6 @@ GlobalIndirectSymbol::GlobalIndirectSymbol(Type *Ty, ValueTy VTy,
     Op<0>() = Symbol;
 }
 
-static const GlobalObject *
-findBaseObject(const Constant *C, DenseSet<const GlobalAlias *> &Aliases) {
-  if (auto *GO = dyn_cast<GlobalObject>(C))
-    return GO;
-  if (auto *GA = dyn_cast<GlobalAlias>(C))
-    if (Aliases.insert(GA).second)
-      return findBaseObject(GA->getOperand(0), Aliases);
-  if (auto *CE = dyn_cast<ConstantExpr>(C)) {
-    switch (CE->getOpcode()) {
-    case Instruction::Add: {
-      auto *LHS = findBaseObject(CE->getOperand(0), Aliases);
-      auto *RHS = findBaseObject(CE->getOperand(1), Aliases);
-      if (LHS && RHS)
-        return nullptr;
-      return LHS ? LHS : RHS;
-    }
-    case Instruction::Sub: {
-      if (findBaseObject(CE->getOperand(1), Aliases))
-        return nullptr;
-      return findBaseObject(CE->getOperand(0), Aliases);
-    }
-    case Instruction::IntToPtr:
-    case Instruction::PtrToInt:
-    case Instruction::BitCast:
-    case Instruction::GetElementPtr:
-      return findBaseObject(CE->getOperand(0), Aliases);
-    default:
-      break;
-    }
-  }
-  return nullptr;
-}
-
-const GlobalObject *GlobalIndirectSymbol::getBaseObject() const {
-  DenseSet<const GlobalAlias *> Aliases;
-  return findBaseObject(getOperand(0), Aliases);
-}
 
 //===----------------------------------------------------------------------===//
 // GlobalAlias Implementation
@@ -502,7 +461,8 @@ GlobalAlias *GlobalAlias::create(Type *Ty, unsigned AddressSpace,
 
 GlobalAlias *GlobalAlias::create(LinkageTypes Link, const Twine &Name,
                                  GlobalValue *Aliasee) {
-  return create(Aliasee->getValueType(), Aliasee->getAddressSpace(), Link, Name,
+  PointerType *PTy = Aliasee->getType();
+  return create(PTy->getElementType(), PTy->getAddressSpace(), Link, Name,
                 Aliasee);
 }
 

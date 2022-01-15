@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_DYNAMICREGISTERINFO_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_DYNAMICREGISTERINFO_H
+#ifndef lldb_DynamicRegisterInfo_h_
+#define lldb_DynamicRegisterInfo_h_
 
 #include <map>
 #include <vector>
@@ -17,10 +17,6 @@
 #include "lldb/lldb-private.h"
 
 class DynamicRegisterInfo {
-protected:
-  DynamicRegisterInfo(DynamicRegisterInfo &) = default;
-  DynamicRegisterInfo &operator=(DynamicRegisterInfo &) = default;
-
 public:
   DynamicRegisterInfo() = default;
 
@@ -28,6 +24,9 @@ public:
                       const lldb_private::ArchSpec &arch);
 
   virtual ~DynamicRegisterInfo() = default;
+
+  DynamicRegisterInfo(DynamicRegisterInfo &) = delete;
+  void operator=(DynamicRegisterInfo &) = delete;
 
   DynamicRegisterInfo(DynamicRegisterInfo &&info);
   DynamicRegisterInfo &operator=(DynamicRegisterInfo &&info);
@@ -60,17 +59,9 @@ public:
   uint32_t ConvertRegisterKindToRegisterNumber(uint32_t kind,
                                                uint32_t num) const;
 
-  const lldb_private::RegisterInfo *GetRegisterInfo(uint32_t kind,
-                                                    uint32_t num) const;
-
   void Dump() const;
 
   void Clear();
-
-  bool IsReconfigurable();
-
-  const lldb_private::RegisterInfo *
-  GetRegisterInfo(llvm::StringRef reg_name) const;
 
 protected:
   // Classes that inherit from DynamicRegisterInfo can see and modify these
@@ -83,9 +74,10 @@ protected:
   typedef std::vector<uint8_t> dwarf_opcode;
   typedef std::map<uint32_t, dwarf_opcode> dynamic_reg_size_map;
 
-  void MoveFrom(DynamicRegisterInfo &&info);
+  const lldb_private::RegisterInfo *
+  GetRegisterInfo(lldb_private::ConstString reg_name) const;
 
-  void ConfigureOffsets();
+  void MoveFrom(DynamicRegisterInfo &&info);
 
   reg_collection m_regs;
   set_collection m_sets;
@@ -97,6 +89,5 @@ protected:
   size_t m_reg_data_byte_size = 0u; // The number of bytes required to store
                                     // all registers
   bool m_finalized = false;
-  bool m_is_reconfigurable = false;
 };
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_DYNAMICREGISTERINFO_H
+#endif // lldb_DynamicRegisterInfo_h_

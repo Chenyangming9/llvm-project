@@ -74,8 +74,8 @@ bool ARMAsmPrinter::lowerOperand(const MachineOperand &MO,
   switch (MO.getType()) {
   default: llvm_unreachable("unknown operand type");
   case MachineOperand::MO_Register:
-    // Ignore all implicit register operands.
-    if (MO.isImplicit())
+    // Ignore all non-CPSR implicit register operands.
+    if (MO.isImplicit() && MO.getReg() != ARM::CPSR)
       return false;
     assert(!MO.getSubReg() && "Subregs should be eliminated!");
     MCOp = MCOperand::createReg(MO.getReg());
@@ -110,7 +110,7 @@ bool ARMAsmPrinter::lowerOperand(const MachineOperand &MO,
     APFloat Val = MO.getFPImm()->getValueAPF();
     bool ignored;
     Val.convert(APFloat::IEEEdouble(), APFloat::rmTowardZero, &ignored);
-    MCOp = MCOperand::createDFPImm(bit_cast<uint64_t>(Val.convertToDouble()));
+    MCOp = MCOperand::createFPImm(Val.convertToDouble());
     break;
   }
   case MachineOperand::MO_RegisterMask:
@@ -194,9 +194,9 @@ void ARMAsmPrinter::EmitSled(const MachineInstr &MI, SledKind Kind)
   //   BLX ip
   //   POP{ r0, lr }
   //
-  OutStreamer->emitCodeAlignment(4);
+  OutStreamer->EmitCodeAlignment(4);
   auto CurSled = OutContext.createTempSymbol("xray_sled_", true);
-  OutStreamer->emitLabel(CurSled);
+  OutStreamer->EmitLabel(CurSled);
   auto Target = OutContext.createTempSymbol();
 
   // Emit "B #20" instruction, which jumps over the next 24 bytes (because
@@ -207,10 +207,13 @@ void ARMAsmPrinter::EmitSled(const MachineInstr &MI, SledKind Kind)
   EmitToStreamer(*OutStreamer, MCInstBuilder(ARM::Bcc).addImm(20)
     .addImm(ARMCC::AL).addReg(0));
 
-  emitNops(NoopsInSledCount);
+  MCInst Noop;
+  Subtarget->getInstrInfo()->getNoop(Noop);
+  for (int8_t I = 0; I < NoopsInSledCount; I++)
+    OutStreamer->EmitInstruction(Noop, getSubtargetInfo());
 
-  OutStreamer->emitLabel(Target);
-  recordSled(CurSled, MI, Kind, 2);
+  OutStreamer->EmitLabel(Target);
+  recordSled(CurSled, MI, Kind);
 }
 
 void ARMAsmPrinter::LowerPATCHABLE_FUNCTION_ENTER(const MachineInstr &MI)

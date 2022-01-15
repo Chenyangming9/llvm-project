@@ -1,4 +1,4 @@
-//===-- BreakpointList.cpp ------------------------------------------------===//
+//===-- BreakpointList.cpp --------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,8 +9,6 @@
 #include "lldb/Breakpoint/BreakpointList.h"
 
 #include "lldb/Target/Target.h"
-
-#include "llvm/Support/Errc.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -26,7 +24,7 @@ BreakpointList::BreakpointList(bool is_internal)
     : m_mutex(), m_breakpoints(), m_next_break_id(0),
       m_is_internal(is_internal) {}
 
-BreakpointList::~BreakpointList() = default;
+BreakpointList::~BreakpointList() {}
 
 break_id_t BreakpointList::Add(BreakpointSP &bp_sp, bool notify) {
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
@@ -130,24 +128,22 @@ BreakpointSP BreakpointList::FindBreakpointByID(break_id_t break_id) const {
   return {};
 }
 
-llvm::Expected<std::vector<lldb::BreakpointSP>>
-BreakpointList::FindBreakpointsByName(const char *name) {
-  if (!name)
-    return llvm::createStringError(llvm::errc::invalid_argument,
-                                   "FindBreakpointsByName requires a name");
-
+bool BreakpointList::FindBreakpointsByName(const char *name,
+                                           BreakpointList &matching_bps) {
   Status error;
-  if (!BreakpointID::StringIsBreakpointName(llvm::StringRef(name), error))
-    return error.ToError();
+  if (!name)
+    return false;
 
-  std::vector<lldb::BreakpointSP> matching_bps;
+  if (!BreakpointID::StringIsBreakpointName(llvm::StringRef(name), error))
+    return false;
+
   for (BreakpointSP bkpt_sp : Breakpoints()) {
     if (bkpt_sp->MatchesName(name)) {
-      matching_bps.push_back(bkpt_sp);
+      matching_bps.Add(bkpt_sp, false);
     }
   }
 
-  return matching_bps;
+  return true;
 }
 
 void BreakpointList::Dump(Stream *s) const {

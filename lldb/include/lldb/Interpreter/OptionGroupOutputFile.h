@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONGROUPOUTPUTFILE_H
-#define LLDB_INTERPRETER_OPTIONGROUPOUTPUTFILE_H
+#ifndef liblldb_OptionGroupOutputFile_h_
+#define liblldb_OptionGroupOutputFile_h_
 
 #include "lldb/Interpreter/OptionValueBoolean.h"
 #include "lldb/Interpreter/OptionValueFileSpec.h"
@@ -20,12 +20,13 @@ class OptionGroupOutputFile : public OptionGroup {
 public:
   OptionGroupOutputFile();
 
-  ~OptionGroupOutputFile() override = default;
+  ~OptionGroupOutputFile() override;
 
   llvm::ArrayRef<OptionDefinition> GetDefinitions() override;
 
   Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
                         ExecutionContext *execution_context) override;
+  Status SetOptionValue(uint32_t, const char *, ExecutionContext *) = delete;
 
   void OptionParsingStarting(ExecutionContext *execution_context) override;
 
@@ -44,4 +45,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONGROUPOUTPUTFILE_H
+#endif // liblldb_OptionGroupOutputFile_h_

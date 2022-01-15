@@ -9,7 +9,3 @@ struct MergeExceptionSpec {
 #include "decls.h"
 
 MergeExceptionSpec mergeExceptionSpec2;
-
-template<typename T> struct DeductionGuide {};
-DeductionGuide() -> DeductionGuide<int>;
-DeductionGuide a;

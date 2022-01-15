@@ -34,7 +34,7 @@ using namespace llvm;
 
 #define DEBUG_TYPE "machine-ssaupdater"
 
-using AvailableValsTy = DenseMap<MachineBasicBlock *, Register>;
+using AvailableValsTy = DenseMap<MachineBasicBlock *, unsigned>;
 
 static AvailableValsTy &getAvailableVals(void *AV) {
   return *static_cast<AvailableValsTy*>(AV);
@@ -50,18 +50,15 @@ MachineSSAUpdater::~MachineSSAUpdater() {
 }
 
 /// Initialize - Reset this object to get ready for a new set of SSA
-/// updates.
-void MachineSSAUpdater::Initialize(const TargetRegisterClass *RC) {
+/// updates.  ProtoValue is the value used to name PHI nodes.
+void MachineSSAUpdater::Initialize(unsigned V) {
   if (!AV)
     AV = new AvailableValsTy();
   else
     getAvailableVals(AV).clear();
 
-  VRC = RC;
-}
-
-void MachineSSAUpdater::Initialize(Register V) {
-  Initialize(MRI->getRegClass(V));
+  VR = V;
+  VRC = MRI->getRegClass(VR);
 }
 
 /// HasValueForBlock - Return true if the MachineSSAUpdater already has a value for
@@ -72,25 +69,25 @@ bool MachineSSAUpdater::HasValueForBlock(MachineBasicBlock *BB) const {
 
 /// AddAvailableValue - Indicate that a rewritten value is available in the
 /// specified block with the specified value.
-void MachineSSAUpdater::AddAvailableValue(MachineBasicBlock *BB, Register V) {
+void MachineSSAUpdater::AddAvailableValue(MachineBasicBlock *BB, unsigned V) {
   getAvailableVals(AV)[BB] = V;
 }
 
 /// GetValueAtEndOfBlock - Construct SSA form, materializing a value that is
 /// live at the end of the specified block.
-Register MachineSSAUpdater::GetValueAtEndOfBlock(MachineBasicBlock *BB) {
+unsigned MachineSSAUpdater::GetValueAtEndOfBlock(MachineBasicBlock *BB) {
   return GetValueAtEndOfBlockInternal(BB);
 }
 
 static
-Register LookForIdenticalPHI(MachineBasicBlock *BB,
-        SmallVectorImpl<std::pair<MachineBasicBlock *, Register>> &PredValues) {
+unsigned LookForIdenticalPHI(MachineBasicBlock *BB,
+        SmallVectorImpl<std::pair<MachineBasicBlock *, unsigned>> &PredValues) {
   if (BB->empty())
-    return Register();
+    return 0;
 
   MachineBasicBlock::iterator I = BB->begin();
   if (!I->isPHI())
-    return Register();
+    return 0;
 
   AvailableValsTy AVals;
   for (unsigned i = 0, e = PredValues.size(); i != e; ++i)
@@ -98,7 +95,7 @@ Register LookForIdenticalPHI(MachineBasicBlock *BB,
   while (I != BB->end() && I->isPHI()) {
     bool Same = true;
     for (unsigned i = 1, e = I->getNumOperands(); i != e; i += 2) {
-      Register SrcReg = I->getOperand(i).getReg();
+      unsigned SrcReg = I->getOperand(i).getReg();
       MachineBasicBlock *SrcBB = I->getOperand(i+1).getMBB();
       if (AVals[SrcBB] != SrcReg) {
         Same = false;
@@ -109,7 +106,7 @@ Register LookForIdenticalPHI(MachineBasicBlock *BB,
       return I->getOperand(0).getReg();
     ++I;
   }
-  return Register();
+  return 0;
 }
 
 /// InsertNewDef - Insert an empty PHI or IMPLICIT_DEF instruction which define
@@ -121,7 +118,7 @@ MachineInstrBuilder InsertNewDef(unsigned Opcode,
                            const TargetRegisterClass *RC,
                            MachineRegisterInfo *MRI,
                            const TargetInstrInfo *TII) {
-  Register NewVR = MRI->createVirtualRegister(RC);
+  unsigned NewVR = MRI->createVirtualRegister(RC);
   return BuildMI(*BB, I, DebugLoc(), TII->get(Opcode), NewVR);
 }
 
@@ -143,7 +140,7 @@ MachineInstrBuilder InsertNewDef(unsigned Opcode,
 /// their respective blocks.  However, the use of X happens in the *middle* of
 /// a block.  Because of this, we need to insert a new PHI node in SomeBB to
 /// merge the appropriate values, and this value isn't live out of the block.
-Register MachineSSAUpdater::GetValueInMiddleOfBlock(MachineBasicBlock *BB) {
+unsigned MachineSSAUpdater::GetValueInMiddleOfBlock(MachineBasicBlock *BB) {
   // If there is no definition of the renamed variable in this block, just use
   // GetValueAtEndOfBlock to do our work.
   if (!HasValueForBlock(BB))
@@ -160,12 +157,14 @@ Register MachineSSAUpdater::GetValueInMiddleOfBlock(MachineBasicBlock *BB) {
 
   // Otherwise, we have the hard case.  Get the live-in values for each
   // predecessor.
-  SmallVector<std::pair<MachineBasicBlock*, Register>, 8> PredValues;
-  Register SingularValue;
+  SmallVector<std::pair<MachineBasicBlock*, unsigned>, 8> PredValues;
+  unsigned SingularValue = 0;
 
   bool isFirstPred = true;
-  for (MachineBasicBlock *PredBB : BB->predecessors()) {
-    Register PredVal = GetValueAtEndOfBlockInternal(PredBB);
+  for (MachineBasicBlock::pred_iterator PI = BB->pred_begin(),
+         E = BB->pred_end(); PI != E; ++PI) {
+    MachineBasicBlock *PredBB = *PI;
+    unsigned PredVal = GetValueAtEndOfBlockInternal(PredBB);
     PredValues.push_back(std::make_pair(PredBB, PredVal));
 
     // Compute SingularValue.
@@ -173,15 +172,15 @@ Register MachineSSAUpdater::GetValueInMiddleOfBlock(MachineBasicBlock *BB) {
       SingularValue = PredVal;
       isFirstPred = false;
     } else if (PredVal != SingularValue)
-      SingularValue = Register();
+      SingularValue = 0;
   }
 
   // Otherwise, if all the merged values are the same, just use it.
-  if (SingularValue)
+  if (SingularValue != 0)
     return SingularValue;
 
   // If an identical PHI is already in BB, just reuse it.
-  Register DupPHI = LookForIdenticalPHI(BB, PredValues);
+  unsigned DupPHI = LookForIdenticalPHI(BB, PredValues);
   if (DupPHI)
     return DupPHI;
 
@@ -205,7 +204,7 @@ Register MachineSSAUpdater::GetValueInMiddleOfBlock(MachineBasicBlock *BB) {
   if (InsertedPHIs) InsertedPHIs->push_back(InsertedPHI);
 
   LLVM_DEBUG(dbgs() << "  Inserted PHI: " << *InsertedPHI << "\n");
-  return InsertedPHI.getReg(0);
+  return InsertedPHI->getOperand(0).getReg();
 }
 
 static
@@ -223,7 +222,7 @@ MachineBasicBlock *findCorrespondingPred(const MachineInstr *MI,
 /// which use their value in the corresponding predecessor.
 void MachineSSAUpdater::RewriteUse(MachineOperand &U) {
   MachineInstr *UseMI = U.getParent();
-  Register NewVR;
+  unsigned NewVR = 0;
   if (UseMI->isPHI()) {
     MachineBasicBlock *SourceBB = findCorrespondingPred(UseMI, &U);
     NewVR = GetValueAtEndOfBlockInternal(SourceBB);
@@ -234,15 +233,15 @@ void MachineSSAUpdater::RewriteUse(MachineOperand &U) {
   U.setReg(NewVR);
 }
 
-namespace llvm {
-
 /// SSAUpdaterTraits<MachineSSAUpdater> - Traits for the SSAUpdaterImpl
 /// template, specialized for MachineSSAUpdater.
+namespace llvm {
+
 template<>
 class SSAUpdaterTraits<MachineSSAUpdater> {
 public:
   using BlkT = MachineBasicBlock;
-  using ValT = Register;
+  using ValT = unsigned;
   using PhiT = MachineInstr;
   using BlkSucc_iterator = MachineBasicBlock::succ_iterator;
 
@@ -282,16 +281,18 @@ public:
   /// vector.
   static void FindPredecessorBlocks(MachineBasicBlock *BB,
                                     SmallVectorImpl<MachineBasicBlock*> *Preds){
-    append_range(*Preds, BB->predecessors());
+    for (MachineBasicBlock::pred_iterator PI = BB->pred_begin(),
+           E = BB->pred_end(); PI != E; ++PI)
+      Preds->push_back(*PI);
   }
 
   /// GetUndefVal - Create an IMPLICIT_DEF instruction with a new register.
   /// Add it into the specified block and return the register.
-  static Register GetUndefVal(MachineBasicBlock *BB,
+  static unsigned GetUndefVal(MachineBasicBlock *BB,
                               MachineSSAUpdater *Updater) {
     // Insert an implicit_def to represent an undef value.
     MachineInstr *NewDef = InsertNewDef(TargetOpcode::IMPLICIT_DEF,
-                                        BB, BB->getFirstNonPHI(),
+                                        BB, BB->getFirstTerminator(),
                                         Updater->VRC, Updater->MRI,
                                         Updater->TII);
     return NewDef->getOperand(0).getReg();
@@ -299,7 +300,7 @@ public:
 
   /// CreateEmptyPHI - Create a PHI instruction that defines a new register.
   /// Add it into the specified block and return the register.
-  static Register CreateEmptyPHI(MachineBasicBlock *BB, unsigned NumPreds,
+  static unsigned CreateEmptyPHI(MachineBasicBlock *BB, unsigned NumPreds,
                                  MachineSSAUpdater *Updater) {
     MachineBasicBlock::iterator Loc = BB->empty() ? BB->end() : BB->begin();
     MachineInstr *PHI = InsertNewDef(TargetOpcode::PHI, BB, Loc,
@@ -310,7 +311,7 @@ public:
 
   /// AddPHIOperand - Add the specified value as an operand of the PHI for
   /// the specified predecessor block.
-  static void AddPHIOperand(MachineInstr *PHI, Register Val,
+  static void AddPHIOperand(MachineInstr *PHI, unsigned Val,
                             MachineBasicBlock *Pred) {
     MachineInstrBuilder(*Pred->getParent(), PHI).addReg(Val).addMBB(Pred);
   }
@@ -324,13 +325,13 @@ public:
 
   /// ValueIsPHI - Check if the instruction that defines the specified register
   /// is a PHI instruction.
-  static MachineInstr *ValueIsPHI(Register Val, MachineSSAUpdater *Updater) {
+  static MachineInstr *ValueIsPHI(unsigned Val, MachineSSAUpdater *Updater) {
     return InstrIsPHI(Updater->MRI->getVRegDef(Val));
   }
 
   /// ValueIsNewPHI - Like ValueIsPHI but also check if the PHI has no source
   /// operands, i.e., it was just added.
-  static MachineInstr *ValueIsNewPHI(Register Val, MachineSSAUpdater *Updater) {
+  static MachineInstr *ValueIsNewPHI(unsigned Val, MachineSSAUpdater *Updater) {
     MachineInstr *PHI = ValueIsPHI(Val, Updater);
     if (PHI && PHI->getNumOperands() <= 1)
       return PHI;
@@ -339,7 +340,7 @@ public:
 
   /// GetPHIValue - For the specified PHI instruction, return the register
   /// that it defines.
-  static Register GetPHIValue(MachineInstr *PHI) {
+  static unsigned GetPHIValue(MachineInstr *PHI) {
     return PHI->getOperand(0).getReg();
   }
 };
@@ -350,9 +351,9 @@ public:
 /// for the specified BB and if so, return it.  If not, construct SSA form by
 /// first calculating the required placement of PHIs and then inserting new
 /// PHIs where needed.
-Register MachineSSAUpdater::GetValueAtEndOfBlockInternal(MachineBasicBlock *BB){
+unsigned MachineSSAUpdater::GetValueAtEndOfBlockInternal(MachineBasicBlock *BB){
   AvailableValsTy &AvailableVals = getAvailableVals(AV);
-  if (Register V = AvailableVals[BB])
+  if (unsigned V = AvailableVals[BB])
     return V;
 
   SSAUpdaterImpl<MachineSSAUpdater> Impl(this, &AvailableVals, InsertedPHIs);

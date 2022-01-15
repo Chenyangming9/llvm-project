@@ -19,9 +19,14 @@ set( LLVM_LINK_COMPONENTS
 
 option(CLANG_PLUGIN_SUPPORT "Build clang with plugin support" ON)
 
-# Support plugins.
+# Support plugins. This must be before add_clang_executable as it reads
+# LLVM_NO_DEAD_STRIP.
 if(CLANG_PLUGIN_SUPPORT)
-  set(support_plugins SUPPORT_PLUGINS)
+  set(LLVM_NO_DEAD_STRIP 1)
+endif()
+
+if(NOT CLANG_BUILT_STANDALONE)
+  set(tablegen_deps intrinsics_gen)
 endif()
 
 add_clang_tool(clang
@@ -31,8 +36,7 @@ add_clang_tool(clang
   cc1gen_reproducer_main.cpp
 
   DEPENDS
-  intrinsics_gen
-  ${support_plugins}
+  ${tablegen_deps}
   )
 
 clang_target_link_libraries(clang
@@ -53,7 +57,7 @@ endif()
 
 # Support plugins.
 if(CLANG_PLUGIN_SUPPORT)
-  export_executable_symbols_for_plugins(clang)
+  export_executable_symbols(clang)
 endif()
 
 add_dependencies(clang clang-resource-headers)
@@ -93,7 +97,7 @@ endif()
 
 if(CLANG_ORDER_FILE AND
     (LLVM_LINKER_IS_LD64 OR LLVM_LINKER_IS_GOLD OR LLVM_LINKER_IS_LLD))
-  include(LLVMCheckLinkerFlag)
+  include(CheckLinkerFlag)
 
   if (LLVM_LINKER_IS_LD64)
     set(LINKER_ORDER_FILE_OPTION "-Wl,-order_file,${CLANG_ORDER_FILE}")
@@ -104,7 +108,7 @@ if(CLANG_ORDER_FILE AND
   endif()
 
   # This is a test to ensure the actual order file works with the linker.
-  llvm_check_linker_flag(CXX ${LINKER_ORDER_FILE_OPTION} LINKER_ORDER_FILE_WORKS)
+  check_linker_flag(${LINKER_ORDER_FILE_OPTION} LINKER_ORDER_FILE_WORKS)
 
   # Passing an empty order file disables some linker layout optimizations.
   # To work around this and enable workflows for re-linking when the order file
@@ -118,3 +122,7 @@ if(CLANG_ORDER_FILE AND
     set_target_properties(clang PROPERTIES LINK_DEPENDS ${CLANG_ORDER_FILE})
   endif()
 endif()
+
+if(WITH_POLLY AND LINK_POLLY_INTO_TOOLS)
+  target_link_libraries(clang PRIVATE Polly)
+endif(WITH_POLLY AND LINK_POLLY_INTO_TOOLS)

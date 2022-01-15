@@ -41,7 +41,7 @@ public:
   /// splitRegister - Move any user variables in OldReg to the live ranges in
   /// NewRegs where they are live. Mark the values as unavailable where no new
   /// register is live.
-  void splitRegister(Register OldReg, ArrayRef<Register> NewRegs,
+  void splitRegister(unsigned OldReg, ArrayRef<unsigned> NewRegs,
                      LiveIntervals &LIS);
 
   /// emitDebugValues - Emit new DBG_VALUE instructions reflecting the changes
@@ -56,6 +56,7 @@ private:
   bool runOnMachineFunction(MachineFunction &) override;
   void releaseMemory() override;
   void getAnalysisUsage(AnalysisUsage &) const override;
+  bool doInitialization(Module &) override;
 };
 
 } // end namespace llvm

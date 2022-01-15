@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SYMBOL_TAGGEDASTTYPE_H
-#define LLDB_SYMBOL_TAGGEDASTTYPE_H
+#ifndef liblldb_TaggedASTType_h_
+#define liblldb_TaggedASTType_h_
 
 #include "lldb/Symbol/CompilerType.h"
 
@@ -27,7 +27,7 @@ public:
 
   TaggedASTType() : CompilerType() {}
 
-  virtual ~TaggedASTType() = default;
+  virtual ~TaggedASTType() {}
 
   TaggedASTType<C> &operator=(const TaggedASTType<C> &tw) {
     CompilerType::operator=(tw);

@@ -50,9 +50,6 @@ def ExynosArithFn   : TIIPredicate<
                              MCReturnStatement<ExynosCheckShift>>,
                            MCOpcodeSwitchCase<
                              IsArithUnshiftOp.ValidOpcodes,
-                             MCReturnStatement<TruePred>>,
-                           MCOpcodeSwitchCase<
-                             IsArithImmOp.ValidOpcodes,
                              MCReturnStatement<TruePred>>],
                           MCReturnStatement<FalsePred>>>;
 def ExynosArithPred : MCSchedPredicate<ExynosArithFn>;
@@ -66,9 +63,6 @@ def ExynosLogicFn   : TIIPredicate<
                              MCReturnStatement<ExynosCheckShift>>,
                            MCOpcodeSwitchCase<
                              IsLogicUnshiftOp.ValidOpcodes,
-                             MCReturnStatement<TruePred>>,
-                           MCOpcodeSwitchCase<
-                             IsLogicImmOp.ValidOpcodes,
                              MCReturnStatement<TruePred>>],
                           MCReturnStatement<FalsePred>>>;
 def ExynosLogicPred : MCSchedPredicate<ExynosLogicFn>;
@@ -87,9 +81,6 @@ def ExynosLogicExFn   : TIIPredicate<
                                       CheckShiftBy8]>]>>>,
                              MCOpcodeSwitchCase<
                                IsLogicUnshiftOp.ValidOpcodes,
-                               MCReturnStatement<TruePred>>,
-                             MCOpcodeSwitchCase<
-                               IsLogicImmOp.ValidOpcodes,
                                MCReturnStatement<TruePred>>],
                             MCReturnStatement<FalsePred>>>;
 def ExynosLogicExPred : MCSchedPredicate<ExynosLogicExFn>;
@@ -109,10 +100,7 @@ def ExynosScaledIdxFn   : TIIPredicate<"isExynosScaledAddr",
 def ExynosScaledIdxPred : MCSchedPredicate<ExynosScaledIdxFn>;
 
 // Identify FP instructions.
-def ExynosFPPred : MCSchedPredicate<CheckAny<[CheckHForm,
-                                              CheckSForm,
-                                              CheckDForm,
-                                              CheckQForm]>>;
+def ExynosFPPred : MCSchedPredicate<CheckAny<[CheckDForm, CheckQForm]>>;
 
 // Identify 128-bit NEON instructions.
 def ExynosQFormPred : MCSchedPredicate<CheckQForm>;

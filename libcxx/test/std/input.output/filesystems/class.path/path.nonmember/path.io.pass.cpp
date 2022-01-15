@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
-// UNSUPPORTED: libcpp-has-no-localization
+// UNSUPPORTED: c++98, c++03
 
 // <filesystem>
 
@@ -22,7 +21,7 @@
 // operator>>(basic_istream<charT, traits>& is, path& p)
 //
 
-#include "filesystem_include.h"
+#include "filesystem_include.hpp"
 #include <type_traits>
 #include <sstream>
 #include <cassert>
@@ -30,8 +29,8 @@
 
 #include "test_macros.h"
 #include "test_iterators.h"
-#include "count_new.h"
-#include "filesystem_test_helper.h"
+#include "count_new.hpp"
+#include "filesystem_test_helper.hpp"
 
 MultiStringType InStr =  MKSTR("abcdefg/\"hijklmnop\"/qrstuvwxyz/123456789");
 MultiStringType OutStr = MKSTR("\"abcdefg/\\\"hijklmnop\\\"/qrstuvwxyz/123456789\"");
@@ -54,7 +53,7 @@ void doIOTest() {
   { // test input
     path p_in;
     auto& ret = ss >> p_in;
-    assert(p_in.native() == (const path::value_type*)InStr);
+    assert(p_in.native() == (const char*)InStr);
     assert(&ret == &ss);
   }
 }

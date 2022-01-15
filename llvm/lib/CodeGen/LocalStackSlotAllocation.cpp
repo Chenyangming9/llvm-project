@@ -28,7 +28,6 @@
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -79,11 +78,11 @@ namespace {
     using StackObjSet = SmallSetVector<int, 8>;
 
     void AdjustStackOffset(MachineFrameInfo &MFI, int FrameIdx, int64_t &Offset,
-                           bool StackGrowsDown, Align &MaxAlign);
+                           bool StackGrowsDown, unsigned &MaxAlign);
     void AssignProtectedObjSet(const StackObjSet &UnassignedObjs,
                                SmallSet<int, 16> &ProtectedObjs,
                                MachineFrameInfo &MFI, bool StackGrowsDown,
-                               int64_t &Offset, Align &MaxAlign);
+                               int64_t &Offset, unsigned &MaxAlign);
     void calculateFrameObjectOffsets(MachineFunction &Fn);
     bool insertFrameReferenceRegisters(MachineFunction &Fn);
 
@@ -117,7 +116,7 @@ bool LocalStackSlotPass::runOnMachineFunction(MachineFunction &MF) {
 
   // If the target doesn't want/need this pass, or if there are no locals
   // to consider, early exit.
-  if (LocalObjectCount == 0 || !TRI->requiresVirtualBaseRegisters(MF))
+  if (!TRI->requiresVirtualBaseRegisters(MF) || LocalObjectCount == 0)
     return true;
 
   // Make sure we have enough space to store the local offsets.
@@ -140,21 +139,22 @@ bool LocalStackSlotPass::runOnMachineFunction(MachineFunction &MF) {
 }
 
 /// AdjustStackOffset - Helper function used to adjust the stack frame offset.
-void LocalStackSlotPass::AdjustStackOffset(MachineFrameInfo &MFI, int FrameIdx,
-                                           int64_t &Offset, bool StackGrowsDown,
-                                           Align &MaxAlign) {
+void LocalStackSlotPass::AdjustStackOffset(MachineFrameInfo &MFI,
+                                           int FrameIdx, int64_t &Offset,
+                                           bool StackGrowsDown,
+                                           unsigned &MaxAlign) {
   // If the stack grows down, add the object size to find the lowest address.
   if (StackGrowsDown)
     Offset += MFI.getObjectSize(FrameIdx);
 
-  Align Alignment = MFI.getObjectAlign(FrameIdx);
+  unsigned Align = MFI.getObjectAlignment(FrameIdx);
 
   // If the alignment of this object is greater than that of the stack, then
   // increase the stack alignment to match.
-  MaxAlign = std::max(MaxAlign, Alignment);
+  MaxAlign = std::max(MaxAlign, Align);
 
   // Adjust to alignment boundary.
-  Offset = alignTo(Offset, Alignment);
+  Offset = (Offset + Align - 1) / Align * Align;
 
   int64_t LocalOffset = StackGrowsDown ? -Offset : Offset;
   LLVM_DEBUG(dbgs() << "Allocate FI(" << FrameIdx << ") to local offset "
@@ -172,11 +172,14 @@ void LocalStackSlotPass::AdjustStackOffset(MachineFrameInfo &MFI, int FrameIdx,
 
 /// AssignProtectedObjSet - Helper function to assign large stack objects (i.e.,
 /// those required to be close to the Stack Protector) to stack offsets.
-void LocalStackSlotPass::AssignProtectedObjSet(
-    const StackObjSet &UnassignedObjs, SmallSet<int, 16> &ProtectedObjs,
-    MachineFrameInfo &MFI, bool StackGrowsDown, int64_t &Offset,
-    Align &MaxAlign) {
-  for (int i : UnassignedObjs) {
+void LocalStackSlotPass::AssignProtectedObjSet(const StackObjSet &UnassignedObjs,
+                                           SmallSet<int, 16> &ProtectedObjs,
+                                           MachineFrameInfo &MFI,
+                                           bool StackGrowsDown, int64_t &Offset,
+                                           unsigned &MaxAlign) {
+  for (StackObjSet::const_iterator I = UnassignedObjs.begin(),
+        E = UnassignedObjs.end(); I != E; ++I) {
+    int i = *I;
     AdjustStackOffset(MFI, i, Offset, StackGrowsDown, MaxAlign);
     ProtectedObjs.insert(i);
   }
@@ -191,7 +194,7 @@ void LocalStackSlotPass::calculateFrameObjectOffsets(MachineFunction &Fn) {
   bool StackGrowsDown =
     TFI.getStackGrowthDirection() == TargetFrameLowering::StackGrowsDown;
   int64_t Offset = 0;
-  Align MaxAlign;
+  unsigned MaxAlign = 0;
 
   // Make sure that the stack protector comes before the local variables on the
   // stack.
@@ -217,8 +220,6 @@ void LocalStackSlotPass::calculateFrameObjectOffsets(MachineFunction &Fn) {
       if (MFI.isDeadObjectIndex(i))
         continue;
       if (StackProtectorFI == (int)i)
-        continue;
-      if (!TFI.isStackIdSafeForLocalArea(MFI.getStackID(i)))
         continue;
 
       switch (MFI.getObjectSSPLayout(i)) {
@@ -253,8 +254,6 @@ void LocalStackSlotPass::calculateFrameObjectOffsets(MachineFunction &Fn) {
     if (MFI.getStackProtectorIndex() == (int)i)
       continue;
     if (ProtectedObjs.count(i))
-      continue;
-    if (!TFI.isStackIdSafeForLocalArea(MFI.getStackID(i)))
       continue;
 
     AdjustStackOffset(MFI, i, Offset, StackGrowsDown, MaxAlign);
@@ -352,14 +351,6 @@ bool LocalStackSlotPass::insertFrameReferenceRegisters(MachineFunction &Fn) {
     assert(MFI.isObjectPreAllocated(FrameIdx) &&
            "Only pre-allocated locals expected!");
 
-    // We need to keep the references to the stack protector slot through frame
-    // index operands so that it gets resolved by PEI rather than this pass.
-    // This avoids accesses to the stack protector though virtual base
-    // registers, and forces PEI to address it using fp/sp/bp.
-    if (MFI.hasStackProtectorIndex() &&
-        FrameIdx == MFI.getStackProtectorIndex())
-      continue;
-
     LLVM_DEBUG(dbgs() << "Considering: " << MI);
 
     unsigned idx = 0;
@@ -414,16 +405,15 @@ bool LocalStackSlotPass::insertFrameReferenceRegisters(MachineFunction &Fn) {
       const TargetRegisterClass *RC = TRI->getPointerRegClass(*MF);
       BaseReg = Fn.getRegInfo().createVirtualRegister(RC);
 
-      LLVM_DEBUG(dbgs() << "  Materializing base register"
+      LLVM_DEBUG(dbgs() << "  Materializing base register " << BaseReg
                         << " at frame local offset "
-                        << LocalOffset + InstrOffset);
+                        << LocalOffset + InstrOffset << "\n");
 
       // Tell the target to insert the instruction to initialize
       // the base register.
       //            MachineBasicBlock::iterator InsertionPt = Entry->begin();
-      BaseReg = TRI->materializeFrameBaseRegister(Entry, FrameIdx, InstrOffset);
-
-      LLVM_DEBUG(dbgs() << " into " << printReg(BaseReg, TRI) << '\n');
+      TRI->materializeFrameBaseRegister(Entry, BaseReg, FrameIdx,
+                                        InstrOffset);
 
       // The base register already includes any offset specified
       // by the instruction, so account for that so it doesn't get

@@ -6,8 +6,6 @@ const char const *x10; // expected-error {{duplicate 'const' declaration specifi
 
 int x(*g); // expected-error {{use of undeclared identifier 'g'}}
 
-private int cplusplus_is_not_opencl; // expected-error {{expected unqualified-id}}
-
 struct Type {
   int Type;
 };
@@ -238,20 +236,22 @@ namespace PR5066 {
 
 namespace PR17255 {
 void foo() {
-  typename A::template B<> c; // expected-error {{use of undeclared identifier 'A'}}
+  typename A::template B<>; // expected-error {{use of undeclared identifier 'A'}}
+  // expected-error@-1 {{'template' keyword not permitted here}}
 #if __cplusplus <= 199711L
-  // expected-error@-2 {{'template' keyword outside of a template}}
+  // expected-error@-3 {{'template' keyword outside of a template}}
 #endif
+  // expected-error@-5 {{expected a qualified name after 'typename'}}
 }
 }
 
 namespace PR17567 {
   struct Foobar { // expected-note 2{{declared here}}
     FooBar(); // expected-error {{missing return type for function 'FooBar'; did you mean the constructor name 'Foobar'?}}
-    ~FooBar(); // expected-error {{undeclared identifier 'FooBar' in destructor name}}
+    ~FooBar(); // expected-error {{expected the class name after '~' to name a destructor}}
   };
   FooBar::FooBar() {} // expected-error {{undeclared}} expected-error {{missing return type}}
-  FooBar::~FooBar() {} // expected-error 2{{undeclared}}
+  FooBar::~FooBar() {} // expected-error {{undeclared}} expected-error {{expected the class name}}
 }
 
 namespace DuplicateFriend {

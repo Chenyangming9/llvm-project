@@ -12,8 +12,6 @@
 
 // const char* name() const;
 
-// UNSUPPORTED: no-rtti
-
 #include <typeindex>
 #include <string>
 #include <cassert>

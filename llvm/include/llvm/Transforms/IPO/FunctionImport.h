@@ -98,17 +98,15 @@ public:
   using ImportMapTy = StringMap<FunctionsToImportTy>;
 
   /// The set contains an entry for every global value the module exports.
-  using ExportSetTy = DenseSet<ValueInfo>;
+  using ExportSetTy = std::unordered_set<GlobalValue::GUID>;
 
   /// A function of this type is used to load modules referenced by the index.
   using ModuleLoaderTy =
       std::function<Expected<std::unique_ptr<Module>>(StringRef Identifier)>;
 
   /// Create a Function Importer.
-  FunctionImporter(const ModuleSummaryIndex &Index, ModuleLoaderTy ModuleLoader,
-                   bool ClearDSOLocalOnDeclarations)
-      : Index(Index), ModuleLoader(std::move(ModuleLoader)),
-        ClearDSOLocalOnDeclarations(ClearDSOLocalOnDeclarations) {}
+  FunctionImporter(const ModuleSummaryIndex &Index, ModuleLoaderTy ModuleLoader)
+      : Index(Index), ModuleLoader(std::move(ModuleLoader)) {}
 
   /// Import functions in Module \p M based on the supplied import list.
   Expected<bool> importFunctions(Module &M, const ImportMapTy &ImportList);
@@ -119,10 +117,6 @@ private:
 
   /// Factory function to load a Module for a given identifier
   ModuleLoaderTy ModuleLoader;
-
-  /// See the comment of ClearDSOLocalOnDeclarations in
-  /// Utils/FunctionImportUtils.h.
-  bool ClearDSOLocalOnDeclarations;
 };
 
 /// The function importing pass
@@ -214,10 +208,8 @@ std::error_code EmitImportsFiles(
     StringRef ModulePath, StringRef OutputFilename,
     const std::map<std::string, GVSummaryMapTy> &ModuleToSummariesForIndex);
 
-/// Resolve prevailing symbol linkages and constrain visibility (1. CanAutoHide,
-/// 2. consider visibility from other definitions for ELF) in \p TheModule based
-/// on the information recorded in the summaries during global summary-based
-/// analysis.
+/// Resolve prevailing symbol linkages in \p TheModule based on the information
+/// recorded in the summaries during global summary-based analysis.
 void thinLTOResolvePrevailingInModule(Module &TheModule,
                                       const GVSummaryMapTy &DefinedGlobals);
 

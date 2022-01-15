@@ -19,11 +19,12 @@
 #ifndef LLVM_C_OBJECT_H
 #define LLVM_C_OBJECT_H
 
-#include "llvm-c/ExternC.h"
 #include "llvm-c/Types.h"
 #include "llvm/Config/llvm-config.h"
 
-LLVM_C_EXTERN_C_BEGIN
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @defgroup LLVMCObject Object file reading and writing
@@ -225,6 +226,8 @@ LLVMBool LLVMIsSymbolIteratorAtEnd(LLVMObjectFileRef ObjectFile,
  * @}
  */
 
-LLVM_C_EXTERN_C_END
+#ifdef __cplusplus
+}
+#endif /* defined(__cplusplus) */
 
 #endif

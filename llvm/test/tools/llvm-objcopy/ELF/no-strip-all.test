@@ -37,7 +37,6 @@ Sections:
   - Name:  .alloc
     Type:  SHT_PROGBITS
     Flags: [ SHF_ALLOC ]
-Symbols: []
 
 # ALL: SectionHeaderCount: 3
 # ALL: Name: .alloc

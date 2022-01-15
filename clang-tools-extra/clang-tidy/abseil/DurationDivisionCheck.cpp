@@ -9,7 +9,6 @@
 #include "DurationDivisionCheck.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "clang/Lex/Lexer.h"
 
 namespace clang {
 namespace tidy {
@@ -17,26 +16,28 @@ namespace abseil {
 
 using namespace clang::ast_matchers;
 
-void DurationDivisionCheck::registerMatchers(MatchFinder *Finder) {
+void DurationDivisionCheck::registerMatchers(MatchFinder *finder) {
+  if (!getLangOpts().CPlusPlus)
+    return;
+
   const auto DurationExpr =
       expr(hasType(cxxRecordDecl(hasName("::absl::Duration"))));
-  Finder->addMatcher(
-      traverse(TK_AsIs,
-               implicitCastExpr(
-                   hasSourceExpression(ignoringParenCasts(
-                       cxxOperatorCallExpr(hasOverloadedOperatorName("/"),
-                                           hasArgument(0, DurationExpr),
-                                           hasArgument(1, DurationExpr))
-                           .bind("OpCall"))),
-                   hasImplicitDestinationType(qualType(unless(isInteger()))),
-                   unless(hasParent(cxxStaticCastExpr())),
-                   unless(hasParent(cStyleCastExpr())),
-                   unless(isInTemplateInstantiation()))),
+  finder->addMatcher(
+      implicitCastExpr(
+          hasSourceExpression(ignoringParenCasts(
+              cxxOperatorCallExpr(hasOverloadedOperatorName("/"),
+                                  hasArgument(0, DurationExpr),
+                                  hasArgument(1, DurationExpr))
+                  .bind("OpCall"))),
+          hasImplicitDestinationType(qualType(unless(isInteger()))),
+          unless(hasParent(cxxStaticCastExpr())),
+          unless(hasParent(cStyleCastExpr())),
+          unless(isInTemplateInstantiation())),
       this);
 }
 
-void DurationDivisionCheck::check(const MatchFinder::MatchResult &Result) {
-  const auto *OpCall = Result.Nodes.getNodeAs<CXXOperatorCallExpr>("OpCall");
+void DurationDivisionCheck::check(const MatchFinder::MatchResult &result) {
+  const auto *OpCall = result.Nodes.getNodeAs<CXXOperatorCallExpr>("OpCall");
   diag(OpCall->getOperatorLoc(),
        "operator/ on absl::Duration objects performs integer division; "
        "did you mean to use FDivDuration()?")
@@ -47,8 +48,8 @@ void DurationDivisionCheck::check(const MatchFinder::MatchResult &Result) {
              ", ")
       << FixItHint::CreateInsertion(
              Lexer::getLocForEndOfToken(
-                 Result.SourceManager->getSpellingLoc(OpCall->getEndLoc()), 0,
-                 *Result.SourceManager, Result.Context->getLangOpts()),
+                 result.SourceManager->getSpellingLoc(OpCall->getEndLoc()), 0,
+                 *result.SourceManager, result.Context->getLangOpts()),
              ")");
 }
 

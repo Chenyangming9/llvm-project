@@ -8,7 +8,6 @@
 
 #include "Solaris.h"
 #include "CommonArgs.h"
-#include "clang/Basic/LangStandard.h"
 #include "clang/Config/config.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Driver.h"
@@ -41,8 +40,7 @@ void solaris::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(II.getFilename());
 
   const char *Exec = Args.MakeArgString(getToolChain().GetProgramPath("as"));
-  C.addCommand(std::make_unique<Command>(JA, *this, ResponseFileSupport::None(),
-                                         Exec, CmdArgs, Inputs, Output));
+  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
 
 void solaris::Linker::ConstructJob(Compilation &C, const JobAction &JA,
@@ -88,28 +86,8 @@ void solaris::Linker::ConstructJob(Compilation &C, const JobAction &JA,
           Args.MakeArgString(getToolChain().GetFilePath("crt1.o")));
 
     CmdArgs.push_back(Args.MakeArgString(getToolChain().GetFilePath("crti.o")));
-
-    const Arg *Std = Args.getLastArg(options::OPT_std_EQ, options::OPT_ansi);
-    bool HaveAnsi = false;
-    const LangStandard *LangStd = nullptr;
-    if (Std) {
-      HaveAnsi = Std->getOption().matches(options::OPT_ansi);
-      if (!HaveAnsi)
-        LangStd = LangStandard::getLangStandardForName(Std->getValue());
-    }
-
-    const char *values_X = "values-Xa.o";
-    // Use values-Xc.o for -ansi, -std=c*, -std=iso9899:199409.
-    if (HaveAnsi || (LangStd && !LangStd->isGNUMode()))
-      values_X = "values-Xc.o";
-    CmdArgs.push_back(Args.MakeArgString(getToolChain().GetFilePath(values_X)));
-
-    const char *values_xpg = "values-xpg6.o";
-    // Use values-xpg4.o for -std=c90, -std=gnu90, -std=iso9899:199409.
-    if (LangStd && LangStd->getLanguage() == Language::C && !LangStd->isC99())
-      values_xpg = "values-xpg4.o";
     CmdArgs.push_back(
-        Args.MakeArgString(getToolChain().GetFilePath(values_xpg)));
+        Args.MakeArgString(getToolChain().GetFilePath("values-Xa.o")));
     CmdArgs.push_back(
         Args.MakeArgString(getToolChain().GetFilePath("crtbegin.o")));
   }
@@ -151,8 +129,7 @@ void solaris::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   getToolChain().addProfileRTLibs(Args, CmdArgs);
 
   const char *Exec = Args.MakeArgString(getToolChain().GetLinkerPath());
-  C.addCommand(std::make_unique<Command>(JA, *this, ResponseFileSupport::None(),
-                                         Exec, CmdArgs, Inputs, Output));
+  C.addCommand(llvm::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 }
 
 static StringRef getSolarisLibSuffix(const llvm::Triple &Triple) {
@@ -200,7 +177,6 @@ Solaris::Solaris(const Driver &D, const llvm::Triple &Triple,
 
 SanitizerMask Solaris::getSupportedSanitizers() const {
   const bool IsX86 = getTriple().getArch() == llvm::Triple::x86;
-  const bool IsX86_64 = getTriple().getArch() == llvm::Triple::x86_64;
   SanitizerMask Res = ToolChain::getSupportedSanitizers();
   // FIXME: Omit X86_64 until 64-bit support is figured out.
   if (IsX86) {
@@ -208,8 +184,6 @@ SanitizerMask Solaris::getSupportedSanitizers() const {
     Res |= SanitizerKind::PointerCompare;
     Res |= SanitizerKind::PointerSubtract;
   }
-  if (IsX86 || IsX86_64)
-    Res |= SanitizerKind::Function;
   Res |= SanitizerKind::Vptr;
   return Res;
 }
@@ -246,7 +220,7 @@ void Solaris::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
     CIncludeDirs.split(dirs, ":");
     for (StringRef dir : dirs) {
       StringRef Prefix =
-          llvm::sys::path::is_absolute(dir) ? "" : StringRef(D.SysRoot);
+          llvm::sys::path::is_absolute(dir) ? StringRef(D.SysRoot) : "";
       addExternCSystemInclude(DriverArgs, CC1Args, Prefix + dir);
     }
     return;
@@ -283,7 +257,9 @@ void Solaris::addLibStdCxxIncludePaths(
   const GCCVersion &Version = GCCInstallation.getVersion();
 
   // The primary search for libstdc++ supports multiarch variants.
-  addLibStdCXXIncludePaths(LibDir.str() + "/../include/c++/" + Version.Text,
-                           TripleStr, Multilib.includeSuffix(), DriverArgs,
-                           CC1Args);
+  addLibStdCXXIncludePaths(LibDir.str() + "/../include", "/c++/" + Version.Text,
+                           TripleStr,
+                           /*GCCMultiarchTriple*/ "",
+                           /*TargetMultiarchTriple*/ "",
+                           Multilib.includeSuffix(), DriverArgs, CC1Args);
 }

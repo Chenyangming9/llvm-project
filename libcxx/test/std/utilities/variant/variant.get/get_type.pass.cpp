@@ -7,10 +7,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
-// Throwing bad_variant_access is supported starting in macosx10.13
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11|12}} && !no-exceptions
+// XFAIL: dylib-has-no-bad_variant_access && !libcpp-no-exceptions
 
 // <variant>
 
@@ -23,7 +22,7 @@
 
 #include "test_macros.h"
 #include "test_workarounds.h"
-#include "variant_test_helpers.h"
+#include "variant_test_helpers.hpp"
 #include <cassert>
 #include <type_traits>
 #include <utility>

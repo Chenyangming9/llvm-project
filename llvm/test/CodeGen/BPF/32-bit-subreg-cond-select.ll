@@ -55,10 +55,6 @@ entry:
   %c.d = select i1 %cmp, i32 %c, i32 %d
   ret i32 %c.d
 }
-; CHECK-LABEL: select_cc_32
-; CHECK: r{{[0-9]+}} = w{{[0-9]+}}
-; CHECK-NOT: r{{[0-9]+}} <<= 32
-; CHECK-NOT: r{{[0-9]+}} >>= 32
 
 ; Function Attrs: norecurse nounwind readnone
 define dso_local i64 @select_cc_32_64(i32 %a, i32 %b, i64 %c, i64 %d) local_unnamed_addr #0 {
@@ -67,10 +63,6 @@ entry:
   %c.d = select i1 %cmp, i64 %c, i64 %d
   ret i64 %c.d
 }
-; CHECK-LABEL: select_cc_32_64
-; CHECK: r{{[0-9]+}} = w{{[0-9]+}}
-; CHECK-NOT: r{{[0-9]+}} <<= 32
-; CHECK-NOT: r{{[0-9]+}} >>= 32
 
 ; Function Attrs: norecurse nounwind readnone
 define dso_local i32 @select_cc_64_32(i64 %a, i64 %b, i32 %c, i32 %d) local_unnamed_addr #0 {
@@ -79,8 +71,6 @@ entry:
   %c.d = select i1 %cmp, i32 %c, i32 %d
   ret i32 %c.d
 }
-; CHECK-LABEL: select_cc_64_32
-; CHECK-NOT: r{{[0-9]+}} <<= 32
 
 ; Function Attrs: norecurse nounwind readnone
 define dso_local i32 @selecti_cc_32(i32 %a, i32 %c, i32 %d) local_unnamed_addr #0 {
@@ -89,10 +79,6 @@ entry:
   %c.d = select i1 %cmp, i32 %c, i32 %d
   ret i32 %c.d
 }
-; CHECK-LABEL: selecti_cc_32
-; CHECK: r{{[0-9]+}} = w{{[0-9]+}}
-; CHECK-NOT: r{{[0-9]+}} <<= 32
-; CHECK-NOT: r{{[0-9]+}} >>= 32
 
 ; Function Attrs: norecurse nounwind readnone
 define dso_local i64 @selecti_cc_32_64(i32 %a, i64 %c, i64 %d) local_unnamed_addr #0 {
@@ -101,10 +87,6 @@ entry:
   %c.d = select i1 %cmp, i64 %c, i64 %d
   ret i64 %c.d
 }
-; CHECK-LABEL: selecti_cc_32_64
-; CHECK: r{{[0-9]+}} = w{{[0-9]+}}
-; CHECK-NOT: r{{[0-9]+}} <<= 32
-; CHECK-NOT: r{{[0-9]+}} >>= 32
 
 ; Function Attrs: norecurse nounwind readnone
 define dso_local i32 @selecti_cc_64_32(i64 %a, i32 %c, i32 %d) local_unnamed_addr #0 {
@@ -113,5 +95,6 @@ entry:
   %c.d = select i1 %cmp, i32 %c, i32 %d
   ret i32 %c.d
 }
-; CHECK-LABEL: selecti_cc_64_32
+; There shouldn't be any type promotion, all of them are expected to be
+; eliminated by peephole optimization.
 ; CHECK-NOT: r{{[0-9]+}} <<= 32

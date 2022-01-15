@@ -38,12 +38,17 @@ public:
 }
 
 COFFDumper::COFFDumper(const object::COFFObjectFile &Obj) : Obj(Obj) {
-  if (const object::pe32_header *PE32Header = Obj.getPE32Header())
+  const object::pe32_header *PE32Header = nullptr;
+  Obj.getPE32Header(PE32Header);
+  if (PE32Header) {
     dumpOptionalHeader(PE32Header);
-  else if (const object::pe32plus_header *PE32PlusHeader =
-               Obj.getPE32PlusHeader())
-    dumpOptionalHeader(PE32PlusHeader);
-
+  } else {
+    const object::pe32plus_header *PE32PlusHeader = nullptr;
+    Obj.getPE32PlusHeader(PE32PlusHeader);
+    if (PE32PlusHeader) {
+      dumpOptionalHeader(PE32PlusHeader);
+    }
+  }
   dumpHeader();
   dumpSections(Obj.getNumberOfSections());
   dumpSymbols(Obj.getNumberOfSymbols());
@@ -82,8 +87,8 @@ template <typename T> void COFFDumper::dumpOptionalHeader(T OptionalHeader) {
       OptionalHeader->SizeOfHeapCommit;
   unsigned I = 0;
   for (auto &DestDD : YAMLObj.OptionalHeader->DataDirectories) {
-    const object::data_directory *DD = Obj.getDataDirectory(I++);
-    if (!DD)
+    const object::data_directory *DD;
+    if (Obj.getDataDirectory(I++, DD))
       continue;
     DestDD = COFF::DataDirectory();
     DestDD->RelativeVirtualAddress = DD->RelativeVirtualAddress;
@@ -100,21 +105,17 @@ static void
 initializeFileAndStringTable(const llvm::object::COFFObjectFile &Obj,
                              codeview::StringsAndChecksumsRef &SC) {
 
-  ExitOnError Err("invalid .debug$S section");
+  ExitOnError Err("Invalid .debug$S section!");
   // Iterate all .debug$S sections looking for the checksums and string table.
   // Exit as soon as both sections are found.
   for (const auto &S : Obj.sections()) {
     if (SC.hasStrings() && SC.hasChecksums())
       break;
 
-    Expected<StringRef> SectionNameOrErr = S.getName();
-    if (!SectionNameOrErr) {
-      consumeError(SectionNameOrErr.takeError());
-      continue;
-    }
-
+    StringRef SectionName;
+    S.getName(SectionName);
     ArrayRef<uint8_t> sectionData;
-    if ((*SectionNameOrErr) != ".debug$S")
+    if (SectionName != ".debug$S")
       continue;
 
     const object::coff_section *COFFSection = Obj.getCOFFSection(S);
@@ -139,10 +140,11 @@ void COFFDumper::dumpSections(unsigned NumSections) {
   codeview::StringsAndChecksumsRef SC;
   initializeFileAndStringTable(Obj, SC);
 
-  ExitOnError Err("invalid section table");
   StringMap<bool> SymbolUnique;
   for (const auto &S : Obj.symbols()) {
-    StringRef Name = Err(Obj.getSymbolName(Obj.getCOFFSymbol(S)));
+    object::COFFSymbolRef Symbol = Obj.getCOFFSymbol(S);
+    StringRef Name;
+    Obj.getSymbolName(Symbol, Name);
     StringMap<bool>::iterator It;
     bool Inserted;
     std::tie(It, Inserted) = SymbolUnique.insert(std::make_pair(Name, true));
@@ -153,12 +155,7 @@ void COFFDumper::dumpSections(unsigned NumSections) {
   for (const auto &ObjSection : Obj.sections()) {
     const object::coff_section *COFFSection = Obj.getCOFFSection(ObjSection);
     COFFYAML::Section NewYAMLSection;
-
-    if (Expected<StringRef> NameOrErr = ObjSection.getName())
-      NewYAMLSection.Name = *NameOrErr;
-    else
-      consumeError(NameOrErr.takeError());
-
+    ObjSection.getName(NewYAMLSection.Name);
     NewYAMLSection.Header.Characteristics = COFFSection->Characteristics;
     NewYAMLSection.Header.VirtualAddress = COFFSection->VirtualAddress;
     NewYAMLSection.Header.VirtualSize = COFFSection->VirtualSize;
@@ -276,13 +273,11 @@ dumpCLRTokenDefinition(COFFYAML::Symbol *Sym,
 }
 
 void COFFDumper::dumpSymbols(unsigned NumSymbols) {
-  ExitOnError Err("invalid symbol table");
-
   std::vector<COFFYAML::Symbol> &Symbols = YAMLObj.Symbols;
   for (const auto &S : Obj.symbols()) {
     object::COFFSymbolRef Symbol = Obj.getCOFFSymbol(S);
     COFFYAML::Symbol Sym;
-    Sym.Name = Err(Obj.getSymbolName(Symbol));
+    Obj.getSymbolName(Symbol, Sym.Name);
     Sym.SimpleType = COFF::SymbolBaseType(Symbol.getBaseType());
     Sym.ComplexType = COFF::SymbolComplexType(Symbol.getComplexType());
     Sym.Header.StorageClass = Symbol.getStorageClass();

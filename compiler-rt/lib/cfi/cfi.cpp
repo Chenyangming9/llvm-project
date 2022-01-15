@@ -322,14 +322,14 @@ void InitShadow() {
 THREADLOCAL int in_loader;
 BlockingMutex shadow_update_lock(LINKER_INITIALIZED);
 
-void EnterLoader() NO_THREAD_SAFETY_ANALYSIS {
+void EnterLoader() {
   if (in_loader == 0) {
     shadow_update_lock.Lock();
   }
   ++in_loader;
 }
 
-void ExitLoader() NO_THREAD_SAFETY_ANALYSIS {
+void ExitLoader() {
   CHECK(in_loader > 0);
   --in_loader;
   UpdateShadow();
@@ -379,7 +379,7 @@ void InitializeFlags() {
   __ubsan::RegisterUbsanFlags(&ubsan_parser, uf);
   RegisterCommonFlags(&ubsan_parser);
 
-  const char *ubsan_default_options = __ubsan_default_options();
+  const char *ubsan_default_options = __ubsan::MaybeCallUbsanDefaultOptions();
   ubsan_parser.ParseString(ubsan_default_options);
   ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
 #endif

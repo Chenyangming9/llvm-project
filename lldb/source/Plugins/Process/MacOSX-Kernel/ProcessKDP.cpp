@@ -1,4 +1,4 @@
-//===-- ProcessKDP.cpp ----------------------------------------------------===//
+//===-- ProcessKDP.cpp ------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cerrno>
-#include <cstdlib>
+#include <errno.h>
+#include <stdlib.h>
 
 #include <memory>
 #include <mutex>
@@ -50,17 +50,13 @@
 using namespace lldb;
 using namespace lldb_private;
 
-LLDB_PLUGIN_DEFINE_ADV(ProcessKDP, ProcessMacOSXKernel)
-
 namespace {
 
-#define LLDB_PROPERTIES_processkdp
-#include "ProcessKDPProperties.inc"
+static constexpr PropertyDefinition g_properties[] = {
+    {"packet-timeout", OptionValue::eTypeUInt64, true, 5, NULL, {},
+     "Specify the default packet timeout in seconds."}};
 
-enum {
-#define LLDB_PROPERTIES_processkdp
-#include "ProcessKDPPropertiesEnum.inc"
-};
+enum { ePropertyPacketTimeout };
 
 class PluginProperties : public Properties {
 public:
@@ -70,15 +66,15 @@ public:
 
   PluginProperties() : Properties() {
     m_collection_sp = std::make_shared<OptionValueProperties>(GetSettingName());
-    m_collection_sp->Initialize(g_processkdp_properties);
+    m_collection_sp->Initialize(g_properties);
   }
 
-  virtual ~PluginProperties() = default;
+  virtual ~PluginProperties() {}
 
   uint64_t GetPacketTimeout() {
-    const uint32_t idx = ePropertyKDPPacketTimeout;
+    const uint32_t idx = ePropertyPacketTimeout;
     return m_collection_sp->GetPropertyAtIndexAsUInt64(
-        NULL, idx, g_processkdp_properties[idx].default_uint_value);
+        NULL, idx, g_properties[idx].default_uint_value);
   }
 };
 
@@ -111,8 +107,7 @@ void ProcessKDP::Terminate() {
 
 lldb::ProcessSP ProcessKDP::CreateInstance(TargetSP target_sp,
                                            ListenerSP listener_sp,
-                                           const FileSpec *crash_file_path,
-                                           bool can_connect) {
+                                           const FileSpec *crash_file_path) {
   lldb::ProcessSP process_sp;
   if (crash_file_path == NULL)
     process_sp = std::make_shared<ProcessKDP>(target_sp, listener_sp);
@@ -218,7 +213,7 @@ bool ProcessKDP::GetHostArchitecture(ArchSpec &arch) {
   return false;
 }
 
-Status ProcessKDP::DoConnectRemote(llvm::StringRef remote_url) {
+Status ProcessKDP::DoConnectRemote(Stream *strm, llvm::StringRef remote_url) {
   Status error;
 
   // Don't let any JIT happen when doing KDP as we can't allocate memory and we
@@ -251,7 +246,7 @@ Status ProcessKDP::DoConnectRemote(llvm::StringRef remote_url) {
     const uint16_t reply_port = socket.GetLocalPortNumber();
 
     if (reply_port != 0) {
-      m_comm.SetConnection(std::move(conn_up));
+      m_comm.SetConnection(conn_up.release());
 
       if (m_comm.SendRequestReattach(reply_port)) {
         if (m_comm.SendRequestConnect(reply_port, reply_port,
@@ -399,7 +394,8 @@ void ProcessKDP::DidAttach(ArchSpec &process_arch) {
   Process::DidAttach(process_arch);
 
   Log *log(ProcessKDPLog::GetLogIfAllCategoriesSet(KDP_LOG_PROCESS));
-  LLDB_LOGF(log, "ProcessKDP::DidAttach()");
+  if (log)
+    log->Printf("ProcessKDP::DidAttach()");
   if (GetID() != LLDB_INVALID_PROCESS_ID) {
     GetHostArchitecture(process_arch);
   }
@@ -433,13 +429,15 @@ Status ProcessKDP::DoResume() {
     const StateType thread_resume_state =
         kernel_thread_sp->GetTemporaryResumeState();
 
-    LLDB_LOGF(log, "ProcessKDP::DoResume() thread_resume_state = %s",
-              StateAsCString(thread_resume_state));
+    if (log)
+      log->Printf("ProcessKDP::DoResume() thread_resume_state = %s",
+                  StateAsCString(thread_resume_state));
     switch (thread_resume_state) {
     case eStateSuspended:
       // Nothing to do here when a thread will stay suspended we just leave the
       // CPU mask bit set to zero for the thread
-      LLDB_LOGF(log, "ProcessKDP::DoResume() = suspended???");
+      if (log)
+        log->Printf("ProcessKDP::DoResume() = suspended???");
       break;
 
     case eStateStepping: {
@@ -447,9 +445,9 @@ Status ProcessKDP::DoResume() {
           kernel_thread_sp->GetRegisterContext());
 
       if (reg_ctx_sp) {
-        LLDB_LOGF(
-            log,
-            "ProcessKDP::DoResume () reg_ctx_sp->HardwareSingleStep (true);");
+        if (log)
+          log->Printf(
+              "ProcessKDP::DoResume () reg_ctx_sp->HardwareSingleStep (true);");
         reg_ctx_sp->HardwareSingleStep(true);
         resume = true;
       } else {
@@ -464,8 +462,9 @@ Status ProcessKDP::DoResume() {
           kernel_thread_sp->GetRegisterContext());
 
       if (reg_ctx_sp) {
-        LLDB_LOGF(log, "ProcessKDP::DoResume () reg_ctx_sp->HardwareSingleStep "
-                       "(false);");
+        if (log)
+          log->Printf("ProcessKDP::DoResume () reg_ctx_sp->HardwareSingleStep "
+                      "(false);");
         reg_ctx_sp->HardwareSingleStep(false);
         resume = true;
       } else {
@@ -482,7 +481,8 @@ Status ProcessKDP::DoResume() {
   }
 
   if (resume) {
-    LLDB_LOGF(log, "ProcessKDP::DoResume () sending resume");
+    if (log)
+      log->Printf("ProcessKDP::DoResume () sending resume");
 
     if (m_comm.SendRequestResume()) {
       m_async_broadcaster.BroadcastEvent(eBroadcastBitAsyncContinue);
@@ -508,8 +508,8 @@ lldb::ThreadSP ProcessKDP::GetKernelThread() {
   return thread_sp;
 }
 
-bool ProcessKDP::DoUpdateThreadList(ThreadList &old_thread_list,
-                                    ThreadList &new_thread_list) {
+bool ProcessKDP::UpdateThreadList(ThreadList &old_thread_list,
+                                  ThreadList &new_thread_list) {
   // locker will keep a mutex locked until it goes out of scope
   Log *log(ProcessKDPLog::GetLogIfAllCategoriesSet(KDP_LOG_THREAD));
   LLDB_LOGV(log, "pid = {0}", GetID());
@@ -550,7 +550,8 @@ Status ProcessKDP::DoHalt(bool &caused_stop) {
 Status ProcessKDP::DoDetach(bool keep_stopped) {
   Status error;
   Log *log(ProcessKDPLog::GetLogIfAllCategoriesSet(KDP_LOG_PROCESS));
-  LLDB_LOGF(log, "ProcessKDP::DoDetach(keep_stopped = %i)", keep_stopped);
+  if (log)
+    log->Printf("ProcessKDP::DoDetach(keep_stopped = %i)", keep_stopped);
 
   if (m_comm.IsRunning()) {
     // We are running and we can't interrupt a running kernel, so we need to
@@ -645,9 +646,6 @@ Status ProcessKDP::DoDeallocateMemory(lldb::addr_t addr) {
 }
 
 Status ProcessKDP::EnableBreakpointSite(BreakpointSite *bp_site) {
-  if (bp_site->HardwareRequired())
-    return Status("Hardware breakpoints are not supported.");
-
   if (m_comm.LocalBreakpointsAreSupported()) {
     Status error;
     if (!bp_site->IsEnabled()) {
@@ -736,7 +734,8 @@ void ProcessKDP::DebuggerInitialize(lldb_private::Debugger &debugger) {
 bool ProcessKDP::StartAsyncThread() {
   Log *log(ProcessKDPLog::GetLogIfAllCategoriesSet(KDP_LOG_PROCESS));
 
-  LLDB_LOGF(log, "ProcessKDP::StartAsyncThread ()");
+  if (log)
+    log->Printf("ProcessKDP::StartAsyncThread ()");
 
   if (m_async_thread.IsJoinable())
     return true;
@@ -756,7 +755,8 @@ bool ProcessKDP::StartAsyncThread() {
 void ProcessKDP::StopAsyncThread() {
   Log *log(ProcessKDPLog::GetLogIfAllCategoriesSet(KDP_LOG_PROCESS));
 
-  LLDB_LOGF(log, "ProcessKDP::StopAsyncThread ()");
+  if (log)
+    log->Printf("ProcessKDP::StopAsyncThread ()");
 
   m_async_broadcaster.BroadcastEvent(eBroadcastBitAsyncThreadShouldExit);
 
@@ -771,10 +771,10 @@ void *ProcessKDP::AsyncThread(void *arg) {
   const lldb::pid_t pid = process->GetID();
 
   Log *log(ProcessKDPLog::GetLogIfAllCategoriesSet(KDP_LOG_PROCESS));
-  LLDB_LOGF(log,
-            "ProcessKDP::AsyncThread (arg = %p, pid = %" PRIu64
-            ") thread starting...",
-            arg, pid);
+  if (log)
+    log->Printf("ProcessKDP::AsyncThread (arg = %p, pid = %" PRIu64
+                ") thread starting...",
+                arg, pid);
 
   ListenerSP listener_sp(Listener::MakeListener("ProcessKDP::AsyncThread"));
   EventSP event_sp;
@@ -786,16 +786,16 @@ void *ProcessKDP::AsyncThread(void *arg) {
       desired_event_mask) {
     bool done = false;
     while (!done) {
-      LLDB_LOGF(log,
-                "ProcessKDP::AsyncThread (pid = %" PRIu64
-                ") listener.WaitForEvent (NULL, event_sp)...",
-                pid);
+      if (log)
+        log->Printf("ProcessKDP::AsyncThread (pid = %" PRIu64
+                    ") listener.WaitForEvent (NULL, event_sp)...",
+                    pid);
       if (listener_sp->GetEvent(event_sp, llvm::None)) {
         uint32_t event_type = event_sp->GetType();
-        LLDB_LOGF(log,
-                  "ProcessKDP::AsyncThread (pid = %" PRIu64
-                  ") Got an event of type: %d...",
-                  pid, event_type);
+        if (log)
+          log->Printf("ProcessKDP::AsyncThread (pid = %" PRIu64
+                      ") Got an event of type: %d...",
+                      pid, event_type);
 
         // When we are running, poll for 1 second to try and get an exception
         // to indicate the process has stopped. If we don't get one, check to
@@ -834,38 +834,38 @@ void *ProcessKDP::AsyncThread(void *arg) {
           } break;
 
           case eBroadcastBitAsyncThreadShouldExit:
-            LLDB_LOGF(log,
-                      "ProcessKDP::AsyncThread (pid = %" PRIu64
-                      ") got eBroadcastBitAsyncThreadShouldExit...",
-                      pid);
+            if (log)
+              log->Printf("ProcessKDP::AsyncThread (pid = %" PRIu64
+                          ") got eBroadcastBitAsyncThreadShouldExit...",
+                          pid);
             done = true;
             is_running = false;
             break;
 
           default:
-            LLDB_LOGF(log,
-                      "ProcessKDP::AsyncThread (pid = %" PRIu64
-                      ") got unknown event 0x%8.8x",
-                      pid, event_type);
+            if (log)
+              log->Printf("ProcessKDP::AsyncThread (pid = %" PRIu64
+                          ") got unknown event 0x%8.8x",
+                          pid, event_type);
             done = true;
             is_running = false;
             break;
           }
         } while (is_running);
       } else {
-        LLDB_LOGF(log,
-                  "ProcessKDP::AsyncThread (pid = %" PRIu64
-                  ") listener.WaitForEvent (NULL, event_sp) => false",
-                  pid);
+        if (log)
+          log->Printf("ProcessKDP::AsyncThread (pid = %" PRIu64
+                      ") listener.WaitForEvent (NULL, event_sp) => false",
+                      pid);
         done = true;
       }
     }
   }
 
-  LLDB_LOGF(log,
-            "ProcessKDP::AsyncThread (arg = %p, pid = %" PRIu64
-            ") thread exiting...",
-            arg, pid);
+  if (log)
+    log->Printf("ProcessKDP::AsyncThread (arg = %p, pid = %" PRIu64
+                ") thread exiting...",
+                arg, pid);
 
   process->m_async_thread.Reset();
   return NULL;
@@ -877,7 +877,7 @@ private:
   OptionGroupUInt64 m_command_byte;
   OptionGroupString m_packet_data;
 
-  Options *GetOptions() override { return &m_option_group; }
+  virtual Options *GetOptions() { return &m_option_group; }
 
 public:
   CommandObjectProcessKDPPacketSend(CommandInterpreter &interpreter)
@@ -902,14 +902,15 @@ public:
     m_option_group.Finalize();
   }
 
-  ~CommandObjectProcessKDPPacketSend() = default;
+  ~CommandObjectProcessKDPPacketSend() {}
 
-  bool DoExecute(Args &command, CommandReturnObject &result) override {
+  bool DoExecute(Args &command, CommandReturnObject &result) {
     const size_t argc = command.GetArgumentCount();
     if (argc == 0) {
       if (!m_command_byte.GetOptionValue().OptionWasSet()) {
         result.AppendError(
             "the --command option must be set to a valid command byte");
+        result.SetStatus(eReturnStatusFailed);
       } else {
         const uint64_t command_byte =
             m_command_byte.GetOptionValue().GetUInt64Value(0);
@@ -932,6 +933,7 @@ public:
                                                "even number of ASCII hex "
                                                "characters: '%s'",
                                                ascii_hex_bytes_cstr);
+                  result.SetStatus(eReturnStatusFailed);
                   return false;
                 }
                 payload_bytes.resize(ascii_hex_bytes_cstr_len / 2);
@@ -941,6 +943,7 @@ public:
                                                "ASCII hex characters (no "
                                                "spaces or hex prefixes): '%s'",
                                                ascii_hex_bytes_cstr);
+                  result.SetStatus(eReturnStatusFailed);
                   return false;
                 }
               }
@@ -967,25 +970,30 @@ public:
                 else
                   result.AppendErrorWithFormat("unknown error 0x%8.8x",
                                                error.GetError());
+                result.SetStatus(eReturnStatusFailed);
                 return false;
               }
             } else {
               result.AppendErrorWithFormat("process must be stopped in order "
                                            "to send KDP packets, state is %s",
                                            StateAsCString(state));
+              result.SetStatus(eReturnStatusFailed);
             }
           } else {
             result.AppendError("invalid process");
+            result.SetStatus(eReturnStatusFailed);
           }
         } else {
           result.AppendErrorWithFormat("invalid command byte 0x%" PRIx64
                                        ", valid values are 1 - 255",
                                        command_byte);
+          result.SetStatus(eReturnStatusFailed);
         }
       }
     } else {
       result.AppendErrorWithFormat("'%s' takes no arguments, only options.",
                                    m_cmd_name.c_str());
+      result.SetStatus(eReturnStatusFailed);
     }
     return false;
   }
@@ -1003,7 +1011,7 @@ public:
         CommandObjectSP(new CommandObjectProcessKDPPacketSend(interpreter)));
   }
 
-  ~CommandObjectProcessKDPPacket() = default;
+  ~CommandObjectProcessKDPPacket() {}
 };
 
 class CommandObjectMultiwordProcessKDP : public CommandObjectMultiword {
@@ -1017,7 +1025,7 @@ public:
                                  interpreter)));
   }
 
-  ~CommandObjectMultiwordProcessKDP() = default;
+  ~CommandObjectMultiwordProcessKDP() {}
 };
 
 CommandObject *ProcessKDP::GetPluginCommandObject() {

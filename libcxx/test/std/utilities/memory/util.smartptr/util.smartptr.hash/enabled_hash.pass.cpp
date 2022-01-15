@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <memory>
 
@@ -15,9 +15,7 @@
 
 #include <memory>
 
-#include <functional>
-
-#include "poisoned_hash_helper.h"
+#include "poisoned_hash_helper.hpp"
 
 #include "test_macros.h"
 

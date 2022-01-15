@@ -1,4 +1,4 @@
-// Check that -gno-column-info gets added to the cc1 line:
+// Check that -dwarf-column-info does not get added to the cc1 line:
 // 1) When -gcodeview is present via the clang or clang++ driver
 // 2) When /Z7 is present via the cl driver.
 
@@ -11,8 +11,5 @@
 // RUN: %clang_cl -### --target=x86_64-windows-msvc /c /Z7 -- %s 2> %t2
 // RUN: FileCheck < %t2 %s
 
-// CHECK: "-gno-column-info"
-
-// RUN: %clang_cl -### /Z7 -gcolumn-info -- %s 2>&1 | FileCheck --check-prefix=COLUMN %s
-
-// COLUMN-NOT: "-gno-column-info"
+// CHECK: "-cc1"
+// CHECK-NOT: "-dwarf-column-info"

@@ -2,8 +2,6 @@
 
 void clang_analyzer_eval(int);
 
-#define nil ((id)0)
-
 typedef unsigned long NSUInteger;
 typedef signed char BOOL;
 typedef struct _NSZone NSZone;
@@ -311,15 +309,4 @@ void testNoReportWhenReceiverNil(NSMutableArray *array, int b) {
   // When view is nil, subviews is also nil so there should be no warning
   // here either.
   [subviews addObject:view]; // no-warning
-}
-
-NSString *getStringFromString(NSString *string) {
-  if (!string)
-    return nil;
-  return @"New String";
-}
-void testInlinedDefensiveCheck(NSMutableDictionary *dict, id obj) {
-  // The check in getStringFromString() is not a good indication
-  // that 'obj' can be nil in this context.
-  dict[obj] = getStringFromString(obj); // no-warning
 }

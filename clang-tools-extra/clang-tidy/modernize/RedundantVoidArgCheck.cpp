@@ -20,13 +20,13 @@ namespace {
 
 // Determine if the given QualType is a nullary function or pointer to same.
 bool protoTypeHasNoParms(QualType QT) {
-  if (const auto *PT = QT->getAs<PointerType>()) {
+  if (auto PT = QT->getAs<PointerType>()) {
     QT = PT->getPointeeType();
   }
   if (auto *MPT = QT->getAs<MemberPointerType>()) {
     QT = MPT->getPointeeType();
   }
-  if (const auto *FP = QT->getAs<FunctionProtoType>()) {
+  if (auto FP = QT->getAs<FunctionProtoType>()) {
     return FP->getNumParams() == 0;
   }
   return false;
@@ -44,6 +44,9 @@ const char LambdaId[] = "lambda";
 } // namespace
 
 void RedundantVoidArgCheck::registerMatchers(MatchFinder *Finder) {
+  if (!getLangOpts().CPlusPlus)
+    return;
+
   Finder->addMatcher(functionDecl(parameterCountIs(0), unless(isImplicit()),
                                   unless(isInstantiated()), unless(isExternC()))
                          .bind(FunctionId),

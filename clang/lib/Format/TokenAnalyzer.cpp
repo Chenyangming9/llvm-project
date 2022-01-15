@@ -64,16 +64,11 @@ TokenAnalyzer::TokenAnalyzer(const Environment &Env, const FormatStyle &Style)
 
 std::pair<tooling::Replacements, unsigned> TokenAnalyzer::process() {
   tooling::Replacements Result;
-  llvm::SpecificBumpPtrAllocator<FormatToken> Allocator;
-  IdentifierTable IdentTable(getFormattingLangOpts(Style));
-  FormatTokenLexer Lex(Env.getSourceManager(), Env.getFileID(),
-                       Env.getFirstStartColumn(), Style, Encoding, Allocator,
+  FormatTokenLexer Tokens(Env.getSourceManager(), Env.getFileID(),
+                          Env.getFirstStartColumn(), Style, Encoding);
 
-                       IdentTable);
-  ArrayRef<FormatToken *> Toks(Lex.lex());
-  SmallVector<FormatToken *, 10> Tokens(Toks.begin(), Toks.end());
-  UnwrappedLineParser Parser(Style, Lex.getKeywords(),
-                             Env.getFirstStartColumn(), Tokens, *this);
+  UnwrappedLineParser Parser(Style, Tokens.getKeywords(),
+                             Env.getFirstStartColumn(), Tokens.lex(), *this);
   Parser.parse();
   assert(UnwrappedLines.rbegin()->empty());
   unsigned Penalty = 0;
@@ -81,14 +76,14 @@ std::pair<tooling::Replacements, unsigned> TokenAnalyzer::process() {
     LLVM_DEBUG(llvm::dbgs() << "Run " << Run << "...\n");
     SmallVector<AnnotatedLine *, 16> AnnotatedLines;
 
-    TokenAnnotator Annotator(Style, Lex.getKeywords());
+    TokenAnnotator Annotator(Style, Tokens.getKeywords());
     for (unsigned i = 0, e = UnwrappedLines[Run].size(); i != e; ++i) {
       AnnotatedLines.push_back(new AnnotatedLine(UnwrappedLines[Run][i]));
       Annotator.annotate(*AnnotatedLines.back());
     }
 
     std::pair<tooling::Replacements, unsigned> RunResult =
-        analyze(Annotator, AnnotatedLines, Lex);
+        analyze(Annotator, AnnotatedLines, Tokens);
 
     LLVM_DEBUG({
       llvm::dbgs() << "Replacements for run " << Run << ":\n";

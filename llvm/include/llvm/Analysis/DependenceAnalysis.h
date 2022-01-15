@@ -40,13 +40,12 @@
 #define LLVM_ANALYSIS_DEPENDENCEANALYSIS_H
 
 #include "llvm/ADT/SmallBitVector.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/PassManager.h"
 #include "llvm/Pass.h"
 
 namespace llvm {
-  class AAResults;
-  template <typename T> class ArrayRef;
+template <typename T> class ArrayRef;
   class Loop;
   class LoopInfo;
   class ScalarEvolution;
@@ -271,7 +270,7 @@ namespace llvm {
   ///
   class DependenceInfo {
   public:
-    DependenceInfo(Function *F, AAResults *AA, ScalarEvolution *SE,
+    DependenceInfo(Function *F, AliasAnalysis *AA, ScalarEvolution *SE,
                    LoopInfo *LI)
         : AA(AA), SE(SE), LI(LI), F(F) {}
 
@@ -334,7 +333,7 @@ namespace llvm {
     Function *getFunction() const { return F; }
 
   private:
-    AAResults *AA;
+    AliasAnalysis *AA;
     ScalarEvolution *SE;
     LoopInfo *LI;
     Function *F;
@@ -925,32 +924,8 @@ namespace llvm {
     void updateDirection(Dependence::DVEntry &Level,
                          const Constraint &CurConstraint) const;
 
-    /// Given a linear access function, tries to recover subscripts
-    /// for each dimension of the array element access.
     bool tryDelinearize(Instruction *Src, Instruction *Dst,
                         SmallVectorImpl<Subscript> &Pair);
-
-    /// Tries to delinearize access function for a fixed size multi-dimensional
-    /// array, by deriving subscripts from GEP instructions. Returns true upon
-    /// success and false otherwise.
-    bool tryDelinearizeFixedSize(Instruction *Src, Instruction *Dst,
-                                 const SCEV *SrcAccessFn,
-                                 const SCEV *DstAccessFn,
-                                 SmallVectorImpl<const SCEV *> &SrcSubscripts,
-                                 SmallVectorImpl<const SCEV *> &DstSubscripts);
-
-    /// Tries to delinearize access function for a multi-dimensional array with
-    /// symbolic runtime sizes.
-    /// Returns true upon success and false otherwise.
-    bool tryDelinearizeParametricSize(
-        Instruction *Src, Instruction *Dst, const SCEV *SrcAccessFn,
-        const SCEV *DstAccessFn, SmallVectorImpl<const SCEV *> &SrcSubscripts,
-        SmallVectorImpl<const SCEV *> &DstSubscripts);
-
-    /// checkSubscript - Helper function for checkSrcSubscript and
-    /// checkDstSubscript to avoid duplicate code
-    bool checkSubscript(const SCEV *Expr, const Loop *LoopNest,
-                        SmallBitVector &Loops, bool IsSrc);
   }; // class DependenceInfo
 
   /// AnalysisPass to compute dependence information in a function
@@ -979,7 +954,10 @@ namespace llvm {
   class DependenceAnalysisWrapperPass : public FunctionPass {
   public:
     static char ID; // Class identification, replacement for typeinfo
-    DependenceAnalysisWrapperPass();
+    DependenceAnalysisWrapperPass() : FunctionPass(ID) {
+      initializeDependenceAnalysisWrapperPassPass(
+          *PassRegistry::getPassRegistry());
+    }
 
     bool runOnFunction(Function &F) override;
     void releaseMemory() override;

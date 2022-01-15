@@ -14,14 +14,15 @@
 #define LLVM_CODEGEN_PARALLELCG_H
 
 #include "llvm/Support/CodeGen.h"
+#include "llvm/Target/TargetMachine.h"
+
 #include <functional>
-#include <memory>
 
 namespace llvm {
 
 template <typename T> class ArrayRef;
 class Module;
-class TargetMachine;
+class TargetOptions;
 class raw_pwrite_stream;
 
 /// Split M into OSs.size() partitions, and generate code for each. Takes a
@@ -32,11 +33,14 @@ class raw_pwrite_stream;
 ///
 /// Writes bitcode for individual partitions into output streams in BCOSs, if
 /// BCOSs is not empty.
-void splitCodeGen(
-    Module &M, ArrayRef<raw_pwrite_stream *> OSs,
-    ArrayRef<llvm::raw_pwrite_stream *> BCOSs,
-    const std::function<std::unique_ptr<TargetMachine>()> &TMFactory,
-    CodeGenFileType FileType = CGFT_ObjectFile, bool PreserveLocals = false);
+///
+/// \returns M if OSs.size() == 1, otherwise returns std::unique_ptr<Module>().
+std::unique_ptr<Module>
+splitCodeGen(std::unique_ptr<Module> M, ArrayRef<raw_pwrite_stream *> OSs,
+             ArrayRef<llvm::raw_pwrite_stream *> BCOSs,
+             const std::function<std::unique_ptr<TargetMachine>()> &TMFactory,
+             TargetMachine::CodeGenFileType FileType = TargetMachine::CGFT_ObjectFile,
+             bool PreserveLocals = false);
 
 } // namespace llvm
 

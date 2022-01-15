@@ -5,13 +5,12 @@
 
 int main()
 {
-  //need to use an OpenMP construct so that OMPT will be initialized
+  //need to use an OpenMP construct so that OMPT will be initalized
   #pragma omp parallel num_threads(1)
     print_ids(0);
 
   omp_nest_lock_t nest_lock;
-  printf("%" PRIu64 ": &nest_lock: %" PRIu64 "\n",
-         ompt_get_thread_data()->value, (ompt_wait_id_t)(uintptr_t)&nest_lock);
+  printf("%" PRIu64 ": &nest_lock: %lli\n", ompt_get_thread_data()->value, (ompt_wait_id_t)(uintptr_t) &nest_lock);
   omp_init_nest_lock(&nest_lock);
   print_fuzzy_address(1);
   omp_set_nest_lock(&nest_lock);

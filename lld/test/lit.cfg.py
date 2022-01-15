@@ -18,7 +18,8 @@ config.name = 'lld'
 
 # testFormat: The test format to use to interpret tests.
 #
-# For now we require '&&' between commands, until they get globally killed and the test runner updated.
+# For now we require '&&' between commands, until they get globally killed and
+# the test runner updated.
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files.
@@ -86,14 +87,11 @@ config.environment['LLD_IN_TEST'] = '1'
 # Indirectly check if the mt.exe Microsoft utility exists by searching for
 # cvtres, which always accompanies it.  Alternatively, check if we can use
 # libxml2 to merge manifests.
-if (lit.util.which('cvtres', config.environment['PATH']) or
-        config.have_libxml2):
+if (lit.util.which('cvtres', config.environment['PATH']) or 
+        config.llvm_libxml2_enabled):
     config.available_features.add('manifest_tool')
 
-if config.have_libxar:
-    config.available_features.add('xar')
-
-if config.have_libxml2:
+if config.llvm_libxml2_enabled:
     config.available_features.add('libxml2')
 
 if config.have_dia_sdk:
@@ -104,20 +102,11 @@ if config.sizeof_void_p == 8:
 
 tar_executable = lit.util.which('tar', config.environment['PATH'])
 if tar_executable:
-    env = os.environ
-    env['LANG'] = 'C'
     tar_version = subprocess.Popen(
         [tar_executable, '--version'],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        env=env)
+        env={'LANG': 'C'})
     sout, _ = tar_version.communicate()
     if 'GNU tar' in sout.decode():
         config.available_features.add('gnutar')
-
-# ELF tests expect the default target for ld.lld to be ELF.
-if config.ld_lld_default_mingw:
-    config.excludes.append('ELF')
-
-if config.ld_lld_default_nostart_stop_gc:
-    config.available_features.add('default-nostart-stop-gc')

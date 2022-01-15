@@ -10,4 +10,4 @@ bar:
 
         .weak zed
         .type zed, @object
-        zed = 0x1288
+        zed = 0x1000

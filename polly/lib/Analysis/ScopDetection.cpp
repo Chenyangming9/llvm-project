@@ -74,17 +74,10 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Value.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include <algorithm>
 #include <cassert>
-#include <memory>
-#include <stack>
-#include <string>
-#include <utility>
-#include <vector>
 
 using namespace llvm;
 using namespace polly;
@@ -358,7 +351,7 @@ ScopDetection::ScopDetection(Function &F, const DominatorTree &DT,
 
   // Prune non-profitable regions.
   for (auto &DIt : DetectionContextMap) {
-    DetectionContext &DC = *DIt.getSecond().get();
+    auto &DC = DIt.getSecond();
     if (DC.Log.hasErrors())
       continue;
     if (!ValidRegions.count(&DC.CurRegion))
@@ -389,7 +382,7 @@ ScopDetection::ScopDetection(Function &F, const DominatorTree &DT,
 
 template <class RR, typename... Args>
 inline bool ScopDetection::invalid(DetectionContext &Context, bool Assert,
-                                   Args &&...Arguments) const {
+                                   Args &&... Arguments) const {
   if (!Context.Verifying) {
     RejectLog &Log = Context.Log;
     std::shared_ptr<RR> RejectReason = std::make_shared<RR>(Arguments...);
@@ -411,17 +404,12 @@ bool ScopDetection::isMaxRegionInScop(const Region &R, bool Verify) const {
     return false;
 
   if (Verify) {
-    BBPair P = getBBPairForRegion(&R);
-    std::unique_ptr<DetectionContext> &Entry = DetectionContextMap[P];
-
-    // Free previous DetectionContext for the region and create and verify a new
-    // one. Be sure that the DetectionContext is not still used by a ScopInfop.
-    // Due to changes but CodeGeneration of another Scop, the Region object and
-    // the BBPair might not match anymore.
-    Entry = std::make_unique<DetectionContext>(const_cast<Region &>(R), AA,
-                                               /*Verifying=*/false);
-
-    return isValidRegion(*Entry.get());
+    DetectionContextMap.erase(getBBPairForRegion(&R));
+    const auto &It = DetectionContextMap.insert(std::make_pair(
+        getBBPairForRegion(&R),
+        DetectionContext(const_cast<Region &>(R), AA, false /*verifying*/)));
+    DetectionContext &Context = It.first->second;
+    return isValidRegion(Context);
   }
 
   return true;
@@ -480,7 +468,8 @@ bool ScopDetection::onlyValidRequiredInvariantLoads(
 
     for (auto NonAffineRegion : Context.NonAffineSubRegionSet) {
       if (isSafeToLoadUnconditionally(Load->getPointerOperand(),
-                                      Load->getType(), Load->getAlign(), DL))
+                                      Load->getType(), Load->getAlignment(),
+                                      DL))
         continue;
 
       if (NonAffineRegion->contains(Load) &&
@@ -706,8 +695,6 @@ bool ScopDetection::isValidCallInst(CallInst &CI,
       return false;
     case FMRB_DoesNotAccessMemory:
     case FMRB_OnlyReadsMemory:
-    case FMRB_OnlyReadsInaccessibleMem:
-    case FMRB_OnlyReadsInaccessibleOrArgMem:
       // Implicitly disable delinearization since we have an unknown
       // accesses with an unknown access function.
       Context.HasUnknownAccess = true;
@@ -717,7 +704,6 @@ bool ScopDetection::isValidCallInst(CallInst &CI,
       return true;
     case FMRB_OnlyReadsArgumentPointees:
     case FMRB_OnlyAccessesArgumentPointees:
-    case FMRB_OnlyWritesArgumentPointees:
       for (const auto &Arg : CI.arg_operands()) {
         if (!Arg->getType()->isPointerTy())
           continue;
@@ -741,9 +727,7 @@ bool ScopDetection::isValidCallInst(CallInst &CI,
       // pointer into the alias set.
       Context.AST.addUnknown(&CI);
       return true;
-    case FMRB_OnlyWritesMemory:
-    case FMRB_OnlyWritesInaccessibleMem:
-    case FMRB_OnlyWritesInaccessibleOrArgMem:
+    case FMRB_DoesNotReadMemory:
     case FMRB_OnlyAccessesInaccessibleMem:
     case FMRB_OnlyAccessesInaccessibleOrArgMem:
       return false;
@@ -1140,7 +1124,7 @@ bool ScopDetection::isValidAccess(Instruction *Inst, const SCEV *AF,
   AAMDNodes AATags;
   Inst->getAAMetadata(AATags);
   AliasSet &AS = Context.AST.getAliasSetFor(
-      MemoryLocation::getBeforeOrAfter(BP->getValue(), AATags));
+      MemoryLocation(BP->getValue(), MemoryLocation::UnknownSize, AATags));
 
   if (!AS.isMustAlias()) {
     if (PollyUseRuntimeAliasChecks) {
@@ -1409,12 +1393,10 @@ Region *ScopDetection::expandRegion(Region &R) {
   LLVM_DEBUG(dbgs() << "\tExpanding " << R.getNameStr() << "\n");
 
   while (ExpandedRegion) {
-    BBPair P = getBBPairForRegion(ExpandedRegion.get());
-    std::unique_ptr<DetectionContext> &Entry = DetectionContextMap[P];
-    Entry = std::make_unique<DetectionContext>(*ExpandedRegion, AA,
-                                               /*Verifying=*/false);
-    DetectionContext &Context = *Entry.get();
-
+    const auto &It = DetectionContextMap.insert(std::make_pair(
+        getBBPairForRegion(ExpandedRegion.get()),
+        DetectionContext(*ExpandedRegion, AA, false /*verifying*/)));
+    DetectionContext &Context = It.first->second;
     LLVM_DEBUG(dbgs() << "\t\tTrying " << ExpandedRegion->getNameStr() << "\n");
     // Only expand when we did not collect errors.
 
@@ -1424,7 +1406,7 @@ Region *ScopDetection::expandRegion(Region &R) {
       //  - if false, .tbd. => stop  (should this really end the loop?)
       if (!allBlocksValid(Context) || Context.Log.hasErrors()) {
         removeCachedResults(*ExpandedRegion);
-        DetectionContextMap.erase(P);
+        DetectionContextMap.erase(It.first);
         break;
       }
 
@@ -1432,7 +1414,7 @@ Region *ScopDetection::expandRegion(Region &R) {
       // far).
       if (LastValidRegion) {
         removeCachedResults(*LastValidRegion);
-        DetectionContextMap.erase(P);
+        DetectionContextMap.erase(getBBPairForRegion(LastValidRegion.get()));
       }
       LastValidRegion = std::move(ExpandedRegion);
 
@@ -1443,7 +1425,7 @@ Region *ScopDetection::expandRegion(Region &R) {
     } else {
       // Create and test the next greater region (if any)
       removeCachedResults(*ExpandedRegion);
-      DetectionContextMap.erase(P);
+      DetectionContextMap.erase(It.first);
       ExpandedRegion =
           std::unique_ptr<Region>(ExpandedRegion->getExpandedRegion());
     }
@@ -1481,10 +1463,9 @@ void ScopDetection::removeCachedResults(const Region &R) {
 }
 
 void ScopDetection::findScops(Region &R) {
-  std::unique_ptr<DetectionContext> &Entry =
-      DetectionContextMap[getBBPairForRegion(&R)];
-  Entry = std::make_unique<DetectionContext>(R, AA, /*Verifying=*/false);
-  DetectionContext &Context = *Entry.get();
+  const auto &It = DetectionContextMap.insert(std::make_pair(
+      getBBPairForRegion(&R), DetectionContext(R, AA, false /*verifying*/)));
+  DetectionContext &Context = It.first->second;
 
   bool RegionIsValid = false;
   if (!PollyProcessUnprofitable && regionWithoutLoops(R, LI))
@@ -1671,8 +1652,7 @@ bool ScopDetection::isValidRegion(DetectionContext &Context) const {
                                             CurRegion.getExit(), DbgLoc);
   }
 
-  if (!OnlyRegion.empty() &&
-      !CurRegion.getEntry()->getName().count(OnlyRegion)) {
+  if (!CurRegion.getEntry()->getName().count(OnlyRegion)) {
     LLVM_DEBUG({
       dbgs() << "Region entry does not match -polly-region-only";
       dbgs() << "\n";
@@ -1719,7 +1699,7 @@ void ScopDetection::printLocations(Function &F) {
 
 void ScopDetection::emitMissedRemarks(const Function &F) {
   for (auto &DIt : DetectionContextMap) {
-    DetectionContext &DC = *DIt.getSecond().get();
+    auto &DC = DIt.getSecond();
     if (DC.Log.hasErrors())
       emitRejectionRemarks(DIt.getFirst(), DC.Log, ORE);
   }
@@ -1845,7 +1825,7 @@ ScopDetection::getDetectionContext(const Region *R) const {
   auto DCMIt = DetectionContextMap.find(getBBPairForRegion(R));
   if (DCMIt == DetectionContextMap.end())
     return nullptr;
-  return DCMIt->second.get();
+  return &DCMIt->second;
 }
 
 const RejectLog *ScopDetection::lookupRejectionLog(const Region *R) const {

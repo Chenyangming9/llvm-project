@@ -9,7 +9,6 @@
 #ifndef LLD_COFF_CONFIG_H
 #define LLD_COFF_CONFIG_H
 
-#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Object/COFF.h"
@@ -30,7 +29,6 @@ class DefinedRelative;
 class StringChunk;
 class Symbol;
 class InputFile;
-class SectionChunk;
 
 // Short aliases.
 static const auto AMD64 = llvm::COFF::IMAGE_FILE_MACHINE_AMD64;
@@ -74,19 +72,10 @@ enum class DebugType {
   Fixup = 0x4,  /// Relocation Table
 };
 
-enum GuardCFLevel {
-  Off     = 0x0,
-  CF      = 0x1, /// Emit gfids tables
-  LongJmp = 0x2, /// Emit longjmp tables
-  EHCont  = 0x4, /// Emit ehcont tables
-  All     = 0x7  /// Enable all protections
-};
-
-enum class ICFLevel {
-  None,
-  Safe, // Safe ICF for all sections.
-  All,  // Aggressive ICF for code, but safe ICF for data, similar to MSVC's
-        // behavior.
+enum class GuardCFLevel {
+  Off,
+  NoLongJmp, // Emit gfids but no longjmp tables
+  Full,      // Enable all protections.
 };
 
 // Global configuration.
@@ -104,7 +93,7 @@ struct Configuration {
   std::string importName;
   bool demangle = true;
   bool doGC = true;
-  ICFLevel doICF = ICFLevel::None;
+  bool doICF = true;
   bool tailMerge;
   bool relocatable = true;
   bool forceMultiple = false;
@@ -114,14 +103,10 @@ struct Configuration {
   bool debugDwarf = false;
   bool debugGHashes = false;
   bool debugSymtab = false;
-  bool driver = false;
-  bool driverUponly = false;
-  bool driverWdm = false;
   bool showTiming = false;
   bool showSummary = false;
   unsigned debugTypes = static_cast<unsigned>(DebugType::None);
   std::vector<std::string> natvisFiles;
-  llvm::StringMap<std::string> namedStreams;
   llvm::SmallString<128> pdbAltPath;
   llvm::SmallString<128> pdbPath;
   llvm::SmallString<128> pdbSourcePath;
@@ -137,7 +122,6 @@ struct Configuration {
   bool dll = false;
   StringRef implib;
   std::vector<Export> exports;
-  bool hadExplicitExports;
   std::set<std::string> delayLoads;
   std::map<std::string, int> dllOrder;
   Symbol *delayLoadHelper = nullptr;
@@ -145,19 +129,18 @@ struct Configuration {
   bool saveTemps = false;
 
   // /guard:cf
-  int guardCF = GuardCFLevel::Off;
+  GuardCFLevel guardCF = GuardCFLevel::Off;
 
   // Used for SafeSEH.
   bool safeSEH = false;
   Symbol *sehTable = nullptr;
   Symbol *sehCount = nullptr;
-  bool noSEH = false;
 
   // Used for /opt:lldlto=N
   unsigned ltoo = 2;
 
   // Used for /opt:lldltojobs=N
-  std::string thinLTOJobs;
+  unsigned thinLTOJobs = 0;
   // Used for /opt:lldltopartitions=N
   unsigned ltoPartitions = 1;
 
@@ -165,11 +148,6 @@ struct Configuration {
   StringRef ltoCache;
   // Used for /opt:lldltocachepolicy=policy
   llvm::CachePruningPolicy ltoCachePolicy;
-
-  // Used for /opt:[no]ltonewpassmanager
-  bool ltoNewPassManager = false;
-  // Used for /opt:[no]ltodebugpassmanager
-  bool ltoDebugPassManager = false;
 
   // Used for /merge:from=to (e.g. /merge:.rdata=.text)
   std::map<StringRef, StringRef> merge;
@@ -200,9 +178,6 @@ struct Configuration {
   llvm::StringMap<int> order;
 
   // Used for /lldmap.
-  std::string lldmapFile;
-
-  // Used for /map.
   std::string mapFile;
 
   // Used for /thinlto-index-only:
@@ -214,24 +189,6 @@ struct Configuration {
   // Used for /thinlto-object-suffix-replace:
   std::pair<llvm::StringRef, llvm::StringRef> thinLTOObjectSuffixReplace;
 
-  // Used for /lto-obj-path:
-  llvm::StringRef ltoObjPath;
-
-  // Used for /lto-cs-profile-generate:
-  bool ltoCSProfileGenerate = false;
-
-  // Used for /lto-cs-profile-path
-  llvm::StringRef ltoCSProfileFile;
-
-  // Used for /call-graph-ordering-file:
-  llvm::MapVector<std::pair<const SectionChunk *, const SectionChunk *>,
-                  uint64_t>
-      callGraphProfile;
-  bool callGraphProfileSort = false;
-
-  // Used for /print-symbol-order:
-  StringRef printSymbolOrder;
-
   uint64_t align = 4096;
   uint64_t imageBase = -1;
   uint64_t fileAlign = 512;
@@ -241,17 +198,12 @@ struct Configuration {
   uint64_t heapCommit = 4096;
   uint32_t majorImageVersion = 0;
   uint32_t minorImageVersion = 0;
-  // If changing the default os/subsys version here, update the default in
-  // the MinGW driver accordingly.
   uint32_t majorOSVersion = 6;
   uint32_t minorOSVersion = 0;
-  uint32_t majorSubsystemVersion = 6;
-  uint32_t minorSubsystemVersion = 0;
   uint32_t timestamp = 0;
   uint32_t functionPadMin = 0;
   bool dynamicBase = true;
   bool allowBind = true;
-  bool cetCompat = false;
   bool nxCompat = true;
   bool allowIsolation = true;
   bool terminalServerAware = true;
@@ -262,8 +214,6 @@ struct Configuration {
   bool warnMissingOrderSymbol = true;
   bool warnLocallyDefinedImported = true;
   bool warnDebugInfoUnusable = true;
-  bool warnLongSectionNames = true;
-  bool warnStdcallFixup = true;
   bool incremental = true;
   bool integrityCheck = false;
   bool killAt = false;
@@ -272,9 +222,6 @@ struct Configuration {
   bool swaprunNet = false;
   bool thinLTOEmitImportsFiles;
   bool thinLTOIndexOnly;
-  bool autoImport = false;
-  bool pseudoRelocs = false;
-  bool stdcallFixup = false;
 };
 
 extern Configuration *config;

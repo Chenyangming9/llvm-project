@@ -11,10 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "X86ShuffleDecodeConstantPool.h"
-#include "MCTargetDesc/X86ShuffleDecode.h"
+#include "Utils/X86ShuffleDecode.h"
 #include "llvm/ADT/APInt.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Constants.h"
 
 //===----------------------------------------------------------------------===//
@@ -36,17 +34,17 @@ static bool extractConstantMask(const Constant *C, unsigned MaskEltSizeInBits,
   //
   //   <4 x i32> <i32 -2147483648, i32 -2147483648,
   //              i32 -2147483648, i32 -2147483648>
-  auto *CstTy = dyn_cast<FixedVectorType>(C->getType());
-  if (!CstTy)
+  Type *CstTy = C->getType();
+  if (!CstTy->isVectorTy())
     return false;
 
-  Type *CstEltTy = CstTy->getElementType();
+  Type *CstEltTy = CstTy->getVectorElementType();
   if (!CstEltTy->isIntegerTy())
     return false;
 
   unsigned CstSizeInBits = CstTy->getPrimitiveSizeInBits();
   unsigned CstEltSizeInBits = CstTy->getScalarSizeInBits();
-  unsigned NumCstElts = CstTy->getNumElements();
+  unsigned NumCstElts = CstTy->getVectorNumElements();
 
   assert((CstSizeInBits % MaskEltSizeInBits) == 0 &&
          "Unaligned shuffle mask size");
@@ -187,12 +185,13 @@ void DecodeVPERMILPMask(const Constant *C, unsigned ElSize, unsigned Width,
 }
 
 void DecodeVPERMIL2PMask(const Constant *C, unsigned M2Z, unsigned ElSize,
-                         unsigned Width, SmallVectorImpl<int> &ShuffleMask) {
+                         unsigned Width,
+                         SmallVectorImpl<int> &ShuffleMask) {
   Type *MaskTy = C->getType();
   unsigned MaskTySize = MaskTy->getPrimitiveSizeInBits();
   (void)MaskTySize;
-  assert((MaskTySize == 128 || MaskTySize == 256) && Width >= MaskTySize &&
-         "Unexpected vector size.");
+  assert((MaskTySize == 128 || MaskTySize == 256) &&
+         Width >= MaskTySize && "Unexpected vector size.");
 
   // The shuffle mask requires elements the same size as the target.
   APInt UndefElts;
@@ -293,4 +292,55 @@ void DecodeVPPERMMask(const Constant *C, unsigned Width,
   }
 }
 
-} // namespace llvm
+void DecodeVPERMVMask(const Constant *C, unsigned ElSize, unsigned Width,
+                      SmallVectorImpl<int> &ShuffleMask) {
+  assert((Width == 128 || Width == 256 || Width == 512) &&
+         C->getType()->getPrimitiveSizeInBits() >= Width &&
+         "Unexpected vector size.");
+  assert((ElSize == 8 || ElSize == 16 || ElSize == 32 || ElSize == 64) &&
+         "Unexpected vector element size.");
+
+  // The shuffle mask requires elements the same size as the target.
+  APInt UndefElts;
+  SmallVector<uint64_t, 64> RawMask;
+  if (!extractConstantMask(C, ElSize, UndefElts, RawMask))
+    return;
+
+  unsigned NumElts = Width / ElSize;
+
+  for (unsigned i = 0; i != NumElts; ++i) {
+    if (UndefElts[i]) {
+      ShuffleMask.push_back(SM_SentinelUndef);
+      continue;
+    }
+    int Index = RawMask[i] & (NumElts - 1);
+    ShuffleMask.push_back(Index);
+  }
+}
+
+void DecodeVPERMV3Mask(const Constant *C, unsigned ElSize, unsigned Width,
+                       SmallVectorImpl<int> &ShuffleMask) {
+  assert((Width == 128 || Width == 256 || Width == 512) &&
+         C->getType()->getPrimitiveSizeInBits() >= Width &&
+         "Unexpected vector size.");
+  assert((ElSize == 8 || ElSize == 16 || ElSize == 32 || ElSize == 64) &&
+         "Unexpected vector element size.");
+
+  // The shuffle mask requires elements the same size as the target.
+  APInt UndefElts;
+  SmallVector<uint64_t, 64> RawMask;
+  if (!extractConstantMask(C, ElSize, UndefElts, RawMask))
+    return;
+
+  unsigned NumElts = Width / ElSize;
+
+  for (unsigned i = 0; i != NumElts; ++i) {
+    if (UndefElts[i]) {
+      ShuffleMask.push_back(SM_SentinelUndef);
+      continue;
+    }
+    int Index = RawMask[i] & (NumElts*2 - 1);
+    ShuffleMask.push_back(Index);
+  }
+}
+} // llvm namespace

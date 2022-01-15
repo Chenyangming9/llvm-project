@@ -14,7 +14,6 @@
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/StringRef.h"
-#include <cassert>
 
 using namespace llvm;
 
@@ -26,14 +25,14 @@ APSInt::APSInt(StringRef Str) {
   APInt Tmp(NumBits, Str, /*radix=*/10);
   if (Str[0] == '-') {
     unsigned MinBits = Tmp.getMinSignedBits();
-    if (MinBits < NumBits)
-      Tmp = Tmp.trunc(std::max<unsigned>(1, MinBits));
+    if (MinBits > 0 && MinBits < NumBits)
+      Tmp = Tmp.trunc(MinBits);
     *this = APSInt(Tmp, /*isUnsigned=*/false);
     return;
   }
   unsigned ActiveBits = Tmp.getActiveBits();
-  if (ActiveBits < NumBits)
-    Tmp = Tmp.trunc(std::max<unsigned>(1, ActiveBits));
+  if (ActiveBits > 0 && ActiveBits < NumBits)
+    Tmp = Tmp.trunc(ActiveBits);
   *this = APSInt(Tmp, /*isUnsigned=*/true);
 }
 

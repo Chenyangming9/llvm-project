@@ -6,14 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// This test relies on P0482 being fixed, which isn't in
-// older Apple dylibs
-//
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11|12|13|14|15}}
-
-// This test runs in C++20, but we have deprecated codecvt<char(16|32), char, mbstate_t> in C++20.
-// ADDITIONAL_COMPILE_FLAGS: -D_LIBCPP_DISABLE_DEPRECATION_WARNINGS
-
 // <locale>
 
 // template <class Facet> locale combine(const locale& other) const;
@@ -22,7 +14,7 @@
 #include <stdexcept>
 #include <cassert>
 
-#include "count_new.h"
+#include "count_new.hpp"
 
 #include "test_macros.h"
 
@@ -36,10 +28,6 @@ void check(const std::locale& loc)
     assert((std::has_facet<std::codecvt<char, char, std::mbstate_t> >(loc)));
     assert((std::has_facet<std::codecvt<char16_t, char, std::mbstate_t> >(loc)));
     assert((std::has_facet<std::codecvt<char32_t, char, std::mbstate_t> >(loc)));
-#if TEST_STD_VER > 17
-    assert((std::has_facet<std::codecvt<char16_t, char8_t, std::mbstate_t> >(loc)));
-    assert((std::has_facet<std::codecvt<char32_t, char8_t, std::mbstate_t> >(loc)));
-#endif
     assert((std::has_facet<std::codecvt<wchar_t, char, std::mbstate_t> >(loc)));
 
     assert((std::has_facet<std::moneypunct<char> >(loc)));
@@ -78,7 +66,6 @@ std::locale::id my_facet::id;
 int main(int, char**)
 {
 {
-    globalMemCounter.reset();
     {
         std::locale loc;
         std::locale loc2(loc, new my_facet);

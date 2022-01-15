@@ -77,10 +77,10 @@ Options
 
 .. option:: ChainedConditionalReturn
 
-   If `true`, conditional boolean return statements at the end of an
-   ``if/else if`` chain will be transformed. Default is `false`.
+   If non-zero, conditional boolean return statements at the end of an
+   ``if/else if`` chain will be transformed. Default is `0`.
 
 .. option:: ChainedConditionalAssignment
 
-   If `true`, conditional boolean assignments at the end of an ``if/else
-   if`` chain will be transformed. Default is `false`.
+   If non-zero, conditional boolean assignments at the end of an ``if/else
+   if`` chain will be transformed. Default is `0`.

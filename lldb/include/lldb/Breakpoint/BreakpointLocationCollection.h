@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_BREAKPOINT_BREAKPOINTLOCATIONCOLLECTION_H
-#define LLDB_BREAKPOINT_BREAKPOINTLOCATIONCOLLECTION_H
+#ifndef liblldb_BreakpointLocationCollection_h_
+#define liblldb_BreakpointLocationCollection_h_
 
 #include <mutex>
 #include <vector>
@@ -22,14 +22,17 @@ public:
   BreakpointLocationCollection();
 
   ~BreakpointLocationCollection();
-
+  
   BreakpointLocationCollection &operator=(const BreakpointLocationCollection &rhs);
 
   /// Add the breakpoint \a bp_loc_sp to the list.
   ///
-  /// \param[in] bp_loc_sp
+  /// \param[in] bp_sp
   ///     Shared pointer to the breakpoint location that will get added
   ///     to the list.
+  ///
+  /// \result
+  ///     Returns breakpoint location id.
   void Add(const lldb::BreakpointLocationSP &bp_loc_sp);
 
   /// Removes the breakpoint location given by \b breakID from this
@@ -63,7 +66,7 @@ public:
   /// Returns a shared pointer to the breakpoint location with id \a
   /// breakID, const version.
   ///
-  /// \param[in] break_id
+  /// \param[in] breakID
   ///     The breakpoint location ID to seek for.
   ///
   /// \param[in] break_loc_id
@@ -109,6 +112,9 @@ public:
   /// \param[in] context
   ///    This contains the information about this stop.
   ///
+  /// \param[in] breakID
+  ///    This break ID that we hit.
+  ///
   /// \return
   ///    \b true if we should stop, \b false otherwise.
   bool ShouldStop(StoppointCallbackContext *context);
@@ -136,7 +142,7 @@ public:
   /// return
   ///     \b true if the collection contains at least one location that
   ///     would be valid for this thread, false otherwise.
-  bool ValidForThisThread(Thread &thread);
+  bool ValidForThisThread(Thread *thread);
 
   /// Tell whether ALL the breakpoints in the location collection are internal.
   ///
@@ -175,4 +181,4 @@ public:
 
 } // namespace lldb_private
 
-#endif // LLDB_BREAKPOINT_BREAKPOINTLOCATIONCOLLECTION_H
+#endif // liblldb_BreakpointLocationCollection_h_

@@ -1,4 +1,4 @@
-//===-- DebuggerThread.cpp ------------------------------------------------===//
+//===-- DebuggerThread.cpp --------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -28,10 +28,6 @@
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/Threading.h"
 #include "llvm/Support/raw_ostream.h"
-
-#ifndef STATUS_WX86_BREAKPOINT
-#define STATUS_WX86_BREAKPOINT 0x4000001FL // For WOW64
-#endif
 
 using namespace lldb;
 using namespace lldb_private;
@@ -70,11 +66,11 @@ Status DebuggerThread::DebugLaunch(const ProcessLaunchInfo &launch_info) {
   Status result;
   DebugLaunchContext *context = new DebugLaunchContext(this, launch_info);
 
-  llvm::Expected<HostThread> secondary_thread =
-      ThreadLauncher::LaunchThread("lldb.plugin.process-windows.secondary[?]",
-                                   DebuggerThreadLaunchRoutine, context);
-  if (!secondary_thread) {
-    result = Status(secondary_thread.takeError());
+  llvm::Expected<HostThread> slave_thread = ThreadLauncher::LaunchThread(
+      "lldb.plugin.process-windows.slave[?]", DebuggerThreadLaunchRoutine,
+      context);
+  if (!slave_thread) {
+    result = Status(slave_thread.takeError());
     LLDB_LOG(log, "couldn't launch debugger thread. {0}", result);
   }
 
@@ -89,11 +85,11 @@ Status DebuggerThread::DebugAttach(lldb::pid_t pid,
   Status result;
   DebugAttachContext *context = new DebugAttachContext(this, pid, attach_info);
 
-  llvm::Expected<HostThread> secondary_thread =
-      ThreadLauncher::LaunchThread("lldb.plugin.process-windows.secondary[?]",
-                                   DebuggerThreadAttachRoutine, context);
-  if (!secondary_thread) {
-    result = Status(secondary_thread.takeError());
+  llvm::Expected<HostThread> slave_thread = ThreadLauncher::LaunchThread(
+      "lldb.plugin.process-windows.slave[?]", DebuggerThreadAttachRoutine,
+      context);
+  if (!slave_thread) {
+    result = Status(slave_thread.takeError());
     LLDB_LOG(log, "couldn't attach to process '{0}'. {1}", pid, result);
   }
 
@@ -354,8 +350,7 @@ DebuggerThread::HandleExceptionEvent(const EXCEPTION_DEBUG_INFO &info,
     // we use simply to wake up the DebuggerThread so that we can close out the
     // debug loop.
     if (m_pid_to_detach != 0 &&
-        (info.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT ||
-         info.ExceptionRecord.ExceptionCode == STATUS_WX86_BREAKPOINT)) {
+        info.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT) {
       LLDB_LOG(log, "Breakpoint exception is cue to detach from process {0:x}",
                m_pid_to_detach.load());
       ::DebugActiveProcessStop(m_pid_to_detach);
@@ -411,7 +406,7 @@ DebuggerThread::HandleCreateProcessEvent(const CREATE_PROCESS_DEBUG_INFO &info,
 
   std::string thread_name;
   llvm::raw_string_ostream name_stream(thread_name);
-  name_stream << "lldb.plugin.process-windows.secondary[" << process_id << "]";
+  name_stream << "lldb.plugin.process-windows.slave[" << process_id << "]";
   name_stream.flush();
   llvm::set_thread_name(thread_name);
 

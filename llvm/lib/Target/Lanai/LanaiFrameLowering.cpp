@@ -32,8 +32,8 @@ void LanaiFrameLowering::determineFrameLayout(MachineFunction &MF) const {
   unsigned FrameSize = MFI.getStackSize();
 
   // Get the alignment.
-  Align StackAlign =
-      LRI->hasStackRealignment(MF) ? MFI.getMaxAlign() : getStackAlign();
+  unsigned StackAlign = LRI->needsStackRealignment(MF) ? MFI.getMaxAlignment()
+                                                       : getStackAlignment();
 
   // Get the maximum call frame size of all the calls.
   unsigned MaxCallFrameSize = MFI.getMaxCallFrameSize();
@@ -72,8 +72,8 @@ void LanaiFrameLowering::replaceAdjDynAllocPseudo(MachineFunction &MF) const {
       MachineInstr &MI = *MBBI++;
       if (MI.getOpcode() == Lanai::ADJDYNALLOC) {
         DebugLoc DL = MI.getDebugLoc();
-        Register Dst = MI.getOperand(0).getReg();
-        Register Src = MI.getOperand(1).getReg();
+        unsigned Dst = MI.getOperand(0).getReg();
+        unsigned Src = MI.getOperand(1).getReg();
 
         BuildMI(*MBB, MI, DL, LII.get(Lanai::ADD_I_LO), Dst)
             .addReg(Src)

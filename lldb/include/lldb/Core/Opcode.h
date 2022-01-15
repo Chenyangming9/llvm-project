@@ -6,17 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_OPCODE_H
-#define LLDB_CORE_OPCODE_H
+#ifndef lldb_Opcode_h
+#define lldb_Opcode_h
 
 #include "lldb/Utility/Endian.h"
 #include "lldb/lldb-enumerations.h"
 
-#include "llvm/Support/SwapByteOrder.h"
+#include "llvm/Support/MathExtras.h"
 
-#include <cassert>
-#include <cstdint>
-#include <cstring>
+#include <assert.h>
+#include <stdint.h>
+#include <string.h>
 
 namespace lldb {
 class SBInstruction;
@@ -38,7 +38,7 @@ public:
     eTypeBytes
   };
 
-  Opcode() = default;
+  Opcode() : m_byte_order(lldb::eByteOrderInvalid), m_type(eTypeInvalid) {}
 
   Opcode(uint8_t inst, lldb::ByteOrder order)
       : m_byte_order(order), m_type(eType8) {
@@ -252,9 +252,9 @@ protected:
             endian::InlHostByteOrder() == lldb::eByteOrderBig);
   }
 
-  lldb::ByteOrder m_byte_order = lldb::eByteOrderInvalid;
+  lldb::ByteOrder m_byte_order;
 
-  Opcode::Type m_type = eTypeInvalid;
+  Opcode::Type m_type;
   union {
     uint8_t inst8;
     uint16_t inst16;
@@ -270,4 +270,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_OPCODE_H
+#endif // lldb_Opcode_h

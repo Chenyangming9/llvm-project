@@ -15,6 +15,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/Lex/Preprocessor.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
@@ -25,12 +26,9 @@
 #include "clang/Lex/LiteralSupport.h"
 #include "clang/Lex/MacroInfo.h"
 #include "clang/Lex/PPCallbacks.h"
-#include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/Token.h"
 #include "llvm/ADT/APSInt.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SaveAndRestore.h"
@@ -253,24 +251,8 @@ static bool EvaluateValue(PPValue &Result, Token &PeekTok, DefinedTracker &DT,
         // If this identifier isn't 'defined' or one of the special
         // preprocessor keywords and it wasn't macro expanded, it turns
         // into a simple 0
-        if (ValueLive) {
+        if (ValueLive)
           PP.Diag(PeekTok, diag::warn_pp_undef_identifier) << II;
-
-          const DiagnosticsEngine &DiagEngine = PP.getDiagnostics();
-          // If 'Wundef' is enabled, do not emit 'undef-prefix' diagnostics.
-          if (DiagEngine.isIgnored(diag::warn_pp_undef_identifier,
-                                   PeekTok.getLocation())) {
-            const std::vector<std::string> UndefPrefixes =
-                DiagEngine.getDiagnosticOptions().UndefPrefixes;
-            const StringRef IdentifierName = II->getName();
-            if (llvm::any_of(UndefPrefixes,
-                             [&IdentifierName](const std::string &Prefix) {
-                               return IdentifierName.startswith(Prefix);
-                             }))
-              PP.Diag(PeekTok, diag::warn_pp_undef_prefix)
-                  << AddFlagValue{llvm::join(UndefPrefixes, ",")} << II;
-          }
-        }
         Result.Val = 0;
         Result.Val.setIsUnsigned(false); // "0" is signed intmax_t 0.
         Result.setIdentifier(II);
@@ -295,9 +277,7 @@ static bool EvaluateValue(PPValue &Result, Token &PeekTok, DefinedTracker &DT,
     if (NumberInvalid)
       return true; // a diagnostic was already reported
 
-    NumericLiteralParser Literal(Spelling, PeekTok.getLocation(),
-                                 PP.getSourceManager(), PP.getLangOpts(),
-                                 PP.getTargetInfo(), PP.getDiagnostics());
+    NumericLiteralParser Literal(Spelling, PeekTok.getLocation(), PP);
     if (Literal.hadError)
       return true; // a diagnostic was already reported.
 
@@ -320,14 +300,6 @@ static bool EvaluateValue(PPValue &Result, Token &PeekTok, DefinedTracker &DT,
       else
         PP.Diag(PeekTok, diag::ext_c99_longlong);
     }
-
-    // 'z/uz' literals are a C++2b feature.
-    if (Literal.isSizeT)
-      PP.Diag(PeekTok, PP.getLangOpts().CPlusPlus
-                           ? PP.getLangOpts().CPlusPlus2b
-                                 ? diag::warn_cxx20_compat_size_t_suffix
-                                 : diag::ext_cxx2b_size_t_suffix
-                           : diag::err_cxx2b_size_t_suffix);
 
     // Parse the integer literal into Result.
     if (Literal.GetIntegerValue(Result.Val)) {
@@ -666,13 +638,13 @@ static bool EvaluateDirectiveSubExpr(PPValue &LHS, unsigned MinPrec,
       if (ValueLive && Res.isUnsigned()) {
         if (!LHS.isUnsigned() && LHS.Val.isNegative())
           PP.Diag(OpLoc, diag::warn_pp_convert_to_positive) << 0
-            << toString(LHS.Val, 10, true) + " to " +
-               toString(LHS.Val, 10, false)
+            << LHS.Val.toString(10, true) + " to " +
+               LHS.Val.toString(10, false)
             << LHS.getRange() << RHS.getRange();
         if (!RHS.isUnsigned() && RHS.Val.isNegative())
           PP.Diag(OpLoc, diag::warn_pp_convert_to_positive) << 1
-            << toString(RHS.Val, 10, true) + " to " +
-               toString(RHS.Val, 10, false)
+            << RHS.Val.toString(10, true) + " to " +
+               RHS.Val.toString(10, false)
             << LHS.getRange() << RHS.getRange();
       }
       LHS.Val.setIsUnsigned(Res.isUnsigned());

@@ -1,3 +1,4 @@
-# RUN: not obj2yaml  %p/path/does/not/exist 2>&1 | FileCheck -DMSG=%errc_ENOENT %s
+# RUN: not obj2yaml  %p/path/does/not/exist 2>&1 | FileCheck %s
 
-# CHECK: Error reading file: {{.*}}/path/does/not/exist: [[MSG]]
+# Don't check the OS-dependent message "No such file or directory".
+# CHECK: Error reading file: {{.*}}/path/does/not/exist: {{.*}}

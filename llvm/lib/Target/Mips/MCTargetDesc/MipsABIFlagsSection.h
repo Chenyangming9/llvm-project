@@ -139,9 +139,7 @@ public:
 
   template <class PredicateLibrary>
   void setISAExtensionFromPredicates(const PredicateLibrary &P) {
-    if (P.hasCnMipsP())
-      ISAExtension = Mips::AFL_EXT_OCTEONP;
-    else if (P.hasCnMips())
+    if (P.hasCnMips())
       ISAExtension = Mips::AFL_EXT_OCTEON;
     else
       ISAExtension = Mips::AFL_EXT_NONE;

@@ -16,5 +16,7 @@ static_library("Disassembler") {
     "//llvm/lib/Target/Hexagon/TargetInfo",
   ]
   include_dirs = [ ".." ]
-  sources = [ "HexagonDisassembler.cpp" ]
+  sources = [
+    "HexagonDisassembler.cpp",
+  ]
 }

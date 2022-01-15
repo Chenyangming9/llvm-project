@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_GDB_REMOTE_PROCESSGDBREMOTE_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_GDB_REMOTE_PROCESSGDBREMOTE_H
+#ifndef liblldb_ProcessGDBRemote_h_
+#define liblldb_ProcessGDBRemote_h_
 
 #include <atomic>
 #include <map>
@@ -24,8 +24,8 @@
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/Broadcaster.h"
 #include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/GDBRemote.h"
 #include "lldb/Utility/Status.h"
+#include "lldb/Utility/StreamGDBRemote.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/StringExtractor.h"
 #include "lldb/Utility/StringList.h"
@@ -55,8 +55,7 @@ public:
 
   static lldb::ProcessSP CreateInstance(lldb::TargetSP target_sp,
                                         lldb::ListenerSP listener_sp,
-                                        const FileSpec *crash_file_path,
-                                        bool can_connect);
+                                        const FileSpec *crash_file_path);
 
   static void Initialize();
 
@@ -67,8 +66,6 @@ public:
   static ConstString GetPluginNameStatic();
 
   static const char *GetPluginDescriptionStatic();
-
-  static std::chrono::seconds GetPacketTimeout();
 
   // Check if a given Process
   bool CanDebug(lldb::TargetSP target_sp,
@@ -88,7 +85,7 @@ public:
   Status WillAttachToProcessWithName(const char *process_name,
                                      bool wait_for_launch) override;
 
-  Status DoConnectRemote(llvm::StringRef remote_url) override;
+  Status DoConnectRemote(Stream *strm, llvm::StringRef remote_url) override;
 
   Status WillLaunchOrAttach();
 
@@ -165,16 +162,20 @@ public:
 
   Status GetWatchpointSupportInfo(uint32_t &num) override;
 
-  llvm::Expected<TraceSupportedResponse> TraceSupported() override;
+  lldb::user_id_t StartTrace(const TraceOptions &options,
+                             Status &error) override;
 
-  llvm::Error TraceStop(const TraceStopRequest &request) override;
+  Status StopTrace(lldb::user_id_t uid, lldb::tid_t thread_id) override;
 
-  llvm::Error TraceStart(const llvm::json::Value &request) override;
+  Status GetData(lldb::user_id_t uid, lldb::tid_t thread_id,
+                 llvm::MutableArrayRef<uint8_t> &buffer,
+                 size_t offset = 0) override;
 
-  llvm::Expected<std::string> TraceGetState(llvm::StringRef type) override;
+  Status GetMetaData(lldb::user_id_t uid, lldb::tid_t thread_id,
+                     llvm::MutableArrayRef<uint8_t> &buffer,
+                     size_t offset = 0) override;
 
-  llvm::Expected<std::vector<uint8_t>>
-  TraceGetBinaryData(const TraceGetBinaryDataRequest &request) override;
+  Status GetTraceConfig(lldb::user_id_t uid, TraceOptions &options) override;
 
   Status GetWatchpointSupportInfo(uint32_t &num, bool &after) override;
 
@@ -198,11 +199,10 @@ public:
                            const llvm::Triple &triple) override;
 
   llvm::VersionTuple GetHostOSVersion() override;
-  llvm::VersionTuple GetHostMacCatalystVersion() override;
 
-  llvm::Error LoadModules() override;
+  size_t LoadModules(LoadedModuleInfoList &module_list) override;
 
-  llvm::Expected<LoadedModuleInfoList> GetLoadedModuleList() override;
+  size_t LoadModules() override;
 
   Status GetFileLoadAddress(const FileSpec &file, bool &is_loaded,
                             lldb::addr_t &load_addr) override;
@@ -235,8 +235,6 @@ protected:
   friend class GDBRemoteCommunicationClient;
   friend class GDBRemoteRegisterContext;
 
-  bool SupportsMemoryTagging() override;
-
   /// Broadcaster event bits definitions.
   enum {
     eBroadcastBitAsyncContinue = (1 << 0),
@@ -252,7 +250,7 @@ protected:
                                                              // the last stop
                                                              // packet variable
   std::recursive_mutex m_last_stop_packet_mutex;
-  GDBRemoteDynamicRegisterInfoSP m_register_info_sp;
+  GDBRemoteDynamicRegisterInfo m_register_info;
   Broadcaster m_async_broadcaster;
   lldb::ListenerSP m_async_listener_sp;
   HostThread m_async_thread;
@@ -285,7 +283,6 @@ protected:
   lldb::CommandObjectSP m_command_sp;
   int64_t m_breakpoint_pc_offset;
   lldb::tid_t m_initial_tid; // The initial thread ID, given by stub on attach
-  bool m_use_g_packet_for_reading;
 
   bool m_replay_mode;
   bool m_allow_flash_writes;
@@ -310,10 +307,10 @@ protected:
 
   void Clear();
 
-  bool DoUpdateThreadList(ThreadList &old_thread_list,
-                          ThreadList &new_thread_list) override;
+  bool UpdateThreadList(ThreadList &old_thread_list,
+                        ThreadList &new_thread_list) override;
 
-  Status ConnectToReplayServer();
+  Status ConnectToReplayServer(repro::Loader *loader);
 
   Status EstablishConnectionIfNeeded(const ProcessInfo &process_info);
 
@@ -337,7 +334,7 @@ protected:
 
   size_t UpdateThreadPCsFromStopReplyThreadsValue(std::string &value);
 
-  size_t UpdateThreadIDsFromStopReplyThreadsValue(llvm::StringRef value);
+  size_t UpdateThreadIDsFromStopReplyThreadsValue(std::string &value);
 
   bool HandleNotifyPacket(StringExtractorGDBRemote &packet);
 
@@ -378,7 +375,6 @@ protected:
   bool UpdateThreadIDList();
 
   void DidLaunchOrAttach(ArchSpec &process_arch);
-  void MaybeLoadExecutableModule();
 
   Status ConnectToDebugserver(llvm::StringRef host_port);
 
@@ -388,12 +384,15 @@ protected:
   DynamicLoader *GetDynamicLoader() override;
 
   bool GetGDBServerRegisterInfoXMLAndProcess(ArchSpec &arch_to_use,
-                                             std::string xml_filename,
-                                             uint32_t &cur_reg_remote,
-                                             uint32_t &cur_reg_local);
+                                             std::string xml_filename, 
+                                             uint32_t &cur_reg_num,
+                                             uint32_t &reg_offset);
 
   // Query remote GDBServer for register information
   bool GetGDBServerRegisterInfo(ArchSpec &arch);
+
+  // Query remote GDBServer for a detailed loaded library list
+  Status GetLoadedModuleList(LoadedModuleInfoList &);
 
   lldb::ModuleSP LoadModuleAtAddress(const FileSpec &file,
                                      lldb::addr_t link_map,
@@ -407,12 +406,6 @@ protected:
   Status FlashDone();
 
   bool HasErased(FlashRange range);
-
-  llvm::Expected<std::vector<uint8_t>>
-  DoReadMemoryTags(lldb::addr_t addr, size_t len, int32_t type) override;
-
-  Status DoWriteMemoryTags(lldb::addr_t addr, size_t len, int32_t type,
-                           const std::vector<uint8_t> &tags) override;
 
 private:
   // For ProcessGDBRemote only
@@ -457,11 +450,10 @@ private:
   llvm::DenseMap<ModuleCacheKey, ModuleSpec, ModuleCacheInfo>
       m_cached_module_specs;
 
-  ProcessGDBRemote(const ProcessGDBRemote &) = delete;
-  const ProcessGDBRemote &operator=(const ProcessGDBRemote &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(ProcessGDBRemote);
 };
 
 } // namespace process_gdb_remote
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_GDB_REMOTE_PROCESSGDBREMOTE_H
+#endif // liblldb_ProcessGDBRemote_h_

@@ -1,4 +1,5 @@
-//===-- SBTypeCategory.cpp ------------------------------------------------===//
+//===-- SBTypeCategory.cpp ----------------------------------------*- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -39,7 +40,7 @@ SBTypeCategory::SBTypeCategory(const lldb::SBTypeCategory &rhs)
   LLDB_RECORD_CONSTRUCTOR(SBTypeCategory, (const lldb::SBTypeCategory &), rhs);
 }
 
-SBTypeCategory::~SBTypeCategory() = default;
+SBTypeCategory::~SBTypeCategory() {}
 
 bool SBTypeCategory::IsValid() const {
   LLDB_RECORD_METHOD_CONST_NO_ARGS(bool, SBTypeCategory, IsValid);
@@ -363,7 +364,9 @@ bool SBTypeCategory::AddTypeFormat(SBTypeNameSpecifier type_name,
 
   if (type_name.IsRegex())
     m_opaque_sp->GetRegexTypeFormatsContainer()->Add(
-        RegularExpression(type_name.GetName()), format.GetSP());
+        lldb::RegularExpressionSP(new RegularExpression(
+            llvm::StringRef::withNullAsEmpty(type_name.GetName()))),
+        format.GetSP());
   else
     m_opaque_sp->GetTypeFormatsContainer()->Add(
         ConstString(type_name.GetName()), format.GetSP());
@@ -440,7 +443,9 @@ bool SBTypeCategory::AddTypeSummary(SBTypeNameSpecifier type_name,
 
   if (type_name.IsRegex())
     m_opaque_sp->GetRegexTypeSummariesContainer()->Add(
-        RegularExpression(type_name.GetName()), summary.GetSP());
+        lldb::RegularExpressionSP(new RegularExpression(
+            llvm::StringRef::withNullAsEmpty(type_name.GetName()))),
+        summary.GetSP());
   else
     m_opaque_sp->GetTypeSummariesContainer()->Add(
         ConstString(type_name.GetName()), summary.GetSP());
@@ -483,7 +488,9 @@ bool SBTypeCategory::AddTypeFilter(SBTypeNameSpecifier type_name,
 
   if (type_name.IsRegex())
     m_opaque_sp->GetRegexTypeFiltersContainer()->Add(
-        RegularExpression(type_name.GetName()), filter.GetSP());
+        lldb::RegularExpressionSP(new RegularExpression(
+            llvm::StringRef::withNullAsEmpty(type_name.GetName()))),
+        filter.GetSP());
   else
     m_opaque_sp->GetTypeFiltersContainer()->Add(
         ConstString(type_name.GetName()), filter.GetSP());
@@ -560,7 +567,9 @@ bool SBTypeCategory::AddTypeSynthetic(SBTypeNameSpecifier type_name,
 
   if (type_name.IsRegex())
     m_opaque_sp->GetRegexTypeSyntheticsContainer()->Add(
-        RegularExpression(type_name.GetName()), synth.GetSP());
+        lldb::RegularExpressionSP(new RegularExpression(
+            llvm::StringRef::withNullAsEmpty(type_name.GetName()))),
+        synth.GetSP());
   else
     m_opaque_sp->GetTypeSyntheticsContainer()->Add(
         ConstString(type_name.GetName()), synth.GetSP());

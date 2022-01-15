@@ -25,10 +25,6 @@
 # RUN: ld.lld -shared -o %t.abs.so --script %t.abs.script %t.o
 # RUN: llvm-objdump -s -t %t.abs.so | FileCheck --check-prefix=ABS %s
 
-# REL: 000000e0 l       .text           00000000 foo
-# REL: 00000000 l       *ABS*           00000000 .hidden _gp_disp
-# REL: 000001ec l       *ABS*           00000000 .hidden _gp
-
 # REL:      Contents of section .reginfo:
 # REL-NEXT:  0018 10000104 00000000 00000000 00000000
 # REL-NEXT:  0028 00000000 000001ec
@@ -46,9 +42,9 @@
 #                 ^-- 0x30-0x1ec
 #                     foo - GP
 
-# ABS: 000000e0 l       .text           00000000 foo
-# ABS: 00000000 l       *ABS*           00000000 .hidden _gp_disp
-# ABS: 00000200 l       *ABS*           00000000 .hidden _gp
+# REL: 000000e0         .text           00000000 foo
+# REL: 00000000         *ABS*           00000000 .hidden _gp_disp
+# REL: 000001ec         *ABS*           00000000 .hidden _gp
 
 # ABS:      Contents of section .reginfo:
 # ABS-NEXT:  0018 10000104 00000000 00000000 00000000
@@ -66,6 +62,10 @@
 # ABS-NEXT:  00f0 fffffee0
 #                 ^-- 0xe0-0x200
 #                     foo - GP
+
+# ABS: 000000e0         .text           00000000 foo
+# ABS: 00000000         *ABS*           00000000 .hidden _gp_disp
+# ABS: 00000200         *ABS*           00000000 .hidden _gp
 
   .text
 foo:

@@ -11,13 +11,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "RISCV.h"
 #include "MCTargetDesc/RISCVInstPrinter.h"
 #include "MCTargetDesc/RISCVMCExpr.h"
-#include "MCTargetDesc/RISCVTargetStreamer.h"
-#include "RISCV.h"
 #include "RISCVTargetMachine.h"
 #include "TargetInfo/RISCVTargetInfo.h"
-#include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -33,23 +31,16 @@ using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
 
-STATISTIC(RISCVNumInstrsCompressed,
-          "Number of RISC-V Compressed instructions emitted");
-
 namespace {
 class RISCVAsmPrinter : public AsmPrinter {
-  const MCSubtargetInfo *STI;
-
 public:
   explicit RISCVAsmPrinter(TargetMachine &TM,
                            std::unique_ptr<MCStreamer> Streamer)
-      : AsmPrinter(TM, std::move(Streamer)), STI(TM.getMCSubtargetInfo()) {}
+      : AsmPrinter(TM, std::move(Streamer)) {}
 
   StringRef getPassName() const override { return "RISCV Assembly Printer"; }
 
-  bool runOnMachineFunction(MachineFunction &MF) override;
-
-  void emitInstruction(const MachineInstr *MI) override;
+  void EmitInstruction(const MachineInstr *MI) override;
 
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
                        const char *ExtraCode, raw_ostream &OS) override;
@@ -64,12 +55,6 @@ public:
   bool lowerOperand(const MachineOperand &MO, MCOperand &MCOp) const {
     return LowerRISCVMachineOperandToMCOperand(MO, MCOp, *this);
   }
-
-  void emitStartOfAsmFile(Module &M) override;
-  void emitEndOfAsmFile(Module &M) override;
-
-private:
-  void emitAttributes();
 };
 }
 
@@ -77,9 +62,8 @@ private:
 #include "RISCVGenCompressInstEmitter.inc"
 void RISCVAsmPrinter::EmitToStreamer(MCStreamer &S, const MCInst &Inst) {
   MCInst CInst;
-  bool Res = compressInst(CInst, Inst, *STI, OutStreamer->getContext());
-  if (Res)
-    ++RISCVNumInstrsCompressed;
+  bool Res = compressInst(CInst, Inst, *TM.getMCSubtargetInfo(),
+                          OutStreamer->getContext());
   AsmPrinter::EmitToStreamer(*OutStreamer, Res ? CInst : Inst);
 }
 
@@ -87,14 +71,14 @@ void RISCVAsmPrinter::EmitToStreamer(MCStreamer &S, const MCInst &Inst) {
 // instructions) auto-generated.
 #include "RISCVGenMCPseudoLowering.inc"
 
-void RISCVAsmPrinter::emitInstruction(const MachineInstr *MI) {
+void RISCVAsmPrinter::EmitInstruction(const MachineInstr *MI) {
   // Do any auto-generated pseudo lowerings.
   if (emitPseudoExpansionLowering(*OutStreamer, MI))
     return;
 
   MCInst TmpInst;
-  if (!lowerRISCVMachineInstrToMCInst(MI, TmpInst, *this))
-    EmitToStreamer(*OutStreamer, TmpInst);
+  LowerRISCVMachineInstrToMCInst(MI, TmpInst, *this);
+  EmitToStreamer(*OutStreamer, TmpInst);
 }
 
 bool RISCVAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
@@ -131,14 +115,6 @@ bool RISCVAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
   case MachineOperand::MO_Register:
     OS << RISCVInstPrinter::getRegisterName(MO.getReg());
     return false;
-  case MachineOperand::MO_GlobalAddress:
-    PrintSymbolOperand(MO, OS);
-    return false;
-  case MachineOperand::MO_BlockAddress: {
-    MCSymbol *Sym = GetBlockAddressSymbol(MO.getBlockAddress());
-    Sym->print(OS, MAI);
-    return false;
-  }
   default:
     break;
   }
@@ -164,40 +140,8 @@ bool RISCVAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
   return AsmPrinter::PrintAsmMemoryOperand(MI, OpNo, ExtraCode, OS);
 }
 
-bool RISCVAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
-  // Set the current MCSubtargetInfo to a copy which has the correct
-  // feature bits for the current MachineFunction
-  MCSubtargetInfo &NewSTI =
-    OutStreamer->getContext().getSubtargetCopy(*TM.getMCSubtargetInfo());
-  NewSTI.setFeatureBits(MF.getSubtarget().getFeatureBits());
-  STI = &NewSTI;
-
-  SetupMachineFunction(MF);
-  emitFunctionBody();
-  return false;
-}
-
-void RISCVAsmPrinter::emitStartOfAsmFile(Module &M) {
-  if (TM.getTargetTriple().isOSBinFormatELF())
-    emitAttributes();
-}
-
-void RISCVAsmPrinter::emitEndOfAsmFile(Module &M) {
-  RISCVTargetStreamer &RTS =
-      static_cast<RISCVTargetStreamer &>(*OutStreamer->getTargetStreamer());
-
-  if (TM.getTargetTriple().isOSBinFormatELF())
-    RTS.finishAttributeSection();
-}
-
-void RISCVAsmPrinter::emitAttributes() {
-  RISCVTargetStreamer &RTS =
-      static_cast<RISCVTargetStreamer &>(*OutStreamer->getTargetStreamer());
-  RTS.emitTargetAttributes(*STI);
-}
-
 // Force static initialization.
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVAsmPrinter() {
+extern "C" void LLVMInitializeRISCVAsmPrinter() {
   RegisterAsmPrinter<RISCVAsmPrinter> X(getTheRISCV32Target());
   RegisterAsmPrinter<RISCVAsmPrinter> Y(getTheRISCV64Target());
 }

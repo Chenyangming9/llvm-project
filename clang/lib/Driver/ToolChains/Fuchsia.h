@@ -10,7 +10,6 @@
 #define LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_FUCHSIA_H
 
 #include "Gnu.h"
-#include "clang/Basic/LangOptions.h"
 #include "clang/Driver/Tool.h"
 #include "clang/Driver/ToolChain.h"
 
@@ -18,9 +17,9 @@ namespace clang {
 namespace driver {
 namespace tools {
 namespace fuchsia {
-class LLVM_LIBRARY_VISIBILITY Linker : public Tool {
+class LLVM_LIBRARY_VISIBILITY Linker : public GnuTool {
 public:
-  Linker(const ToolChain &TC) : Tool("fuchsia::Linker", "ld.lld", TC) {}
+  Linker(const ToolChain &TC) : GnuTool("fuchsia::Linker", "ld.lld", TC) {}
 
   bool hasIntegratedCPP() const override { return false; }
   bool isLinkJob() const override { return true; }
@@ -60,9 +59,8 @@ public:
     return llvm::DebuggerKind::GDB;
   }
 
-  LangOptions::StackProtectorMode
-  GetDefaultStackProtectorLevel(bool KernelOrKext) const override {
-    return LangOptions::SSPStrong;
+  unsigned GetDefaultStackProtectorLevel(bool KernelOrKext) const override {
+    return 2; // SSPStrong
   }
 
   std::string ComputeEffectiveClangTriple(const llvm::opt::ArgList &Args,
@@ -70,9 +68,6 @@ public:
 
   SanitizerMask getSupportedSanitizers() const override;
   SanitizerMask getDefaultSanitizers() const override;
-
-  void addProfileRTLibs(const llvm::opt::ArgList &Args,
-                        llvm::opt::ArgStringList &CmdArgs) const override;
 
   RuntimeLibType
   GetRuntimeLibType(const llvm::opt::ArgList &Args) const override;

@@ -42,8 +42,7 @@ int CollectDataFlow(const std::string &DFTBinary, const std::string &DirPath,
                     const Vector<SizedFile> &CorporaFiles);
 
 class BlockCoverage {
-public:
-  // These functions guarantee no CoverageVector is longer than UINT32_MAX.
+ public:
   bool AppendCoverage(std::istream &IN);
   bool AppendCoverage(const std::string &S);
 
@@ -51,8 +50,7 @@ public:
 
   uint32_t GetCounter(size_t FunctionId, size_t BasicBlockId) {
     auto It = Functions.find(FunctionId);
-    if (It == Functions.end())
-      return 0;
+    if (It == Functions.end()) return 0;
     const auto &Counters = It->second;
     if (BasicBlockId < Counters.size())
       return Counters[BasicBlockId];
@@ -63,7 +61,7 @@ public:
     auto It = Functions.find(FunctionId);
     if (It == Functions.end()) return 0;
     const auto &Counters = It->second;
-    return static_cast<uint32_t>(Counters.size());
+    return Counters.size();
   }
 
   uint32_t GetNumberOfCoveredBlocks(size_t FunctionId) {
@@ -80,7 +78,8 @@ public:
   Vector<double> FunctionWeights(size_t NumFunctions) const;
   void clear() { Functions.clear(); }
 
-private:
+ private:
+
   typedef Vector<uint32_t> CoverageVector;
 
   uint32_t NumberOfCoveredBlocks(const CoverageVector &Counters) const {
@@ -92,8 +91,7 @@ private:
   }
 
   uint32_t NumberOfUncoveredBlocks(const CoverageVector &Counters) const {
-    return static_cast<uint32_t>(Counters.size()) -
-           NumberOfCoveredBlocks(Counters);
+    return Counters.size() - NumberOfCoveredBlocks(Counters);
   }
 
   uint32_t SmallestNonZeroCounter(const CoverageVector &Counters) const {

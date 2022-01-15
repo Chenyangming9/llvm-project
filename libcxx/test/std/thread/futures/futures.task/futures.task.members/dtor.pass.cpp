@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: libcpp-has-no-threads
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <future>
 
@@ -18,7 +18,6 @@
 #include <future>
 #include <cassert>
 
-#include "make_test_thread.h"
 #include "test_macros.h"
 
 class A
@@ -46,7 +45,7 @@ int main(int, char**)
     {
         std::packaged_task<double(int, char)> p(A(5));
         std::future<double> f = p.get_future();
-        support::make_test_thread(func, std::move(p)).detach();
+        std::thread(func, std::move(p)).detach();
         try
         {
             double i = f.get();
@@ -62,7 +61,7 @@ int main(int, char**)
     {
         std::packaged_task<double(int, char)> p(A(5));
         std::future<double> f = p.get_future();
-        support::make_test_thread(func2, std::move(p)).detach();
+        std::thread(func2, std::move(p)).detach();
         assert(f.get() == 105.0);
     }
 

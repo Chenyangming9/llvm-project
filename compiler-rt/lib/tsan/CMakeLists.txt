@@ -14,7 +14,8 @@ append_rtti_flag(OFF TSAN_CFLAGS)
 if(COMPILER_RT_TSAN_DEBUG_OUTPUT)
   # Add extra debug information to TSan runtime. This configuration is rarely
   # used, but we need to support it so that debug output will not bitrot.
-  list(APPEND TSAN_CFLAGS -DTSAN_DEBUG_OUTPUT=2)
+  list(APPEND TSAN_CFLAGS -DTSAN_COLLECT_STATS=1
+                          -DTSAN_DEBUG_OUTPUT=2)
 endif()
 
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
@@ -25,57 +26,52 @@ append_list_if(COMPILER_RT_HAS_WGLOBAL_CONSTRUCTORS_FLAG -Wglobal-constructors
                TSAN_RTL_CFLAGS)
 
 set(TSAN_SOURCES
-  rtl/tsan_clock.cpp
-  rtl/tsan_debugging.cpp
-  rtl/tsan_external.cpp
-  rtl/tsan_fd.cpp
-  rtl/tsan_flags.cpp
-  rtl/tsan_ignoreset.cpp
-  rtl/tsan_interceptors_posix.cpp
-  rtl/tsan_interface.cpp
-  rtl/tsan_interface_ann.cpp
-  rtl/tsan_interface_atomic.cpp
-  rtl/tsan_interface_java.cpp
-  rtl/tsan_malloc_mac.cpp
-  rtl/tsan_md5.cpp
-  rtl/tsan_mman.cpp
-  rtl/tsan_mutexset.cpp
-  rtl/tsan_preinit.cpp
-  rtl/tsan_report.cpp
-  rtl/tsan_rtl.cpp
-  rtl/tsan_rtl_mutex.cpp
-  rtl/tsan_rtl_proc.cpp
-  rtl/tsan_rtl_report.cpp
-  rtl/tsan_rtl_thread.cpp
-  rtl/tsan_stack_trace.cpp
-  rtl/tsan_suppressions.cpp
-  rtl/tsan_symbolize.cpp
-  rtl/tsan_sync.cpp
-  )
+  rtl/tsan_clock.cc
+  rtl/tsan_debugging.cc
+  rtl/tsan_external.cc
+  rtl/tsan_fd.cc
+  rtl/tsan_flags.cc
+  rtl/tsan_ignoreset.cc
+  rtl/tsan_interceptors.cc
+  rtl/tsan_interface.cc
+  rtl/tsan_interface_ann.cc
+  rtl/tsan_interface_atomic.cc
+  rtl/tsan_interface_java.cc
+  rtl/tsan_malloc_mac.cc
+  rtl/tsan_md5.cc
+  rtl/tsan_mman.cc
+  rtl/tsan_mutex.cc
+  rtl/tsan_mutexset.cc
+  rtl/tsan_preinit.cc
+  rtl/tsan_report.cc
+  rtl/tsan_rtl.cc
+  rtl/tsan_rtl_mutex.cc
+  rtl/tsan_rtl_proc.cc
+  rtl/tsan_rtl_report.cc
+  rtl/tsan_rtl_thread.cc
+  rtl/tsan_stack_trace.cc
+  rtl/tsan_stat.cc
+  rtl/tsan_suppressions.cc
+  rtl/tsan_symbolize.cc
+  rtl/tsan_sync.cc)
 
 set(TSAN_CXX_SOURCES
-  rtl/tsan_new_delete.cpp
-  )
+  rtl/tsan_new_delete.cc)
 
 if(APPLE)
   list(APPEND TSAN_SOURCES
-    rtl/tsan_interceptors_mac.cpp
-    rtl/tsan_interceptors_mach_vm.cpp
-    rtl/tsan_platform_mac.cpp
-    rtl/tsan_platform_posix.cpp
-    )
+    rtl/tsan_interceptors_mac.cc
+    rtl/tsan_platform_mac.cc
+    rtl/tsan_platform_posix.cc)
 elseif(UNIX)
   # Assume Linux
   list(APPEND TSAN_SOURCES
-    rtl/tsan_platform_linux.cpp
-    rtl/tsan_platform_posix.cpp
-    )
+    rtl/tsan_platform_linux.cc
+    rtl/tsan_platform_posix.cc)
 endif()
 
 if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
-  list(APPEND TSAN_SOURCES
-    rtl/tsan_interceptors_libdispatch.cpp
-    )
+  list(APPEND TSAN_SOURCES rtl/tsan_libdispatch.cc)
   list(APPEND TSAN_RTL_CFLAGS ${COMPILER_RT_LIBDISPATCH_CFLAGS})
 endif()
 
@@ -93,39 +89,25 @@ set(TSAN_HEADERS
   rtl/tsan_interface_inl.h
   rtl/tsan_interface_java.h
   rtl/tsan_mman.h
+  rtl/tsan_mutex.h
   rtl/tsan_mutexset.h
   rtl/tsan_platform.h
   rtl/tsan_ppc_regs.h
   rtl/tsan_report.h
   rtl/tsan_rtl.h
   rtl/tsan_stack_trace.h
+  rtl/tsan_stat.h
   rtl/tsan_suppressions.h
   rtl/tsan_symbolize.h
   rtl/tsan_sync.h
   rtl/tsan_trace.h
-  rtl/tsan_update_shadow_word_inl.h
-  )
+  rtl/tsan_update_shadow_word_inl.h)
 
 set(TSAN_RUNTIME_LIBRARIES)
 add_compiler_rt_component(tsan)
 
-if("${CMAKE_C_FLAGS}" MATCHES "-Wno-(error=)?unused-command-line-argument")
-  set(EXTRA_CFLAGS "-Wno-error=unused-command-line-argument ${EXTRA_CFLAGS}")
-endif()
-
 if(APPLE)
-  # Ideally we would check the SDK version for the actual platform we are
-  # building for here.  To make our lifes easier we assume the host SDK setup is
-  # sane and use the macOS SDK version as a proxy for aligned SDKs.
-  find_darwin_sdk_version(macosx_sdk_version "macosx")
-  if ("${macosx_sdk_version}" VERSION_LESS 10.12)
-    message(FATAL_ERROR "Building the TSan runtime requires at least macOS SDK 10.12 (or aligned SDK on other platforms)")
-  endif()
-
-  add_asm_sources(TSAN_ASM_SOURCES
-    rtl/tsan_rtl_amd64.S
-    rtl/tsan_rtl_aarch64.S
-    )
+  add_asm_sources(TSAN_ASM_SOURCES rtl/tsan_rtl_amd64.S rtl/tsan_rtl_aarch64.S)
 
   set(TSAN_LINK_LIBS ${SANITIZER_COMMON_LINK_LIBS})
 
@@ -159,7 +141,6 @@ if(APPLE)
   set(BUILDGO_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/go/buildgo.sh)
   add_custom_target(GotsanRuntimeCheck
     COMMAND env "CC=${CMAKE_C_COMPILER} ${OSX_SYSROOT_FLAG}"
-            EXTRA_CFLAGS=${EXTRA_CFLAGS}
             IN_TMPDIR=1 SILENT=1 ${BUILDGO_SCRIPT}
     DEPENDS tsan ${BUILDGO_SCRIPT}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/go
@@ -169,65 +150,40 @@ if(APPLE)
 else()
   foreach(arch ${TSAN_SUPPORTED_ARCH})
     if(arch STREQUAL "x86_64")
-      add_asm_sources(TSAN_ASM_SOURCES
-        rtl/tsan_rtl_amd64.S
-        )
+      add_asm_sources(TSAN_ASM_SOURCES rtl/tsan_rtl_amd64.S)
       # Sanity check for Go runtime.
       set(BUILDGO_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/go/buildgo.sh)
       add_custom_target(GotsanRuntimeCheck
         COMMAND env "CC=${CMAKE_C_COMPILER} ${CMAKE_C_COMPILER_ARG1}"
-                EXTRA_CFLAGS=${EXTRA_CFLAGS}
                 IN_TMPDIR=1 SILENT=1 ${BUILDGO_SCRIPT}
         DEPENDS clang_rt.tsan-${arch} ${BUILDGO_SCRIPT}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/go
         COMMENT "Checking TSan Go runtime..."
         VERBATIM)
     elseif(arch STREQUAL "aarch64")
-      add_asm_sources(TSAN_ASM_SOURCES
-        rtl/tsan_rtl_aarch64.S
-        )
+      add_asm_sources(TSAN_ASM_SOURCES rtl/tsan_rtl_aarch64.S)
       # Sanity check for Go runtime.
       set(BUILDGO_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/go/buildgo.sh)
       add_custom_target(GotsanRuntimeCheck
 	COMMAND env "CC=${CMAKE_C_COMPILER} ${CMAKE_C_COMPILER_ARG1}"
-		EXTRA_CFLAGS=${EXTRA_CFLAGS} 
 		IN_TMPDIR=1 SILENT=1 ${BUILDGO_SCRIPT}
 	DEPENDS clang_rt.tsan-${arch} ${BUILDGO_SCRIPT}
 	WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/go
 	COMMENT "Checking TSan Go runtime..."
 	VERBATIM)
     elseif(arch MATCHES "powerpc64|powerpc64le")
-      add_asm_sources(TSAN_ASM_SOURCES
-        rtl/tsan_rtl_ppc64.S
-        )
+      add_asm_sources(TSAN_ASM_SOURCES rtl/tsan_rtl_ppc64.S)
       # Sanity check for Go runtime.
       set(BUILDGO_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/go/buildgo.sh)
       add_custom_target(GotsanRuntimeCheck
 	COMMAND env "CC=${CMAKE_C_COMPILER} ${CMAKE_C_COMPILER_ARG1}"
-		EXTRA_CFLAGS=${EXTRA_CFLAGS} 
 		IN_TMPDIR=1 SILENT=1 ${BUILDGO_SCRIPT}
 	DEPENDS clang_rt.tsan-${arch} ${BUILDGO_SCRIPT}
 	WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/go
 	COMMENT "Checking TSan Go runtime..."
 	VERBATIM)
     elseif(arch MATCHES "mips64|mips64le")
-      add_asm_sources(TSAN_ASM_SOURCES
-        rtl/tsan_rtl_mips64.S
-        )
-    elseif(arch MATCHES "s390x")
-      add_asm_sources(TSAN_ASM_SOURCES
-        rtl/tsan_rtl_s390x.S
-        )
-      # Sanity check for Go runtime.
-      set(BUILDGO_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/go/buildgo.sh)
-      add_custom_target(GotsanRuntimeCheck
-	COMMAND env "CC=${CMAKE_C_COMPILER} ${CMAKE_C_COMPILER_ARG1}"
-		EXTRA_CFLAGS=${EXTRA_CFLAGS}
-		IN_TMPDIR=1 SILENT=1 ${BUILDGO_SCRIPT}
-	DEPENDS clang_rt.tsan-${arch} ${BUILDGO_SCRIPT}
-	WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/go
-	COMMENT "Checking TSan Go runtime..."
-	VERBATIM)
+      add_asm_sources(TSAN_ASM_SOURCES rtl/tsan_rtl_mips64.S)
     else()
       set(TSAN_ASM_SOURCES)
     endif()
@@ -265,6 +221,21 @@ else()
                           clang_rt.tsan-${arch}-symbols
                           clang_rt.tsan_cxx-${arch}-symbols)
   endforeach()
+endif()
+
+# Make sure that non-platform-specific files don't include any system headers.
+# FreeBSD/NetBSD do not install a number of Clang-provided headers for the
+# compiler in the base system due to incompatibilities between FreeBSD/NetBSD's
+# and Clang's versions. As a workaround do not use --sysroot=. on FreeBSD/NetBSD
+# until this is addressed.
+if(COMPILER_RT_HAS_SYSROOT_FLAG AND NOT CMAKE_SYSTEM_NAME MATCHES "FreeBSD"
+   AND NOT CMAKE_SYSTEM_NAME MATCHES "NetBSD")
+  file(GLOB _tsan_generic_sources rtl/tsan*)
+  file(GLOB _tsan_platform_sources rtl/tsan*posix* rtl/tsan*mac*
+                                   rtl/tsan*linux*)
+  list(REMOVE_ITEM _tsan_generic_sources ${_tsan_platform_sources})
+  set_source_files_properties(${_tsan_generic_sources}
+    PROPERTIES COMPILE_FLAGS "--sysroot=.")
 endif()
 
 # Build libcxx instrumented with TSan.

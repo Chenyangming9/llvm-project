@@ -96,11 +96,10 @@ define void @f1(<16 x i8> *%ptr) {
   ret void
 }
 
-; Like f1, but no 16-byte slot should be needed, and no outgoing reg save
-; area of 160 bytes.
+; Like f1, but no 16-byte slot should be needed.
 define void @f2(<16 x i8> *%ptr) {
 ; CHECK-LABEL: f2:
-; CHECK: aghi %r15, -64
+; CHECK: aghi %r15, -224
 ; CHECK-DAG: std %f8,
 ; CHECK-DAG: std %f9,
 ; CHECK-DAG: std %f10,
@@ -119,7 +118,7 @@ define void @f2(<16 x i8> *%ptr) {
 ; CHECK-DAG: ld %f13,
 ; CHECK-DAG: ld %f14,
 ; CHECK-DAG: ld %f15,
-; CHECK: aghi %r15, 64
+; CHECK: aghi %r15, 224
 ; CHECK: br %r14
   %v0 = load volatile <16 x i8>, <16 x i8> *%ptr
   %v1 = load volatile <16 x i8>, <16 x i8> *%ptr
@@ -191,7 +190,7 @@ define void @f2(<16 x i8> *%ptr) {
 ; Like f2, but only %f8 should be saved.
 define void @f3(<16 x i8> *%ptr) {
 ; CHECK-LABEL: f3:
-; CHECK: aghi %r15, -8
+; CHECK: aghi %r15, -168
 ; CHECK-DAG: std %f8,
 ; CHECK-NOT: vst {{.*}}(%r15)
 ; CHECK-NOT: vl {{.*}}(%r15)
@@ -203,7 +202,7 @@ define void @f3(<16 x i8> *%ptr) {
 ; CHECK-NOT: %v14
 ; CHECK-NOT: %v15
 ; CHECK-DAG: ld %f8,
-; CHECK: aghi %r15, 8
+; CHECK: aghi %r15, 168
 ; CHECK: br %r14
   %v0 = load volatile <16 x i8>, <16 x i8> *%ptr
   %v1 = load volatile <16 x i8>, <16 x i8> *%ptr

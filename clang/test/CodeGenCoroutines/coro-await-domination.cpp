@@ -7,7 +7,7 @@ struct coro {
   struct promise_type {
     coro get_return_object();
     suspend_never initial_suspend();
-    suspend_never final_suspend() noexcept;
+    suspend_never final_suspend();
     void return_void();
     static void unhandled_exception();
   };
@@ -35,3 +35,4 @@ extern "C" coro f(int) {
   x = co_await A{};
   consume(x);
 }
+

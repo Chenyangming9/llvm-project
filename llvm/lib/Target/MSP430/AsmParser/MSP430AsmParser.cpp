@@ -12,6 +12,7 @@
 #include "TargetInfo/MSP430TargetInfo.h"
 
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
@@ -45,8 +46,6 @@ class MSP430AsmParser : public MCTargetAsmParser {
                                bool MatchingInlineAsm) override;
 
   bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc) override;
-  OperandMatchResultTy tryParseRegister(unsigned &RegNo, SMLoc &StartLoc,
-                                        SMLoc &EndLoc) override;
 
   bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
                         SMLoc NameLoc, OperandVector &Operands) override;
@@ -155,12 +154,12 @@ public:
     addExprOperand(Inst, Mem.Offset);
   }
 
-  bool isReg()   const override { return Kind == k_Reg; }
-  bool isImm()   const override { return Kind == k_Imm; }
-  bool isToken() const override { return Kind == k_Tok; }
-  bool isMem()   const override { return Kind == k_Mem; }
-  bool isIndReg()         const { return Kind == k_IndReg; }
-  bool isPostIndReg()     const { return Kind == k_PostIndReg; }
+  bool isReg() const        { return Kind == k_Reg; }
+  bool isImm() const        { return Kind == k_Imm; }
+  bool isToken() const      { return Kind == k_Tok; }
+  bool isMem() const        { return Kind == k_Mem; }
+  bool isIndReg() const     { return Kind == k_IndReg; }
+  bool isPostIndReg() const { return Kind == k_PostIndReg; }
 
   bool isCGImm() const {
     if (Kind != k_Imm)
@@ -181,7 +180,7 @@ public:
     return Tok;
   }
 
-  unsigned getReg() const override {
+  unsigned getReg() const {
     assert(Kind == k_Reg && "Invalid access!");
     return Reg;
   }
@@ -192,39 +191,39 @@ public:
   }
 
   static std::unique_ptr<MSP430Operand> CreateToken(StringRef Str, SMLoc S) {
-    return std::make_unique<MSP430Operand>(Str, S);
+    return make_unique<MSP430Operand>(Str, S);
   }
 
   static std::unique_ptr<MSP430Operand> CreateReg(unsigned RegNum, SMLoc S,
                                                   SMLoc E) {
-    return std::make_unique<MSP430Operand>(k_Reg, RegNum, S, E);
+    return make_unique<MSP430Operand>(k_Reg, RegNum, S, E);
   }
 
   static std::unique_ptr<MSP430Operand> CreateImm(const MCExpr *Val, SMLoc S,
                                                   SMLoc E) {
-    return std::make_unique<MSP430Operand>(Val, S, E);
+    return make_unique<MSP430Operand>(Val, S, E);
   }
 
   static std::unique_ptr<MSP430Operand> CreateMem(unsigned RegNum,
                                                   const MCExpr *Val,
                                                   SMLoc S, SMLoc E) {
-    return std::make_unique<MSP430Operand>(RegNum, Val, S, E);
+    return make_unique<MSP430Operand>(RegNum, Val, S, E);
   }
 
   static std::unique_ptr<MSP430Operand> CreateIndReg(unsigned RegNum, SMLoc S,
                                                   SMLoc E) {
-    return std::make_unique<MSP430Operand>(k_IndReg, RegNum, S, E);
+    return make_unique<MSP430Operand>(k_IndReg, RegNum, S, E);
   }
 
   static std::unique_ptr<MSP430Operand> CreatePostIndReg(unsigned RegNum, SMLoc S,
                                                   SMLoc E) {
-    return std::make_unique<MSP430Operand>(k_PostIndReg, RegNum, S, E);
+    return make_unique<MSP430Operand>(k_PostIndReg, RegNum, S, E);
   }
 
-  SMLoc getStartLoc() const override { return Start; }
-  SMLoc getEndLoc() const override { return End; }
+  SMLoc getStartLoc() const { return Start; }
+  SMLoc getEndLoc() const { return End; }
 
-  void print(raw_ostream &O) const override {
+  virtual void print(raw_ostream &O) const {
     switch (Kind) {
     case k_Tok:
       O << "Token " << Tok;
@@ -262,7 +261,7 @@ bool MSP430AsmParser::MatchAndEmitInstruction(SMLoc Loc, unsigned &Opcode,
   switch (MatchResult) {
   case Match_Success:
     Inst.setLoc(Loc);
-    Out.emitInstruction(Inst, STI);
+    Out.EmitInstruction(Inst, STI);
     return false;
   case Match_MnemonicFail:
     return Error(Loc, "invalid instruction mnemonic");
@@ -289,28 +288,13 @@ static unsigned MatchRegisterAltName(StringRef Name);
 
 bool MSP430AsmParser::ParseRegister(unsigned &RegNo, SMLoc &StartLoc,
                                     SMLoc &EndLoc) {
-  switch (tryParseRegister(RegNo, StartLoc, EndLoc)) {
-  case MatchOperand_ParseFail:
-    return Error(StartLoc, "invalid register name");
-  case MatchOperand_Success:
-    return false;
-  case MatchOperand_NoMatch:
-    return true;
-  }
-
-  llvm_unreachable("unknown match result type");
-}
-
-OperandMatchResultTy MSP430AsmParser::tryParseRegister(unsigned &RegNo,
-                                                       SMLoc &StartLoc,
-                                                       SMLoc &EndLoc) {
   if (getLexer().getKind() == AsmToken::Identifier) {
     auto Name = getLexer().getTok().getIdentifier().lower();
     RegNo = MatchRegisterName(Name);
     if (RegNo == MSP430::NoRegister) {
       RegNo = MatchRegisterAltName(Name);
       if (RegNo == MSP430::NoRegister)
-        return MatchOperand_NoMatch;
+        return true;
     }
 
     AsmToken const &T = getParser().getTok();
@@ -318,16 +302,16 @@ OperandMatchResultTy MSP430AsmParser::tryParseRegister(unsigned &RegNo,
     EndLoc = T.getEndLoc();
     getLexer().Lex(); // eat register token
 
-    return MatchOperand_Success;
+    return false;
   }
 
-  return MatchOperand_ParseFail;
+  return Error(StartLoc, "invalid register name");
 }
 
 bool MSP430AsmParser::parseJccInstruction(ParseInstructionInfo &Info,
                                           StringRef Name, SMLoc NameLoc,
                                           OperandVector &Operands) {
-  if (!Name.startswith_insensitive("j"))
+  if (!Name.startswith_lower("j"))
     return true;
 
   auto CC = Name.drop_front().lower();
@@ -390,7 +374,7 @@ bool MSP430AsmParser::ParseInstruction(ParseInstructionInfo &Info,
                                        StringRef Name, SMLoc NameLoc,
                                        OperandVector &Operands) {
   // Drop .w suffix
-  if (Name.endswith_insensitive(".w"))
+  if (Name.endswith_lower(".w"))
     Name = Name.drop_back(2);
 
   if (!parseJccInstruction(Info, Name, NameLoc, Operands))
@@ -430,7 +414,7 @@ bool MSP430AsmParser::ParseDirectiveRefSym(AsmToken DirectiveID) {
       return TokError("expected identifier in directive");
 
     MCSymbol *Sym = getContext().getOrCreateSymbol(Name);
-    getStreamer().emitSymbolAttribute(Sym, MCSA_Global);
+    getStreamer().EmitSymbolAttribute(Sym, MCSA_Global);
     return false;
 }
 
@@ -539,13 +523,13 @@ bool MSP430AsmParser::ParseLiteralValues(unsigned Size, SMLoc L) {
     const MCExpr *Value;
     if (getParser().parseExpression(Value))
       return true;
-    getParser().getStreamer().emitValue(Value, Size, L);
+    getParser().getStreamer().EmitValue(Value, Size, L);
     return false;
   };
   return (parseMany(parseOne));
 }
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeMSP430AsmParser() {
+extern "C" void LLVMInitializeMSP430AsmParser() {
   RegisterMCAsmParser<MSP430AsmParser> X(getTheMSP430Target());
 }
 
@@ -561,7 +545,7 @@ static unsigned convertGR16ToGR8(unsigned Reg) {
   case MSP430::SP:  return MSP430::SPB;
   case MSP430::SR:  return MSP430::SRB;
   case MSP430::CG:  return MSP430::CGB;
-  case MSP430::R4:  return MSP430::R4B;
+  case MSP430::FP:  return MSP430::FPB;
   case MSP430::R5:  return MSP430::R5B;
   case MSP430::R6:  return MSP430::R6B;
   case MSP430::R7:  return MSP430::R7B;

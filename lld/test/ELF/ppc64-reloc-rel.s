@@ -12,7 +12,7 @@
   beq 1f
 1:
 # CHECK-LABEL: Disassembly of section .R_PPC64_REL14:
-# CHECK: bt 2, 0x10010198
+# CHECK: bt 2, .+4
 
 .section .R_PPC64_REL16,"ax",@progbits
 .globl rel16
@@ -34,7 +34,7 @@ rel16:
 .section .R_PPC64_REL24,"ax",@progbits
   b rel16
 # CHECK-LABEL: Disassembly of section .R_PPC64_REL24:
-# CHECK: 100101b0: b 0x10010198
+# CHECK: b .+67108840
 
 .section .REL32_AND_REL64,"ax",@progbits
   .cfi_startproc
@@ -48,11 +48,11 @@ rel64:
 # REL-NEXT:   0x28 R_PPC64_REL32 .REL32_AND_REL64 0x0
 # REL-NEXT: }
 
-# SEC: .REL32_AND_REL64 PROGBITS 00000000100101b4
+# SEC: .REL32_AND_REL64 PROGBITS 0000000010010020
 
-## CIE Personality Address: 0x100101b4-(0x10000168+2)+4 = 0x1004e
-## FDE PC Begin: 0x100101b4-(0x10000178+8) = 0x10034
+## CIE Personality Address: 0x10010020-(0x10000168+2)+4 = 0xfeba
+## FDE PC Begin: 0x10010020-(0x10000178+8) = 0xfea0
 # HEX:      section '.eh_frame':
 # HEX-NEXT: 0x10000158
-# HEX-NEXT: 0x10000168 {{....}}4e00 01000000 0000{{....}}
-# HEX-NEXT: 0x10000178 {{[0-9a-f]+}} {{[0-9a-f]+}} 34000100
+# HEX-NEXT: 0x10000168 {{....}}bafe 00000000
+# HEX-NEXT: 0x10000178 {{[0-9a-f]+}} {{[0-9a-f]+}} a0fe0000

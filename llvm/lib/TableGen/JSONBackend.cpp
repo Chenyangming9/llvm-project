@@ -29,6 +29,7 @@ private:
   RecordKeeper &Records;
 
   json::Value translateInit(const Init &I);
+  json::Array listSuperclasses(const Record &R);
 
 public:
   JSONEmitter(RecordKeeper &R);
@@ -58,6 +59,8 @@ json::Value JSONEmitter::translateInit(const Init &I) {
     return Int->getValue();
   } else if (auto *Str = dyn_cast<StringInit>(&I)) {
     return Str->getValue();
+  } else if (auto *Code = dyn_cast<CodeInit>(&I)) {
+    return Code->getValue();
   } else if (auto *List = dyn_cast<ListInit>(&I)) {
     json::Array array;
     for (auto val : *List)
@@ -144,7 +147,7 @@ void JSONEmitter::run(raw_ostream &OS) {
     for (const RecordVal &RV : Def.getValues()) {
       if (!Def.isTemplateArg(RV.getNameInit())) {
         auto Name = RV.getNameInitAsString();
-        if (RV.isNonconcreteOK())
+        if (RV.getPrefix())
           fields.push_back(Name);
         obj[Name] = translateInit(*RV.getValue());
       }

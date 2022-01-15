@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cassert>
-#include "support/timer.h"
+#include "support/timer.hpp"
 
 namespace t1
 {
@@ -2172,12 +2172,10 @@ void test()
 
 }  // t3
 
-int main(int, char**)
+int main()
 {
     timer t;
     t1::test();
     t2::test();
     t3::test();
-
-    return 0;
 }

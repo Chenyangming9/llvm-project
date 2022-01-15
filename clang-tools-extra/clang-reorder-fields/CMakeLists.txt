@@ -1,17 +1,9 @@
-set(LLVM_LINK_COMPONENTS
-  FrontendOpenMP
-  support
-)
+set(LLVM_LINK_COMPONENTS support)
 
 add_clang_library(clangReorderFields
   ReorderFieldsAction.cpp
 
-  DEPENDS
-  omp_gen
-)
-
-clang_target_link_libraries(clangReorderFields
-  PRIVATE
+  LINK_LIBS
   clangAST
   clangASTMatchers
   clangBasic

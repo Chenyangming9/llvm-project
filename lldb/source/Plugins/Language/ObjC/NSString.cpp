@@ -1,4 +1,5 @@
-//===-- NSString.cpp ------------------------------------------------------===//
+//===-- NSString.cpp ----------------------------------------------*- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,11 +9,11 @@
 
 #include "NSString.h"
 
-#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
 #include "lldb/DataFormatters/StringPrinter.h"
+#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Target/Language.h"
 #include "lldb/Target/ProcessStructReader.h"
 #include "lldb/Target/Target.h"
@@ -34,7 +35,7 @@ NSString_Additionals::GetAdditionalSummaries() {
 static CompilerType GetNSPathStore2Type(Target &target) {
   static ConstString g_type_name("__lldb_autogen_nspathstore2");
 
-  TypeSystemClang *ast_ctx = ScratchTypeSystemClang::GetForTarget(target);
+  ClangASTContext *ast_ctx = target.GetScratchClangASTContext();
 
   if (!ast_ctx)
     return CompilerType();
@@ -77,12 +78,12 @@ bool lldb_private::formatters::NSStringSummaryProvider(
     return false;
 
   ConstString class_name_cs = descriptor->GetClassName();
-  llvm::StringRef class_name = class_name_cs.GetStringRef();
+  const char *class_name = class_name_cs.GetCString();
 
-  if (class_name.empty())
+  if (!class_name || !*class_name)
     return false;
 
-  bool is_tagged_ptr = class_name == "NSTaggedPointerString" &&
+  bool is_tagged_ptr = (0 == strcmp(class_name, "NSTaggedPointerString")) &&
                        descriptor->GetTaggedPointerInfo();
   // for a tagged pointer, the descriptor has everything we need
   if (is_tagged_ptr)
@@ -110,7 +111,7 @@ bool lldb_private::formatters::NSStringSummaryProvider(
   bool is_inline = (info_bits & 0x60) == 0;
   bool has_explicit_length = (info_bits & (1 | 4)) != 4;
   bool is_unicode = (info_bits & 0x10) == 0x10;
-  bool is_path_store = class_name == "NSPathStore2";
+  bool is_path_store = strcmp(class_name, "NSPathStore2") == 0;
   bool has_null = (info_bits & 8) == 8;
 
   size_t explicit_length = 0;
@@ -134,14 +135,14 @@ bool lldb_private::formatters::NSStringSummaryProvider(
     }
   }
 
-  const llvm::StringSet<> supported_string_classes = {
-      "NSString",     "CFMutableStringRef",
-      "CFStringRef",  "__NSCFConstantString",
-      "__NSCFString", "NSCFConstantString",
-      "NSCFString",   "NSPathStore2"};
-  if (supported_string_classes.count(class_name) == 0) {
+  if (strcmp(class_name, "NSString") && strcmp(class_name, "CFStringRef") &&
+      strcmp(class_name, "CFMutableStringRef") &&
+      strcmp(class_name, "__NSCFConstantString") &&
+      strcmp(class_name, "__NSCFString") &&
+      strcmp(class_name, "NSCFConstantString") &&
+      strcmp(class_name, "NSCFString") && strcmp(class_name, "NSPathStore2")) {
     // not one of us - but tell me class name
-    stream.Printf("class name = %s", class_name_cs.GetCString());
+    stream.Printf("class name = %s", class_name);
     return true;
   }
 
@@ -170,11 +171,11 @@ bool lldb_private::formatters::NSStringSummaryProvider(
       options.SetStream(&stream);
       options.SetQuote('"');
       options.SetSourceSize(explicit_length);
-      options.SetHasSourceSize(has_explicit_length);
       options.SetNeedsZeroTermination(false);
       options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                  TypeSummaryCapping::eTypeSummaryUncapped);
       options.SetBinaryZeroIsTerminator(false);
+      options.SetLanguage(summary_options.GetLanguage());
       return StringPrinter::ReadStringAndDumpToStream<
           StringPrinter::StringElementType::UTF16>(options);
     } else {
@@ -182,11 +183,11 @@ bool lldb_private::formatters::NSStringSummaryProvider(
       options.SetProcessSP(process_sp);
       options.SetStream(&stream);
       options.SetSourceSize(explicit_length);
-      options.SetHasSourceSize(has_explicit_length);
       options.SetNeedsZeroTermination(false);
       options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                  TypeSummaryCapping::eTypeSummaryUncapped);
       options.SetBinaryZeroIsTerminator(false);
+      options.SetLanguage(summary_options.GetLanguage());
       return StringPrinter::ReadStringAndDumpToStream<
           StringPrinter::StringElementType::ASCII>(options);
     }
@@ -199,9 +200,9 @@ bool lldb_private::formatters::NSStringSummaryProvider(
     options.SetStream(&stream);
     options.SetQuote('"');
     options.SetSourceSize(explicit_length);
-    options.SetHasSourceSize(has_explicit_length);
     options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                TypeSummaryCapping::eTypeSummaryUncapped);
+    options.SetLanguage(summary_options.GetLanguage());
     return StringPrinter::ReadStringAndDumpToStream<
         StringPrinter::StringElementType::ASCII>(options);
   } else if (is_unicode) {
@@ -221,11 +222,11 @@ bool lldb_private::formatters::NSStringSummaryProvider(
     options.SetStream(&stream);
     options.SetQuote('"');
     options.SetSourceSize(explicit_length);
-    options.SetHasSourceSize(has_explicit_length);
     options.SetNeedsZeroTermination(!has_explicit_length);
     options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                TypeSummaryCapping::eTypeSummaryUncapped);
     options.SetBinaryZeroIsTerminator(!has_explicit_length);
+    options.SetLanguage(summary_options.GetLanguage());
     return StringPrinter::ReadStringAndDumpToStream<
         StringPrinter::StringElementType::UTF16>(options);
   } else if (is_path_store) {
@@ -241,11 +242,11 @@ bool lldb_private::formatters::NSStringSummaryProvider(
     options.SetStream(&stream);
     options.SetQuote('"');
     options.SetSourceSize(explicit_length);
-    options.SetHasSourceSize(has_explicit_length);
     options.SetNeedsZeroTermination(!has_explicit_length);
     options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                TypeSummaryCapping::eTypeSummaryUncapped);
     options.SetBinaryZeroIsTerminator(!has_explicit_length);
+    options.SetLanguage(summary_options.GetLanguage());
     return StringPrinter::ReadStringAndDumpToStream<
         StringPrinter::StringElementType::UTF16>(options);
   } else if (is_inline) {
@@ -263,11 +264,11 @@ bool lldb_private::formatters::NSStringSummaryProvider(
     options.SetProcessSP(process_sp);
     options.SetStream(&stream);
     options.SetSourceSize(explicit_length);
-    options.SetHasSourceSize(has_explicit_length);
     options.SetNeedsZeroTermination(!has_explicit_length);
     options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                TypeSummaryCapping::eTypeSummaryUncapped);
     options.SetBinaryZeroIsTerminator(!has_explicit_length);
+    options.SetLanguage(summary_options.GetLanguage());
     if (has_explicit_length)
       return StringPrinter::ReadStringAndDumpToStream<
           StringPrinter::StringElementType::UTF8>(options);
@@ -286,9 +287,9 @@ bool lldb_private::formatters::NSStringSummaryProvider(
     options.SetProcessSP(process_sp);
     options.SetStream(&stream);
     options.SetSourceSize(explicit_length);
-    options.SetHasSourceSize(has_explicit_length);
     options.SetIgnoreMaxLength(summary_options.GetCapping() ==
                                TypeSummaryCapping::eTypeSummaryUncapped);
+    options.SetLanguage(summary_options.GetLanguage());
     return StringPrinter::ReadStringAndDumpToStream<
         StringPrinter::StringElementType::ASCII>(options);
   }

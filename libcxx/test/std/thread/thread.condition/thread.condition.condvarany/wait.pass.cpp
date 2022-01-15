@@ -20,7 +20,6 @@
 #include <thread>
 #include <cassert>
 
-#include "make_test_thread.h"
 #include "test_macros.h"
 
 std::condition_variable_any cv;
@@ -47,7 +46,7 @@ void f()
 int main(int, char**)
 {
     L1 lk(m0);
-    std::thread t = support::make_test_thread(f);
+    std::thread t(f);
     assert(test1 == 0);
     while (test1 == 0)
         cv.wait(lk);

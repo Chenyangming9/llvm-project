@@ -48,7 +48,7 @@ public:
                                      QualType BaseObjectType,
                                      const PartialDiagnostic &PDiag) {
     DependentDiagnostic *DD = Create(Context, Parent, PDiag);
-    DD->AccessData.Loc = Loc;
+    DD->AccessData.Loc = Loc.getRawEncoding();
     DD->AccessData.IsMember = IsMemberAccess;
     DD->AccessData.Access = AS;
     DD->AccessData.TargetDecl = TargetDecl;
@@ -73,7 +73,7 @@ public:
 
   SourceLocation getAccessLoc() const {
     assert(getKind() == Access);
-    return AccessData.Loc;
+    return SourceLocation::getFromRawEncoding(AccessData.Loc);
   }
 
   NamedDecl *getAccessTarget() const {
@@ -100,8 +100,8 @@ private:
   friend class DependentStoredDeclsMap;
 
   DependentDiagnostic(const PartialDiagnostic &PDiag,
-                      DiagnosticStorage *Storage)
-      : Diag(PDiag, Storage) {}
+                      PartialDiagnostic::Storage *Storage)
+    : Diag(PDiag, Storage) {}
 
   static DependentDiagnostic *Create(ASTContext &Context,
                                      DeclContext *Parent,
@@ -112,7 +112,7 @@ private:
   PartialDiagnostic Diag;
 
   struct {
-    SourceLocation Loc;
+    unsigned Loc;
     unsigned Access : 2;
     unsigned IsMember : 1;
     NamedDecl *TargetDecl;

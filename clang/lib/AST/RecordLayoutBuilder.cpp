@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/RecordLayout.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/Attr.h"
@@ -14,8 +15,6 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/Expr.h"
-#include "clang/AST/VTableBuilder.h"
-#include "clang/AST/RecordLayout.h"
 #include "clang/Basic/TargetInfo.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Format.h"
@@ -589,9 +588,6 @@ protected:
   /// Alignment - The current alignment of the record layout.
   CharUnits Alignment;
 
-  /// PreferredAlignment - The preferred alignment of the record layout.
-  CharUnits PreferredAlignment;
-
   /// The alignment if attribute packed is not used.
   CharUnits UnpackedAlignment;
 
@@ -615,8 +611,6 @@ protected:
 
   unsigned IsMac68kAlign : 1;
 
-  unsigned IsNaturalAlign : 1;
-
   unsigned IsMsStruct : 1;
 
   /// UnfilledBitsInLastUnit - If the last field laid out was a bitfield,
@@ -624,10 +618,9 @@ protected:
   /// an adjacent bitfield if necessary.  The unit in question is usually
   /// a byte, but larger units are used if IsMsStruct.
   unsigned char UnfilledBitsInLastUnit;
-
-  /// LastBitfieldStorageUnitSize - If IsMsStruct, represents the size of the
-  /// storage unit of the previous field if it was a bitfield.
-  unsigned char LastBitfieldStorageUnitSize;
+  /// LastBitfieldTypeSize - If IsMsStruct, represents the size of the type
+  /// of the previous field if it was a bitfield.
+  unsigned char LastBitfieldTypeSize;
 
   /// MaxFieldAlignment - The maximum allowed field alignment. This is set by
   /// #pragma pack.
@@ -638,7 +631,6 @@ protected:
 
   CharUnits NonVirtualSize;
   CharUnits NonVirtualAlignment;
-  CharUnits PreferredNVAlignment;
 
   /// If we've laid out a field but not included its tail padding in Size yet,
   /// this is the size up to the end of that field.
@@ -658,12 +650,6 @@ protected:
 
   /// the flag of field offset changing due to packed attribute.
   bool HasPackedField;
-
-  /// HandledFirstNonOverlappingEmptyField - An auxiliary field used for AIX.
-  /// When there are OverlappingEmptyFields existing in the aggregate, the
-  /// flag shows if the following first non-empty or empty-but-non-overlapping
-  /// field has been handled, if any.
-  bool HandledFirstNonOverlappingEmptyField;
 
   typedef llvm::DenseMap<const CXXRecordDecl *, CharUnits> BaseOffsetsMapTy;
 
@@ -691,21 +677,17 @@ protected:
   ItaniumRecordLayoutBuilder(const ASTContext &Context,
                              EmptySubobjectMap *EmptySubobjects)
       : Context(Context), EmptySubobjects(EmptySubobjects), Size(0),
-        Alignment(CharUnits::One()), PreferredAlignment(CharUnits::One()),
-        UnpackedAlignment(CharUnits::One()),
-        UnadjustedAlignment(CharUnits::One()), UseExternalLayout(false),
-        InferAlignment(false), Packed(false), IsUnion(false),
-        IsMac68kAlign(false),
-        IsNaturalAlign(!Context.getTargetInfo().getTriple().isOSAIX()),
-        IsMsStruct(false), UnfilledBitsInLastUnit(0),
-        LastBitfieldStorageUnitSize(0), MaxFieldAlignment(CharUnits::Zero()),
-        DataSize(0), NonVirtualSize(CharUnits::Zero()),
+        Alignment(CharUnits::One()), UnpackedAlignment(CharUnits::One()),
+        UnadjustedAlignment(CharUnits::One()),
+        UseExternalLayout(false), InferAlignment(false), Packed(false),
+        IsUnion(false), IsMac68kAlign(false), IsMsStruct(false),
+        UnfilledBitsInLastUnit(0), LastBitfieldTypeSize(0),
+        MaxFieldAlignment(CharUnits::Zero()), DataSize(0),
+        NonVirtualSize(CharUnits::Zero()),
         NonVirtualAlignment(CharUnits::One()),
-        PreferredNVAlignment(CharUnits::One()),
         PaddedFieldSize(CharUnits::Zero()), PrimaryBase(nullptr),
-        PrimaryBaseIsVirtual(false), HasOwnVFPtr(false), HasPackedField(false),
-        HandledFirstNonOverlappingEmptyField(false),
-        FirstNearlyEmptyVBase(nullptr) {}
+        PrimaryBaseIsVirtual(false), HasOwnVFPtr(false),
+        HasPackedField(false), FirstNearlyEmptyVBase(nullptr) {}
 
   void Layout(const RecordDecl *D);
   void Layout(const CXXRecordDecl *D);
@@ -713,7 +695,7 @@ protected:
 
   void LayoutFields(const RecordDecl *D);
   void LayoutField(const FieldDecl *D, bool InsertExtraPadding);
-  void LayoutWideBitField(uint64_t FieldSize, uint64_t StorageUnitSize,
+  void LayoutWideBitField(uint64_t FieldSize, uint64_t TypeSize,
                           bool FieldPacked, const FieldDecl *D);
   void LayoutBitField(const FieldDecl *D);
 
@@ -780,13 +762,9 @@ protected:
   /// alignment.
   void FinishLayout(const NamedDecl *D);
 
-  void UpdateAlignment(CharUnits NewAlignment, CharUnits UnpackedNewAlignment,
-                       CharUnits PreferredAlignment);
-  void UpdateAlignment(CharUnits NewAlignment, CharUnits UnpackedNewAlignment) {
-    UpdateAlignment(NewAlignment, UnpackedNewAlignment, NewAlignment);
-  }
+  void UpdateAlignment(CharUnits NewAlignment, CharUnits UnpackedNewAlignment);
   void UpdateAlignment(CharUnits NewAlignment) {
-    UpdateAlignment(NewAlignment, NewAlignment, NewAlignment);
+    UpdateAlignment(NewAlignment, NewAlignment);
   }
 
   /// Retrieve the externally-supplied field offset for the given
@@ -1019,7 +997,7 @@ void ItaniumRecordLayoutBuilder::EnsureVTablePointerAlignment(
   setSize(getSize().alignTo(BaseAlign));
 
   // Update the alignment.
-  UpdateAlignment(BaseAlign, UnpackedBaseAlign, BaseAlign);
+  UpdateAlignment(BaseAlign, UnpackedBaseAlign);
 }
 
 void ItaniumRecordLayoutBuilder::LayoutNonVirtualBases(
@@ -1065,10 +1043,6 @@ void ItaniumRecordLayoutBuilder::LayoutNonVirtualBases(
       Context.toCharUnitsFromBits(Context.getTargetInfo().getPointerAlign(0));
     EnsureVTablePointerAlignment(PtrAlign);
     HasOwnVFPtr = true;
-
-    assert(!IsUnion && "Unions cannot be dynamic classes.");
-    HandledFirstNonOverlappingEmptyField = true;
-
     setSize(getSize() + PtrWidth);
     setDataSize(getSize());
   }
@@ -1204,91 +1178,60 @@ void ItaniumRecordLayoutBuilder::LayoutVirtualBase(
 
 CharUnits
 ItaniumRecordLayoutBuilder::LayoutBase(const BaseSubobjectInfo *Base) {
-  assert(!IsUnion && "Unions cannot have base classes.");
-
   const ASTRecordLayout &Layout = Context.getASTRecordLayout(Base->Class);
+
+
   CharUnits Offset;
 
   // Query the external layout to see if it provides an offset.
   bool HasExternalLayout = false;
   if (UseExternalLayout) {
+    // FIXME: This appears to be reversed.
     if (Base->IsVirtual)
-      HasExternalLayout = External.getExternalVBaseOffset(Base->Class, Offset);
-    else
       HasExternalLayout = External.getExternalNVBaseOffset(Base->Class, Offset);
+    else
+      HasExternalLayout = External.getExternalVBaseOffset(Base->Class, Offset);
   }
 
-  auto getBaseOrPreferredBaseAlignFromUnpacked = [&](CharUnits UnpackedAlign) {
-    // Clang <= 6 incorrectly applied the 'packed' attribute to base classes.
-    // Per GCC's documentation, it only applies to non-static data members.
-    return (Packed && ((Context.getLangOpts().getClangABICompat() <=
-                        LangOptions::ClangABI::Ver6) ||
-                       Context.getTargetInfo().getTriple().isPS4() ||
-                       Context.getTargetInfo().getTriple().isOSAIX()))
-               ? CharUnits::One()
-               : UnpackedAlign;
-  };
-
+  // Clang <= 6 incorrectly applied the 'packed' attribute to base classes.
+  // Per GCC's documentation, it only applies to non-static data members.
   CharUnits UnpackedBaseAlign = Layout.getNonVirtualAlignment();
-  CharUnits UnpackedPreferredBaseAlign = Layout.getPreferredNVAlignment();
   CharUnits BaseAlign =
-      getBaseOrPreferredBaseAlignFromUnpacked(UnpackedBaseAlign);
-  CharUnits PreferredBaseAlign =
-      getBaseOrPreferredBaseAlignFromUnpacked(UnpackedPreferredBaseAlign);
+      (Packed && ((Context.getLangOpts().getClangABICompat() <=
+                   LangOptions::ClangABI::Ver6) ||
+                  Context.getTargetInfo().getTriple().isPS4()))
+          ? CharUnits::One()
+          : UnpackedBaseAlign;
 
-  const bool DefaultsToAIXPowerAlignment =
-      Context.getTargetInfo().defaultsToAIXPowerAlignment();
-  if (DefaultsToAIXPowerAlignment) {
-    // AIX `power` alignment does not apply the preferred alignment for
-    // non-union classes if the source of the alignment (the current base in
-    // this context) follows introduction of the first subobject with
-    // exclusively allocated space or zero-extent array.
-    if (!Base->Class->isEmpty() && !HandledFirstNonOverlappingEmptyField) {
-      // By handling a base class that is not empty, we're handling the
-      // "first (inherited) member".
-      HandledFirstNonOverlappingEmptyField = true;
-    } else if (!IsNaturalAlign) {
-      UnpackedPreferredBaseAlign = UnpackedBaseAlign;
-      PreferredBaseAlign = BaseAlign;
-    }
-  }
-
-  CharUnits UnpackedAlignTo = !DefaultsToAIXPowerAlignment
-                                  ? UnpackedBaseAlign
-                                  : UnpackedPreferredBaseAlign;
   // If we have an empty base class, try to place it at offset 0.
   if (Base->Class->isEmpty() &&
       (!HasExternalLayout || Offset == CharUnits::Zero()) &&
       EmptySubobjects->CanPlaceBaseAtOffset(Base, CharUnits::Zero())) {
     setSize(std::max(getSize(), Layout.getSize()));
-    UpdateAlignment(BaseAlign, UnpackedAlignTo, PreferredBaseAlign);
+    UpdateAlignment(BaseAlign, UnpackedBaseAlign);
 
     return CharUnits::Zero();
   }
 
-  // The maximum field alignment overrides the base align/(AIX-only) preferred
-  // base align.
+  // The maximum field alignment overrides base align.
   if (!MaxFieldAlignment.isZero()) {
     BaseAlign = std::min(BaseAlign, MaxFieldAlignment);
-    PreferredBaseAlign = std::min(PreferredBaseAlign, MaxFieldAlignment);
-    UnpackedAlignTo = std::min(UnpackedAlignTo, MaxFieldAlignment);
+    UnpackedBaseAlign = std::min(UnpackedBaseAlign, MaxFieldAlignment);
   }
 
-  CharUnits AlignTo =
-      !DefaultsToAIXPowerAlignment ? BaseAlign : PreferredBaseAlign;
   if (!HasExternalLayout) {
     // Round up the current record size to the base's alignment boundary.
-    Offset = getDataSize().alignTo(AlignTo);
+    Offset = getDataSize().alignTo(BaseAlign);
 
     // Try to place the base.
     while (!EmptySubobjects->CanPlaceBaseAtOffset(Base, Offset))
-      Offset += AlignTo;
+      Offset += BaseAlign;
   } else {
     bool Allowed = EmptySubobjects->CanPlaceBaseAtOffset(Base, Offset);
     (void)Allowed;
     assert(Allowed && "Base subobject externally placed at overlapping offset");
 
-    if (InferAlignment && Offset < getDataSize().alignTo(AlignTo)) {
+    if (InferAlignment && Offset < getDataSize().alignTo(BaseAlign)) {
       // The externally-supplied base offset is before the base offset we
       // computed. Assume that the structure is packed.
       Alignment = CharUnits::One();
@@ -1305,7 +1248,7 @@ ItaniumRecordLayoutBuilder::LayoutBase(const BaseSubobjectInfo *Base) {
     setSize(std::max(getSize(), Offset + Layout.getSize()));
 
   // Remember max struct/class alignment.
-  UpdateAlignment(BaseAlign, UnpackedAlignTo, PreferredBaseAlign);
+  UpdateAlignment(BaseAlign, UnpackedBaseAlign);
 
   return Offset;
 }
@@ -1328,26 +1271,16 @@ void ItaniumRecordLayoutBuilder::InitializeLayout(const Decl *D) {
   // allude to additional (more complicated) semantics, especially with regard
   // to bit-fields, but gcc appears not to follow that.
   if (D->hasAttr<AlignMac68kAttr>()) {
-    assert(
-        !D->hasAttr<AlignNaturalAttr>() &&
-        "Having both mac68k and natural alignment on a decl is not allowed.");
     IsMac68kAlign = true;
     MaxFieldAlignment = CharUnits::fromQuantity(2);
     Alignment = CharUnits::fromQuantity(2);
-    PreferredAlignment = CharUnits::fromQuantity(2);
   } else {
-    if (D->hasAttr<AlignNaturalAttr>())
-      IsNaturalAlign = true;
-
     if (const MaxFieldAlignmentAttr *MFAA = D->getAttr<MaxFieldAlignmentAttr>())
       MaxFieldAlignment = Context.toCharUnitsFromBits(MFAA->getAlignment());
 
     if (unsigned MaxAlign = D->getMaxAlignment())
       UpdateAlignment(Context.toCharUnitsFromBits(MaxAlign));
   }
-
-  HandledFirstNonOverlappingEmptyField =
-      !Context.getTargetInfo().defaultsToAIXPowerAlignment() || IsNaturalAlign;
 
   // If there is an external AST source, ask it for the various offsets.
   if (const RecordDecl *RD = dyn_cast<RecordDecl>(D))
@@ -1360,7 +1293,6 @@ void ItaniumRecordLayoutBuilder::InitializeLayout(const Decl *D) {
       if (UseExternalLayout) {
         if (External.Align > 0) {
           Alignment = Context.toCharUnitsFromBits(External.Align);
-          PreferredAlignment = Context.toCharUnitsFromBits(External.Align);
         } else {
           // The external source didn't have alignment information; infer it.
           InferAlignment = true;
@@ -1389,7 +1321,6 @@ void ItaniumRecordLayoutBuilder::Layout(const CXXRecordDecl *RD) {
   NonVirtualSize = Context.toCharUnitsFromBits(
       llvm::alignTo(getSizeInBits(), Context.getTargetInfo().getCharAlign()));
   NonVirtualAlignment = Alignment;
-  PreferredNVAlignment = PreferredAlignment;
 
   // Lay out the virtual bases and add the primary virtual base offsets.
   LayoutVirtualBases(RD, RD);
@@ -1463,7 +1394,7 @@ roundUpSizeToCharAlignment(uint64_t Size,
 }
 
 void ItaniumRecordLayoutBuilder::LayoutWideBitField(uint64_t FieldSize,
-                                                    uint64_t StorageUnitSize,
+                                                    uint64_t TypeSize,
                                                     bool FieldPacked,
                                                     const FieldDecl *D) {
   assert(Context.getLangOpts().CPlusPlus &&
@@ -1493,7 +1424,7 @@ void ItaniumRecordLayoutBuilder::LayoutWideBitField(uint64_t FieldSize,
 
   // We're not going to use any of the unfilled bits in the last byte.
   UnfilledBitsInLastUnit = 0;
-  LastBitfieldStorageUnitSize = 0;
+  LastBitfieldTypeSize = 0;
 
   uint64_t FieldOffset;
   uint64_t UnpaddedFieldOffset = getDataSizeInBits() - UnfilledBitsInLastUnit;
@@ -1528,17 +1459,12 @@ void ItaniumRecordLayoutBuilder::LayoutWideBitField(uint64_t FieldSize,
   UpdateAlignment(TypeAlign);
 }
 
-static bool isAIXLayout(const ASTContext &Context) {
-  return Context.getTargetInfo().getTriple().getOS() == llvm::Triple::AIX;
-}
-
 void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
   bool FieldPacked = Packed || D->hasAttr<PackedAttr>();
   uint64_t FieldSize = D->getBitWidthValue(Context);
   TypeInfo FieldInfo = Context.getTypeInfo(D->getType());
-  uint64_t StorageUnitSize = FieldInfo.Width;
+  uint64_t TypeSize = FieldInfo.Width;
   unsigned FieldAlign = FieldInfo.Align;
-  bool AlignIsRequired = FieldInfo.AlignIsRequired;
 
   // UnfilledBitsInLastUnit is the difference between the end of the
   // last allocated bitfield (i.e. the first bit offset available for
@@ -1546,7 +1472,7 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
   // first bit offset available for non-bitfields).  The current data
   // size in bits is always a multiple of the char size; additionally,
   // for ms_struct records it's also a multiple of the
-  // LastBitfieldStorageUnitSize (if set).
+  // LastBitfieldTypeSize (if set).
 
   // The struct-layout algorithm is dictated by the platform ABI,
   // which in principle could use almost any rules it likes.  In
@@ -1600,50 +1526,26 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
   // First, some simple bookkeeping to perform for ms_struct structs.
   if (IsMsStruct) {
     // The field alignment for integer types is always the size.
-    FieldAlign = StorageUnitSize;
+    FieldAlign = TypeSize;
 
     // If the previous field was not a bitfield, or was a bitfield
     // with a different storage unit size, or if this field doesn't fit into
     // the current storage unit, we're done with that storage unit.
-    if (LastBitfieldStorageUnitSize != StorageUnitSize ||
+    if (LastBitfieldTypeSize != TypeSize ||
         UnfilledBitsInLastUnit < FieldSize) {
       // Also, ignore zero-length bitfields after non-bitfields.
-      if (!LastBitfieldStorageUnitSize && !FieldSize)
+      if (!LastBitfieldTypeSize && !FieldSize)
         FieldAlign = 1;
 
       UnfilledBitsInLastUnit = 0;
-      LastBitfieldStorageUnitSize = 0;
-    }
-  }
-
-  if (isAIXLayout(Context)) {
-    if (StorageUnitSize < Context.getTypeSize(Context.UnsignedIntTy)) {
-      // On AIX, [bool, char, short] bitfields have the same alignment
-      // as [unsigned].
-      StorageUnitSize = Context.getTypeSize(Context.UnsignedIntTy);
-    } else if (StorageUnitSize > Context.getTypeSize(Context.UnsignedIntTy) &&
-               Context.getTargetInfo().getTriple().isArch32Bit() &&
-               FieldSize <= 32) {
-      // Under 32-bit compile mode, the bitcontainer is 32 bits if a single
-      // long long bitfield has length no greater than 32 bits.
-      StorageUnitSize = 32;
-
-      if (!AlignIsRequired)
-        FieldAlign = 32;
-    }
-
-    if (FieldAlign < StorageUnitSize) {
-      // The bitfield alignment should always be greater than or equal to
-      // bitcontainer size.
-      FieldAlign = StorageUnitSize;
+      LastBitfieldTypeSize = 0;
     }
   }
 
   // If the field is wider than its declared type, it follows
-  // different rules in all cases, except on AIX.
-  // On AIX, wide bitfield follows the same rules as normal bitfield.
-  if (FieldSize > StorageUnitSize && !isAIXLayout(Context)) {
-    LayoutWideBitField(FieldSize, StorageUnitSize, FieldPacked, D);
+  // different rules in all cases.
+  if (FieldSize > TypeSize) {
+    LayoutWideBitField(FieldSize, TypeSize, FieldPacked, D);
     return;
   }
 
@@ -1656,17 +1558,12 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
     // Some such targets do honor it on zero-width bitfields.
     if (FieldSize == 0 &&
         Context.getTargetInfo().useZeroLengthBitfieldAlignment()) {
-      // Some targets don't honor leading zero-width bitfield.
-      if (!IsUnion && FieldOffset == 0 &&
-          !Context.getTargetInfo().useLeadingZeroLengthBitfield())
-        FieldAlign = 1;
-      else {
-        // The alignment to round up to is the max of the field's natural
-        // alignment and a target-specific fixed value (sometimes zero).
-        unsigned ZeroLengthBitfieldBoundary =
-            Context.getTargetInfo().getZeroLengthBitfieldBoundary();
-        FieldAlign = std::max(FieldAlign, ZeroLengthBitfieldBoundary);
-      }
+      // The alignment to round up to is the max of the field's natural
+      // alignment and a target-specific fixed value (sometimes zero).
+      unsigned ZeroLengthBitfieldBoundary =
+        Context.getTargetInfo().getZeroLengthBitfieldBoundary();
+      FieldAlign = std::max(FieldAlign, ZeroLengthBitfieldBoundary);
+
     // If that doesn't apply, just ignore the field alignment.
     } else {
       FieldAlign = 1;
@@ -1732,7 +1629,7 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
     // Compute the real offset.
     if (FieldSize == 0 ||
         (AllowPadding &&
-         (FieldOffset & (FieldAlign - 1)) + FieldSize > StorageUnitSize)) {
+         (FieldOffset & (FieldAlign-1)) + FieldSize > TypeSize)) {
       FieldOffset = llvm::alignTo(FieldOffset, FieldAlign);
     } else if (ExplicitFieldAlign &&
                (MaxFieldAlignmentInBits == 0 ||
@@ -1746,8 +1643,7 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
     // Repeat the computation for diagnostic purposes.
     if (FieldSize == 0 ||
         (AllowPadding &&
-         (UnpackedFieldOffset & (UnpackedFieldAlign - 1)) + FieldSize >
-             StorageUnitSize))
+         (UnpackedFieldOffset & (UnpackedFieldAlign-1)) + FieldSize > TypeSize))
       UnpackedFieldOffset =
           llvm::alignTo(UnpackedFieldOffset, UnpackedFieldAlign);
     else if (ExplicitFieldAlign &&
@@ -1775,12 +1671,6 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
       !D->getIdentifier())
     FieldAlign = UnpackedFieldAlign = 1;
 
-  // On AIX, zero-width bitfields pad out to the alignment boundary, but then
-  // do not affect overall record alignment if there is a pragma pack or
-  // pragma align(packed).
-  if (isAIXLayout(Context) && !MaxFieldAlignment.isZero() && !FieldSize)
-    FieldAlign = std::min(FieldAlign, MaxFieldAlignmentInBits);
-
   // Diagnose differences in layout due to padding or packing.
   if (!UseExternalLayout)
     CheckFieldPadding(FieldOffset, UnpaddedFieldOffset, UnpackedFieldOffset,
@@ -1794,11 +1684,11 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
     // is a zero-width bitfield, in which case just use a size of 1.
     uint64_t RoundedFieldSize;
     if (IsMsStruct) {
-      RoundedFieldSize = (FieldSize ? StorageUnitSize
-                                    : Context.getTargetInfo().getCharWidth());
+      RoundedFieldSize =
+        (FieldSize ? TypeSize : Context.getTargetInfo().getCharWidth());
 
-      // Otherwise, allocate just the number of bytes required to store
-      // the bitfield.
+    // Otherwise, allocate just the number of bytes required to store
+    // the bitfield.
     } else {
       RoundedFieldSize = roundUpSizeToCharAlignment(FieldSize, Context);
     }
@@ -1810,15 +1700,15 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
     // We should have cleared UnfilledBitsInLastUnit in every case
     // where we changed storage units.
     if (!UnfilledBitsInLastUnit) {
-      setDataSize(FieldOffset + StorageUnitSize);
-      UnfilledBitsInLastUnit = StorageUnitSize;
+      setDataSize(FieldOffset + TypeSize);
+      UnfilledBitsInLastUnit = TypeSize;
     }
     UnfilledBitsInLastUnit -= FieldSize;
-    LastBitfieldStorageUnitSize = StorageUnitSize;
+    LastBitfieldTypeSize = TypeSize;
 
-    // Otherwise, bump the data size up to include the bitfield,
-    // including padding up to char alignment, and then remember how
-    // bits we didn't use.
+  // Otherwise, bump the data size up to include the bitfield,
+  // including padding up to char alignment, and then remember how
+  // bits we didn't use.
   } else {
     uint64_t NewSizeInBits = FieldOffset + FieldSize;
     uint64_t CharAlignment = Context.getTargetInfo().getCharAlign();
@@ -1828,7 +1718,7 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
     // The only time we can get here for an ms_struct is if this is a
     // zero-width bitfield, which doesn't count as anything for the
     // purposes of unfilled bits.
-    LastBitfieldStorageUnitSize = 0;
+    LastBitfieldTypeSize = 0;
   }
 
   // Update the size.
@@ -1843,46 +1733,25 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
 
 void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
                                              bool InsertExtraPadding) {
-  auto *FieldClass = D->getType()->getAsCXXRecordDecl();
-  bool PotentiallyOverlapping = D->hasAttr<NoUniqueAddressAttr>() && FieldClass;
-  bool IsOverlappingEmptyField =
-      PotentiallyOverlapping && FieldClass->isEmpty();
-
-  CharUnits FieldOffset =
-      (IsUnion || IsOverlappingEmptyField) ? CharUnits::Zero() : getDataSize();
-
-  const bool DefaultsToAIXPowerAlignment =
-      Context.getTargetInfo().defaultsToAIXPowerAlignment();
-  bool FoundFirstNonOverlappingEmptyFieldForAIX = false;
-  if (DefaultsToAIXPowerAlignment && !HandledFirstNonOverlappingEmptyField) {
-    assert(FieldOffset == CharUnits::Zero() &&
-           "The first non-overlapping empty field should have been handled.");
-
-    if (!IsOverlappingEmptyField) {
-      FoundFirstNonOverlappingEmptyFieldForAIX = true;
-
-      // We're going to handle the "first member" based on
-      // `FoundFirstNonOverlappingEmptyFieldForAIX` during the current
-      // invocation of this function; record it as handled for future
-      // invocations (except for unions, because the current field does not
-      // represent all "firsts").
-      HandledFirstNonOverlappingEmptyField = !IsUnion;
-    }
-  }
-
   if (D->isBitField()) {
     LayoutBitField(D);
     return;
   }
 
   uint64_t UnpaddedFieldOffset = getDataSizeInBits() - UnfilledBitsInLastUnit;
+
   // Reset the unfilled bits.
   UnfilledBitsInLastUnit = 0;
-  LastBitfieldStorageUnitSize = 0;
+  LastBitfieldTypeSize = 0;
 
+  auto *FieldClass = D->getType()->getAsCXXRecordDecl();
+  bool PotentiallyOverlapping = D->hasAttr<NoUniqueAddressAttr>() && FieldClass;
+  bool IsOverlappingEmptyField = PotentiallyOverlapping && FieldClass->isEmpty();
   bool FieldPacked = Packed || D->hasAttr<PackedAttr>();
 
-  bool AlignIsRequired = false;
+  CharUnits FieldOffset = (IsUnion || IsOverlappingEmptyField)
+                              ? CharUnits::Zero()
+                              : getDataSize();
   CharUnits FieldSize;
   CharUnits FieldAlign;
   // The amount of this class's dsize occupied by the field.
@@ -1890,26 +1759,25 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
   // into the field's tail padding.
   CharUnits EffectiveFieldSize;
 
-  auto setDeclInfo = [&](bool IsIncompleteArrayType) {
-    auto TI = Context.getTypeInfoInChars(D->getType());
-    FieldAlign = TI.Align;
-    // Flexible array members don't have any size, but they have to be
-    // aligned appropriately for their element type.
-    EffectiveFieldSize = FieldSize =
-        IsIncompleteArrayType ? CharUnits::Zero() : TI.Width;
-    AlignIsRequired = TI.AlignIsRequired;
-  };
-
   if (D->getType()->isIncompleteArrayType()) {
-    setDeclInfo(true /* IsIncompleteArrayType */);
+    // This is a flexible array member; we can't directly
+    // query getTypeInfo about these, so we figure it out here.
+    // Flexible array members don't have any size, but they
+    // have to be aligned appropriately for their element type.
+    EffectiveFieldSize = FieldSize = CharUnits::Zero();
+    const ArrayType* ATy = Context.getAsArrayType(D->getType());
+    FieldAlign = Context.getTypeAlignInChars(ATy->getElementType());
   } else if (const ReferenceType *RT = D->getType()->getAs<ReferenceType>()) {
     unsigned AS = Context.getTargetAddressSpace(RT->getPointeeType());
-    EffectiveFieldSize = FieldSize = Context.toCharUnitsFromBits(
-        Context.getTargetInfo().getPointerWidth(AS));
-    FieldAlign = Context.toCharUnitsFromBits(
-        Context.getTargetInfo().getPointerAlign(AS));
+    EffectiveFieldSize = FieldSize =
+      Context.toCharUnitsFromBits(Context.getTargetInfo().getPointerWidth(AS));
+    FieldAlign =
+      Context.toCharUnitsFromBits(Context.getTargetInfo().getPointerAlign(AS));
   } else {
-    setDeclInfo(false /* IsIncompleteArrayType */);
+    std::pair<CharUnits, CharUnits> FieldInfo =
+      Context.getTypeInfoInChars(D->getType());
+    EffectiveFieldSize = FieldSize = FieldInfo.first;
+    FieldAlign = FieldInfo.second;
 
     // A potentially-overlapping field occupies its dsize or nvsize, whichever
     // is larger.
@@ -1961,72 +1829,31 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
     }
   }
 
-  // The AIX `power` alignment rules apply the natural alignment of the
-  // "first member" if it is of a floating-point data type (or is an aggregate
-  // whose recursively "first" member or element is such a type). The alignment
-  // associated with these types for subsequent members use an alignment value
-  // where the floating-point data type is considered to have 4-byte alignment.
-  //
-  // For the purposes of the foregoing: vtable pointers, non-empty base classes,
-  // and zero-width bit-fields count as prior members; members of empty class
-  // types marked `no_unique_address` are not considered to be prior members.
-  CharUnits PreferredAlign = FieldAlign;
-  if (DefaultsToAIXPowerAlignment && !AlignIsRequired &&
-      (FoundFirstNonOverlappingEmptyFieldForAIX || IsNaturalAlign)) {
-    auto performBuiltinTypeAlignmentUpgrade = [&](const BuiltinType *BTy) {
-      if (BTy->getKind() == BuiltinType::Double ||
-          BTy->getKind() == BuiltinType::LongDouble) {
-        assert(PreferredAlign == CharUnits::fromQuantity(4) &&
-               "No need to upgrade the alignment value.");
-        PreferredAlign = CharUnits::fromQuantity(8);
-      }
-    };
-
-    const Type *Ty = D->getType()->getBaseElementTypeUnsafe();
-    if (const ComplexType *CTy = Ty->getAs<ComplexType>()) {
-      performBuiltinTypeAlignmentUpgrade(CTy->getElementType()->castAs<BuiltinType>());
-    } else if (const BuiltinType *BTy = Ty->getAs<BuiltinType>()) {
-      performBuiltinTypeAlignmentUpgrade(BTy);
-    } else if (const RecordType *RT = Ty->getAs<RecordType>()) {
-      const RecordDecl *RD = RT->getDecl();
-      assert(RD && "Expected non-null RecordDecl.");
-      const ASTRecordLayout &FieldRecord = Context.getASTRecordLayout(RD);
-      PreferredAlign = FieldRecord.getPreferredAlignment();
-    }
-  }
-
   // The align if the field is not packed. This is to check if the attribute
   // was unnecessary (-Wpacked).
-  CharUnits UnpackedFieldAlign =
-      !DefaultsToAIXPowerAlignment ? FieldAlign : PreferredAlign;
+  CharUnits UnpackedFieldAlign = FieldAlign;
   CharUnits UnpackedFieldOffset = FieldOffset;
 
-  if (FieldPacked) {
+  if (FieldPacked)
     FieldAlign = CharUnits::One();
-    PreferredAlign = CharUnits::One();
-  }
   CharUnits MaxAlignmentInChars =
-      Context.toCharUnitsFromBits(D->getMaxAlignment());
+    Context.toCharUnitsFromBits(D->getMaxAlignment());
   FieldAlign = std::max(FieldAlign, MaxAlignmentInChars);
-  PreferredAlign = std::max(PreferredAlign, MaxAlignmentInChars);
   UnpackedFieldAlign = std::max(UnpackedFieldAlign, MaxAlignmentInChars);
 
   // The maximum field alignment overrides the aligned attribute.
   if (!MaxFieldAlignment.isZero()) {
     FieldAlign = std::min(FieldAlign, MaxFieldAlignment);
-    PreferredAlign = std::min(PreferredAlign, MaxFieldAlignment);
     UnpackedFieldAlign = std::min(UnpackedFieldAlign, MaxFieldAlignment);
   }
 
-  CharUnits AlignTo =
-      !DefaultsToAIXPowerAlignment ? FieldAlign : PreferredAlign;
   // Round up the current record size to the field's alignment boundary.
-  FieldOffset = FieldOffset.alignTo(AlignTo);
+  FieldOffset = FieldOffset.alignTo(FieldAlign);
   UnpackedFieldOffset = UnpackedFieldOffset.alignTo(UnpackedFieldAlign);
 
   if (UseExternalLayout) {
     FieldOffset = Context.toCharUnitsFromBits(
-        updateExternalFieldOffset(D, Context.toBits(FieldOffset)));
+                    updateExternalFieldOffset(D, Context.toBits(FieldOffset)));
 
     if (!IsUnion && EmptySubobjects) {
       // Record the fact that we're placing a field at this offset.
@@ -2042,9 +1869,9 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
         // We try offset 0 (for an empty field) and then dsize(C) onwards.
         if (FieldOffset == CharUnits::Zero() &&
             getDataSize() != CharUnits::Zero())
-          FieldOffset = getDataSize().alignTo(AlignTo);
+          FieldOffset = getDataSize().alignTo(FieldAlign);
         else
-          FieldOffset += AlignTo;
+          FieldOffset += FieldAlign;
       }
     }
   }
@@ -2081,9 +1908,9 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
                      (uint64_t)Context.toBits(FieldOffset + FieldSize)));
   }
 
-  // Remember max struct/class ABI-specified alignment.
+  // Remember max struct/class alignment.
   UnadjustedAlignment = std::max(UnadjustedAlignment, FieldAlign);
-  UpdateAlignment(FieldAlign, UnpackedFieldAlign, PreferredAlign);
+  UpdateAlignment(FieldAlign, UnpackedFieldAlign);
 }
 
 void ItaniumRecordLayoutBuilder::FinishLayout(const NamedDecl *D) {
@@ -2109,12 +1936,8 @@ void ItaniumRecordLayoutBuilder::FinishLayout(const NamedDecl *D) {
   uint64_t UnpaddedSize = getSizeInBits() - UnfilledBitsInLastUnit;
   uint64_t UnpackedSizeInBits =
       llvm::alignTo(getSizeInBits(), Context.toBits(UnpackedAlignment));
-
-  uint64_t RoundedSize = llvm::alignTo(
-      getSizeInBits(),
-      Context.toBits(!Context.getTargetInfo().defaultsToAIXPowerAlignment()
-                         ? Alignment
-                         : PreferredAlignment));
+  uint64_t RoundedSize =
+      llvm::alignTo(getSizeInBits(), Context.toBits(Alignment));
 
   if (UseExternalLayout) {
     // If we're inferring alignment, and the external size is smaller than
@@ -2122,7 +1945,6 @@ void ItaniumRecordLayoutBuilder::FinishLayout(const NamedDecl *D) {
     // alignment to 1.
     if (InferAlignment && External.Size < RoundedSize) {
       Alignment = CharUnits::One();
-      PreferredAlignment = CharUnits::One();
       InferAlignment = false;
     }
     setSize(External.Size);
@@ -2159,8 +1981,7 @@ void ItaniumRecordLayoutBuilder::FinishLayout(const NamedDecl *D) {
 }
 
 void ItaniumRecordLayoutBuilder::UpdateAlignment(
-    CharUnits NewAlignment, CharUnits UnpackedNewAlignment,
-    CharUnits PreferredNewAlignment) {
+    CharUnits NewAlignment, CharUnits UnpackedNewAlignment) {
   // The alignment is not modified when using 'mac68k' alignment or when
   // we have an externally-supplied layout that also provides overall alignment.
   if (IsMac68kAlign || (UseExternalLayout && !InferAlignment))
@@ -2177,12 +1998,6 @@ void ItaniumRecordLayoutBuilder::UpdateAlignment(
            "Alignment not a power of 2");
     UnpackedAlignment = UnpackedNewAlignment;
   }
-
-  if (PreferredNewAlignment > PreferredAlignment) {
-    assert(llvm::isPowerOf2_64(PreferredNewAlignment.getQuantity()) &&
-           "Alignment not a power of 2");
-    PreferredAlignment = PreferredNewAlignment;
-  }
 }
 
 uint64_t
@@ -2194,7 +2009,6 @@ ItaniumRecordLayoutBuilder::updateExternalFieldOffset(const FieldDecl *Field,
     // The externally-supplied field offset is before the field offset we
     // computed. Assume that the structure is packed.
     Alignment = CharUnits::One();
-    PreferredAlignment = CharUnits::One();
     InferAlignment = false;
   }
 
@@ -2293,7 +2107,7 @@ static const CXXMethodDecl *computeKeyFunction(ASTContext &Context,
     if (MD->isImplicit())
       continue;
 
-    if (MD->isInlineSpecified() || MD->isConstexpr())
+    if (MD->isInlineSpecified())
       continue;
 
     if (MD->hasInlineBody())
@@ -2328,8 +2142,7 @@ static const CXXMethodDecl *computeKeyFunction(ASTContext &Context,
     // If the key function is dllimport but the class isn't, then the class has
     // no key function. The DLL that exports the key function won't export the
     // vtable in this case.
-    if (MD->hasAttr<DLLImportAttr>() && !RD->hasAttr<DLLImportAttr>() &&
-        !Context.getTargetInfo().hasPS4DLLImportExport())
+    if (MD->hasAttr<DLLImportAttr>() && !RD->hasAttr<DLLImportAttr>())
       return nullptr;
 
     // We found it.
@@ -2624,9 +2437,9 @@ MicrosoftRecordLayoutBuilder::getAdjustedElementInfo(
     const FieldDecl *FD) {
   // Get the alignment of the field type's natural alignment, ignore any
   // alignment attributes.
-  auto TInfo =
+  ElementInfo Info;
+  std::tie(Info.Size, Info.Alignment) =
       Context.getTypeInfoInChars(FD->getType()->getUnqualifiedDesugaredType());
-  ElementInfo Info{TInfo.Width, TInfo.Align};
   // Respect align attributes on the field.
   CharUnits FieldRequiredAlignment =
       Context.toCharUnitsFromBits(FD->getMaxAlignment());
@@ -2755,11 +2568,9 @@ MicrosoftRecordLayoutBuilder::layoutNonVirtualBases(const CXXRecordDecl *RD) {
   // information about the bases, such as required alignment and the presence of
   // zero sized members.
   const ASTRecordLayout *PreviousBaseLayout = nullptr;
-  bool HasPolymorphicBaseClass = false;
   // Iterate through the bases and lay out the non-virtual ones.
   for (const CXXBaseSpecifier &Base : RD->bases()) {
     const CXXRecordDecl *BaseDecl = Base.getType()->getAsCXXRecordDecl();
-    HasPolymorphicBaseClass |= BaseDecl->isPolymorphic();
     const ASTRecordLayout &BaseLayout = Context.getASTRecordLayout(BaseDecl);
     // Mark and skip virtual bases.
     if (Base.isVirtual()) {
@@ -2783,23 +2594,11 @@ MicrosoftRecordLayoutBuilder::layoutNonVirtualBases(const CXXRecordDecl *RD) {
     layoutNonVirtualBase(RD, BaseDecl, BaseLayout, PreviousBaseLayout);
   }
   // Figure out if we need a fresh VFPtr for this class.
-  if (RD->isPolymorphic()) {
-    if (!HasPolymorphicBaseClass)
-      // This class introduces polymorphism, so we need a vftable to store the
-      // RTTI information.
-      HasOwnVFPtr = true;
-    else if (!PrimaryBase) {
-      // We have a polymorphic base class but can't extend its vftable. Add a
-      // new vfptr if we would use any vftable slots.
-      for (CXXMethodDecl *M : RD->methods()) {
-        if (MicrosoftVTableContext::hasVtableSlot(M) &&
-            M->size_overridden_methods() == 0) {
-          HasOwnVFPtr = true;
-          break;
-        }
-      }
-    }
-  }
+  if (!PrimaryBase && RD->isDynamicClass())
+    for (CXXRecordDecl::method_iterator i = RD->method_begin(),
+                                        e = RD->method_end();
+         !HasOwnVFPtr && i != e; ++i)
+      HasOwnVFPtr = i->isVirtual() && i->size_overridden_methods() == 0;
   // If we don't have a primary base then we have a leading object that could
   // itself lead with a zero-sized object, something we track.
   bool CheckLeadingLayout = !PrimaryBase;
@@ -3157,7 +2956,7 @@ void MicrosoftRecordLayoutBuilder::computeVtorDispSet(
     const CXXRecordDecl *RD) const {
   // /vd2 or #pragma vtordisp(2): Always use vtordisps for virtual bases with
   // vftables.
-  if (RD->getMSVtorDispMode() == MSVtorDispMode::ForVFTable) {
+  if (RD->getMSVtorDispMode() == MSVtorDispAttr::ForVFTable) {
     for (const CXXBaseSpecifier &Base : RD->vbases()) {
       const CXXRecordDecl *BaseDecl = Base.getType()->getAsCXXRecordDecl();
       const ASTRecordLayout &Layout = Context.getASTRecordLayout(BaseDecl);
@@ -3180,12 +2979,12 @@ void MicrosoftRecordLayoutBuilder::computeVtorDispSet(
   // * A user declared constructor or destructor aren't declared.
   // * #pragma vtordisp(0) or the /vd0 flag are in use.
   if ((!RD->hasUserDeclaredConstructor() && !RD->hasUserDeclaredDestructor()) ||
-      RD->getMSVtorDispMode() == MSVtorDispMode::Never)
+      RD->getMSVtorDispMode() == MSVtorDispAttr::Never)
     return;
   // /vd1 or #pragma vtordisp(1): Try to guess based on whether we think it's
   // possible for a partially constructed object with virtual base overrides to
   // escape a non-trivial constructor.
-  assert(RD->getMSVtorDispMode() == MSVtorDispMode::ForVBaseOverride);
+  assert(RD->getMSVtorDispMode() == MSVtorDispAttr::ForVBaseOverride);
   // Compute a set of base classes which define methods we override.  A virtual
   // base in this set will require a vtordisp.  A virtual base that transitively
   // contains one of these bases as a non-virtual base will also require a
@@ -3194,8 +2993,7 @@ void MicrosoftRecordLayoutBuilder::computeVtorDispSet(
   llvm::SmallPtrSet<const CXXRecordDecl *, 2> BasesWithOverriddenMethods;
   // Seed the working set with our non-destructor, non-pure virtual methods.
   for (const CXXMethodDecl *MD : RD->methods())
-    if (MicrosoftVTableContext::hasVtableSlot(MD) &&
-        !isa<CXXDestructorDecl>(MD) && !MD->isPure())
+    if (MD->isVirtual() && !isa<CXXDestructorDecl>(MD) && !MD->isPure())
       Work.insert(MD);
   while (!Work.empty()) {
     const CXXMethodDecl *MD = *Work.begin();
@@ -3250,10 +3048,10 @@ ASTContext::getASTRecordLayout(const RecordDecl *D) const {
       Builder.cxxLayout(RD);
       NewEntry = new (*this) ASTRecordLayout(
           *this, Builder.Size, Builder.Alignment, Builder.Alignment,
-          Builder.Alignment, Builder.RequiredAlignment, Builder.HasOwnVFPtr,
-          Builder.HasOwnVFPtr || Builder.PrimaryBase, Builder.VBPtrOffset,
-          Builder.DataSize, Builder.FieldOffsets, Builder.NonVirtualSize,
-          Builder.Alignment, Builder.Alignment, CharUnits::Zero(),
+          Builder.RequiredAlignment,
+          Builder.HasOwnVFPtr, Builder.HasOwnVFPtr || Builder.PrimaryBase,
+          Builder.VBPtrOffset, Builder.DataSize, Builder.FieldOffsets,
+          Builder.NonVirtualSize, Builder.Alignment, CharUnits::Zero(),
           Builder.PrimaryBase, false, Builder.SharedVBPtrBase,
           Builder.EndsWithZeroSizedObject, Builder.LeadsWithZeroSizedBase,
           Builder.Bases, Builder.VBases);
@@ -3261,8 +3059,8 @@ ASTContext::getASTRecordLayout(const RecordDecl *D) const {
       Builder.layout(D);
       NewEntry = new (*this) ASTRecordLayout(
           *this, Builder.Size, Builder.Alignment, Builder.Alignment,
-          Builder.Alignment, Builder.RequiredAlignment, Builder.Size,
-          Builder.FieldOffsets);
+          Builder.RequiredAlignment,
+          Builder.Size, Builder.FieldOffsets);
     }
   } else {
     if (const auto *RD = dyn_cast<CXXRecordDecl>(D)) {
@@ -3282,13 +3080,11 @@ ASTContext::getASTRecordLayout(const RecordDecl *D) const {
       CharUnits NonVirtualSize =
           skipTailPadding ? DataSize : Builder.NonVirtualSize;
       NewEntry = new (*this) ASTRecordLayout(
-          *this, Builder.getSize(), Builder.Alignment,
-          Builder.PreferredAlignment, Builder.UnadjustedAlignment,
+          *this, Builder.getSize(), Builder.Alignment, Builder.UnadjustedAlignment,
           /*RequiredAlignment : used by MS-ABI)*/
           Builder.Alignment, Builder.HasOwnVFPtr, RD->isDynamicClass(),
           CharUnits::fromQuantity(-1), DataSize, Builder.FieldOffsets,
           NonVirtualSize, Builder.NonVirtualAlignment,
-          Builder.PreferredNVAlignment,
           EmptySubobjects.SizeOfLargestEmptySubobject, Builder.PrimaryBase,
           Builder.PrimaryBaseIsVirtual, nullptr, false, false, Builder.Bases,
           Builder.VBases);
@@ -3297,8 +3093,7 @@ ASTContext::getASTRecordLayout(const RecordDecl *D) const {
       Builder.Layout(D);
 
       NewEntry = new (*this) ASTRecordLayout(
-          *this, Builder.getSize(), Builder.Alignment,
-          Builder.PreferredAlignment, Builder.UnadjustedAlignment,
+          *this, Builder.getSize(), Builder.Alignment, Builder.UnadjustedAlignment,
           /*RequiredAlignment : used by MS-ABI)*/
           Builder.Alignment, Builder.getSize(), Builder.FieldOffsets);
     }
@@ -3427,8 +3222,7 @@ ASTContext::getObjCLayout(const ObjCInterfaceDecl *D,
   if (D->hasExternalLexicalStorage() && !D->getDefinition())
     getExternalSource()->CompleteType(const_cast<ObjCInterfaceDecl*>(D));
   D = D->getDefinition();
-  assert(D && !D->isInvalidDecl() && D->isThisDeclarationADefinition() &&
-         "Invalid interface decl!");
+  assert(D && D->isThisDeclarationADefinition() && "Invalid interface decl!");
 
   // Look up this layout, if already laid out, return what we have.
   const ObjCContainerDecl *Key =
@@ -3450,11 +3244,14 @@ ASTContext::getObjCLayout(const ObjCInterfaceDecl *D,
   ItaniumRecordLayoutBuilder Builder(*this, /*EmptySubobjects=*/nullptr);
   Builder.Layout(D);
 
-  const ASTRecordLayout *NewEntry = new (*this) ASTRecordLayout(
-      *this, Builder.getSize(), Builder.Alignment, Builder.PreferredAlignment,
-      Builder.UnadjustedAlignment,
-      /*RequiredAlignment : used by MS-ABI)*/
-      Builder.Alignment, Builder.getDataSize(), Builder.FieldOffsets);
+  const ASTRecordLayout *NewEntry =
+    new (*this) ASTRecordLayout(*this, Builder.getSize(),
+                                Builder.Alignment,
+                                Builder.UnadjustedAlignment,
+                                /*RequiredAlignment : used by MS-ABI)*/
+                                Builder.Alignment,
+                                Builder.getDataSize(),
+                                Builder.FieldOffsets);
 
   ObjCLayouts[Key] = NewEntry;
 
@@ -3583,10 +3380,7 @@ static void DumpRecordLayout(raw_ostream &OS, const RecordDecl *RD,
     } else {
       PrintOffset(OS, FieldOffset, IndentLevel);
     }
-    const QualType &FieldType = C.getLangOpts().DumpRecordLayoutsCanonical
-                                    ? Field.getType().getCanonicalType()
-                                    : Field.getType();
-    OS << FieldType.getAsString() << ' ' << Field << '\n';
+    OS << Field.getType().getAsString() << ' ' << Field << '\n';
   }
 
   // Dump virtual bases.
@@ -3620,26 +3414,22 @@ static void DumpRecordLayout(raw_ostream &OS, const RecordDecl *RD,
   if (CXXRD && !isMsLayout(C))
     OS << ", dsize=" << Layout.getDataSize().getQuantity();
   OS << ", align=" << Layout.getAlignment().getQuantity();
-  if (C.getTargetInfo().defaultsToAIXPowerAlignment())
-    OS << ", preferredalign=" << Layout.getPreferredAlignment().getQuantity();
 
   if (CXXRD) {
     OS << ",\n";
     PrintIndentNoOffset(OS, IndentLevel - 1);
     OS << " nvsize=" << Layout.getNonVirtualSize().getQuantity();
     OS << ", nvalign=" << Layout.getNonVirtualAlignment().getQuantity();
-    if (C.getTargetInfo().defaultsToAIXPowerAlignment())
-      OS << ", preferrednvalign="
-         << Layout.getPreferredNVAlignment().getQuantity();
   }
   OS << "]\n";
 }
 
-void ASTContext::DumpRecordLayout(const RecordDecl *RD, raw_ostream &OS,
+void ASTContext::DumpRecordLayout(const RecordDecl *RD,
+                                  raw_ostream &OS,
                                   bool Simple) const {
   if (!Simple) {
     ::DumpRecordLayout(OS, RD, *this, CharUnits(), 0, nullptr,
-                       /*PrintSizeInfo*/ true,
+                       /*PrintSizeInfo*/true,
                        /*IncludeVirtualBases=*/true);
     return;
   }
@@ -3659,13 +3449,9 @@ void ASTContext::DumpRecordLayout(const RecordDecl *RD, raw_ostream &OS,
   if (!isMsLayout(*this))
     OS << "  DataSize:" << toBits(Info.getDataSize()) << "\n";
   OS << "  Alignment:" << toBits(Info.getAlignment()) << "\n";
-  if (Target->defaultsToAIXPowerAlignment())
-    OS << "  PreferredAlignment:" << toBits(Info.getPreferredAlignment())
-       << "\n";
   OS << "  FieldOffsets: [";
   for (unsigned i = 0, e = Info.getFieldCount(); i != e; ++i) {
-    if (i)
-      OS << ", ";
+    if (i) OS << ", ";
     OS << Info.getFieldOffset(i);
   }
   OS << "]>\n";

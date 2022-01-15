@@ -6,12 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_HOST_HOSTPROCESS_H
-#define LLDB_HOST_HOSTPROCESS_H
+#ifndef lldb_Host_HostProcess_h_
+#define lldb_Host_HostProcess_h_
 
 #include "lldb/Host/Host.h"
 #include "lldb/lldb-types.h"
 
+/// \class HostInfo HostInfo.h "lldb/Host/HostProcess.h"
 /// A class that represents a running process on the host machine.
 ///
 /// HostProcess allows querying and manipulation of processes running on the

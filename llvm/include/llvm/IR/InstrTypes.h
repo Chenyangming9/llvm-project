@@ -47,7 +47,7 @@
 namespace llvm {
 
 namespace Intrinsic {
-typedef unsigned ID;
+enum ID : unsigned;
 }
 
 //===----------------------------------------------------------------------===//
@@ -68,8 +68,9 @@ protected:
 
 public:
   // allocate space for exactly one operand
-  void *operator new(size_t S) { return User::operator new(S, 1); }
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
+  void *operator new(size_t s) {
+    return User::operator new(s, 1);
+  }
 
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
@@ -153,20 +154,18 @@ public:
   }
 #include "llvm/IR/Instruction.def"
 
-  static UnaryOperator *
-  CreateWithCopiedFlags(UnaryOps Opc, Value *V, Instruction *CopyO,
-                        const Twine &Name = "",
-                        Instruction *InsertBefore = nullptr) {
-    UnaryOperator *UO = Create(Opc, V, Name, InsertBefore);
+  static UnaryOperator *CreateWithCopiedFlags(UnaryOps Opc,
+                                              Value *V,
+                                              Instruction *CopyO,
+                                              const Twine &Name = "") {
+    UnaryOperator *UO = Create(Opc, V, Name);
     UO->copyIRFlags(CopyO);
     return UO;
   }
 
   static UnaryOperator *CreateFNegFMF(Value *Op, Instruction *FMFSource,
-                                      const Twine &Name = "",
-                                      Instruction *InsertBefore = nullptr) {
-    return CreateWithCopiedFlags(Instruction::FNeg, Op, FMFSource, Name,
-                                 InsertBefore);
+                                      const Twine &Name = "") {
+    return CreateWithCopiedFlags(Instruction::FNeg, Op, FMFSource, Name);
   }
 
   UnaryOps getOpcode() const {
@@ -202,8 +201,9 @@ protected:
 
 public:
   // allocate space for exactly two operands
-  void *operator new(size_t S) { return User::operator new(S, 2); }
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
+  void *operator new(size_t s) {
+    return User::operator new(s, 2);
+  }
 
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
@@ -246,11 +246,11 @@ public:
   }
 #include "llvm/IR/Instruction.def"
 
-  static BinaryOperator *
-  CreateWithCopiedFlags(BinaryOps Opc, Value *V1, Value *V2, Instruction *CopyO,
-                        const Twine &Name = "",
-                        Instruction *InsertBefore = nullptr) {
-    BinaryOperator *BO = Create(Opc, V1, V2, Name, InsertBefore);
+  static BinaryOperator *CreateWithCopiedFlags(BinaryOps Opc,
+                                               Value *V1, Value *V2,
+                                               Instruction *CopyO,
+                                               const Twine &Name = "") {
+    BinaryOperator *BO = Create(Opc, V1, V2, Name);
     BO->copyIRFlags(CopyO);
     return BO;
   }
@@ -279,6 +279,11 @@ public:
                                        Instruction *FMFSource,
                                        const Twine &Name = "") {
     return CreateWithCopiedFlags(Instruction::FRem, V1, V2, FMFSource, Name);
+  }
+  static BinaryOperator *CreateFNegFMF(Value *Op, Instruction *FMFSource,
+                                       const Twine &Name = "") {
+    Value *Zero = ConstantFP::getNegativeZero(Op->getType());
+    return CreateWithCopiedFlags(Instruction::FSub, Zero, Op, FMFSource, Name);
   }
 
   static BinaryOperator *CreateNSW(BinaryOps Opc, Value *V1, Value *V2,
@@ -385,6 +390,10 @@ public:
                                       Instruction *InsertBefore = nullptr);
   static BinaryOperator *CreateNUWNeg(Value *Op, const Twine &Name,
                                       BasicBlock *InsertAtEnd);
+  static BinaryOperator *CreateFNeg(Value *Op, const Twine &Name = "",
+                                    Instruction *InsertBefore = nullptr);
+  static BinaryOperator *CreateFNeg(Value *Op, const Twine &Name,
+                                    BasicBlock *InsertAtEnd);
   static BinaryOperator *CreateNot(Value *Op, const Twine &Name = "",
                                    Instruction *InsertBefore = nullptr);
   static BinaryOperator *CreateNot(Value *Op, const Twine &Name,
@@ -597,6 +606,12 @@ public:
     BasicBlock *InsertAtEnd  ///< The block to insert the instruction into
   );
 
+  /// Check whether it is valid to call getCastOpcode for these types.
+  static bool isCastable(
+    Type *SrcTy, ///< The Type from which the value should be cast.
+    Type *DestTy ///< The Type to which the value should be cast.
+  );
+
   /// Check whether a bitcast between these types is valid
   static bool isBitCastable(
     Type *SrcTy, ///< The Type from which the value should be cast.
@@ -642,8 +657,8 @@ public:
   /// DataLayout argument is to determine the pointer size when examining casts
   /// involving Integer and Pointer types. They are no-op casts if the integer
   /// is the same size as the pointer. However, pointer size varies with
-  /// platform.  Note that a precondition of this method is that the cast is
-  /// legal - i.e. the instruction formed with these operands would verify.
+  /// platform.
+  /// Determine if the described cast is a no-op cast.
   static bool isNoopCast(
     Instruction::CastOps Opcode, ///< Opcode of cast
     Type *SrcTy,         ///< SrcTy of cast
@@ -683,14 +698,11 @@ public:
   /// Return the destination type, as a convenience
   Type* getDestTy() const { return getType(); }
 
-  /// This method can be used to determine if a cast from SrcTy to DstTy using
+  /// This method can be used to determine if a cast from S to DstTy using
   /// Opcode op is valid or not.
   /// @returns true iff the proposed cast is valid.
   /// Determine if a cast is valid without creating one.
-  static bool castIsValid(Instruction::CastOps op, Type *SrcTy, Type *DstTy);
-  static bool castIsValid(Instruction::CastOps op, Value *S, Type *DstTy) {
-    return castIsValid(op, S->getType(), DstTy);
-  }
+  static bool castIsValid(Instruction::CastOps op, Value *S, Type *DstTy);
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Instruction *I) {
@@ -717,43 +729,41 @@ public:
   /// Some passes (e.g. InstCombine) depend on the bit-wise characteristics of
   /// FCMP_* values. Changing the bit patterns requires a potential change to
   /// those passes.
-  enum Predicate : unsigned {
-    // Opcode            U L G E    Intuitive operation
-    FCMP_FALSE = 0, ///< 0 0 0 0    Always false (always folded)
-    FCMP_OEQ = 1,   ///< 0 0 0 1    True if ordered and equal
-    FCMP_OGT = 2,   ///< 0 0 1 0    True if ordered and greater than
-    FCMP_OGE = 3,   ///< 0 0 1 1    True if ordered and greater than or equal
-    FCMP_OLT = 4,   ///< 0 1 0 0    True if ordered and less than
-    FCMP_OLE = 5,   ///< 0 1 0 1    True if ordered and less than or equal
-    FCMP_ONE = 6,   ///< 0 1 1 0    True if ordered and operands are unequal
-    FCMP_ORD = 7,   ///< 0 1 1 1    True if ordered (no nans)
-    FCMP_UNO = 8,   ///< 1 0 0 0    True if unordered: isnan(X) | isnan(Y)
-    FCMP_UEQ = 9,   ///< 1 0 0 1    True if unordered or equal
-    FCMP_UGT = 10,  ///< 1 0 1 0    True if unordered or greater than
-    FCMP_UGE = 11,  ///< 1 0 1 1    True if unordered, greater than, or equal
-    FCMP_ULT = 12,  ///< 1 1 0 0    True if unordered or less than
-    FCMP_ULE = 13,  ///< 1 1 0 1    True if unordered, less than, or equal
-    FCMP_UNE = 14,  ///< 1 1 1 0    True if unordered or not equal
-    FCMP_TRUE = 15, ///< 1 1 1 1    Always true (always folded)
+  enum Predicate {
+    // Opcode              U L G E    Intuitive operation
+    FCMP_FALSE =  0,  ///< 0 0 0 0    Always false (always folded)
+    FCMP_OEQ   =  1,  ///< 0 0 0 1    True if ordered and equal
+    FCMP_OGT   =  2,  ///< 0 0 1 0    True if ordered and greater than
+    FCMP_OGE   =  3,  ///< 0 0 1 1    True if ordered and greater than or equal
+    FCMP_OLT   =  4,  ///< 0 1 0 0    True if ordered and less than
+    FCMP_OLE   =  5,  ///< 0 1 0 1    True if ordered and less than or equal
+    FCMP_ONE   =  6,  ///< 0 1 1 0    True if ordered and operands are unequal
+    FCMP_ORD   =  7,  ///< 0 1 1 1    True if ordered (no nans)
+    FCMP_UNO   =  8,  ///< 1 0 0 0    True if unordered: isnan(X) | isnan(Y)
+    FCMP_UEQ   =  9,  ///< 1 0 0 1    True if unordered or equal
+    FCMP_UGT   = 10,  ///< 1 0 1 0    True if unordered or greater than
+    FCMP_UGE   = 11,  ///< 1 0 1 1    True if unordered, greater than, or equal
+    FCMP_ULT   = 12,  ///< 1 1 0 0    True if unordered or less than
+    FCMP_ULE   = 13,  ///< 1 1 0 1    True if unordered, less than, or equal
+    FCMP_UNE   = 14,  ///< 1 1 1 0    True if unordered or not equal
+    FCMP_TRUE  = 15,  ///< 1 1 1 1    Always true (always folded)
     FIRST_FCMP_PREDICATE = FCMP_FALSE,
     LAST_FCMP_PREDICATE = FCMP_TRUE,
     BAD_FCMP_PREDICATE = FCMP_TRUE + 1,
-    ICMP_EQ = 32,  ///< equal
-    ICMP_NE = 33,  ///< not equal
-    ICMP_UGT = 34, ///< unsigned greater than
-    ICMP_UGE = 35, ///< unsigned greater or equal
-    ICMP_ULT = 36, ///< unsigned less than
-    ICMP_ULE = 37, ///< unsigned less or equal
-    ICMP_SGT = 38, ///< signed greater than
-    ICMP_SGE = 39, ///< signed greater or equal
-    ICMP_SLT = 40, ///< signed less than
-    ICMP_SLE = 41, ///< signed less or equal
+    ICMP_EQ    = 32,  ///< equal
+    ICMP_NE    = 33,  ///< not equal
+    ICMP_UGT   = 34,  ///< unsigned greater than
+    ICMP_UGE   = 35,  ///< unsigned greater or equal
+    ICMP_ULT   = 36,  ///< unsigned less than
+    ICMP_ULE   = 37,  ///< unsigned less or equal
+    ICMP_SGT   = 38,  ///< signed greater than
+    ICMP_SGE   = 39,  ///< signed greater or equal
+    ICMP_SLT   = 40,  ///< signed less than
+    ICMP_SLE   = 41,  ///< signed less or equal
     FIRST_ICMP_PREDICATE = ICMP_EQ,
     LAST_ICMP_PREDICATE = ICMP_SLE,
     BAD_ICMP_PREDICATE = ICMP_SLE + 1
   };
-  using PredicateField =
-      Bitfield::Element<Predicate, 0, 6, LAST_ICMP_PREDICATE>;
 
 protected:
   CmpInst(Type *ty, Instruction::OtherOps op, Predicate pred,
@@ -767,8 +777,9 @@ protected:
 
 public:
   // allocate space for exactly two operands
-  void *operator new(size_t S) { return User::operator new(S, 2); }
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
+  void *operator new(size_t s) {
+    return User::operator new(s, 2);
+  }
 
   /// Construct a compare instruction, given the opcode, the predicate and
   /// the two operands.  Optionally (if InstBefore is specified) insert the
@@ -793,15 +804,15 @@ public:
   }
 
   /// Return the predicate for this instruction.
-  Predicate getPredicate() const { return getSubclassData<PredicateField>(); }
+  Predicate getPredicate() const {
+    return Predicate(getSubclassDataFromInstruction());
+  }
 
   /// Set the predicate for this instruction to the specified value.
-  void setPredicate(Predicate P) { setSubclassData<PredicateField>(P); }
+  void setPredicate(Predicate P) { setInstructionSubclassData(P); }
 
   static bool isFPPredicate(Predicate P) {
-    static_assert(FIRST_FCMP_PREDICATE == 0,
-                  "FIRST_FCMP_PREDICATE is required to be 0");
-    return P <= LAST_FCMP_PREDICATE;
+    return P >= FIRST_FCMP_PREDICATE && P <= LAST_FCMP_PREDICATE;
   }
 
   static bool isIntPredicate(Predicate P) {
@@ -842,38 +853,20 @@ public:
   /// Return the predicate as if the operands were swapped.
   static Predicate getSwappedPredicate(Predicate pred);
 
-  /// This is a static version that you can use without an instruction
-  /// available.
-  /// @returns true if the comparison predicate is strict, false otherwise.
-  static bool isStrictPredicate(Predicate predicate);
-
-  /// @returns true if the comparison predicate is strict, false otherwise.
-  /// Determine if this instruction is using an strict comparison predicate.
-  bool isStrictPredicate() const { return isStrictPredicate(getPredicate()); }
-
-  /// This is a static version that you can use without an instruction
-  /// available.
-  /// @returns true if the comparison predicate is non-strict, false otherwise.
-  static bool isNonStrictPredicate(Predicate predicate);
-
-  /// @returns true if the comparison predicate is non-strict, false otherwise.
-  /// Determine if this instruction is using an non-strict comparison predicate.
-  bool isNonStrictPredicate() const {
-    return isNonStrictPredicate(getPredicate());
-  }
-
-  /// For example, SGE -> SGT, SLE -> SLT, ULE -> ULT, UGE -> UGT.
-  /// Returns the strict version of non-strict comparisons.
-  Predicate getStrictPredicate() const {
-    return getStrictPredicate(getPredicate());
+  /// For predicate of kind "is X or equal to 0" returns the predicate "is X".
+  /// For predicate of kind "is X" returns the predicate "is X or equal to 0".
+  /// does not support other kind of predicates.
+  /// @returns the predicate that does not contains is equal to zero if
+  /// it had and vice versa.
+  /// Return the flipped strictness of predicate
+  Predicate getFlippedStrictnessPredicate() const {
+    return getFlippedStrictnessPredicate(getPredicate());
   }
 
   /// This is a static version that you can use without an instruction
   /// available.
-  /// @returns the strict version of comparison provided in \p pred.
-  /// If \p pred is not a strict comparison predicate, returns \p pred.
-  /// Returns the strict version of non-strict comparisons.
-  static Predicate getStrictPredicate(Predicate pred);
+  /// Return the flipped strictness of predicate
+  static Predicate getFlippedStrictnessPredicate(Predicate pred);
 
   /// For example, SGT -> SGE, SLT -> SLE, ULT -> ULE, UGT -> UGE.
   /// Returns the non-strict version of strict comparisons.
@@ -888,21 +881,6 @@ public:
   /// Returns the non-strict version of strict comparisons.
   static Predicate getNonStrictPredicate(Predicate pred);
 
-  /// This is a static version that you can use without an instruction
-  /// available.
-  /// Return the flipped strictness of predicate
-  static Predicate getFlippedStrictnessPredicate(Predicate pred);
-
-  /// For predicate of kind "is X or equal to 0" returns the predicate "is X".
-  /// For predicate of kind "is X" returns the predicate "is X or equal to 0".
-  /// does not support other kind of predicates.
-  /// @returns the predicate that does not contains is equal to zero if
-  /// it had and vice versa.
-  /// Return the flipped strictness of predicate
-  Predicate getFlippedStrictnessPredicate() const {
-    return getFlippedStrictnessPredicate(getPredicate());
-  }
-
   /// Provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 
@@ -915,19 +893,9 @@ public:
   /// Determine if this CmpInst is commutative.
   bool isCommutative() const;
 
+  /// This is just a convenience that dispatches to the subclasses.
   /// Determine if this is an equals/not equals predicate.
-  /// This is a static version that you can use without an instruction
-  /// available.
-  static bool isEquality(Predicate pred);
-
-  /// Determine if this is an equals/not equals predicate.
-  bool isEquality() const { return isEquality(getPredicate()); }
-
-  /// Return true if the predicate is relational (not EQ or NE).
-  static bool isRelational(Predicate P) { return !isEquality(P); }
-
-  /// Return true if the predicate is relational (not EQ or NE).
-  bool isRelational() const { return !isEquality(); }
+  bool isEquality() const;
 
   /// @returns true if the comparison is signed, false otherwise.
   /// Determine if this instruction is using a signed comparison.
@@ -952,30 +920,6 @@ public:
   /// return the signed version of a predicate
   Predicate getSignedPredicate() {
     return getSignedPredicate(getPredicate());
-  }
-
-  /// For example, SLT->ULT, SLE->ULE, SGT->UGT, SGE->UGE, ULT->Failed assert
-  /// @returns the unsigned version of the signed predicate pred.
-  static Predicate getUnsignedPredicate(Predicate pred);
-
-  /// For example, SLT->ULT, SLE->ULE, SGT->UGT, SGE->UGE, ULT->Failed assert
-  /// @returns the unsigned version of the predicate for this instruction (which
-  /// has to be an signed predicate).
-  /// return the unsigned version of a predicate
-  Predicate getUnsignedPredicate() {
-    return getUnsignedPredicate(getPredicate());
-  }
-
-  /// For example, SLT->ULT, ULT->SLT, SLE->ULE, ULE->SLE, EQ->Failed assert
-  /// @returns the unsigned version of the signed predicate pred or
-  ///          the signed version of the signed predicate pred.
-  static Predicate getFlippedSignednessPredicate(Predicate pred);
-
-  /// For example, SLT->ULT, ULT->SLT, SLE->ULE, ULE->SLE, EQ->Failed assert
-  /// @returns the unsigned version of the signed predicate pred or
-  ///          the signed version of the signed predicate pred.
-  Predicate getFlippedSignednessPredicate() {
-    return getFlippedSignednessPredicate(getPredicate());
   }
 
   /// This is just a convenience.
@@ -1031,7 +975,7 @@ public:
   static Type* makeCmpResultType(Type* opnd_type) {
     if (VectorType* vt = dyn_cast<VectorType>(opnd_type)) {
       return VectorType::get(Type::getInt1Ty(opnd_type->getContext()),
-                             vt->getElementCount());
+                             vt->getNumElements());
     }
     return Type::getInt1Ty(opnd_type->getContext());
   }
@@ -1095,11 +1039,6 @@ struct OperandBundleUse {
     return getTagID() == LLVMContext::OB_funclet;
   }
 
-  /// Return true if this is a "cfguardtarget" operand bundle.
-  bool isCFGuardTargetOperandBundle() const {
-    return getTagID() == LLVMContext::OB_cfguardtarget;
-  }
-
 private:
   /// Pointer to an entry in LLVMContextImpl::getOrInsertBundleTag.
   StringMapEntry<uint32_t> *Tag;
@@ -1122,8 +1061,8 @@ public:
       : Tag(std::move(Tag)), Inputs(Inputs) {}
 
   explicit OperandBundleDefT(const OperandBundleUse &OBU) {
-    Tag = std::string(OBU.getTagName());
-    llvm::append_range(Inputs, OBU.Inputs);
+    Tag = OBU.getTagName();
+    Inputs.insert(Inputs.end(), OBU.Inputs.begin(), OBU.Inputs.end());
   }
 
   ArrayRef<InputTy> inputs() const { return Inputs; }
@@ -1160,15 +1099,6 @@ using ConstOperandBundleDef = OperandBundleDefT<const Value *>;
 /// as cheap as most other operations on the base class.
 class CallBase : public Instruction {
 protected:
-  // The first two bits are reserved by CallInst for fast retrieval,
-  using CallInstReservedField = Bitfield::Element<unsigned, 0, 2>;
-  using CallingConvField =
-      Bitfield::Element<CallingConv::ID, CallInstReservedField::NextBit, 10,
-                        CallingConv::MaxID>;
-  static_assert(
-      Bitfield::areContiguous<CallInstReservedField, CallingConvField>(),
-      "Bitfields must be contiguous");
-
   /// The last operand is the called operand.
   static constexpr int CalledOperandOpEndIdx = -1;
 
@@ -1201,33 +1131,6 @@ protected:
 
 public:
   using Instruction::getContext;
-
-  /// Create a clone of \p CB with a different set of operand bundles and
-  /// insert it before \p InsertPt.
-  ///
-  /// The returned call instruction is identical \p CB in every way except that
-  /// the operand bundles for the new instruction are set to the operand bundles
-  /// in \p Bundles.
-  static CallBase *Create(CallBase *CB, ArrayRef<OperandBundleDef> Bundles,
-                          Instruction *InsertPt = nullptr);
-
-  /// Create a clone of \p CB with the operand bundle with the tag matching
-  /// \p Bundle's tag replaced with Bundle, and insert it before \p InsertPt.
-  ///
-  /// The returned call instruction is identical \p CI in every way except that
-  /// the specified operand bundle has been replaced.
-  static CallBase *Create(CallBase *CB,
-                          OperandBundleDef Bundle,
-                          Instruction *InsertPt = nullptr);
-
-  /// Create a clone of \p CB with operand bundle \p OB added.
-  static CallBase *addOperandBundle(CallBase *CB, uint32_t ID,
-                                    OperandBundleDef OB,
-                                    Instruction *InsertPt = nullptr);
-
-  /// Create a clone of \p CB with operand bundle \p ID removed.
-  static CallBase *removeOperandBundle(CallBase *CB, uint32_t ID,
-                                       Instruction *InsertPt = nullptr);
 
   static bool classof(const Instruction *I) {
     return I->getOpcode() == Instruction::Call ||
@@ -1364,26 +1267,17 @@ public:
     return isArgOperand(&UI.getUse());
   }
 
-  /// Given a use for a arg operand, get the arg operand number that
-  /// corresponds to it.
-  unsigned getArgOperandNo(const Use *U) const {
-    assert(isArgOperand(U) && "Arg operand # out of range!");
-    return U - arg_begin();
-  }
-
-  /// Given a value use iterator, return the arg operand number corresponding to
-  /// it. Iterator must actually correspond to a data operand.
-  unsigned getArgOperandNo(Value::const_user_iterator UI) const {
-    return getArgOperandNo(&UI.getUse());
-  }
-
   /// Returns true if this CallSite passes the given Value* as an argument to
   /// the called function.
   bool hasArgument(const Value *V) const {
-    return llvm::is_contained(args(), V);
+    return llvm::any_of(args(), [V](const Value *Arg) { return Arg == V; });
   }
 
   Value *getCalledOperand() const { return Op<CalledOperandOpEndIdx>(); }
+
+  // DEPRECATED: This routine will be removed in favor of `getCalledOperand` in
+  // the near future.
+  Value *getCalledValue() const { return getCalledOperand(); }
 
   const Use &getCalledOperandUse() const { return Op<CalledOperandOpEndIdx>(); }
   Use &getCalledOperandUse() { return Op<CalledOperandOpEndIdx>(); }
@@ -1439,7 +1333,8 @@ public:
   /// type.
   void setCalledFunction(FunctionType *FTy, Value *Fn) {
     this->FTy = FTy;
-    assert(cast<PointerType>(Fn->getType())->isOpaqueOrPointeeTypeMatches(FTy));
+    assert(FTy == cast<FunctionType>(
+                      cast<PointerType>(Fn->getType())->getElementType()));
     // This function doesn't mutate the return type, only the function
     // type. Seems broken, but I'm just gonna stick an assert in for now.
     assert(getType() == FTy->getReturnType());
@@ -1447,11 +1342,14 @@ public:
   }
 
   CallingConv::ID getCallingConv() const {
-    return getSubclassData<CallingConvField>();
+    return static_cast<CallingConv::ID>(getSubclassDataFromInstruction() >> 2);
   }
 
   void setCallingConv(CallingConv::ID CC) {
-    setSubclassData<CallingConvField>(CC);
+    auto ID = static_cast<unsigned>(CC);
+    assert(!(ID & ~CallingConv::MaxID) && "Unsupported calling convention");
+    setInstructionSubclassData((getSubclassDataFromInstruction() & 3) |
+                               (ID << 2));
   }
 
   /// Check if this call is an inline asm statement.
@@ -1471,18 +1369,14 @@ public:
   ///
   void setAttributes(AttributeList A) { Attrs = A; }
 
-  /// Determine whether this call has the given attribute. If it does not
-  /// then determine if the called function has the attribute, but only if
-  /// the attribute is allowed for the call.
+  /// Determine whether this call has the given attribute.
   bool hasFnAttr(Attribute::AttrKind Kind) const {
     assert(Kind != Attribute::NoBuiltin &&
            "Use CallBase::isNoBuiltin() to check for Attribute::NoBuiltin");
     return hasFnAttrImpl(Kind);
   }
 
-  /// Determine whether this call has the given attribute. If it does not
-  /// then determine if the called function has the attribute, but only if
-  /// the attribute is allowed for the call.
+  /// Determine whether this call has the given attribute.
   bool hasFnAttr(StringRef Kind) const { return hasFnAttrImpl(Kind); }
 
   /// adds the attribute to the list of attributes.
@@ -1529,12 +1423,6 @@ public:
     setAttributes(PAL);
   }
 
-  void removeAttributes(unsigned i, const AttrBuilder &Attrs) {
-    AttributeList PAL = getAttributes();
-    PAL = PAL.removeAttributes(getContext(), i, Attrs);
-    setAttributes(PAL);
-  }
-
   /// Removes the attribute from the given argument
   void removeParamAttr(unsigned ArgNo, Attribute::AttrKind Kind) {
     assert(ArgNo < getNumArgOperands() && "Out of bounds");
@@ -1548,13 +1436,6 @@ public:
     assert(ArgNo < getNumArgOperands() && "Out of bounds");
     AttributeList PAL = getAttributes();
     PAL = PAL.removeParamAttribute(getContext(), ArgNo, Kind);
-    setAttributes(PAL);
-  }
-
-  /// Removes the attributes from the given argument
-  void removeParamAttrs(unsigned ArgNo, const AttrBuilder &Attrs) {
-    AttributeList PAL = getAttributes();
-    PAL = PAL.removeParamAttributes(getContext(), ArgNo, Attrs);
     setAttributes(PAL);
   }
 
@@ -1574,11 +1455,7 @@ public:
   }
 
   /// Determine whether the return value has the given attribute.
-  bool hasRetAttr(Attribute::AttrKind Kind) const {
-    return hasRetAttrImpl(Kind);
-  }
-  /// Determine whether the return value has the given attribute.
-  bool hasRetAttr(StringRef Kind) const { return hasRetAttrImpl(Kind); }
+  bool hasRetAttr(Attribute::AttrKind Kind) const;
 
   /// Determine whether the argument or parameter has the given attribute.
   bool paramHasAttr(unsigned ArgNo, Attribute::AttrKind Kind) const;
@@ -1657,23 +1534,10 @@ public:
     return paramHasAttr(ArgNo, Attribute::InAlloca);
   }
 
-  /// Determine whether this argument is passed by value, in an alloca, or is
-  /// preallocated.
-  bool isPassPointeeByValueArgument(unsigned ArgNo) const {
+  /// Determine whether this argument is passed by value or in an alloca.
+  bool isByValOrInAllocaArgument(unsigned ArgNo) const {
     return paramHasAttr(ArgNo, Attribute::ByVal) ||
-           paramHasAttr(ArgNo, Attribute::InAlloca) ||
-           paramHasAttr(ArgNo, Attribute::Preallocated);
-  }
-
-  /// Determine whether passing undef to this argument is undefined behavior.
-  /// If passing undef to this argument is UB, passing poison is UB as well
-  /// because poison is more undefined than undef.
-  bool isPassingUndefUB(unsigned ArgNo) const {
-    return paramHasAttr(ArgNo, Attribute::NoUndef) ||
-           // dereferenceable implies noundef.
-           paramHasAttr(ArgNo, Attribute::Dereferenceable) ||
-           // dereferenceable implies noundef, and null is a well-defined value.
-           paramHasAttr(ArgNo, Attribute::DereferenceableOrNull);
+           paramHasAttr(ArgNo, Attribute::InAlloca);
   }
 
   /// Determine if there are is an inalloca argument. Only the last argument can
@@ -1703,42 +1567,17 @@ public:
   }
 
   /// Extract the alignment of the return value.
-  MaybeAlign getRetAlign() const { return Attrs.getRetAlignment(); }
+  unsigned getRetAlignment() const { return Attrs.getRetAlignment(); }
 
   /// Extract the alignment for a call or parameter (0=unknown).
-  MaybeAlign getParamAlign(unsigned ArgNo) const {
+  unsigned getParamAlignment(unsigned ArgNo) const {
     return Attrs.getParamAlignment(ArgNo);
-  }
-
-  MaybeAlign getParamStackAlign(unsigned ArgNo) const {
-    return Attrs.getParamStackAlignment(ArgNo);
   }
 
   /// Extract the byval type for a call or parameter.
   Type *getParamByValType(unsigned ArgNo) const {
-    if (auto *Ty = Attrs.getParamByValType(ArgNo))
-      return Ty;
-    if (const Function *F = getCalledFunction())
-      return F->getAttributes().getParamByValType(ArgNo);
-    return nullptr;
-  }
-
-  /// Extract the preallocated type for a call or parameter.
-  Type *getParamPreallocatedType(unsigned ArgNo) const {
-    if (auto *Ty = Attrs.getParamPreallocatedType(ArgNo))
-      return Ty;
-    if (const Function *F = getCalledFunction())
-      return F->getAttributes().getParamPreallocatedType(ArgNo);
-    return nullptr;
-  }
-
-  /// Extract the preallocated type for a call or parameter.
-  Type *getParamInAllocaType(unsigned ArgNo) const {
-    if (auto *Ty = Attrs.getParamInAllocaType(ArgNo))
-      return Ty;
-    if (const Function *F = getCalledFunction())
-      return F->getAttributes().getParamInAllocaType(ArgNo);
-    return nullptr;
+    Type *Ty = Attrs.getParamByValType(ArgNo);
+    return Ty ? Ty : getArgOperand(ArgNo)->getType()->getPointerElementType();
   }
 
   /// Extract the number of dereferenceable bytes for a call or
@@ -1792,7 +1631,6 @@ public:
   bool onlyReadsMemory() const {
     return doesNotAccessMemory() || hasFnAttr(Attribute::ReadOnly);
   }
-
   void setOnlyReadsMemory() {
     addAttribute(AttributeList::FunctionIndex, Attribute::ReadOnly);
   }
@@ -1851,12 +1689,6 @@ public:
   bool cannotDuplicate() const { return hasFnAttr(Attribute::NoDuplicate); }
   void setCannotDuplicate() {
     addAttribute(AttributeList::FunctionIndex, Attribute::NoDuplicate);
-  }
-
-  /// Determine if the call cannot be tail merged.
-  bool cannotMerge() const { return hasFnAttr(Attribute::NoMerge); }
-  void setCannotMerge() {
-    addAttribute(AttributeList::FunctionIndex, Attribute::NoMerge);
   }
 
   /// Determine if the invoke is convergent
@@ -2008,7 +1840,10 @@ public:
   /// OperandBundleUser to a vector of OperandBundleDefs.  Note:
   /// OperandBundeUses and OperandBundleDefs are non-trivially *different*
   /// representations of operand bundles (see documentation above).
-  void getOperandBundlesAsDefs(SmallVectorImpl<OperandBundleDef> &Defs) const;
+  void getOperandBundlesAsDefs(SmallVectorImpl<OperandBundleDef> &Defs) const {
+    for (unsigned i = 0, e = getNumOperandBundles(); i != e; ++i)
+      Defs.emplace_back(getOperandBundleAt(i));
+  }
 
   /// Return the operand bundle for the operand at index OpIdx.
   ///
@@ -2020,7 +1855,12 @@ public:
 
   /// Return true if this operand bundle user has operand bundles that
   /// may read from the heap.
-  bool hasReadingOperandBundles() const;
+  bool hasReadingOperandBundles() const {
+    // Implementation note: this is a conservative implementation of operand
+    // bundle semantics, where *any* operand bundle forces a callsite to be at
+    // least readonly.
+    return hasOperandBundles();
+  }
 
   /// Return true if this operand bundle user has operand bundles that
   /// may write to the heap.
@@ -2071,7 +1911,7 @@ public:
   /// Is the function attribute S disallowed by some operand bundle on
   /// this operand bundle user?
   bool isFnAttrDisallowedByOpBundle(StringRef S) const {
-    // Operand bundles only possibly disallow readnone, readonly and argmemonly
+    // Operand bundles only possibly disallow readnone, readonly and argmenonly
     // attributes.  All String attributes are fine.
     return false;
   }
@@ -2231,14 +2071,16 @@ public:
   op_iterator populateBundleOperandInfos(ArrayRef<OperandBundleDef> Bundles,
                                          const unsigned BeginIndex);
 
-public:
   /// Return the BundleOpInfo for the operand at index OpIdx.
   ///
   /// It is an error to call this with an OpIdx that does not correspond to an
   /// bundle operand.
-  BundleOpInfo &getBundleOpInfoForOperand(unsigned OpIdx);
   const BundleOpInfo &getBundleOpInfoForOperand(unsigned OpIdx) const {
-    return const_cast<CallBase *>(this)->getBundleOpInfoForOperand(OpIdx);
+    for (auto &BOI : bundle_op_infos())
+      if (BOI.Begin <= OpIdx && OpIdx < BOI.End)
+        return BOI;
+
+    llvm_unreachable("Did not find operand bundle for operand!");
   }
 
 protected:
@@ -2258,7 +2100,7 @@ private:
   bool hasFnAttrOnCalledFunction(StringRef Kind) const;
 
   template <typename AttrKind> bool hasFnAttrImpl(AttrKind Kind) const {
-    if (Attrs.hasFnAttribute(Kind))
+    if (Attrs.hasAttribute(AttributeList::FunctionIndex, Kind))
       return true;
 
     // Operand bundles override attributes on the called function, but don't
@@ -2267,18 +2109,6 @@ private:
       return false;
 
     return hasFnAttrOnCalledFunction(Kind);
-  }
-
-  /// Determine whether the return value has the given attribute. Supports
-  /// Attribute::AttrKind and StringRef as \p AttrKind types.
-  template <typename AttrKind> bool hasRetAttrImpl(AttrKind Kind) const {
-    if (Attrs.hasAttribute(AttributeList::ReturnIndex, Kind))
-      return true;
-
-    // Look at the callee, if available.
-    if (const Function *F = getCalledFunction())
-      return F->getAttributes().hasAttribute(AttributeList::ReturnIndex, Kind);
-    return false;
   }
 };
 

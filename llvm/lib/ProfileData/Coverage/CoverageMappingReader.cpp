@@ -16,24 +16,21 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Object/Binary.h"
-#include "llvm/Object/COFF.h"
 #include "llvm/Object/Error.h"
 #include "llvm/Object/MachOUniversal.h"
 #include "llvm/Object/ObjectFile.h"
+#include "llvm/Object/COFF.h"
 #include "llvm/ProfileData/InstrProf.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/Compression.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/LEB128.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <vector>
 
@@ -42,9 +39,6 @@ using namespace coverage;
 using namespace object;
 
 #define DEBUG_TYPE "coverage-mapping"
-
-STATISTIC(CovMapNumRecords, "The # of coverage function records");
-STATISTIC(CovMapNumUsedRecords, "The # of used coverage function records");
 
 void CoverageMappingIterator::increment() {
   if (ReadErr != coveragemap_error::success)
@@ -98,86 +92,15 @@ Error RawCoverageReader::readString(StringRef &Result) {
   return Error::success();
 }
 
-Error RawCoverageFilenamesReader::read(CovMapVersion Version) {
+Error RawCoverageFilenamesReader::read() {
   uint64_t NumFilenames;
   if (auto Err = readSize(NumFilenames))
     return Err;
-  if (!NumFilenames)
-    return make_error<CoverageMapError>(coveragemap_error::malformed);
-
-  if (Version < CovMapVersion::Version4)
-    return readUncompressed(Version, NumFilenames);
-
-  // The uncompressed length may exceed the size of the encoded filenames.
-  // Skip size validation.
-  uint64_t UncompressedLen;
-  if (auto Err = readULEB128(UncompressedLen))
-    return Err;
-
-  uint64_t CompressedLen;
-  if (auto Err = readSize(CompressedLen))
-    return Err;
-
-  if (CompressedLen > 0) {
-    if (!zlib::isAvailable())
-      return make_error<CoverageMapError>(
-          coveragemap_error::decompression_failed);
-
-    // Allocate memory for the decompressed filenames.
-    SmallVector<char, 0> StorageBuf;
-
-    // Read compressed filenames.
-    StringRef CompressedFilenames = Data.substr(0, CompressedLen);
-    Data = Data.substr(CompressedLen);
-    auto Err =
-        zlib::uncompress(CompressedFilenames, StorageBuf, UncompressedLen);
-    if (Err) {
-      consumeError(std::move(Err));
-      return make_error<CoverageMapError>(
-          coveragemap_error::decompression_failed);
-    }
-
-    StringRef UncompressedFilenames(StorageBuf.data(), StorageBuf.size());
-    RawCoverageFilenamesReader Delegate(UncompressedFilenames, Filenames,
-                                        CompilationDir);
-    return Delegate.readUncompressed(Version, NumFilenames);
-  }
-
-  return readUncompressed(Version, NumFilenames);
-}
-
-Error RawCoverageFilenamesReader::readUncompressed(CovMapVersion Version,
-                                                   uint64_t NumFilenames) {
-  // Read uncompressed filenames.
-  if (Version < CovMapVersion::Version6) {
-    for (size_t I = 0; I < NumFilenames; ++I) {
-      StringRef Filename;
-      if (auto Err = readString(Filename))
-        return Err;
-      Filenames.push_back(Filename.str());
-    }
-  } else {
-    StringRef CWD;
-    if (auto Err = readString(CWD))
+  for (size_t I = 0; I < NumFilenames; ++I) {
+    StringRef Filename;
+    if (auto Err = readString(Filename))
       return Err;
-    Filenames.push_back(CWD.str());
-
-    for (size_t I = 1; I < NumFilenames; ++I) {
-      StringRef Filename;
-      if (auto Err = readString(Filename))
-        return Err;
-      if (sys::path::is_absolute(Filename)) {
-        Filenames.push_back(Filename.str());
-      } else {
-        SmallString<256> P;
-        if (!CompilationDir.empty())
-          P.assign(CompilationDir);
-        else
-          P.assign(CWD);
-        llvm::sys::path::append(P, Filename);
-        Filenames.push_back(static_cast<std::string>(P));
-      }
-    }
+    Filenames.push_back(Filename);
   }
   return Error::success();
 }
@@ -235,7 +158,7 @@ Error RawCoverageMappingReader::readMappingRegionsSubArray(
     return Err;
   unsigned LineStart = 0;
   for (size_t I = 0; I < NumRegions; ++I) {
-    Counter C, C2;
+    Counter C;
     CounterMappingRegion::RegionKind Kind = CounterMappingRegion::CodeRegion;
 
     // Read the combined counter + region kind.
@@ -245,18 +168,6 @@ Error RawCoverageMappingReader::readMappingRegionsSubArray(
       return Err;
     unsigned Tag = EncodedCounterAndRegion & Counter::EncodingTagMask;
     uint64_t ExpandedFileID = 0;
-
-    // If Tag does not represent a ZeroCounter, then it is understood to refer
-    // to a counter or counter expression with region kind assumed to be
-    // "CodeRegion". In that case, EncodedCounterAndRegion actually encodes the
-    // referenced counter or counter expression (and nothing else).
-    //
-    // If Tag represents a ZeroCounter and EncodingExpansionRegionBit is set,
-    // then EncodedCounterAndRegion is interpreted to represent an
-    // ExpansionRegion. In all other cases, EncodedCounterAndRegion is
-    // interpreted to refer to a specific region kind, after which additional
-    // fields may be read (e.g. BranchRegions have two encoded counters that
-    // follow an encoded region kind value).
     if (Tag != Counter::Zero) {
       if (auto Err = decodeCounter(EncodedCounterAndRegion, C))
         return Err;
@@ -276,14 +187,6 @@ Error RawCoverageMappingReader::readMappingRegionsSubArray(
           break;
         case CounterMappingRegion::SkippedRegion:
           Kind = CounterMappingRegion::SkippedRegion;
-          break;
-        case CounterMappingRegion::BranchRegion:
-          // For a Branch Region, read two successive counters.
-          Kind = CounterMappingRegion::BranchRegion;
-          if (auto Err = readCounter(C))
-            return Err;
-          if (auto Err = readCounter(C2))
-            return Err;
           break;
         default:
           return make_error<CoverageMapError>(coveragemap_error::malformed);
@@ -336,7 +239,7 @@ Error RawCoverageMappingReader::readMappingRegionsSubArray(
       dbgs() << "\n";
     });
 
-    auto CMR = CounterMappingRegion(C, C2, InferredFileID, ExpandedFileID,
+    auto CMR = CounterMappingRegion(C, InferredFileID, ExpandedFileID,
                                     LineStart, ColumnStart,
                                     LineStart + NumLines, ColumnEnd, Kind);
     if (CMR.startLoc() > CMR.endLoc())
@@ -477,56 +380,26 @@ static Expected<bool> isCoverageMappingDummy(uint64_t Hash, StringRef Mapping) {
   return RawCoverageMappingDummyChecker(Mapping).isDummy();
 }
 
-/// A range of filename indices. Used to specify the location of a batch of
-/// filenames in a vector-like container.
-struct FilenameRange {
-  unsigned StartingIndex;
-  unsigned Length;
-
-  FilenameRange(unsigned StartingIndex, unsigned Length)
-      : StartingIndex(StartingIndex), Length(Length) {}
-
-  void markInvalid() { Length = 0; }
-  bool isInvalid() const { return Length == 0; }
-};
-
 namespace {
 
-/// The interface to read coverage mapping function records for a module.
 struct CovMapFuncRecordReader {
   virtual ~CovMapFuncRecordReader() = default;
 
-  // Read a coverage header.
+  // The interface to read coverage mapping function records for a module.
   //
-  // \p CovBuf points to the buffer containing the \c CovHeader of the coverage
+  // \p Buf points to the buffer containing the \c CovHeader of the coverage
   // mapping data associated with the module.
   //
-  // Returns a pointer to the next \c CovHeader if it exists, or to an address
-  // greater than \p CovEnd if not.
-  virtual Expected<const char *> readCoverageHeader(const char *CovBuf,
-                                                    const char *CovBufEnd) = 0;
-
-  // Read function records.
-  //
-  // \p FuncRecBuf points to the buffer containing a batch of function records.
-  // \p FuncRecBufEnd points past the end of the batch of records.
-  //
-  // Prior to Version4, \p OutOfLineFileRange points to a sequence of filenames
-  // associated with the function records. It is unused in Version4.
-  //
-  // Prior to Version4, \p OutOfLineMappingBuf points to a sequence of coverage
-  // mappings associated with the function records. It is unused in Version4.
-  virtual Error readFunctionRecords(const char *FuncRecBuf,
-                                    const char *FuncRecBufEnd,
-                                    Optional<FilenameRange> OutOfLineFileRange,
-                                    const char *OutOfLineMappingBuf,
-                                    const char *OutOfLineMappingBufEnd) = 0;
+  // Returns a pointer to the next \c CovHeader if it exists, or a pointer
+  // greater than \p End if not.
+  virtual Expected<const char *> readFunctionRecords(const char *Buf,
+                                                     const char *End) = 0;
 
   template <class IntPtrT, support::endianness Endian>
   static Expected<std::unique_ptr<CovMapFuncRecordReader>>
   get(CovMapVersion Version, InstrProfSymtab &P,
-      std::vector<BinaryCoverageReader::ProfileMappingRecord> &R, StringRef D,
-      std::vector<std::string> &F);
+      std::vector<BinaryCoverageReader::ProfileMappingRecord> &R,
+      std::vector<StringRef> &F);
 };
 
 // A class for reading coverage mapping function records for a module.
@@ -540,13 +413,8 @@ class VersionedCovMapFuncRecordReader : public CovMapFuncRecordReader {
   // in \c Records.
   DenseMap<NameRefType, size_t> FunctionRecords;
   InstrProfSymtab &ProfileNames;
-  StringRef CompilationDir;
-  std::vector<std::string> &Filenames;
+  std::vector<StringRef> &Filenames;
   std::vector<BinaryCoverageReader::ProfileMappingRecord> &Records;
-
-  // Maps a hash of the filenames in a TU to a \c FileRange. The range
-  // specifies the location of the hashed filenames in \c Filenames.
-  DenseMap<uint64_t, FilenameRange> FileRangeMap;
 
   // Add the record to the collection if we don't already have a record that
   // points to the same function name. This is useful to ignore the redundant
@@ -555,9 +423,7 @@ class VersionedCovMapFuncRecordReader : public CovMapFuncRecordReader {
   // records, which were emitted for inline functions which were seen but
   // not used in the corresponding translation unit.
   Error insertFunctionRecordIfNeeded(const FuncRecordType *CFR,
-                                     StringRef Mapping,
-                                     FilenameRange FileRange) {
-    ++CovMapNumRecords;
+                                     StringRef Mapping, size_t FilenamesBegin) {
     uint64_t FuncHash = CFR->template getFuncHash<Endian>();
     NameRefType NameRef = CFR->template getFuncNameRef<Endian>();
     auto InsertResult =
@@ -568,9 +434,8 @@ class VersionedCovMapFuncRecordReader : public CovMapFuncRecordReader {
         return Err;
       if (FuncName.empty())
         return make_error<InstrProfError>(instrprof_error::malformed);
-      ++CovMapNumUsedRecords;
-      Records.emplace_back(Version, FuncName, FuncHash, Mapping,
-                           FileRange.StartingIndex, FileRange.Length);
+      Records.emplace_back(Version, FuncName, FuncHash, Mapping, FilenamesBegin,
+                           Filenames.size() - FilenamesBegin);
       return Error::success();
     }
     // Update the existing record if it's a dummy and the new record is real.
@@ -589,151 +454,77 @@ class VersionedCovMapFuncRecordReader : public CovMapFuncRecordReader {
       return Err;
     if (*NewIsDummyExpected)
       return Error::success();
-    ++CovMapNumUsedRecords;
     OldRecord.FunctionHash = FuncHash;
     OldRecord.CoverageMapping = Mapping;
-    OldRecord.FilenamesBegin = FileRange.StartingIndex;
-    OldRecord.FilenamesSize = FileRange.Length;
+    OldRecord.FilenamesBegin = FilenamesBegin;
+    OldRecord.FilenamesSize = Filenames.size() - FilenamesBegin;
     return Error::success();
   }
 
 public:
   VersionedCovMapFuncRecordReader(
       InstrProfSymtab &P,
-      std::vector<BinaryCoverageReader::ProfileMappingRecord> &R, StringRef D,
-      std::vector<std::string> &F)
-      : ProfileNames(P), CompilationDir(D), Filenames(F), Records(R) {}
+      std::vector<BinaryCoverageReader::ProfileMappingRecord> &R,
+      std::vector<StringRef> &F)
+      : ProfileNames(P), Filenames(F), Records(R) {}
 
   ~VersionedCovMapFuncRecordReader() override = default;
 
-  Expected<const char *> readCoverageHeader(const char *CovBuf,
-                                            const char *CovBufEnd) override {
+  Expected<const char *> readFunctionRecords(const char *Buf,
+                                             const char *End) override {
     using namespace support;
 
-    if (CovBuf + sizeof(CovMapHeader) > CovBufEnd)
+    if (Buf + sizeof(CovMapHeader) > End)
       return make_error<CoverageMapError>(coveragemap_error::malformed);
-    auto CovHeader = reinterpret_cast<const CovMapHeader *>(CovBuf);
+    auto CovHeader = reinterpret_cast<const CovMapHeader *>(Buf);
     uint32_t NRecords = CovHeader->getNRecords<Endian>();
     uint32_t FilenamesSize = CovHeader->getFilenamesSize<Endian>();
     uint32_t CoverageSize = CovHeader->getCoverageSize<Endian>();
     assert((CovMapVersion)CovHeader->getVersion<Endian>() == Version);
-    CovBuf = reinterpret_cast<const char *>(CovHeader + 1);
+    Buf = reinterpret_cast<const char *>(CovHeader + 1);
 
     // Skip past the function records, saving the start and end for later.
-    // This is a no-op in Version4 (function records are read after all headers
-    // are read).
-    const char *FuncRecBuf = nullptr;
-    const char *FuncRecBufEnd = nullptr;
-    if (Version < CovMapVersion::Version4)
-      FuncRecBuf = CovBuf;
-    CovBuf += NRecords * sizeof(FuncRecordType);
-    if (Version < CovMapVersion::Version4)
-      FuncRecBufEnd = CovBuf;
+    const char *FunBuf = Buf;
+    Buf += NRecords * sizeof(FuncRecordType);
+    const char *FunEnd = Buf;
 
     // Get the filenames.
-    if (CovBuf + FilenamesSize > CovBufEnd)
+    if (Buf + FilenamesSize > End)
       return make_error<CoverageMapError>(coveragemap_error::malformed);
     size_t FilenamesBegin = Filenames.size();
-    StringRef FilenameRegion(CovBuf, FilenamesSize);
-    RawCoverageFilenamesReader Reader(FilenameRegion, Filenames,
-                                      CompilationDir);
-    if (auto Err = Reader.read(Version))
+    RawCoverageFilenamesReader Reader(StringRef(Buf, FilenamesSize), Filenames);
+    if (auto Err = Reader.read())
       return std::move(Err);
-    CovBuf += FilenamesSize;
-    FilenameRange FileRange(FilenamesBegin, Filenames.size() - FilenamesBegin);
-
-    if (Version >= CovMapVersion::Version4) {
-      // Map a hash of the filenames region to the filename range associated
-      // with this coverage header.
-      int64_t FilenamesRef =
-          llvm::IndexedInstrProf::ComputeHash(FilenameRegion);
-      auto Insert =
-          FileRangeMap.insert(std::make_pair(FilenamesRef, FileRange));
-      if (!Insert.second) {
-        // The same filenames ref was encountered twice. It's possible that
-        // the associated filenames are the same.
-        auto It = Filenames.begin();
-        FilenameRange &OrigRange = Insert.first->getSecond();
-        if (std::equal(It + OrigRange.StartingIndex,
-                       It + OrigRange.StartingIndex + OrigRange.Length,
-                       It + FileRange.StartingIndex,
-                       It + FileRange.StartingIndex + FileRange.Length))
-          // Map the new range to the original one.
-          FileRange = OrigRange;
-        else
-          // This is a hash collision. Mark the filenames ref invalid.
-          OrigRange.markInvalid();
-      }
-    }
+    Buf += FilenamesSize;
 
     // We'll read the coverage mapping records in the loop below.
-    // This is a no-op in Version4 (coverage mappings are not affixed to the
-    // coverage header).
-    const char *MappingBuf = CovBuf;
-    if (Version >= CovMapVersion::Version4 && CoverageSize != 0)
+    const char *CovBuf = Buf;
+    Buf += CoverageSize;
+    const char *CovEnd = Buf;
+
+    if (Buf > End)
       return make_error<CoverageMapError>(coveragemap_error::malformed);
-    CovBuf += CoverageSize;
-    const char *MappingEnd = CovBuf;
-
-    if (CovBuf > CovBufEnd)
-      return make_error<CoverageMapError>(coveragemap_error::malformed);
-
-    if (Version < CovMapVersion::Version4) {
-      // Read each function record.
-      if (Error E = readFunctionRecords(FuncRecBuf, FuncRecBufEnd, FileRange,
-                                        MappingBuf, MappingEnd))
-        return std::move(E);
-    }
-
     // Each coverage map has an alignment of 8, so we need to adjust alignment
     // before reading the next map.
-    CovBuf += offsetToAlignedAddr(CovBuf, Align(8));
+    Buf += alignmentAdjustment(Buf, 8);
 
-    return CovBuf;
-  }
+    auto CFR = reinterpret_cast<const FuncRecordType *>(FunBuf);
+    while ((const char *)CFR < FunEnd) {
+      // Read the function information
+      uint32_t DataSize = CFR->template getDataSize<Endian>();
 
-  Error readFunctionRecords(const char *FuncRecBuf, const char *FuncRecBufEnd,
-                            Optional<FilenameRange> OutOfLineFileRange,
-                            const char *OutOfLineMappingBuf,
-                            const char *OutOfLineMappingBufEnd) override {
-    auto CFR = reinterpret_cast<const FuncRecordType *>(FuncRecBuf);
-    while ((const char *)CFR < FuncRecBufEnd) {
-      // Validate the length of the coverage mapping for this function.
-      const char *NextMappingBuf;
-      const FuncRecordType *NextCFR;
-      std::tie(NextMappingBuf, NextCFR) =
-          CFR->template advanceByOne<Endian>(OutOfLineMappingBuf);
-      if (Version < CovMapVersion::Version4)
-        if (NextMappingBuf > OutOfLineMappingBufEnd)
-          return make_error<CoverageMapError>(coveragemap_error::malformed);
+      // Now use that to read the coverage data.
+      if (CovBuf + DataSize > CovEnd)
+        return make_error<CoverageMapError>(coveragemap_error::malformed);
+      auto Mapping = StringRef(CovBuf, DataSize);
+      CovBuf += DataSize;
 
-      // Look up the set of filenames associated with this function record.
-      Optional<FilenameRange> FileRange;
-      if (Version < CovMapVersion::Version4) {
-        FileRange = OutOfLineFileRange;
-      } else {
-        uint64_t FilenamesRef = CFR->template getFilenamesRef<Endian>();
-        auto It = FileRangeMap.find(FilenamesRef);
-        if (It == FileRangeMap.end())
-          return make_error<CoverageMapError>(coveragemap_error::malformed);
-        else
-          FileRange = It->getSecond();
-      }
-
-      // Now, read the coverage data.
-      if (FileRange && !FileRange->isInvalid()) {
-        StringRef Mapping =
-            CFR->template getCoverageMapping<Endian>(OutOfLineMappingBuf);
-        if (Version >= CovMapVersion::Version4 &&
-            Mapping.data() + Mapping.size() > FuncRecBufEnd)
-          return make_error<CoverageMapError>(coveragemap_error::malformed);
-        if (Error Err = insertFunctionRecordIfNeeded(CFR, Mapping, *FileRange))
-          return Err;
-      }
-
-      std::tie(OutOfLineMappingBuf, CFR) = std::tie(NextMappingBuf, NextCFR);
+      if (Error Err =
+              insertFunctionRecordIfNeeded(CFR, Mapping, FilenamesBegin))
+        return std::move(Err);
+      CFR++;
     }
-    return Error::success();
+    return Buf;
   }
 };
 
@@ -742,81 +533,54 @@ public:
 template <class IntPtrT, support::endianness Endian>
 Expected<std::unique_ptr<CovMapFuncRecordReader>> CovMapFuncRecordReader::get(
     CovMapVersion Version, InstrProfSymtab &P,
-    std::vector<BinaryCoverageReader::ProfileMappingRecord> &R, StringRef D,
-    std::vector<std::string> &F) {
+    std::vector<BinaryCoverageReader::ProfileMappingRecord> &R,
+    std::vector<StringRef> &F) {
   using namespace coverage;
 
   switch (Version) {
   case CovMapVersion::Version1:
-    return std::make_unique<VersionedCovMapFuncRecordReader<
-        CovMapVersion::Version1, IntPtrT, Endian>>(P, R, D, F);
+    return llvm::make_unique<VersionedCovMapFuncRecordReader<
+        CovMapVersion::Version1, IntPtrT, Endian>>(P, R, F);
   case CovMapVersion::Version2:
   case CovMapVersion::Version3:
-  case CovMapVersion::Version4:
-  case CovMapVersion::Version5:
-  case CovMapVersion::Version6:
     // Decompress the name data.
     if (Error E = P.create(P.getNameData()))
       return std::move(E);
     if (Version == CovMapVersion::Version2)
-      return std::make_unique<VersionedCovMapFuncRecordReader<
-          CovMapVersion::Version2, IntPtrT, Endian>>(P, R, D, F);
-    else if (Version == CovMapVersion::Version3)
-      return std::make_unique<VersionedCovMapFuncRecordReader<
-          CovMapVersion::Version3, IntPtrT, Endian>>(P, R, D, F);
-    else if (Version == CovMapVersion::Version4)
-      return std::make_unique<VersionedCovMapFuncRecordReader<
-          CovMapVersion::Version4, IntPtrT, Endian>>(P, R, D, F);
-    else if (Version == CovMapVersion::Version5)
-      return std::make_unique<VersionedCovMapFuncRecordReader<
-          CovMapVersion::Version5, IntPtrT, Endian>>(P, R, D, F);
-    else if (Version == CovMapVersion::Version6)
-      return std::make_unique<VersionedCovMapFuncRecordReader<
-          CovMapVersion::Version6, IntPtrT, Endian>>(P, R, D, F);
+      return llvm::make_unique<VersionedCovMapFuncRecordReader<
+          CovMapVersion::Version2, IntPtrT, Endian>>(P, R, F);
+    else
+      return llvm::make_unique<VersionedCovMapFuncRecordReader<
+          CovMapVersion::Version3, IntPtrT, Endian>>(P, R, F);
   }
   llvm_unreachable("Unsupported version");
 }
 
 template <typename T, support::endianness Endian>
 static Error readCoverageMappingData(
-    InstrProfSymtab &ProfileNames, StringRef CovMap, StringRef FuncRecords,
+    InstrProfSymtab &ProfileNames, StringRef Data,
     std::vector<BinaryCoverageReader::ProfileMappingRecord> &Records,
-    StringRef CompilationDir, std::vector<std::string> &Filenames) {
+    std::vector<StringRef> &Filenames) {
   using namespace coverage;
 
   // Read the records in the coverage data section.
   auto CovHeader =
-      reinterpret_cast<const CovMapHeader *>(CovMap.data());
+      reinterpret_cast<const CovMapHeader *>(Data.data());
   CovMapVersion Version = (CovMapVersion)CovHeader->getVersion<Endian>();
   if (Version > CovMapVersion::CurrentVersion)
     return make_error<CoverageMapError>(coveragemap_error::unsupported_version);
   Expected<std::unique_ptr<CovMapFuncRecordReader>> ReaderExpected =
       CovMapFuncRecordReader::get<T, Endian>(Version, ProfileNames, Records,
-                                             CompilationDir, Filenames);
+                                             Filenames);
   if (Error E = ReaderExpected.takeError())
     return E;
   auto Reader = std::move(ReaderExpected.get());
-  const char *CovBuf = CovMap.data();
-  const char *CovBufEnd = CovBuf + CovMap.size();
-  const char *FuncRecBuf = FuncRecords.data();
-  const char *FuncRecBufEnd = FuncRecords.data() + FuncRecords.size();
-  while (CovBuf < CovBufEnd) {
-    // Read the current coverage header & filename data.
-    //
-    // Prior to Version4, this also reads all function records affixed to the
-    // header.
-    //
-    // Return a pointer to the next coverage header.
-    auto NextOrErr = Reader->readCoverageHeader(CovBuf, CovBufEnd);
-    if (auto E = NextOrErr.takeError())
+  for (const char *Buf = Data.data(), *End = Buf + Data.size(); Buf < End;) {
+    auto NextHeaderOrErr = Reader->readFunctionRecords(Buf, End);
+    if (auto E = NextHeaderOrErr.takeError())
       return E;
-    CovBuf = NextOrErr.get();
+    Buf = NextHeaderOrErr.get();
   }
-  // In Version4, function records are not affixed to coverage headers. Read
-  // the records from their dedicated section.
-  if (Version >= CovMapVersion::Version4)
-    return Reader->readFunctionRecords(FuncRecBuf, FuncRecBufEnd, None, nullptr,
-                                       nullptr);
   return Error::success();
 }
 
@@ -824,34 +588,31 @@ static const char *TestingFormatMagic = "llvmcovmtestdata";
 
 Expected<std::unique_ptr<BinaryCoverageReader>>
 BinaryCoverageReader::createCoverageReaderFromBuffer(
-    StringRef Coverage, FuncRecordsStorage &&FuncRecords,
-    InstrProfSymtab &&ProfileNames, uint8_t BytesInAddress,
-    support::endianness Endian, StringRef CompilationDir) {
-  std::unique_ptr<BinaryCoverageReader> Reader(
-      new BinaryCoverageReader(std::move(FuncRecords)));
+    StringRef Coverage, InstrProfSymtab &&ProfileNames, uint8_t BytesInAddress,
+    support::endianness Endian) {
+  std::unique_ptr<BinaryCoverageReader> Reader(new BinaryCoverageReader());
   Reader->ProfileNames = std::move(ProfileNames);
-  StringRef FuncRecordsRef = Reader->FuncRecords->getBuffer();
   if (BytesInAddress == 4 && Endian == support::endianness::little) {
     if (Error E =
             readCoverageMappingData<uint32_t, support::endianness::little>(
-                Reader->ProfileNames, Coverage, FuncRecordsRef,
-                Reader->MappingRecords, CompilationDir, Reader->Filenames))
+                Reader->ProfileNames, Coverage, Reader->MappingRecords,
+                Reader->Filenames))
       return std::move(E);
   } else if (BytesInAddress == 4 && Endian == support::endianness::big) {
     if (Error E = readCoverageMappingData<uint32_t, support::endianness::big>(
-            Reader->ProfileNames, Coverage, FuncRecordsRef,
-            Reader->MappingRecords, CompilationDir, Reader->Filenames))
+            Reader->ProfileNames, Coverage, Reader->MappingRecords,
+            Reader->Filenames))
       return std::move(E);
   } else if (BytesInAddress == 8 && Endian == support::endianness::little) {
     if (Error E =
             readCoverageMappingData<uint64_t, support::endianness::little>(
-                Reader->ProfileNames, Coverage, FuncRecordsRef,
-                Reader->MappingRecords, CompilationDir, Reader->Filenames))
+                Reader->ProfileNames, Coverage, Reader->MappingRecords,
+                Reader->Filenames))
       return std::move(E);
   } else if (BytesInAddress == 8 && Endian == support::endianness::big) {
     if (Error E = readCoverageMappingData<uint64_t, support::endianness::big>(
-            Reader->ProfileNames, Coverage, FuncRecordsRef,
-            Reader->MappingRecords, CompilationDir, Reader->Filenames))
+            Reader->ProfileNames, Coverage, Reader->MappingRecords,
+            Reader->Filenames))
       return std::move(E);
   } else
     return make_error<CoverageMapError>(coveragemap_error::malformed);
@@ -859,7 +620,7 @@ BinaryCoverageReader::createCoverageReaderFromBuffer(
 }
 
 static Expected<std::unique_ptr<BinaryCoverageReader>>
-loadTestingFormat(StringRef Data, StringRef CompilationDir) {
+loadTestingFormat(StringRef Data) {
   uint8_t BytesInAddress = 8;
   support::endianness Endian = support::endianness::little;
 
@@ -883,51 +644,19 @@ loadTestingFormat(StringRef Data, StringRef CompilationDir) {
   InstrProfSymtab ProfileNames;
   if (Error E = ProfileNames.create(Data.substr(0, ProfileNamesSize), Address))
     return std::move(E);
-  Data = Data.substr(ProfileNamesSize);
+  StringRef CoverageMapping = Data.substr(ProfileNamesSize);
   // Skip the padding bytes because coverage map data has an alignment of 8.
-  size_t Pad = offsetToAlignedAddr(Data.data(), Align(8));
-  if (Data.size() < Pad)
+  if (CoverageMapping.empty())
+    return make_error<CoverageMapError>(coveragemap_error::truncated);
+  size_t Pad = alignmentAdjustment(CoverageMapping.data(), 8);
+  if (CoverageMapping.size() < Pad)
     return make_error<CoverageMapError>(coveragemap_error::malformed);
-  Data = Data.substr(Pad);
-  if (Data.size() < sizeof(CovMapHeader))
-    return make_error<CoverageMapError>(coveragemap_error::malformed);
-  auto const *CovHeader = reinterpret_cast<const CovMapHeader *>(
-      Data.substr(0, sizeof(CovMapHeader)).data());
-  CovMapVersion Version =
-      (CovMapVersion)CovHeader->getVersion<support::endianness::little>();
-  StringRef CoverageMapping;
-  BinaryCoverageReader::FuncRecordsStorage CoverageRecords;
-  if (Version < CovMapVersion::Version4) {
-    CoverageMapping = Data;
-    if (CoverageMapping.empty())
-      return make_error<CoverageMapError>(coveragemap_error::truncated);
-    CoverageRecords = MemoryBuffer::getMemBuffer("");
-  } else {
-    uint32_t FilenamesSize =
-        CovHeader->getFilenamesSize<support::endianness::little>();
-    uint32_t CoverageMappingSize = sizeof(CovMapHeader) + FilenamesSize;
-    CoverageMapping = Data.substr(0, CoverageMappingSize);
-    if (CoverageMapping.empty())
-      return make_error<CoverageMapError>(coveragemap_error::truncated);
-    Data = Data.substr(CoverageMappingSize);
-    // Skip the padding bytes because coverage records data has an alignment
-    // of 8.
-    Pad = offsetToAlignedAddr(Data.data(), Align(8));
-    if (Data.size() < Pad)
-      return make_error<CoverageMapError>(coveragemap_error::malformed);
-    CoverageRecords = MemoryBuffer::getMemBuffer(Data.substr(Pad));
-    if (CoverageRecords->getBufferSize() == 0)
-      return make_error<CoverageMapError>(coveragemap_error::truncated);
-  }
+  CoverageMapping = CoverageMapping.substr(Pad);
   return BinaryCoverageReader::createCoverageReaderFromBuffer(
-      CoverageMapping, std::move(CoverageRecords), std::move(ProfileNames),
-      BytesInAddress, Endian, CompilationDir);
+      CoverageMapping, std::move(ProfileNames), BytesInAddress, Endian);
 }
 
-/// Find all sections that match \p Name. There may be more than one if comdats
-/// are in use, e.g. for the __llvm_covfun section on ELF.
-static Expected<std::vector<SectionRef>> lookupSections(ObjectFile &OF,
-                                                        StringRef Name) {
+static Expected<SectionRef> lookupSection(ObjectFile &OF, StringRef Name) {
   // On COFF, the object file section name may end in "$M". This tells the
   // linker to sort these sections between "$A" and "$Z". The linker removes the
   // dollar and everything after it in the final binary. Do the same to match.
@@ -937,27 +666,23 @@ static Expected<std::vector<SectionRef>> lookupSections(ObjectFile &OF,
   };
   Name = stripSuffix(Name);
 
-  std::vector<SectionRef> Sections;
+  StringRef FoundName;
   for (const auto &Section : OF.sections()) {
-    Expected<StringRef> NameOrErr = Section.getName();
-    if (!NameOrErr)
-      return NameOrErr.takeError();
-    if (stripSuffix(*NameOrErr) == Name)
-      Sections.push_back(Section);
+    if (auto EC = Section.getName(FoundName))
+      return errorCodeToError(EC);
+    if (stripSuffix(FoundName) == Name)
+      return Section;
   }
-  if (Sections.empty())
-    return make_error<CoverageMapError>(coveragemap_error::no_data_found);
-  return Sections;
+  return make_error<CoverageMapError>(coveragemap_error::no_data_found);
 }
 
 static Expected<std::unique_ptr<BinaryCoverageReader>>
-loadBinaryFormat(std::unique_ptr<Binary> Bin, StringRef Arch,
-                 StringRef CompilationDir = "") {
+loadBinaryFormat(std::unique_ptr<Binary> Bin, StringRef Arch) {
   std::unique_ptr<ObjectFile> OF;
   if (auto *Universal = dyn_cast<MachOUniversalBinary>(Bin.get())) {
     // If we have a universal binary, try to look up the object for the
     // appropriate architecture.
-    auto ObjectFileOrErr = Universal->getMachOObjectForArch(Arch);
+    auto ObjectFileOrErr = Universal->getObjectForArch(Arch);
     if (!ObjectFileOrErr)
       return ObjectFileOrErr.takeError();
     OF = std::move(ObjectFileOrErr.get());
@@ -980,105 +705,39 @@ loadBinaryFormat(std::unique_ptr<Binary> Bin, StringRef Arch,
   // Look for the sections that we are interested in.
   auto ObjFormat = OF->getTripleObjectFormat();
   auto NamesSection =
-      lookupSections(*OF, getInstrProfSectionName(IPSK_name, ObjFormat,
+      lookupSection(*OF, getInstrProfSectionName(IPSK_name, ObjFormat,
                                                  /*AddSegmentInfo=*/false));
   if (auto E = NamesSection.takeError())
     return std::move(E);
   auto CoverageSection =
-      lookupSections(*OF, getInstrProfSectionName(IPSK_covmap, ObjFormat,
-                                                  /*AddSegmentInfo=*/false));
+      lookupSection(*OF, getInstrProfSectionName(IPSK_covmap, ObjFormat,
+                                                 /*AddSegmentInfo=*/false));
   if (auto E = CoverageSection.takeError())
     return std::move(E);
-  std::vector<SectionRef> CoverageSectionRefs = *CoverageSection;
-  if (CoverageSectionRefs.size() != 1)
-    return make_error<CoverageMapError>(coveragemap_error::malformed);
-  auto CoverageMappingOrErr = CoverageSectionRefs.back().getContents();
+
+  // Get the contents of the given sections.
+  auto CoverageMappingOrErr = CoverageSection->getContents();
   if (!CoverageMappingOrErr)
     return CoverageMappingOrErr.takeError();
-  StringRef CoverageMapping = CoverageMappingOrErr.get();
 
   InstrProfSymtab ProfileNames;
-  std::vector<SectionRef> NamesSectionRefs = *NamesSection;
-  if (NamesSectionRefs.size() != 1)
-    return make_error<CoverageMapError>(coveragemap_error::malformed);
-  if (Error E = ProfileNames.create(NamesSectionRefs.back()))
+  if (Error E = ProfileNames.create(*NamesSection))
     return std::move(E);
 
-  // Look for the coverage records section (Version4 only).
-  auto CoverageRecordsSections =
-      lookupSections(*OF, getInstrProfSectionName(IPSK_covfun, ObjFormat,
-                                                  /*AddSegmentInfo=*/false));
-
-  BinaryCoverageReader::FuncRecordsStorage FuncRecords;
-  if (auto E = CoverageRecordsSections.takeError()) {
-    consumeError(std::move(E));
-    FuncRecords = MemoryBuffer::getMemBuffer("");
-  } else {
-    // Compute the FuncRecordsBuffer of the buffer, taking into account the
-    // padding between each record, and making sure the first block is aligned
-    // in memory to maintain consistency between buffer address and size
-    // alignment.
-    const Align RecordAlignment(8);
-    uint64_t FuncRecordsSize = 0;
-    for (SectionRef Section : *CoverageRecordsSections) {
-      auto CoverageRecordsOrErr = Section.getContents();
-      if (!CoverageRecordsOrErr)
-        return CoverageRecordsOrErr.takeError();
-      FuncRecordsSize += alignTo(CoverageRecordsOrErr->size(), RecordAlignment);
-    }
-    auto WritableBuffer =
-        WritableMemoryBuffer::getNewUninitMemBuffer(FuncRecordsSize);
-    char *FuncRecordsBuffer = WritableBuffer->getBufferStart();
-    assert(isAddrAligned(RecordAlignment, FuncRecordsBuffer) &&
-           "Allocated memory is correctly aligned");
-
-    for (SectionRef Section : *CoverageRecordsSections) {
-      auto CoverageRecordsOrErr = Section.getContents();
-      if (!CoverageRecordsOrErr)
-        return CoverageRecordsOrErr.takeError();
-      const auto &CoverageRecords = CoverageRecordsOrErr.get();
-      FuncRecordsBuffer = std::copy(CoverageRecords.begin(),
-                                    CoverageRecords.end(), FuncRecordsBuffer);
-      FuncRecordsBuffer =
-          std::fill_n(FuncRecordsBuffer,
-                      alignAddr(FuncRecordsBuffer, RecordAlignment) -
-                          (uintptr_t)FuncRecordsBuffer,
-                      '\0');
-    }
-    assert(FuncRecordsBuffer == WritableBuffer->getBufferEnd() &&
-           "consistent init");
-    FuncRecords = std::move(WritableBuffer);
-  }
-
   return BinaryCoverageReader::createCoverageReaderFromBuffer(
-      CoverageMapping, std::move(FuncRecords), std::move(ProfileNames),
-      BytesInAddress, Endian, CompilationDir);
-}
-
-/// Determine whether \p Arch is invalid or empty, given \p Bin.
-static bool isArchSpecifierInvalidOrMissing(Binary *Bin, StringRef Arch) {
-  // If we have a universal binary and Arch doesn't identify any of its slices,
-  // it's user error.
-  if (auto *Universal = dyn_cast<MachOUniversalBinary>(Bin)) {
-    for (auto &ObjForArch : Universal->objects())
-      if (Arch == ObjForArch.getArchFlagName())
-        return false;
-    return true;
-  }
-  return false;
+      CoverageMappingOrErr.get(), std::move(ProfileNames), BytesInAddress,
+      Endian);
 }
 
 Expected<std::vector<std::unique_ptr<BinaryCoverageReader>>>
 BinaryCoverageReader::create(
     MemoryBufferRef ObjectBuffer, StringRef Arch,
-    SmallVectorImpl<std::unique_ptr<MemoryBuffer>> &ObjectFileBuffers,
-    StringRef CompilationDir) {
+    SmallVectorImpl<std::unique_ptr<MemoryBuffer>> &ObjectFileBuffers) {
   std::vector<std::unique_ptr<BinaryCoverageReader>> Readers;
 
   if (ObjectBuffer.getBuffer().startswith(TestingFormatMagic)) {
     // This is a special format used for testing.
-    auto ReaderOrErr =
-        loadTestingFormat(ObjectBuffer.getBuffer(), CompilationDir);
+    auto ReaderOrErr = loadTestingFormat(ObjectBuffer.getBuffer());
     if (!ReaderOrErr)
       return ReaderOrErr.takeError();
     Readers.push_back(std::move(ReaderOrErr.get()));
@@ -1089,10 +748,6 @@ BinaryCoverageReader::create(
   if (!BinOrErr)
     return BinOrErr.takeError();
   std::unique_ptr<Binary> Bin = std::move(BinOrErr.get());
-
-  if (isArchSpecifierInvalidOrMissing(Bin.get(), Arch))
-    return make_error<CoverageMapError>(
-        coveragemap_error::invalid_or_missing_arch_specifier);
 
   // MachO universal binaries which contain archives need to be treated as
   // archives, not as regular binaries.
@@ -1111,8 +766,7 @@ BinaryCoverageReader::create(
       }
 
       return BinaryCoverageReader::create(
-          ArchiveOrErr.get()->getMemoryBufferRef(), Arch, ObjectFileBuffers,
-          CompilationDir);
+          ArchiveOrErr.get()->getMemoryBufferRef(), Arch, ObjectFileBuffers);
     }
   }
 
@@ -1125,7 +779,7 @@ BinaryCoverageReader::create(
         return ChildBufOrErr.takeError();
 
       auto ChildReadersOrErr = BinaryCoverageReader::create(
-          ChildBufOrErr.get(), Arch, ObjectFileBuffers, CompilationDir);
+          ChildBufOrErr.get(), Arch, ObjectFileBuffers);
       if (!ChildReadersOrErr)
         return ChildReadersOrErr.takeError();
       for (auto &Reader : ChildReadersOrErr.get())
@@ -1144,7 +798,7 @@ BinaryCoverageReader::create(
     return std::move(Readers);
   }
 
-  auto ReaderOrErr = loadBinaryFormat(std::move(Bin), Arch, CompilationDir);
+  auto ReaderOrErr = loadBinaryFormat(std::move(Bin), Arch);
   if (!ReaderOrErr)
     return ReaderOrErr.takeError();
   Readers.push_back(std::move(ReaderOrErr.get()));
@@ -1159,9 +813,10 @@ Error BinaryCoverageReader::readNextRecord(CoverageMappingRecord &Record) {
   Expressions.clear();
   MappingRegions.clear();
   auto &R = MappingRecords[CurrentRecord];
-  auto F = makeArrayRef(Filenames).slice(R.FilenamesBegin, R.FilenamesSize);
-  RawCoverageMappingReader Reader(R.CoverageMapping, F, FunctionsFilenames,
-                                  Expressions, MappingRegions);
+  RawCoverageMappingReader Reader(
+      R.CoverageMapping,
+      makeArrayRef(Filenames).slice(R.FilenamesBegin, R.FilenamesSize),
+      FunctionsFilenames, Expressions, MappingRegions);
   if (auto Err = Reader.read())
     return Err;
 

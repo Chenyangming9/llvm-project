@@ -4,10 +4,8 @@ set(LLVM_LINK_COMPONENTS
 
 add_clang_library(clangApplyReplacements
   lib/Tooling/ApplyReplacements.cpp
-)
 
-clang_target_link_libraries(clangApplyReplacements
-  PRIVATE
+  LINK_LIBS
   clangAST
   clangBasic
   clangRewrite

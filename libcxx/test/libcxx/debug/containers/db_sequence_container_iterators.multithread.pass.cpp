@@ -6,15 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 // UNSUPPORTED: windows
 // UNSUPPORTED: libcpp-has-no-threads
-// UNSUPPORTED: libcpp-no-if-constexpr
+// MODULES_DEFINES: _LIBCPP_DEBUG=1
 
-// ADDITIONAL_COMPILE_FLAGS: -D_LIBCPP_DEBUG=1
-// UNSUPPORTED: libcxx-no-debug-mode
+// Can't test the system lib because this test enables debug mode
+// UNSUPPORTED: with_system_cxx_lib
 
 // test multihtreaded container debugging
+
+#define _LIBCPP_DEBUG 1
 
 #include <cassert>
 #include <cstddef>
@@ -22,7 +24,7 @@
 #include <list>
 #include <thread>
 #include <vector>
-#include "container_debug_tests.h"
+#include "container_debug_tests.hpp"
 
 #include "test_macros.h"
 

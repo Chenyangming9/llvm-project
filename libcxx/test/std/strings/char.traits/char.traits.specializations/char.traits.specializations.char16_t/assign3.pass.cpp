@@ -17,7 +17,7 @@
 
 #include "test_macros.h"
 
-TEST_CONSTEXPR_CXX20 bool test()
+int main(int, char**)
 {
 #ifndef _LIBCPP_HAS_NO_UNICODE_CHARS
     char16_t s2[3] = {0};
@@ -26,18 +26,7 @@ TEST_CONSTEXPR_CXX20 bool test()
     assert(s2[1] == char16_t(5));
     assert(s2[2] == char16_t(5));
     assert(std::char_traits<char16_t>::assign(NULL, 0, char16_t(5)) == NULL);
-#endif // _LIBCPP_HAS_NO_UNICODE_CHARS
-
-  return true;
-}
-
-int main(int, char**)
-{
-    test();
-
-#if TEST_STD_VER > 17
-    static_assert(test());
-#endif
+#endif  // _LIBCPP_HAS_NO_UNICODE_CHARS
 
   return 0;
 }

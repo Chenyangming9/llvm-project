@@ -68,10 +68,11 @@ template <> struct DOTGraphTraits<RegionNode *> : public DefaultDOTGraphTraits {
       BasicBlock *BB = Node->getNodeAs<BasicBlock>();
 
       if (isSimple())
-        return DOTGraphTraits<DOTFuncInfo *>::getSimpleNodeLabel(BB, nullptr);
-
+        return DOTGraphTraits<const Function *>::getSimpleNodeLabel(
+            BB, BB->getParent());
       else
-        return DOTGraphTraits<DOTFuncInfo *>::getCompleteNodeLabel(BB, nullptr);
+        return DOTGraphTraits<const Function *>::getCompleteNodeLabel(
+            BB, BB->getParent());
     }
 
     return "Not implemented";
@@ -177,7 +178,7 @@ struct DOTGraphTraits<ScopDetectionWrapperPass *>
 
     RegionInfo *RI = R->getRegionInfo();
 
-    for (BasicBlock *BB : R->blocks())
+    for (const auto &BB : R->blocks())
       if (RI->getRegionFor(BB) == R)
         O.indent(2 * (depth + 1))
             << "Node"

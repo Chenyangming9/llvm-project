@@ -17,9 +17,10 @@
 #define LLVM_C_DEBUGINFO_H
 
 #include "llvm-c/Core.h"
-#include "llvm-c/ExternC.h"
 
-LLVM_C_EXTERN_C_BEGIN
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * Debug info flags.
@@ -31,7 +32,7 @@ typedef enum {
   LLVMDIFlagPublic = 3,
   LLVMDIFlagFwdDecl = 1 << 2,
   LLVMDIFlagAppleBlock = 1 << 3,
-  LLVMDIFlagReservedBit4 = 1 << 4,
+  LLVMDIFlagBlockByrefStruct = 1 << 4,
   LLVMDIFlagVirtual = 1 << 5,
   LLVMDIFlagArtificial = 1 << 6,
   LLVMDIFlagExplicit = 1 << 7,
@@ -159,10 +160,7 @@ enum {
   LLVMDIImportedEntityMetadataKind,
   LLVMDIMacroMetadataKind,
   LLVMDIMacroFileMetadataKind,
-  LLVMDICommonBlockMetadataKind,
-  LLVMDIStringTypeMetadataKind,
-  LLVMDIGenericSubrangeMetadataKind,
-  LLVMDIArgListMetadataKind
+  LLVMDICommonBlockMetadataKind
 };
 typedef unsigned LLVMMetadataKind;
 
@@ -170,19 +168,6 @@ typedef unsigned LLVMMetadataKind;
  * An LLVM DWARF type encoding.
  */
 typedef unsigned LLVMDWARFTypeEncoding;
-
-/**
- * Describes the kind of macro declaration used for LLVMDIBuilderCreateMacro.
- * @see llvm::dwarf::MacinfoRecordType
- * @note Values are from DW_MACINFO_* constants in the DWARF specification.
- */
-typedef enum {
-  LLVMDWARFMacinfoRecordTypeDefine = 0x01,
-  LLVMDWARFMacinfoRecordTypeMacro = 0x02,
-  LLVMDWARFMacinfoRecordTypeStartFile = 0x03,
-  LLVMDWARFMacinfoRecordTypeEndFile = 0x04,
-  LLVMDWARFMacinfoRecordTypeVendorExt = 0xff
-} LLVMDWARFMacinfoRecordType;
 
 /**
  * The current debug metadata version number.
@@ -253,10 +238,6 @@ void LLVMDIBuilderFinalize(LLVMDIBuilderRef Builder);
  * \param SplitDebugInlining    Whether to emit inline debug info.
  * \param DebugInfoForProfiling Whether to emit extra debug info for
  *                              profile collection.
- * \param SysRoot         The Clang system root (value of -isysroot).
- * \param SysRootLen      The length of the C string passed to \c SysRoot.
- * \param SDK           The SDK. On Darwin, the last component of the sysroot.
- * \param SDKLen        The length of the C string passed to \c SDK.
  */
 LLVMMetadataRef LLVMDIBuilderCreateCompileUnit(
     LLVMDIBuilderRef Builder, LLVMDWARFSourceLanguage Lang,
@@ -264,8 +245,7 @@ LLVMMetadataRef LLVMDIBuilderCreateCompileUnit(
     LLVMBool isOptimized, const char *Flags, size_t FlagsLen,
     unsigned RuntimeVer, const char *SplitName, size_t SplitNameLen,
     LLVMDWARFEmissionKind Kind, unsigned DWOId, LLVMBool SplitDebugInlining,
-    LLVMBool DebugInfoForProfiling, const char *SysRoot, size_t SysRootLen,
-    const char *SDK, size_t SDKLen);
+    LLVMBool DebugInfoForProfiling);
 
 /**
  * Create a file descriptor to hold debugging information for a file.
@@ -291,15 +271,15 @@ LLVMDIBuilderCreateFile(LLVMDIBuilderRef Builder, const char *Filename,
  * \param ConfigMacrosLen The length of the C string passed to \c ConfigMacros.
  * \param IncludePath     The path to the module map file.
  * \param IncludePathLen  The length of the C string passed to \c IncludePath.
- * \param APINotesFile    The path to an API notes file for the module.
- * \param APINotesFileLen The length of the C string passed to \c APINotestFile.
+ * \param ISysRoot        The Clang system root (value of -isysroot).
+ * \param ISysRootLen     The length of the C string passed to \c ISysRoot.
  */
 LLVMMetadataRef
 LLVMDIBuilderCreateModule(LLVMDIBuilderRef Builder, LLVMMetadataRef ParentScope,
                           const char *Name, size_t NameLen,
                           const char *ConfigMacros, size_t ConfigMacrosLen,
                           const char *IncludePath, size_t IncludePathLen,
-                          const char *APINotesFile, size_t APINotesFileLen);
+                          const char *ISysRoot, size_t ISysRootLen);
 
 /**
  * Creates a new descriptor for a namespace with the specified parent scope.
@@ -540,38 +520,6 @@ LLVMDIBuilderCreateSubroutineType(LLVMDIBuilderRef Builder,
                                   LLVMMetadataRef *ParameterTypes,
                                   unsigned NumParameterTypes,
                                   LLVMDIFlags Flags);
-
-/**
- * Create debugging information entry for a macro.
- * @param Builder         The DIBuilder.
- * @param ParentMacroFile Macro parent (could be NULL).
- * @param Line            Source line number where the macro is defined.
- * @param RecordType      DW_MACINFO_define or DW_MACINFO_undef.
- * @param Name            Macro name.
- * @param NameLen         Macro name length.
- * @param Value           Macro value.
- * @param ValueLen        Macro value length.
- */
-LLVMMetadataRef LLVMDIBuilderCreateMacro(LLVMDIBuilderRef Builder,
-                                         LLVMMetadataRef ParentMacroFile,
-                                         unsigned Line,
-                                         LLVMDWARFMacinfoRecordType RecordType,
-                                         const char *Name, size_t NameLen,
-                                         const char *Value, size_t ValueLen);
-
-/**
- * Create debugging information temporary entry for a macro file.
- * List of macro node direct children will be calculated by DIBuilder,
- * using the \p ParentMacroFile relationship.
- * @param Builder         The DIBuilder.
- * @param ParentMacroFile Macro parent (could be NULL).
- * @param Line            Source line number where the macro file is included.
- * @param File            File descriptor containing the name of the macro file.
- */
-LLVMMetadataRef
-LLVMDIBuilderCreateTempMacroFile(LLVMDIBuilderRef Builder,
-                                 LLVMMetadataRef ParentMacroFile, unsigned Line,
-                                 LLVMMetadataRef File);
 
 /**
  * Create debugging information entry for an enumerator.
@@ -882,7 +830,7 @@ LLVMMetadataRef
 LLVMDIBuilderCreateTypedef(LLVMDIBuilderRef Builder, LLVMMetadataRef Type,
                            const char *Name, size_t NameLen,
                            LLVMMetadataRef File, unsigned LineNo,
-                           LLVMMetadataRef Scope, uint32_t AlignInBits);
+                           LLVMMetadataRef Scope);
 
 /**
  * Create debugging information entry to establish inheritance relationship
@@ -1360,6 +1308,8 @@ void LLVMInstructionSetDebugLoc(LLVMValueRef Inst, LLVMMetadataRef Loc);
  */
 LLVMMetadataKind LLVMGetMetadataKind(LLVMMetadataRef Metadata);
 
-LLVM_C_EXTERN_C_END
+#ifdef __cplusplus
+} /* end extern "C" */
+#endif
 
 #endif

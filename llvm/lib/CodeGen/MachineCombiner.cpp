@@ -12,22 +12,17 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Analysis/ProfileSummaryInfo.h"
-#include "llvm/CodeGen/LazyMachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/MachineSizeOpts.h"
 #include "llvm/CodeGen/MachineTraceMetrics.h"
 #include "llvm/CodeGen/Passes.h"
-#include "llvm/CodeGen/RegisterClassInfo.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSchedule.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -71,9 +66,6 @@ class MachineCombiner : public MachineFunctionPass {
   MachineLoopInfo *MLI; // Current MachineLoopInfo
   MachineTraceMetrics *Traces;
   MachineTraceMetrics::Ensemble *MinInstr;
-  MachineBlockFrequencyInfo *MBFI;
-  ProfileSummaryInfo *PSI;
-  RegisterClassInfo RegClassInfo;
 
   TargetSchedModel TSchedModel;
 
@@ -90,7 +82,7 @@ public:
   StringRef getPassName() const override { return "Machine InstCombiner"; }
 
 private:
-  bool doSubstitute(unsigned NewSize, unsigned OldSize, bool OptForSize);
+  bool doSubstitute(unsigned NewSize, unsigned OldSize);
   bool combineInstructions(MachineBasicBlock *);
   MachineInstr *getOperandDef(const MachineOperand &MO);
   unsigned getDepth(SmallVectorImpl<MachineInstr *> &InsInstrs,
@@ -105,10 +97,6 @@ private:
                           SmallVectorImpl<MachineInstr *> &DelInstrs,
                           DenseMap<unsigned, unsigned> &InstrIdxForVirtReg,
                           MachineCombinerPattern Pattern, bool SlackIsAccurate);
-  bool reduceRegisterPressure(MachineInstr &Root, MachineBasicBlock *MBB,
-                              SmallVectorImpl<MachineInstr *> &InsInstrs,
-                              SmallVectorImpl<MachineInstr *> &DelInstrs,
-                              MachineCombinerPattern Pattern);
   bool preservesResourceLen(MachineBasicBlock *MBB,
                             MachineTraceMetrics::Trace BlockTrace,
                             SmallVectorImpl<MachineInstr *> &InsInstrs,
@@ -143,15 +131,13 @@ void MachineCombiner::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<MachineLoopInfo>();
   AU.addRequired<MachineTraceMetrics>();
   AU.addPreserved<MachineTraceMetrics>();
-  AU.addRequired<LazyMachineBlockFrequencyInfoPass>();
-  AU.addRequired<ProfileSummaryInfoWrapperPass>();
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 
 MachineInstr *MachineCombiner::getOperandDef(const MachineOperand &MO) {
   MachineInstr *DefInstr = nullptr;
   // We need a virtual register definition.
-  if (MO.isReg() && Register::isVirtualRegister(MO.getReg()))
+  if (MO.isReg() && TargetRegisterInfo::isVirtualRegister(MO.getReg()))
     DefInstr = MRI->getUniqueVRegDef(MO.getReg());
   // PHI's have no depth etc.
   if (DefInstr && DefInstr->isPHI())
@@ -182,7 +168,7 @@ MachineCombiner::getDepth(SmallVectorImpl<MachineInstr *> &InsInstrs,
     unsigned IDepth = 0;
     for (const MachineOperand &MO : InstrPtr->operands()) {
       // Check for virtual register operand.
-      if (!(MO.isReg() && Register::isVirtualRegister(MO.getReg())))
+      if (!(MO.isReg() && TargetRegisterInfo::isVirtualRegister(MO.getReg())))
         continue;
       if (!MO.isUse())
         continue;
@@ -237,7 +223,7 @@ unsigned MachineCombiner::getLatency(MachineInstr *Root, MachineInstr *NewRoot,
 
   for (const MachineOperand &MO : NewRoot->operands()) {
     // Check for virtual register operand.
-    if (!(MO.isReg() && Register::isVirtualRegister(MO.getReg())))
+    if (!(MO.isReg() && TargetRegisterInfo::isVirtualRegister(MO.getReg())))
       continue;
     if (!MO.isDef())
       continue;
@@ -263,9 +249,8 @@ unsigned MachineCombiner::getLatency(MachineInstr *Root, MachineInstr *NewRoot,
 /// The combiner's goal may differ based on which pattern it is attempting
 /// to optimize.
 enum class CombinerObjective {
-  MustReduceDepth,            // The data dependency chain must be improved.
-  MustReduceRegisterPressure, // The register pressure must be reduced.
-  Default                     // The critical path must not be lengthened.
+  MustReduceDepth, // The data dependency chain must be improved.
+  Default          // The critical path must not be lengthened.
 };
 
 static CombinerObjective getCombinerObjective(MachineCombinerPattern P) {
@@ -276,12 +261,7 @@ static CombinerObjective getCombinerObjective(MachineCombinerPattern P) {
   case MachineCombinerPattern::REASSOC_AX_YB:
   case MachineCombinerPattern::REASSOC_XA_BY:
   case MachineCombinerPattern::REASSOC_XA_YB:
-  case MachineCombinerPattern::REASSOC_XY_AMM_BMM:
-  case MachineCombinerPattern::REASSOC_XMM_AMM_BMM:
     return CombinerObjective::MustReduceDepth;
-  case MachineCombinerPattern::REASSOC_XY_BCA:
-  case MachineCombinerPattern::REASSOC_XY_BAC:
-    return CombinerObjective::MustReduceRegisterPressure;
   default:
     return CombinerObjective::Default;
   }
@@ -308,18 +288,6 @@ std::pair<unsigned, unsigned> MachineCombiner::getLatenciesForInstrSequences(
     RootLatency += TSchedModel.computeInstrLatency(I);
 
   return {NewRootLatency, RootLatency};
-}
-
-bool MachineCombiner::reduceRegisterPressure(
-    MachineInstr &Root, MachineBasicBlock *MBB,
-    SmallVectorImpl<MachineInstr *> &InsInstrs,
-    SmallVectorImpl<MachineInstr *> &DelInstrs,
-    MachineCombinerPattern Pattern) {
-  // FIXME: for now, we don't do any check for the register pressure patterns.
-  // We treat them as always profitable. But we can do better if we make
-  // RegPressureTracker class be aware of TIE attribute. Then we can get an
-  // accurate compare of register pressure with DelInstrs or InsInstrs.
-  return true;
 }
 
 /// The DAGCombine code sequence ends in MI (Machine Instruction) Root.
@@ -430,21 +398,18 @@ bool MachineCombiner::preservesResourceLen(
                     << ResLenBeforeCombine
                     << " and after: " << ResLenAfterCombine << "\n";);
   LLVM_DEBUG(
-      ResLenAfterCombine <=
-      ResLenBeforeCombine + TII->getExtendResourceLenLimit()
+      ResLenAfterCombine <= ResLenBeforeCombine
           ? dbgs() << "\t\t  As result it IMPROVES/PRESERVES Resource Length\n"
           : dbgs() << "\t\t  As result it DOES NOT improve/preserve Resource "
                       "Length\n");
 
-  return ResLenAfterCombine <=
-         ResLenBeforeCombine + TII->getExtendResourceLenLimit();
+  return ResLenAfterCombine <= ResLenBeforeCombine;
 }
 
 /// \returns true when new instruction sequence should be generated
 /// independent if it lengthens critical path or not
-bool MachineCombiner::doSubstitute(unsigned NewSize, unsigned OldSize,
-                                   bool OptForSize) {
-  if (OptForSize && (NewSize < OldSize))
+bool MachineCombiner::doSubstitute(unsigned NewSize, unsigned OldSize) {
+  if (OptSize && (NewSize < OldSize))
     return true;
   if (!TSchedModel.hasInstrSchedModelOrItineraries())
     return true;
@@ -460,8 +425,6 @@ bool MachineCombiner::doSubstitute(unsigned NewSize, unsigned OldSize,
 /// \param DelInstrs instruction to delete from \p MBB
 /// \param MinInstr is a pointer to the machine trace information
 /// \param RegUnits set of live registers, needed to compute instruction depths
-/// \param TII is target instruction info, used to call target hook
-/// \param Pattern is used to call target hook finalizeInsInstrs
 /// \param IncrementalUpdate if true, compute instruction depths incrementally,
 ///                          otherwise invalidate the trace
 static void insertDeleteInstructions(MachineBasicBlock *MBB, MachineInstr &MI,
@@ -469,18 +432,7 @@ static void insertDeleteInstructions(MachineBasicBlock *MBB, MachineInstr &MI,
                                      SmallVector<MachineInstr *, 16> DelInstrs,
                                      MachineTraceMetrics::Ensemble *MinInstr,
                                      SparseSet<LiveRegUnit> &RegUnits,
-                                     const TargetInstrInfo *TII,
-                                     MachineCombinerPattern Pattern,
                                      bool IncrementalUpdate) {
-  // If we want to fix up some placeholder for some target, do it now.
-  // We need this because in genAlternativeCodeSequence, we have not decided the
-  // better pattern InsInstrs or DelInstrs, so we don't want generate some
-  // sideeffect to the function. For example we need to delay the constant pool
-  // entry creation here after InsInstrs is selected as better pattern.
-  // Otherwise the constant pool entry created for InsInstrs will not be deleted
-  // even if InsInstrs is not the better pattern.
-  TII->finalizeInsInstrs(MI, Pattern, InsInstrs);
-
   for (auto *InstrPtr : InsInstrs)
     MBB->insert((MachineBasicBlock::iterator)&MI, InstrPtr);
 
@@ -555,11 +507,6 @@ bool MachineCombiner::combineInstructions(MachineBasicBlock *MBB) {
   SparseSet<LiveRegUnit> RegUnits;
   RegUnits.setUniverse(TRI->getNumRegUnits());
 
-  bool OptForSize = OptSize || llvm::shouldOptimizeForSize(MBB, PSI, MBFI);
-
-  bool DoRegPressureReduce =
-      TII->shouldReduceRegisterPressure(MBB, &RegClassInfo);
-
   while (BlockIter != MBB->end()) {
     auto &MI = *BlockIter++;
     SmallVector<MachineCombinerPattern, 16> Patterns;
@@ -590,7 +537,7 @@ bool MachineCombiner::combineInstructions(MachineBasicBlock *MBB) {
     // machine-combiner-verify-pattern-order is enabled, all patterns are
     // checked to ensure later patterns do not provide better latency savings.
 
-    if (!TII->getMachineCombinerPatterns(MI, Patterns, DoRegPressureReduce))
+    if (!TII->getMachineCombinerPatterns(MI, Patterns))
       continue;
 
     if (VerifyPatternOrder)
@@ -626,41 +573,19 @@ bool MachineCombiner::combineInstructions(MachineBasicBlock *MBB) {
       if (ML && TII->isThroughputPattern(P))
         SubstituteAlways = true;
 
-      if (IncrementalUpdate && LastUpdate != BlockIter) {
+      if (IncrementalUpdate) {
         // Update depths since the last incremental update.
         MinInstr->updateDepths(LastUpdate, BlockIter, RegUnits);
         LastUpdate = BlockIter;
-      }
-
-      if (DoRegPressureReduce &&
-          getCombinerObjective(P) ==
-              CombinerObjective::MustReduceRegisterPressure) {
-        if (MBB->size() > inc_threshold) {
-          // Use incremental depth updates for basic blocks above threshold
-          IncrementalUpdate = true;
-          LastUpdate = BlockIter;
-        }
-        if (reduceRegisterPressure(MI, MBB, InsInstrs, DelInstrs, P)) {
-          // Replace DelInstrs with InsInstrs.
-          insertDeleteInstructions(MBB, MI, InsInstrs, DelInstrs, MinInstr,
-                                   RegUnits, TII, P, IncrementalUpdate);
-          Changed |= true;
-
-          // Go back to previous instruction as it may have ILP reassociation
-          // opportunity.
-          BlockIter--;
-          break;
-        }
       }
 
       // Substitute when we optimize for codesize and the new sequence has
       // fewer instructions OR
       // the new sequence neither lengthens the critical path nor increases
       // resource pressure.
-      if (SubstituteAlways ||
-          doSubstitute(NewInstCount, OldInstCount, OptForSize)) {
+      if (SubstituteAlways || doSubstitute(NewInstCount, OldInstCount)) {
         insertDeleteInstructions(MBB, MI, InsInstrs, DelInstrs, MinInstr,
-                                 RegUnits, TII, P, IncrementalUpdate);
+                                 RegUnits, IncrementalUpdate);
         // Eagerly stop after the first pattern fires.
         Changed = true;
         break;
@@ -683,7 +608,7 @@ bool MachineCombiner::combineInstructions(MachineBasicBlock *MBB) {
           }
 
           insertDeleteInstructions(MBB, MI, InsInstrs, DelInstrs, MinInstr,
-                                   RegUnits, TII, P, IncrementalUpdate);
+                                   RegUnits, IncrementalUpdate);
 
           // Eagerly stop after the first pattern fires.
           Changed = true;
@@ -713,13 +638,8 @@ bool MachineCombiner::runOnMachineFunction(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
   MLI = &getAnalysis<MachineLoopInfo>();
   Traces = &getAnalysis<MachineTraceMetrics>();
-  PSI = &getAnalysis<ProfileSummaryInfoWrapperPass>().getPSI();
-  MBFI = (PSI && PSI->hasProfileSummary()) ?
-         &getAnalysis<LazyMachineBlockFrequencyInfoPass>().getBFI() :
-         nullptr;
   MinInstr = nullptr;
   OptSize = MF.getFunction().hasOptSize();
-  RegClassInfo.runOnMachineFunction(MF);
 
   LLVM_DEBUG(dbgs() << getPassName() << ": " << MF.getName() << '\n');
   if (!TII->useMachineCombiner()) {

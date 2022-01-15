@@ -1,5 +1,6 @@
-; RUN: llc --mtriple=wasm32-unknown-unknown -filetype=obj %s -o - | obj2yaml | FileCheck --check-prefixes CHECK,CHK32 %s
-; RUN: llc --mtriple=wasm64-unknown-unknown -filetype=obj %s -o - | obj2yaml | FileCheck --check-prefixes CHECK,CHK64 %s
+; RUN: llc -filetype=obj %s -o - | obj2yaml | FileCheck %s
+
+target triple = "wasm32-unknown-unknown"
 
 ; Function that uses explict stack, and should generate a reference to
 ; __stack_pointer, along with the corresponding reloction entry.
@@ -14,8 +15,7 @@ entry:
 ; CHECK:       - Module:          env
 ; CHECK:         Field:           __stack_pointer
 ; CHECK:         Kind:            GLOBAL
-; CHK32:         GlobalType:      I32
-; CHK64:         GlobalType:      I64
+; CHECK:         GlobalType:      I32
 ; CHECK:         GlobalMutable:   true
 ; CHECK:   - Type:            CODE
 ; CHECK:     Relocations:

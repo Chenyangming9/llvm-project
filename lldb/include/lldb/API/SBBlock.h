@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_API_SBBLOCK_H
-#define LLDB_API_SBBLOCK_H
+#ifndef LLDB_SBBlock_h_
+#define LLDB_SBBlock_h_
 
 #include "lldb/API/SBDefines.h"
 #include "lldb/API/SBFrame.h"
@@ -87,9 +87,9 @@ private:
   void AppendVariables(bool can_create, bool get_parent_variables,
                        lldb_private::VariableList *var_list);
 
-  lldb_private::Block *m_opaque_ptr = nullptr;
+  lldb_private::Block *m_opaque_ptr;
 };
 
 } // namespace lldb
 
-#endif // LLDB_API_SBBLOCK_H
+#endif // LLDB_SBBlock_h_

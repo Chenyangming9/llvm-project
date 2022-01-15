@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 // <numeric>
 
@@ -17,6 +17,7 @@
 #include <cassert>
 #include <climits>
 #include <cstdint>
+#include <cstdlib>    // for rand()
 #include <type_traits>
 
 #include "test_macros.h"
@@ -92,9 +93,9 @@ constexpr bool do_test(int = 0)
     return accumulate;
 }
 
-int main(int argc, char**)
+int main(int, char**)
 {
-    int non_cce = argc; // a value that can't possibly be constexpr
+    auto non_cce = std::rand(); // a value that can't possibly be constexpr
 
     static_assert(do_test<signed char>(), "");
     static_assert(do_test<short>(), "");

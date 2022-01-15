@@ -1,4 +1,4 @@
-//===-- BreakpointLocation.cpp --------------------------------------------===//
+//===-- BreakpointLocation.cpp ----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -31,10 +31,11 @@ using namespace lldb_private;
 BreakpointLocation::BreakpointLocation(break_id_t loc_id, Breakpoint &owner,
                                        const Address &addr, lldb::tid_t tid,
                                        bool hardware, bool check_for_resolver)
-    : m_being_created(true), m_should_resolve_indirect_functions(false),
+    : StoppointLocation(loc_id, addr.GetOpcodeLoadAddress(&owner.GetTarget()),
+                        hardware),
+      m_being_created(true), m_should_resolve_indirect_functions(false),
       m_is_reexported(false), m_is_indirect(false), m_address(addr),
-      m_owner(owner), m_options_up(), m_bp_site_sp(), m_condition_mutex(),
-      m_condition_hash(0), m_loc_id(loc_id), m_hit_counter() {
+      m_owner(owner), m_options_up(), m_bp_site_sp(), m_condition_mutex() {
   if (check_for_resolver) {
     Symbol *symbol = m_address.CalculateSymbolContextSymbol();
     if (symbol && symbol->IsIndirect()) {
@@ -52,10 +53,11 @@ lldb::addr_t BreakpointLocation::GetLoadAddress() const {
   return m_address.GetOpcodeLoadAddress(&m_owner.GetTarget());
 }
 
-const BreakpointOptions &BreakpointLocation::GetOptionsSpecifyingKind(
-    BreakpointOptions::OptionKind kind) const {
+const BreakpointOptions *
+BreakpointLocation::GetOptionsSpecifyingKind(BreakpointOptions::OptionKind kind)
+const {
   if (m_options_up && m_options_up->IsOptionSet(kind))
-    return *m_options_up;
+    return m_options_up.get();
   else
     return m_owner.GetOptions();
 }
@@ -76,7 +78,7 @@ bool BreakpointLocation::IsEnabled() const {
 }
 
 void BreakpointLocation::SetEnabled(bool enabled) {
-  GetLocationOptions().SetEnabled(enabled);
+  GetLocationOptions()->SetEnabled(enabled);
   if (enabled) {
     ResolveBreakpointSite();
   } else {
@@ -95,13 +97,13 @@ bool BreakpointLocation::IsAutoContinue() const {
 }
 
 void BreakpointLocation::SetAutoContinue(bool auto_continue) {
-  GetLocationOptions().SetAutoContinue(auto_continue);
+  GetLocationOptions()->SetAutoContinue(auto_continue);
   SendBreakpointLocationChangedEvent(eBreakpointEventTypeAutoContinueChanged);
 }
 
 void BreakpointLocation::SetThreadID(lldb::tid_t thread_id) {
   if (thread_id != LLDB_INVALID_THREAD_ID)
-    GetLocationOptions().SetThreadID(thread_id);
+    GetLocationOptions()->SetThreadID(thread_id);
   else {
     // If we're resetting this to an invalid thread id, then don't make an
     // options pointer just to do that.
@@ -112,9 +114,9 @@ void BreakpointLocation::SetThreadID(lldb::tid_t thread_id) {
 }
 
 lldb::tid_t BreakpointLocation::GetThreadID() {
-  const ThreadSpec *thread_spec =
+  const ThreadSpec *thread_spec = 
       GetOptionsSpecifyingKind(BreakpointOptions::eThreadSpec)
-          .GetThreadSpecNoCreate();
+          ->GetThreadSpecNoCreate();
   if (thread_spec)
     return thread_spec->GetTID();
   else
@@ -123,7 +125,7 @@ lldb::tid_t BreakpointLocation::GetThreadID() {
 
 void BreakpointLocation::SetThreadIndex(uint32_t index) {
   if (index != 0)
-    GetLocationOptions().GetThreadSpec()->SetIndex(index);
+    GetLocationOptions()->GetThreadSpec()->SetIndex(index);
   else {
     // If we're resetting this to an invalid thread id, then don't make an
     // options pointer just to do that.
@@ -134,9 +136,9 @@ void BreakpointLocation::SetThreadIndex(uint32_t index) {
 }
 
 uint32_t BreakpointLocation::GetThreadIndex() const {
-  const ThreadSpec *thread_spec =
+  const ThreadSpec *thread_spec = 
       GetOptionsSpecifyingKind(BreakpointOptions::eThreadSpec)
-          .GetThreadSpecNoCreate();
+          ->GetThreadSpecNoCreate();
   if (thread_spec)
     return thread_spec->GetIndex();
   else
@@ -145,7 +147,7 @@ uint32_t BreakpointLocation::GetThreadIndex() const {
 
 void BreakpointLocation::SetThreadName(const char *thread_name) {
   if (thread_name != nullptr)
-    GetLocationOptions().GetThreadSpec()->SetName(thread_name);
+    GetLocationOptions()->GetThreadSpec()->SetName(thread_name);
   else {
     // If we're resetting this to an invalid thread id, then don't make an
     // options pointer just to do that.
@@ -156,9 +158,9 @@ void BreakpointLocation::SetThreadName(const char *thread_name) {
 }
 
 const char *BreakpointLocation::GetThreadName() const {
-  const ThreadSpec *thread_spec =
+  const ThreadSpec *thread_spec = 
       GetOptionsSpecifyingKind(BreakpointOptions::eThreadSpec)
-          .GetThreadSpecNoCreate();
+          ->GetThreadSpecNoCreate();
   if (thread_spec)
     return thread_spec->GetName();
   else
@@ -167,7 +169,7 @@ const char *BreakpointLocation::GetThreadName() const {
 
 void BreakpointLocation::SetQueueName(const char *queue_name) {
   if (queue_name != nullptr)
-    GetLocationOptions().GetThreadSpec()->SetQueueName(queue_name);
+    GetLocationOptions()->GetThreadSpec()->SetQueueName(queue_name);
   else {
     // If we're resetting this to an invalid thread id, then don't make an
     // options pointer just to do that.
@@ -178,9 +180,9 @@ void BreakpointLocation::SetQueueName(const char *queue_name) {
 }
 
 const char *BreakpointLocation::GetQueueName() const {
-  const ThreadSpec *thread_spec =
+  const ThreadSpec *thread_spec = 
       GetOptionsSpecifyingKind(BreakpointOptions::eThreadSpec)
-          .GetThreadSpecNoCreate();
+          ->GetThreadSpecNoCreate();
   if (thread_spec)
     return thread_spec->GetQueueName();
   else
@@ -194,18 +196,11 @@ bool BreakpointLocation::InvokeCallback(StoppointCallbackContext *context) {
     return m_owner.InvokeCallback(context, GetID());
 }
 
-bool BreakpointLocation::IsCallbackSynchronous() {
-  if (m_options_up != nullptr && m_options_up->HasCallback())
-    return m_options_up->IsCallbackSynchronous();
-  else
-    return m_owner.GetOptions().IsCallbackSynchronous();
-}
-
 void BreakpointLocation::SetCallback(BreakpointHitCallback callback,
                                      void *baton, bool is_synchronous) {
   // The default "Baton" class will keep a copy of "baton" and won't free or
   // delete it when it goes goes out of scope.
-  GetLocationOptions().SetCallback(
+  GetLocationOptions()->SetCallback(
       callback, std::make_shared<UntypedBaton>(baton), is_synchronous);
   SendBreakpointLocationChangedEvent(eBreakpointEventTypeCommandChanged);
 }
@@ -213,22 +208,22 @@ void BreakpointLocation::SetCallback(BreakpointHitCallback callback,
 void BreakpointLocation::SetCallback(BreakpointHitCallback callback,
                                      const BatonSP &baton_sp,
                                      bool is_synchronous) {
-  GetLocationOptions().SetCallback(callback, baton_sp, is_synchronous);
+  GetLocationOptions()->SetCallback(callback, baton_sp, is_synchronous);
   SendBreakpointLocationChangedEvent(eBreakpointEventTypeCommandChanged);
 }
 
 void BreakpointLocation::ClearCallback() {
-  GetLocationOptions().ClearCallback();
+  GetLocationOptions()->ClearCallback();
 }
 
 void BreakpointLocation::SetCondition(const char *condition) {
-  GetLocationOptions().SetCondition(condition);
+  GetLocationOptions()->SetCondition(condition);
   SendBreakpointLocationChangedEvent(eBreakpointEventTypeConditionChanged);
 }
 
 const char *BreakpointLocation::GetConditionText(size_t *hash) const {
   return GetOptionsSpecifyingKind(BreakpointOptions::eCondition)
-      .GetConditionText(hash);
+      ->GetConditionText(hash);
 }
 
 bool BreakpointLocation::ConditionSaysStop(ExecutionContext &exe_ctx,
@@ -262,8 +257,9 @@ bool BreakpointLocation::ConditionSaysStop(ExecutionContext &exe_ctx,
         condition_text, llvm::StringRef(), language, Expression::eResultTypeAny,
         EvaluateExpressionOptions(), nullptr, error));
     if (error.Fail()) {
-      LLDB_LOGF(log, "Error getting condition expression: %s.",
-                error.AsCString());
+      if (log)
+        log->Printf("Error getting condition expression: %s.",
+                    error.AsCString());
       m_user_expression_sp.reset();
       return true;
     }
@@ -316,8 +312,8 @@ bool BreakpointLocation::ConditionSaysStop(ExecutionContext &exe_ctx,
       ret = result_value_sp->IsLogicalTrue(error);
       if (log) {
         if (error.Success()) {
-          LLDB_LOGF(log, "Condition successfully evaluated, result is %s.\n",
-                    ret ? "true" : "false");
+          log->Printf("Condition successfully evaluated, result is %s.\n",
+                      ret ? "true" : "false");
         } else {
           error.SetErrorString(
               "Failed to get an integer result from the expression");
@@ -337,13 +333,13 @@ bool BreakpointLocation::ConditionSaysStop(ExecutionContext &exe_ctx,
   return ret;
 }
 
-uint32_t BreakpointLocation::GetIgnoreCount() const {
+uint32_t BreakpointLocation::GetIgnoreCount() {
   return GetOptionsSpecifyingKind(BreakpointOptions::eIgnoreCount)
-      .GetIgnoreCount();
+      ->GetIgnoreCount();
 }
 
 void BreakpointLocation::SetIgnoreCount(uint32_t n) {
-  GetLocationOptions().SetIgnoreCount(n);
+  GetLocationOptions()->SetIgnoreCount(n);
   SendBreakpointLocationChangedEvent(eBreakpointEventTypeIgnoreChanged);
 }
 
@@ -356,34 +352,33 @@ void BreakpointLocation::DecrementIgnoreCount() {
 }
 
 bool BreakpointLocation::IgnoreCountShouldStop() {
-  uint32_t owner_ignore = GetBreakpoint().GetIgnoreCount();
-  uint32_t loc_ignore = 0;
-  if (m_options_up != nullptr)
-    loc_ignore = m_options_up->GetIgnoreCount();
-
-  if (loc_ignore != 0 || owner_ignore != 0) {
-    m_owner.DecrementIgnoreCount();
-    DecrementIgnoreCount(); // Have to decrement our owners' ignore count,
-                            // since it won't get a chance to.
-    return false;
+  if (m_options_up != nullptr) {
+    uint32_t loc_ignore = m_options_up->GetIgnoreCount();
+    if (loc_ignore != 0) {
+      m_owner.DecrementIgnoreCount();
+      DecrementIgnoreCount(); // Have to decrement our owners' ignore count,
+                              // since it won't get a
+                              // chance to.
+      return false;
+    }
   }
   return true;
 }
 
-BreakpointOptions &BreakpointLocation::GetLocationOptions() {
+BreakpointOptions *BreakpointLocation::GetLocationOptions() {
   // If we make the copy we don't copy the callbacks because that is
   // potentially expensive and we don't want to do that for the simple case
   // where someone is just disabling the location.
   if (m_options_up == nullptr)
-    m_options_up = std::make_unique<BreakpointOptions>(false);
+    m_options_up.reset(new BreakpointOptions(false));
 
-  return *m_options_up;
+  return m_options_up.get();
 }
 
-bool BreakpointLocation::ValidForThisThread(Thread &thread) {
-  return thread.MatchesSpec(
-      GetOptionsSpecifyingKind(BreakpointOptions::eThreadSpec)
-          .GetThreadSpecNoCreate());
+bool BreakpointLocation::ValidForThisThread(Thread *thread) {
+  return thread
+      ->MatchesSpec(GetOptionsSpecifyingKind(BreakpointOptions::eThreadSpec)
+      ->GetThreadSpecNoCreate());
 }
 
 // RETURNS - true if we should stop at this breakpoint, false if we
@@ -400,6 +395,12 @@ bool BreakpointLocation::ShouldStop(StoppointCallbackContext *context) {
   if (!IsEnabled())
     return false;
 
+  if (!IgnoreCountShouldStop())
+    return false;
+
+  if (!m_owner.IgnoreCountShouldStop())
+    return false;
+
   // We only run synchronous callbacks in ShouldStop:
   context->is_synchronous = true;
   should_stop = InvokeCallback(context);
@@ -407,8 +408,8 @@ bool BreakpointLocation::ShouldStop(StoppointCallbackContext *context) {
   if (log) {
     StreamString s;
     GetDescription(&s, lldb::eDescriptionLevelVerbose);
-    LLDB_LOGF(log, "Hit breakpoint location: %s, %s.\n", s.GetData(),
-              should_stop ? "stopping" : "continuing");
+    log->Printf("Hit breakpoint location: %s, %s.\n", s.GetData(),
+                should_stop ? "stopping" : "continuing");
   }
 
   return should_stop;
@@ -417,16 +418,16 @@ bool BreakpointLocation::ShouldStop(StoppointCallbackContext *context) {
 void BreakpointLocation::BumpHitCount() {
   if (IsEnabled()) {
     // Step our hit count, and also step the hit count of the owner.
-    m_hit_counter.Increment();
-    m_owner.m_hit_counter.Increment();
+    IncrementHitCount();
+    m_owner.IncrementHitCount();
   }
 }
 
 void BreakpointLocation::UndoBumpHitCount() {
   if (IsEnabled()) {
     // Step our hit count, and also step the hit count of the owner.
-    m_hit_counter.Decrement();
-    m_owner.m_hit_counter.Decrement();
+    DecrementHitCount();
+    m_owner.DecrementHitCount();
   }
 }
 
@@ -519,13 +520,13 @@ void BreakpointLocation::GetDescription(Stream *s,
       if (sc.module_sp) {
         s->EOL();
         s->Indent("module = ");
-        sc.module_sp->GetFileSpec().Dump(s->AsRawOstream());
+        sc.module_sp->GetFileSpec().Dump(s);
       }
 
       if (sc.comp_unit != nullptr) {
         s->EOL();
         s->Indent("compile unit = ");
-        sc.comp_unit->GetPrimaryFile().GetFilename().Dump(s);
+        static_cast<FileSpec *>(sc.comp_unit)->GetFilename().Dump(s);
 
         if (sc.function != nullptr) {
           s->EOL();
@@ -593,15 +594,11 @@ void BreakpointLocation::GetDescription(Stream *s,
     }
   }
 
-  bool is_resolved = IsResolved();
-  bool is_hardware = is_resolved && m_bp_site_sp->IsHardware();
-
   if (level == lldb::eDescriptionLevelVerbose) {
     s->EOL();
     s->Indent();
-    s->Printf("resolved = %s\n", is_resolved ? "true" : "false");
-    s->Indent();
-    s->Printf("hardware = %s\n", is_hardware ? "true" : "false");
+    s->Printf("resolved = %s\n", IsResolved() ? "true" : "false");
+
     s->Indent();
     s->Printf("hit count = %-4u\n", GetHitCount());
 
@@ -612,8 +609,8 @@ void BreakpointLocation::GetDescription(Stream *s,
     }
     s->IndentLess();
   } else if (level != eDescriptionLevelInitial) {
-    s->Printf(", %sresolved, %shit count = %u ", (is_resolved ? "" : "un"),
-              (is_hardware ? "hardware, " : ""), GetHitCount());
+    s->Printf(", %sresolved, hit count = %u ", (IsResolved() ? "" : "un"),
+              GetHitCount());
     if (m_options_up) {
       m_options_up->GetDescription(s, level);
     }
@@ -624,14 +621,8 @@ void BreakpointLocation::Dump(Stream *s) const {
   if (s == nullptr)
     return;
 
-  bool is_resolved = IsResolved();
-  bool is_hardware = is_resolved && m_bp_site_sp->IsHardware();
-  auto hardware_index = is_resolved ?
-      m_bp_site_sp->GetHardwareIndex() : LLDB_INVALID_INDEX32;
-
   lldb::tid_t tid = GetOptionsSpecifyingKind(BreakpointOptions::eThreadSpec)
-                        .GetThreadSpecNoCreate()
-                        ->GetTID();
+      ->GetThreadSpecNoCreate()->GetTID();
   s->Printf("BreakpointLocation %u: tid = %4.4" PRIx64
             "  load addr = 0x%8.8" PRIx64 "  state = %s  type = %s breakpoint  "
             "hw_index = %i  hit_count = %-4u  ignore_count = %-4u",
@@ -640,10 +631,10 @@ void BreakpointLocation::Dump(Stream *s) const {
             (m_options_up ? m_options_up->IsEnabled() : m_owner.IsEnabled())
                 ? "enabled "
                 : "disabled",
-            is_hardware ? "hardware" : "software", hardware_index,
+            IsHardware() ? "hardware" : "software", GetHardwareIndex(),
             GetHitCount(),
             GetOptionsSpecifyingKind(BreakpointOptions::eIgnoreCount)
-                .GetIgnoreCount());
+                ->GetIgnoreCount());
 }
 
 void BreakpointLocation::SendBreakpointLocationChangedEvent(

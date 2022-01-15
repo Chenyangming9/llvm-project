@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_INSTRUCTION_ARM_EMULATEINSTRUCTIONARM_H
-#define LLDB_SOURCE_PLUGINS_INSTRUCTION_ARM_EMULATEINSTRUCTIONARM_H
+#ifndef lldb_EmulateInstructionARM_h_
+#define lldb_EmulateInstructionARM_h_
 
 #include "Plugins/Process/Utility/ARMDefines.h"
 #include "lldb/Core/EmulateInstruction.h"
@@ -19,8 +19,8 @@ namespace lldb_private {
 // ITSession - Keep track of the IT Block progression.
 class ITSession {
 public:
-  ITSession() = default;
-  ~ITSession() = default;
+  ITSession() : ITCounter(0), ITState(0) {}
+  ~ITSession() {}
 
   // InitIT - Initializes ITCounter/ITState.
   bool InitIT(uint32_t bits7_0);
@@ -39,8 +39,8 @@ public:
   uint32_t GetCond();
 
 private:
-  uint32_t ITCounter = 0; // Possible values: 0, 1, 2, 3, 4.
-  uint32_t ITState = 0;   // A2.5.2 Consists of IT[7:5] and IT[4:0] initially.
+  uint32_t ITCounter; // Possible values: 0, 1, 2, 3, 4.
+  uint32_t ITState;   // A2.5.2 Consists of IT[7:5] and IT[4:0] initially.
 };
 
 class EmulateInstructionARM : public EmulateInstruction {
@@ -783,4 +783,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_INSTRUCTION_ARM_EMULATEINSTRUCTIONARM_H
+#endif // lldb_EmulateInstructionARM_h_

@@ -124,7 +124,7 @@ public:
 
 class BasicGraphBuilderTest : public ::testing::Test {
 protected:
-  void SetUp() override {
+  virtual void SetUp() {
     IgnoreDWARFFlag = true;
     SuccessfullyInitialised = true;
     if (auto Err = Analysis.initialiseDisassemblyMembers()) {

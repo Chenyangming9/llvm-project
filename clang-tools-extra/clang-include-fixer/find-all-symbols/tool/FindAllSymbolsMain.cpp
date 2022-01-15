@@ -114,7 +114,7 @@ bool Merge(llvm::StringRef MergeDir, llvm::StringRef OutputFile) {
     }
   }
 
-  llvm::raw_fd_ostream OS(OutputFile, EC, llvm::sys::fs::OF_None);
+  llvm::raw_fd_ostream OS(OutputFile, EC, llvm::sys::fs::F_None);
   if (EC) {
     llvm::errs() << "Can't open '" << OutputFile << "': " << EC.message()
                  << '\n';
@@ -128,14 +128,7 @@ bool Merge(llvm::StringRef MergeDir, llvm::StringRef OutputFile) {
 } // namespace find_all_symbols
 
 int main(int argc, const char **argv) {
-  auto ExpectedParser =
-      CommonOptionsParser::create(argc, argv, FindAllSymbolsCategory);
-  if (!ExpectedParser) {
-    llvm::errs() << ExpectedParser.takeError();
-    return 1;
-  }
-
-  CommonOptionsParser &OptionsParser = ExpectedParser.get();
+  CommonOptionsParser OptionsParser(argc, argv, FindAllSymbolsCategory);
   ClangTool Tool(OptionsParser.getCompilations(),
                  OptionsParser.getSourcePathList());
 
@@ -152,7 +145,7 @@ int main(int argc, const char **argv) {
   clang::find_all_symbols::YamlReporter Reporter;
 
   auto Factory =
-      std::make_unique<clang::find_all_symbols::FindAllSymbolsActionFactory>(
+      llvm::make_unique<clang::find_all_symbols::FindAllSymbolsActionFactory>(
           &Reporter, clang::find_all_symbols::getSTLPostfixHeaderMap());
   return Tool.run(Factory.get());
 }

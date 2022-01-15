@@ -15,8 +15,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/DebugInfo/CodeView/CodeViewError.h"
-#include "llvm/DebugInfo/CodeView/GUID.h"
-#include "llvm/DebugInfo/CodeView/TypeIndex.h"
+#include "llvm/DebugInfo/CodeView/TypeRecord.h"
 #include "llvm/Support/BinaryStreamReader.h"
 #include "llvm/Support/BinaryStreamWriter.h"
 #include "llvm/Support/Error.h"
@@ -30,13 +29,10 @@ namespace codeview {
 
 class CodeViewRecordStreamer {
 public:
-  virtual void emitBytes(StringRef Data) = 0;
-  virtual void emitIntValue(uint64_t Value, unsigned Size) = 0;
-  virtual void emitBinaryData(StringRef Data) = 0;
+  virtual void EmitBytes(StringRef Data) = 0;
+  virtual void EmitIntValue(uint64_t Value, unsigned Size) = 0;
+  virtual void EmitBinaryData(StringRef Data) = 0;
   virtual void AddComment(const Twine &T) = 0;
-  virtual void AddRawComment(const Twine &T) = 0;
-  virtual bool isVerboseAsm() = 0;
-  virtual std::string getTypeName(TypeIndex TI) = 0;
   virtual ~CodeViewRecordStreamer() = default;
 };
 
@@ -82,7 +78,7 @@ public:
     if (isStreaming()) {
       StringRef BytesSR =
           StringRef((reinterpret_cast<const char *>(&Value)), sizeof(Value));
-      Streamer->emitBytes(BytesSR);
+      Streamer->EmitBytes(BytesSR);
       incrStreamedLen(sizeof(T));
       return Error::success();
     }
@@ -100,7 +96,7 @@ public:
   template <typename T> Error mapInteger(T &Value, const Twine &Comment = "") {
     if (isStreaming()) {
       emitComment(Comment);
-      Streamer->emitIntValue((int)Value, sizeof(T));
+      Streamer->EmitIntValue((int)Value, sizeof(T));
       incrStreamedLen(sizeof(T));
       return Error::success();
     }
@@ -115,7 +111,7 @@ public:
     if (!isStreaming() && sizeof(Value) > maxFieldLength())
       return make_error<CodeViewError>(cv_error_code::insufficient_buffer);
 
-    using U = std::underlying_type_t<T>;
+    using U = typename std::underlying_type<T>::type;
     U X;
 
     if (isWriting() || isStreaming())
@@ -146,7 +142,7 @@ public:
     if (isStreaming()) {
       Size = static_cast<SizeType>(Items.size());
       emitComment(Comment);
-      Streamer->emitIntValue(Size, sizeof(Size));
+      Streamer->EmitIntValue(Size, sizeof(Size));
       incrStreamedLen(sizeof(Size)); // add 1 for the delimiter
 
       for (auto &X : Items) {
@@ -210,11 +206,6 @@ public:
     return 0;
   }
 
-  void emitRawComment(const Twine &T) {
-    if (isStreaming() && Streamer->isVerboseAsm())
-      Streamer->AddRawComment(T);
-  }
-
 private:
   void emitEncodedSignedInteger(const int64_t &Value,
                                 const Twine &Comment = "");
@@ -234,10 +225,9 @@ private:
   }
 
   void emitComment(const Twine &Comment) {
-    if (isStreaming() && Streamer->isVerboseAsm()) {
+    if (isStreaming()) {
       Twine TComment(Comment);
-      if (!TComment.isTriviallyEmpty())
-        Streamer->AddComment(TComment);
+      Streamer->AddComment(TComment);
     }
   }
 

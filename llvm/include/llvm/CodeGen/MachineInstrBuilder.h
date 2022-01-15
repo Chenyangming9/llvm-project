@@ -31,6 +31,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include <cassert>
 #include <cstdint>
+#include <utility>
 
 namespace llvm {
 
@@ -39,30 +40,20 @@ class MDNode;
 
 namespace RegState {
 
-enum {
-  /// Register definition.
-  Define = 0x2,
-  /// Not emitted register (e.g. carry, or temporary result).
-  Implicit = 0x4,
-  /// The last use of a register.
-  Kill = 0x8,
-  /// Unused definition.
-  Dead = 0x10,
-  /// Value of the register doesn't matter.
-  Undef = 0x20,
-  /// Register definition happens before uses.
-  EarlyClobber = 0x40,
-  /// Register 'use' is for debugging purpose.
-  Debug = 0x80,
-  /// Register reads a value that is defined inside the same instruction or
-  /// bundle.
-  InternalRead = 0x100,
-  /// Register that may be renamed.
-  Renamable = 0x200,
-  DefineNoRead = Define | Undef,
-  ImplicitDefine = Implicit | Define,
-  ImplicitKill = Implicit | Kill
-};
+  enum {
+    Define         = 0x2,
+    Implicit       = 0x4,
+    Kill           = 0x8,
+    Dead           = 0x10,
+    Undef          = 0x20,
+    EarlyClobber   = 0x40,
+    Debug          = 0x80,
+    InternalRead   = 0x100,
+    Renamable      = 0x200,
+    DefineNoRead   = Define | Undef,
+    ImplicitDefine = Implicit | Define,
+    ImplicitKill   = Implicit | Kill
+  };
 
 } // end namespace RegState
 
@@ -94,7 +85,7 @@ public:
   Register getReg(unsigned Idx) const { return MI->getOperand(Idx).getReg(); }
 
   /// Add a new virtual register operand.
-  const MachineInstrBuilder &addReg(Register RegNo, unsigned flags = 0,
+  const MachineInstrBuilder &addReg(unsigned RegNo, unsigned flags = 0,
                                     unsigned SubReg = 0) const {
     assert((flags & 0x1) == 0 &&
            "Passing in 'true' to addReg is forbidden! Use enums instead.");
@@ -113,14 +104,14 @@ public:
   }
 
   /// Add a virtual register definition operand.
-  const MachineInstrBuilder &addDef(Register RegNo, unsigned Flags = 0,
+  const MachineInstrBuilder &addDef(unsigned RegNo, unsigned Flags = 0,
                                     unsigned SubReg = 0) const {
     return addReg(RegNo, Flags | RegState::Define, SubReg);
   }
 
   /// Add a virtual register use operand. It is an error for Flags to contain
   /// `RegState::Define` when calling this function.
-  const MachineInstrBuilder &addUse(Register RegNo, unsigned Flags = 0,
+  const MachineInstrBuilder &addUse(unsigned RegNo, unsigned Flags = 0,
                                     unsigned SubReg = 0) const {
     assert(!(Flags & RegState::Define) &&
            "Misleading addUse defines register, use addReg instead.");
@@ -144,7 +135,7 @@ public:
   }
 
   const MachineInstrBuilder &addMBB(MachineBasicBlock *MBB,
-                                    unsigned TargetFlags = 0) const {
+                                    unsigned char TargetFlags = 0) const {
     MI->addOperand(*MF, MachineOperand::CreateMBB(MBB, TargetFlags));
     return *this;
   }
@@ -154,42 +145,42 @@ public:
     return *this;
   }
 
-  const MachineInstrBuilder &
-  addConstantPoolIndex(unsigned Idx, int Offset = 0,
-                       unsigned TargetFlags = 0) const {
+  const MachineInstrBuilder &addConstantPoolIndex(unsigned Idx,
+                                                  int Offset = 0,
+                                          unsigned char TargetFlags = 0) const {
     MI->addOperand(*MF, MachineOperand::CreateCPI(Idx, Offset, TargetFlags));
     return *this;
   }
 
   const MachineInstrBuilder &addTargetIndex(unsigned Idx, int64_t Offset = 0,
-                                          unsigned TargetFlags = 0) const {
+                                          unsigned char TargetFlags = 0) const {
     MI->addOperand(*MF, MachineOperand::CreateTargetIndex(Idx, Offset,
                                                           TargetFlags));
     return *this;
   }
 
   const MachineInstrBuilder &addJumpTableIndex(unsigned Idx,
-                                               unsigned TargetFlags = 0) const {
+                                          unsigned char TargetFlags = 0) const {
     MI->addOperand(*MF, MachineOperand::CreateJTI(Idx, TargetFlags));
     return *this;
   }
 
   const MachineInstrBuilder &addGlobalAddress(const GlobalValue *GV,
                                               int64_t Offset = 0,
-                                              unsigned TargetFlags = 0) const {
+                                          unsigned char TargetFlags = 0) const {
     MI->addOperand(*MF, MachineOperand::CreateGA(GV, Offset, TargetFlags));
     return *this;
   }
 
   const MachineInstrBuilder &addExternalSymbol(const char *FnName,
-                                               unsigned TargetFlags = 0) const {
+                                          unsigned char TargetFlags = 0) const {
     MI->addOperand(*MF, MachineOperand::CreateES(FnName, TargetFlags));
     return *this;
   }
 
   const MachineInstrBuilder &addBlockAddress(const BlockAddress *BA,
                                              int64_t Offset = 0,
-                                             unsigned TargetFlags = 0) const {
+                                          unsigned char TargetFlags = 0) const {
     MI->addOperand(*MF, MachineOperand::CreateBA(BA, Offset, TargetFlags));
     return *this;
   }
@@ -259,11 +250,6 @@ public:
     return *this;
   }
 
-  const MachineInstrBuilder &addShuffleMask(ArrayRef<int> Val) const {
-    MI->addOperand(*MF, MachineOperand::CreateShuffleMask(Val));
-    return *this;
-  }
-
   const MachineInstrBuilder &addSym(MCSymbol *Sym,
                                     unsigned char TargetFlags = 0) const {
     MI->addOperand(*MF, MachineOperand::CreateMCSymbol(Sym, TargetFlags));
@@ -304,9 +290,6 @@ public:
       case MachineOperand::MO_BlockAddress:
         return addBlockAddress(Disp.getBlockAddress(), Disp.getOffset() + off,
                                TargetFlags);
-      case MachineOperand::MO_JumpTableIndex:
-        assert(off == 0 && "cannot create offset into jump tables");
-        return addJumpTableIndex(Disp.getIndex(), TargetFlags);
     }
   }
 
@@ -333,7 +316,7 @@ inline MachineInstrBuilder BuildMI(MachineFunction &MF, const DebugLoc &DL,
 /// This version of the builder sets up the first operand as a
 /// destination virtual register.
 inline MachineInstrBuilder BuildMI(MachineFunction &MF, const DebugLoc &DL,
-                                   const MCInstrDesc &MCID, Register DestReg) {
+                                   const MCInstrDesc &MCID, unsigned DestReg) {
   return MachineInstrBuilder(MF, MF.CreateMachineInstr(MCID, DL))
            .addReg(DestReg, RegState::Define);
 }
@@ -344,7 +327,7 @@ inline MachineInstrBuilder BuildMI(MachineFunction &MF, const DebugLoc &DL,
 inline MachineInstrBuilder BuildMI(MachineBasicBlock &BB,
                                    MachineBasicBlock::iterator I,
                                    const DebugLoc &DL, const MCInstrDesc &MCID,
-                                   Register DestReg) {
+                                   unsigned DestReg) {
   MachineFunction &MF = *BB.getParent();
   MachineInstr *MI = MF.CreateMachineInstr(MCID, DL);
   BB.insert(I, MI);
@@ -360,7 +343,7 @@ inline MachineInstrBuilder BuildMI(MachineBasicBlock &BB,
 inline MachineInstrBuilder BuildMI(MachineBasicBlock &BB,
                                    MachineBasicBlock::instr_iterator I,
                                    const DebugLoc &DL, const MCInstrDesc &MCID,
-                                   Register DestReg) {
+                                   unsigned DestReg) {
   MachineFunction &MF = *BB.getParent();
   MachineInstr *MI = MF.CreateMachineInstr(MCID, DL);
   BB.insert(I, MI);
@@ -369,7 +352,7 @@ inline MachineInstrBuilder BuildMI(MachineBasicBlock &BB,
 
 inline MachineInstrBuilder BuildMI(MachineBasicBlock &BB, MachineInstr &I,
                                    const DebugLoc &DL, const MCInstrDesc &MCID,
-                                   Register DestReg) {
+                                   unsigned DestReg) {
   // Calling the overload for instr_iterator is always correct.  However, the
   // definition is not available in headers, so inline the check.
   if (I.isInsideBundle())
@@ -379,7 +362,7 @@ inline MachineInstrBuilder BuildMI(MachineBasicBlock &BB, MachineInstr &I,
 
 inline MachineInstrBuilder BuildMI(MachineBasicBlock &BB, MachineInstr *I,
                                    const DebugLoc &DL, const MCInstrDesc &MCID,
-                                   Register DestReg) {
+                                   unsigned DestReg) {
   return BuildMI(BB, *I, DL, MCID, DestReg);
 }
 
@@ -433,7 +416,7 @@ inline MachineInstrBuilder BuildMI(MachineBasicBlock *BB, const DebugLoc &DL,
 /// end of the given MachineBasicBlock, and sets up the first operand as a
 /// destination virtual register.
 inline MachineInstrBuilder BuildMI(MachineBasicBlock *BB, const DebugLoc &DL,
-                                   const MCInstrDesc &MCID, Register DestReg) {
+                                   const MCInstrDesc &MCID, unsigned DestReg) {
   return BuildMI(*BB, BB->end(), DL, MCID, DestReg);
 }
 
@@ -443,22 +426,15 @@ inline MachineInstrBuilder BuildMI(MachineBasicBlock *BB, const DebugLoc &DL,
 /// second operand is an immediate.
 MachineInstrBuilder BuildMI(MachineFunction &MF, const DebugLoc &DL,
                             const MCInstrDesc &MCID, bool IsIndirect,
-                            Register Reg, const MDNode *Variable,
+                            unsigned Reg, const MDNode *Variable,
                             const MDNode *Expr);
 
 /// This version of the builder builds a DBG_VALUE intrinsic
 /// for a MachineOperand.
 MachineInstrBuilder BuildMI(MachineFunction &MF, const DebugLoc &DL,
                             const MCInstrDesc &MCID, bool IsIndirect,
-                            const MachineOperand &MO, const MDNode *Variable,
+                            MachineOperand &MO, const MDNode *Variable,
                             const MDNode *Expr);
-
-/// This version of the builder builds a DBG_VALUE or DBG_VALUE_LIST intrinsic
-/// for a MachineOperand.
-MachineInstrBuilder BuildMI(MachineFunction &MF, const DebugLoc &DL,
-                            const MCInstrDesc &MCID, bool IsIndirect,
-                            ArrayRef<MachineOperand> MOs,
-                            const MDNode *Variable, const MDNode *Expr);
 
 /// This version of the builder builds a DBG_VALUE intrinsic
 /// for either a value in a register or a register-indirect
@@ -466,7 +442,7 @@ MachineInstrBuilder BuildMI(MachineFunction &MF, const DebugLoc &DL,
 MachineInstrBuilder BuildMI(MachineBasicBlock &BB,
                             MachineBasicBlock::iterator I, const DebugLoc &DL,
                             const MCInstrDesc &MCID, bool IsIndirect,
-                            Register Reg, const MDNode *Variable,
+                            unsigned Reg, const MDNode *Variable,
                             const MDNode *Expr);
 
 /// This version of the builder builds a DBG_VALUE intrinsic
@@ -477,27 +453,14 @@ MachineInstrBuilder BuildMI(MachineBasicBlock &BB,
                             MachineOperand &MO, const MDNode *Variable,
                             const MDNode *Expr);
 
-/// This version of the builder builds a DBG_VALUE or DBG_VALUE_LIST intrinsic
-/// for a machine operand and inserts it at position I.
-MachineInstrBuilder BuildMI(MachineBasicBlock &BB,
-                            MachineBasicBlock::iterator I, const DebugLoc &DL,
-                            const MCInstrDesc &MCID, bool IsIndirect,
-                            ArrayRef<MachineOperand> MOs,
-                            const MDNode *Variable, const MDNode *Expr);
-
 /// Clone a DBG_VALUE whose value has been spilled to FrameIndex.
 MachineInstr *buildDbgValueForSpill(MachineBasicBlock &BB,
                                     MachineBasicBlock::iterator I,
-                                    const MachineInstr &Orig, int FrameIndex,
-                                    Register SpillReg);
-MachineInstr *
-buildDbgValueForSpill(MachineBasicBlock &BB, MachineBasicBlock::iterator I,
-                      const MachineInstr &Orig, int FrameIndex,
-                      SmallVectorImpl<const MachineOperand *> &SpilledOperands);
+                                    const MachineInstr &Orig, int FrameIndex);
 
 /// Update a DBG_VALUE whose value has been spilled to FrameIndex. Useful when
 /// modifying an instruction in place while iterating over a basic block.
-void updateDbgValueForSpill(MachineInstr &Orig, int FrameIndex, Register Reg);
+void updateDbgValueForSpill(MachineInstr &Orig, int FrameIndex);
 
 inline unsigned getDefRegState(bool B) {
   return B ? RegState::Define : 0;
@@ -527,13 +490,16 @@ inline unsigned getRenamableRegState(bool B) {
 /// Get all register state flags from machine operand \p RegOp.
 inline unsigned getRegState(const MachineOperand &RegOp) {
   assert(RegOp.isReg() && "Not a register operand");
-  return getDefRegState(RegOp.isDef()) | getImplRegState(RegOp.isImplicit()) |
-         getKillRegState(RegOp.isKill()) | getDeadRegState(RegOp.isDead()) |
-         getUndefRegState(RegOp.isUndef()) |
-         getInternalReadRegState(RegOp.isInternalRead()) |
-         getDebugRegState(RegOp.isDebug()) |
-         getRenamableRegState(Register::isPhysicalRegister(RegOp.getReg()) &&
-                              RegOp.isRenamable());
+  return getDefRegState(RegOp.isDef())                    |
+         getImplRegState(RegOp.isImplicit())              |
+         getKillRegState(RegOp.isKill())                  |
+         getDeadRegState(RegOp.isDead())                  |
+         getUndefRegState(RegOp.isUndef())                |
+         getInternalReadRegState(RegOp.isInternalRead())  |
+         getDebugRegState(RegOp.isDebug())                |
+         getRenamableRegState(
+             TargetRegisterInfo::isPhysicalRegister(RegOp.getReg()) &&
+             RegOp.isRenamable());
 }
 
 /// Helper class for constructing bundles of MachineInstrs.

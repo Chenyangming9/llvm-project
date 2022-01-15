@@ -16,5 +16,7 @@ static_library("Disassembler") {
     "//llvm/lib/Target/PowerPC/TargetInfo",
   ]
   include_dirs = [ ".." ]
-  sources = [ "PPCDisassembler.cpp" ]
+  sources = [
+    "PPCDisassembler.cpp",
+  ]
 }

@@ -6,10 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_COMMANDS_COMMANDOBJECTSETTINGS_H
-#define LLDB_SOURCE_COMMANDS_COMMANDOBJECTSETTINGS_H
+#ifndef liblldb_CommandObjectSettings_h_
+#define liblldb_CommandObjectSettings_h_
 
+#include "lldb/Interpreter/CommandObject.h"
 #include "lldb/Interpreter/CommandObjectMultiword.h"
+#include "lldb/Interpreter/Options.h"
 
 namespace lldb_private {
 
@@ -24,4 +26,4 @@ public:
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_COMMANDS_COMMANDOBJECTSETTINGS_H
+#endif // liblldb_CommandObjectSettings_h_

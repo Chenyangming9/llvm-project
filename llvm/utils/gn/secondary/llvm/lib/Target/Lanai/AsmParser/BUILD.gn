@@ -16,5 +16,7 @@ static_library("AsmParser") {
     "//llvm/lib/Target/Lanai/MCTargetDesc",
   ]
   include_dirs = [ ".." ]
-  sources = [ "LanaiAsmParser.cpp" ]
+  sources = [
+    "LanaiAsmParser.cpp",
+  ]
 }

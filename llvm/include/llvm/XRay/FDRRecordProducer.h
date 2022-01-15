@@ -5,8 +5,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-#ifndef LLVM_XRAY_FDRRECORDPRODUCER_H
-#define LLVM_XRAY_FDRRECORDPRODUCER_H
+#ifndef LLVM_INCLUDE_LLVM_XRAY_FDRRECORDPRODUCER_H_
+#define LLVM_INCLUDE_LLVM_XRAY_FDRRECORDPRODUCER_H_
 
 #include "llvm/Support/Error.h"
 #include "llvm/XRay/FDRRecords.h"
@@ -27,7 +27,7 @@ public:
 class FileBasedRecordProducer : public RecordProducer {
   const XRayFileHeader &Header;
   DataExtractor &E;
-  uint64_t &OffsetPtr;
+  uint32_t &OffsetPtr;
   uint32_t CurrentBufferBytes = 0;
 
   // Helper function which gets the next record by speculatively reading through
@@ -36,7 +36,7 @@ class FileBasedRecordProducer : public RecordProducer {
 
 public:
   FileBasedRecordProducer(const XRayFileHeader &FH, DataExtractor &DE,
-                          uint64_t &OP)
+                          uint32_t &OP)
       : Header(FH), E(DE), OffsetPtr(OP) {}
 
   /// This producer encapsulates the logic for loading a File-backed
@@ -47,4 +47,4 @@ public:
 } // namespace xray
 } // namespace llvm
 
-#endif // LLVM_XRAY_FDRRECORDPRODUCER_H
+#endif // LLVM_INCLUDE_LLVM_XRAY_FDRRECORDPRODUCER_H_

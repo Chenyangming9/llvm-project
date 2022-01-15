@@ -1,4 +1,4 @@
-//===-- Log.cpp -----------------------------------------------------------===//
+//===-- Log.cpp -------------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,6 +9,7 @@
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/VASPrintf.h"
 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/ADT/iterator.h"
@@ -25,7 +26,7 @@
 #include <mutex>
 #include <utility>
 
-#include <cassert>
+#include <assert.h>
 #if defined(_WIN32)
 #include <process.h>
 #else
@@ -37,22 +38,13 @@ using namespace lldb_private;
 
 llvm::ManagedStatic<Log::ChannelMap> Log::g_channel_map;
 
-void Log::ForEachCategory(
-    const Log::ChannelMap::value_type &entry,
-    llvm::function_ref<void(llvm::StringRef, llvm::StringRef)> lambda) {
-  lambda("all", "all available logging categories");
-  lambda("default", "default set of logging categories");
-  for (const auto &category : entry.second.m_channel.categories)
-    lambda(category.name, category.description);
-}
-
-void Log::ListCategories(llvm::raw_ostream &stream,
-                         const ChannelMap::value_type &entry) {
+void Log::ListCategories(llvm::raw_ostream &stream, const ChannelMap::value_type &entry) {
   stream << llvm::formatv("Logging categories for '{0}':\n", entry.first());
-  ForEachCategory(entry,
-                  [&stream](llvm::StringRef name, llvm::StringRef description) {
-                    stream << llvm::formatv("  {0} - {1}\n", name, description);
-                  });
+  stream << "  all - all available logging categories\n";
+  stream << "  default - default set of logging categories\n";
+  for (const auto &category : entry.second.m_channel.categories)
+    stream << llvm::formatv("  {0} - {1}\n", category.name,
+                            category.description);
 }
 
 uint32_t Log::GetFlags(llvm::raw_ostream &stream, const ChannelMap::value_type &entry,
@@ -60,18 +52,17 @@ uint32_t Log::GetFlags(llvm::raw_ostream &stream, const ChannelMap::value_type &
   bool list_categories = false;
   uint32_t flags = 0;
   for (const char *category : categories) {
-    if (llvm::StringRef("all").equals_insensitive(category)) {
+    if (llvm::StringRef("all").equals_lower(category)) {
       flags |= UINT32_MAX;
       continue;
     }
-    if (llvm::StringRef("default").equals_insensitive(category)) {
+    if (llvm::StringRef("default").equals_lower(category)) {
       flags |= entry.second.m_channel.default_flags;
       continue;
     }
-    auto cat = llvm::find_if(entry.second.m_channel.categories,
-                             [&](const Log::Category &c) {
-                               return c.name.equals_insensitive(category);
-                             });
+    auto cat = llvm::find_if(
+        entry.second.m_channel.categories,
+        [&](const Log::Category &c) { return c.name.equals_lower(category); });
     if (cat != entry.second.m_channel.categories.end()) {
       flags |= cat->flag;
       continue;
@@ -139,7 +130,7 @@ void Log::VAPrintf(const char *format, va_list args) {
 
   Stream << Content << "\n";
 
-  WriteMessage(std::string(FinalMessage.str()));
+  WriteMessage(FinalMessage.str());
 }
 
 // Printing of errors that are not fatal.
@@ -244,23 +235,6 @@ bool Log::ListChannelCategories(llvm::StringRef channel,
 void Log::DisableAllLogChannels() {
   for (auto &entry : *g_channel_map)
     entry.second.Disable(UINT32_MAX);
-}
-
-void Log::ForEachChannelCategory(
-    llvm::StringRef channel,
-    llvm::function_ref<void(llvm::StringRef, llvm::StringRef)> lambda) {
-  auto ch = g_channel_map->find(channel);
-  if (ch == g_channel_map->end())
-    return;
-
-  ForEachCategory(*ch, lambda);
-}
-
-std::vector<llvm::StringRef> Log::ListChannels() {
-  std::vector<llvm::StringRef> result;
-  for (const auto &channel : *g_channel_map)
-    result.push_back(channel.first());
-  return result;
 }
 
 void Log::ListAllLogChannels(llvm::raw_ostream &stream) {

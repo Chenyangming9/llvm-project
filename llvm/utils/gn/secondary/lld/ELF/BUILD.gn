@@ -24,7 +24,6 @@ static_library("ELF") {
   include_dirs = [ "." ]
   sources = [
     "AArch64ErrataFix.cpp",
-    "ARMErrataFix.cpp",
     "Arch/AArch64.cpp",
     "Arch/AMDGPU.cpp",
     "Arch/ARM.cpp",

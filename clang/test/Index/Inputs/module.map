@@ -20,11 +20,3 @@ module PreambleWithImplicitImport {
     export *
   }
 }
-
-module hidden_redecls {
-  header "hidden-redecls.h"
-
-  explicit module sub {
-    header "hidden-redecls-sub.h"
-  }
-}

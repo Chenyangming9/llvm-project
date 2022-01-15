@@ -1,4 +1,4 @@
-//===-- LibCxxBitset.cpp --------------------------------------------------===//
+//===-- LibCxxBitset.cpp ----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "LibCxx.h"
-#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
+#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Target/Target.h"
 
 using namespace lldb;
@@ -30,15 +30,8 @@ public:
   ValueObjectSP GetChildAtIndex(size_t idx) override;
 
 private:
-  // The lifetime of a ValueObject and all its derivative ValueObjects
-  // (children, clones, etc.) is managed by a ClusterManager. These
-  // objects are only destroyed when every shared pointer to any of them
-  // is destroyed, so we must not store a shared pointer to any ValueObject
-  // derived from our backend ValueObject (since we're in the same cluster).
-  // Value objects created from raw data (i.e. in a different cluster) must
-  // be referenced via shared pointer to keep them alive, however.
   std::vector<ValueObjectSP> m_elements;
-  ValueObject* m_first = nullptr;
+  ValueObjectSP m_first;
   CompilerType m_bool_type;
   ByteOrder m_byte_order = eByteOrderInvalid;
   uint8_t m_byte_size = 0;
@@ -57,7 +50,7 @@ BitsetFrontEnd::BitsetFrontEnd(ValueObject &valobj)
 
 bool BitsetFrontEnd::Update() {
   m_elements.clear();
-  m_first = nullptr;
+  m_first.reset();
 
   TargetSP target_sp = m_backend.GetTargetSP();
   if (!target_sp)
@@ -70,7 +63,7 @@ bool BitsetFrontEnd::Update() {
 
   m_elements.assign(size, ValueObjectSP());
 
-  m_first = m_backend.GetChildMemberWithName(ConstString("__first_"), true).get();
+  m_first = m_backend.GetChildMemberWithName(ConstString("__first_"), true);
   return false;
 }
 
@@ -85,7 +78,7 @@ ValueObjectSP BitsetFrontEnd::GetChildAtIndex(size_t idx) {
   CompilerType type;
   ValueObjectSP chunk;
   // For small bitsets __first_ is not an array, but a plain size_t.
-  if (m_first->GetCompilerType().IsArrayType(&type)) {
+  if (m_first->GetCompilerType().IsArrayType(&type, nullptr, nullptr)) {
     llvm::Optional<uint64_t> bit_size =
         type.GetBitSize(ctx.GetBestExecutionContextScope());
     if (!bit_size || *bit_size == 0)
@@ -93,7 +86,7 @@ ValueObjectSP BitsetFrontEnd::GetChildAtIndex(size_t idx) {
     chunk = m_first->GetChildAtIndex(idx / *bit_size, true);
   } else {
     type = m_first->GetCompilerType();
-    chunk = m_first->GetSP();
+    chunk = m_first;
   }
   if (!type || !chunk)
     return {};

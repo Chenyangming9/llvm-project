@@ -1,5 +1,4 @@
 set(LLVM_LINK_COMPONENTS
-  FrontendOpenMP
   MC
   MCParser
   Support
@@ -27,7 +26,4 @@ add_clang_library(clangParse
   clangBasic
   clangLex
   clangSema
-
-  DEPENDS
-  omp_gen
   )

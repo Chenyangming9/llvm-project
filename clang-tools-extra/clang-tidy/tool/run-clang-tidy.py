@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 #
-#===- run-clang-tidy.py - Parallel clang-tidy runner --------*- python -*--===#
+#===- run-clang-tidy.py - Parallel clang-tidy runner ---------*- python -*--===#
 #
 # Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #
-#===-----------------------------------------------------------------------===#
+#===------------------------------------------------------------------------===#
 # FIXME: Integrate with clang-tidy-diff.py
-
 
 """
 Parallel clang-tidy runner
@@ -61,7 +60,6 @@ if is_py2:
 else:
     import queue as queue
 
-
 def find_compilation_database(path):
   """Adjusts the directory until a compilation database is found."""
   result = './'
@@ -80,17 +78,12 @@ def make_absolute(f, directory):
 
 
 def get_tidy_invocation(f, clang_tidy_binary, checks, tmpdir, build_path,
-                        header_filter, allow_enabling_alpha_checkers,
-                        extra_arg, extra_arg_before, quiet, config,
-                        line_filter):
+                        header_filter, extra_arg, extra_arg_before, quiet,
+                        config):
   """Gets a command line for clang-tidy."""
-  start = [clang_tidy_binary, '--use-color']
-  if allow_enabling_alpha_checkers:
-    start.append('-allow-enabling-analyzer-alpha-checkers')
+  start = [clang_tidy_binary]
   if header_filter is not None:
     start.append('-header-filter=' + header_filter)
-  if line_filter is not None:
-    start.append('-line-filter=' + line_filter)
   if checks:
     start.append('-checks=' + checks)
   if tmpdir is not None:
@@ -117,7 +110,7 @@ def merge_replacement_files(tmpdir, mergefile):
   """Merge all replacement files in a directory into a single file"""
   # The fixes suggested by clang-tidy >= 4.0.0 are given under
   # the top level key 'Diagnostics' in the output yaml files
-  mergekey = "Diagnostics"
+  mergekey="Diagnostics"
   merged=[]
   for replacefile in glob.iglob(os.path.join(tmpdir, '*.yaml')):
     content = yaml.safe_load(open(replacefile, 'r'))
@@ -130,7 +123,7 @@ def merge_replacement_files(tmpdir, mergefile):
     # include/clang/Tooling/ReplacementsYaml.h, but the value
     # is actually never used inside clang-apply-replacements,
     # so we set it to '' here.
-    output = {'MainSourceFile': '', mergekey: merged}
+    output = { 'MainSourceFile': '', mergekey: merged }
     with open(mergefile, 'w') as out:
       yaml.safe_dump(output, out)
   else:
@@ -166,16 +159,12 @@ def run_tidy(args, tmpdir, build_path, queue, lock, failed_files):
     name = queue.get()
     invocation = get_tidy_invocation(name, args.clang_tidy_binary, args.checks,
                                      tmpdir, build_path, args.header_filter,
-                                     args.allow_enabling_alpha_checkers,
                                      args.extra_arg, args.extra_arg_before,
-                                     args.quiet, args.config, args.line_filter)
+                                     args.quiet, args.config)
 
     proc = subprocess.Popen(invocation, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, err = proc.communicate()
     if proc.returncode != 0:
-      if proc.returncode < 0:
-        msg = "%s: terminated by signal %d\n" % (name, -proc.returncode)
-        err += msg.encode('utf-8')
       failed_files.append(name)
     with lock:
       sys.stdout.write(' '.join(invocation) + '\n' + output.decode('utf-8'))
@@ -190,9 +179,6 @@ def main():
                                    'in a compilation database. Requires '
                                    'clang-tidy and clang-apply-replacements in '
                                    '$PATH.')
-  parser.add_argument('-allow-enabling-alpha-checkers',
-                      action='store_true', help='allow alpha checkers from '
-                                                'clang-analyzer.')
   parser.add_argument('-clang-tidy-binary', metavar='PATH',
                       default='clang-tidy',
                       help='path to clang-tidy binary')
@@ -215,9 +201,6 @@ def main():
                       'headers to output diagnostics from. Diagnostics from '
                       'the main file of each translation unit are always '
                       'displayed.')
-  parser.add_argument('-line-filter', default=None,
-                      help='List of files with line ranges to filter the'
-                      'warnings.')
   if yaml:
     parser.add_argument('-export-fixes', metavar='filename', dest='export_fixes',
                         help='Create a yaml file to store suggested fixes in, '
@@ -255,8 +238,6 @@ def main():
 
   try:
     invocation = [args.clang_tidy_binary, '-list-checks']
-    if args.allow_enabling_alpha_checkers:
-      invocation.append('-allow-enabling-analyzer-alpha-checkers')
     invocation.append('-p=' + build_path)
     if args.checks:
       invocation.append('-checks=' + args.checks)
@@ -335,12 +316,11 @@ def main():
     except:
       print('Error applying fixes.\n', file=sys.stderr)
       traceback.print_exc()
-      return_code = 1
+      return_code=1
 
   if tmpdir:
     shutil.rmtree(tmpdir)
   sys.exit(return_code)
-
 
 if __name__ == '__main__':
   main()

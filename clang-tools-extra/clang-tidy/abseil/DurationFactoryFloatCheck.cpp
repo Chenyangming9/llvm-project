@@ -10,7 +10,6 @@
 #include "DurationRewriter.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "clang/Lex/Lexer.h"
 #include "clang/Tooling/FixIt.h"
 
 using namespace clang::ast_matchers;
@@ -20,7 +19,7 @@ namespace tidy {
 namespace abseil {
 
 // Returns `true` if `Range` is inside a macro definition.
-static bool insideMacroDefinition(const MatchFinder::MatchResult &Result,
+static bool InsideMacroDefinition(const MatchFinder::MatchResult &Result,
                                   SourceRange Range) {
   return !clang::Lexer::makeFileCharRange(
               clang::CharSourceRange::getCharRange(Range),
@@ -46,7 +45,7 @@ void DurationFactoryFloatCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *MatchedCall = Result.Nodes.getNodeAs<CallExpr>("call");
 
   // Don't try and replace things inside of macro definitions.
-  if (insideMacroDefinition(Result, MatchedCall->getSourceRange()))
+  if (InsideMacroDefinition(Result, MatchedCall->getSourceRange()))
     return;
 
   const Expr *Arg = MatchedCall->getArg(0)->IgnoreImpCasts();
@@ -59,8 +58,10 @@ void DurationFactoryFloatCheck::check(const MatchFinder::MatchResult &Result) {
     SimpleArg = stripFloatLiteralFraction(Result, *Arg);
 
   if (SimpleArg) {
-    diag(MatchedCall->getBeginLoc(), "use the integer version of absl::%0")
-        << MatchedCall->getDirectCallee()->getName()
+    diag(MatchedCall->getBeginLoc(),
+         (llvm::Twine("use the integer version of absl::") +
+          MatchedCall->getDirectCallee()->getName())
+             .str())
         << FixItHint::CreateReplacement(Arg->getSourceRange(), *SimpleArg);
   }
 }

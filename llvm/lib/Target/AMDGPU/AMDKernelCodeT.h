@@ -11,8 +11,12 @@
 #ifndef AMDKERNELCODET_H
 #define AMDKERNELCODET_H
 
+#include "llvm/MC/SubtargetFeature.h"
+
+#include <cstddef>
 #include <cstdint>
 
+#include "llvm/Support/Debug.h"
 //---------------------------------------------------------------------------//
 // AMD Kernel Code, and its dependencies                                     //
 //---------------------------------------------------------------------------//
@@ -523,7 +527,7 @@ typedef struct hsa_ext_control_directives_s {
 /// the kernarg segment is constant for the duration of the kernel execution.
 ///
 
-struct amd_kernel_code_t {
+typedef struct amd_kernel_code_s {
   uint32_t amd_kernel_code_version_major;
   uint32_t amd_kernel_code_version_minor;
   uint16_t amd_machine_kind;
@@ -646,6 +650,6 @@ struct amd_kernel_code_t {
   uint8_t reserved3[12];
   uint64_t runtime_loader_kernel_symbol;
   uint64_t control_directives[16];
-};
+} amd_kernel_code_t;
 
 #endif // AMDKERNELCODET_H

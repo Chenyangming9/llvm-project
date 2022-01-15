@@ -1,4 +1,4 @@
-add_llvm_component_library(LLVMRuntimeDyld
+add_llvm_library(LLVMRuntimeDyld
   JITSymbol.cpp
   RTDyldMemoryManager.cpp
   RuntimeDyld.cpp
@@ -10,11 +10,4 @@ add_llvm_component_library(LLVMRuntimeDyld
 
   DEPENDS
   intrinsics_gen
-
-
-  LINK_COMPONENTS
-  Core
-  MC
-  Object
-  Support
   )

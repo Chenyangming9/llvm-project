@@ -1,7 +1,4 @@
-set(LLVM_LINK_COMPONENTS
-  FrontendOpenMP
-  Support
-)
+set(LLVM_LINK_COMPONENTS support)
 
 add_clang_library(clangStaticAnalyzerCore
   APSIntType.cpp
@@ -16,12 +13,10 @@ add_clang_library(clangStaticAnalyzerCore
   CheckerContext.cpp
   CheckerHelpers.cpp
   CheckerManager.cpp
-  CheckerRegistryData.cpp
   CommonBugCategories.cpp
   ConstraintManager.cpp
   CoreEngine.cpp
-  DynamicExtent.cpp
-  DynamicType.cpp
+  DynamicTypeMap.cpp
   Environment.cpp
   ExplodedGraph.cpp
   ExprEngine.cpp
@@ -31,9 +26,11 @@ add_clang_library(clangStaticAnalyzerCore
   ExprEngineObjC.cpp
   FunctionSummary.cpp
   HTMLDiagnostics.cpp
+  IssueHash.cpp
   LoopUnrolling.cpp
   LoopWidening.cpp
   MemRegion.cpp
+  PathDiagnostic.cpp
   PlistDiagnostics.cpp
   ProgramState.cpp
   RangeConstraintManager.cpp
@@ -44,10 +41,10 @@ add_clang_library(clangStaticAnalyzerCore
   SimpleSValBuilder.cpp
   SMTConstraintManager.cpp
   Store.cpp
+  SubEngine.cpp
   SValBuilder.cpp
   SVals.cpp
   SymbolManager.cpp
-  TextDiagnostics.cpp
   WorkList.cpp
 
   LINK_LIBS
@@ -56,12 +53,7 @@ add_clang_library(clangStaticAnalyzerCore
   clangAnalysis
   clangBasic
   clangCrossTU
-  clangFrontend
   clangLex
   clangRewrite
-  clangToolingCore
-
-  DEPENDS
-  omp_gen
   )
 

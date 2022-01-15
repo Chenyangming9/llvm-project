@@ -23,37 +23,27 @@ namespace llvm {
 namespace mca {
 
 llvm::Error RetireStage::cycleStart() {
-  PRF.cycleStart();
+  if (RCU.isEmpty())
+    return llvm::ErrorSuccess();
 
   const unsigned MaxRetirePerCycle = RCU.getMaxRetirePerCycle();
   unsigned NumRetired = 0;
   while (!RCU.isEmpty()) {
     if (MaxRetirePerCycle != 0 && NumRetired == MaxRetirePerCycle)
       break;
-    const RetireControlUnit::RUToken &Current = RCU.getCurrentToken();
+    const RetireControlUnit::RUToken &Current = RCU.peekCurrentToken();
     if (!Current.Executed)
       break;
-    notifyInstructionRetired(Current.IR);
     RCU.consumeCurrentToken();
+    notifyInstructionRetired(Current.IR);
     NumRetired++;
   }
 
   return llvm::ErrorSuccess();
 }
 
-llvm::Error RetireStage::cycleEnd() {
-  PRF.cycleEnd();
-  return llvm::ErrorSuccess();
-}
-
 llvm::Error RetireStage::execute(InstRef &IR) {
-  Instruction &IS = *IR.getInstruction();
-
-  PRF.onInstructionExecuted(&IS);
-  unsigned TokenID = IS.getRCUTokenID();
-  assert(TokenID != RetireControlUnit::UnhandledTokenID);
-  RCU.onInstructionExecuted(TokenID);
-
+  RCU.onInstructionExecuted(IR.getInstruction()->getRCUTokenID());
   return llvm::ErrorSuccess();
 }
 
@@ -61,10 +51,6 @@ void RetireStage::notifyInstructionRetired(const InstRef &IR) const {
   LLVM_DEBUG(llvm::dbgs() << "[E] Instruction Retired: #" << IR << '\n');
   llvm::SmallVector<unsigned, 4> FreedRegs(PRF.getNumRegisterFiles());
   const Instruction &Inst = *IR.getInstruction();
-
-  // Release the load/store queue entries.
-  if (Inst.isMemOp())
-    LSU.onInstructionRetired(IR);
 
   for (const WriteState &WS : Inst.getDefs())
     PRF.removeRegisterWrite(WS, FreedRegs);

@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Object/Error.h"
-#include "llvm/ADT/Twine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ManagedStatic.h"
 
@@ -61,10 +60,9 @@ void BinaryError::anchor() {}
 char BinaryError::ID = 0;
 char GenericBinaryError::ID = 0;
 
-GenericBinaryError::GenericBinaryError(const Twine &Msg) : Msg(Msg.str()) {}
+GenericBinaryError::GenericBinaryError(Twine Msg) : Msg(Msg.str()) {}
 
-GenericBinaryError::GenericBinaryError(const Twine &Msg,
-                                       object_error ECOverride)
+GenericBinaryError::GenericBinaryError(Twine Msg, object_error ECOverride)
     : Msg(Msg.str()) {
   setErrorCode(make_error_code(ECOverride));
 }

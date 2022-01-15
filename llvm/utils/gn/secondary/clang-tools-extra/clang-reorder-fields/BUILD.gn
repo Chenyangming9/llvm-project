@@ -11,5 +11,7 @@ static_library("clang-reorder-fields") {
     "//clang/lib/Tooling/Core",
     "//llvm/lib/Support",
   ]
-  sources = [ "ReorderFieldsAction.cpp" ]
+  sources = [
+    "ReorderFieldsAction.cpp",
+  ]
 }

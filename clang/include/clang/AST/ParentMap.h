@@ -51,7 +51,9 @@ public:
     return getParentIgnoreParenCasts(const_cast<Stmt*>(S));
   }
 
-  bool hasParent(const Stmt *S) const { return getParent(S) != nullptr; }
+  bool hasParent(Stmt* S) const {
+    return getParent(S) != nullptr;
+  }
 
   bool isConsumedExpr(Expr *E) const;
 

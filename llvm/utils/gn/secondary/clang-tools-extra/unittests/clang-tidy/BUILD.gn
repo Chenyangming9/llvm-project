@@ -18,22 +18,18 @@ unittest("ClangTidyTests") {
     "//clang/lib/Serialization",
     "//clang/lib/Tooling",
     "//clang/lib/Tooling/Core",
-    "//clang/lib/Tooling/Transformer",
+    "//clang/lib/Tooling/Refactoring",
     "//llvm/lib/Support",
-    "//llvm/lib/Testing/Support",
   ]
   include_dirs = [ "//clang-tools-extra/clang-tidy" ]
   sources = [
-    "AddConstTest.cpp",
     "ClangTidyDiagnosticConsumerTest.cpp",
     "ClangTidyOptionsTest.cpp",
-    "GlobListTest.cpp",
     "GoogleModuleTest.cpp",
     "IncludeInserterTest.cpp",
     "LLVMModuleTest.cpp",
     "NamespaceAliaserTest.cpp",
     "ObjCModuleTest.cpp",
-    "OptionsProviderTest.cpp",
     "OverlappingReplacementsTest.cpp",
     "ReadabilityModuleTest.cpp",
     "TransformerClangTidyCheckTest.cpp",

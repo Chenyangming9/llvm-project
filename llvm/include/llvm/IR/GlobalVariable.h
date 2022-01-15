@@ -19,6 +19,7 @@
 #ifndef LLVM_IR_GLOBALVARIABLE_H
 #define LLVM_IR_GLOBALVARIABLE_H
 
+#include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/ADT/ilist_node.h"
 #include "llvm/IR/Attributes.h"
@@ -56,11 +57,10 @@ public:
                  bool isExternallyInitialized = false);
   /// GlobalVariable ctor - This creates a global and inserts it before the
   /// specified other global.
-  GlobalVariable(Module &M, Type *Ty, bool isConstant, LinkageTypes Linkage,
-                 Constant *Initializer, const Twine &Name = "",
-                 GlobalVariable *InsertBefore = nullptr,
-                 ThreadLocalMode = NotThreadLocal,
-                 Optional<unsigned> AddressSpace = None,
+  GlobalVariable(Module &M, Type *Ty, bool isConstant,
+                 LinkageTypes Linkage, Constant *Initializer,
+                 const Twine &Name = "", GlobalVariable *InsertBefore = nullptr,
+                 ThreadLocalMode = NotThreadLocal, unsigned AddressSpace = 0,
                  bool isExternallyInitialized = false);
   GlobalVariable(const GlobalVariable &) = delete;
   GlobalVariable &operator=(const GlobalVariable &) = delete;
@@ -243,7 +243,6 @@ public:
   bool hasImplicitSection() const {
     return getAttributes().hasAttribute("bss-section") ||
            getAttributes().hasAttribute("data-section") ||
-           getAttributes().hasAttribute("relro-section") ||
            getAttributes().hasAttribute("rodata-section");
   }
 

@@ -220,7 +220,7 @@ PostingList::PostingList(llvm::ArrayRef<DocID> Documents)
     : Chunks(encodeStream(Documents)) {}
 
 std::unique_ptr<Iterator> PostingList::iterator(const Token *Tok) const {
-  return std::make_unique<ChunkIterator>(Tok, Chunks);
+  return llvm::make_unique<ChunkIterator>(Tok, Chunks);
 }
 
 } // namespace dex

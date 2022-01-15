@@ -110,12 +110,15 @@ int main(int, char**)
     }
 // GLIBC 2.23 uses '.' as the decimal point while other C libraries use ','
 // GLIBC 2.27 corrects this
-#if defined(_CS_GNU_LIBC_VERSION)
-    const char sep = glibc_version_less_than("2.27") ? '.' : ',';
-    const wchar_t wsep = glibc_version_less_than("2.27") ? L'.' : L',';
-#else
+#ifndef TEST_GLIBC_PREREQ
+#define TEST_GLIBC_PREREQ(x, y) 0
+#endif
+#if !defined(TEST_HAS_GLIBC) || TEST_GLIBC_PREREQ(2, 27)
     const char sep = ',';
     const wchar_t wsep = L',';
+#else
+    const char sep = '.';
+    const wchar_t wsep = L'.';
 #endif
     {
         Fnf f(LOCALE_ru_RU_UTF_8, 1);

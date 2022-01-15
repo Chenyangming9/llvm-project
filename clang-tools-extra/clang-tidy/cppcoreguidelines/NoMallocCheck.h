@@ -9,7 +9,9 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_CPPCOREGUIDELINES_NO_MALLOC_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_CPPCOREGUIDELINES_NO_MALLOC_H
 
-#include "../ClangTidyCheck.h"
+#include "../ClangTidy.h"
+#include "clang/AST/ASTContext.h"
+#include "clang/ASTMatchers/ASTMatchFinder.h"
 
 namespace clang {
 namespace tidy {
@@ -30,10 +32,6 @@ public:
         AllocList(Options.get("Allocations", "::malloc;::calloc")),
         ReallocList(Options.get("Reallocations", "::realloc")),
         DeallocList(Options.get("Deallocations", "::free")) {}
-
-  bool isLanguageVersionSupported(const LangOptions &LangOpts) const override {
-    return LangOpts.CPlusPlus;
-  }
 
   /// Make configuration of checker discoverable.
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;

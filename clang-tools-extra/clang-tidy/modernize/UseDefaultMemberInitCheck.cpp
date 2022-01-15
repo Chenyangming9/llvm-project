@@ -17,12 +17,6 @@ namespace clang {
 namespace tidy {
 namespace modernize {
 
-namespace {
-AST_MATCHER_P(InitListExpr, initCountIs, unsigned, N) {
-  return Node.getNumInits() == N;
-}
-} // namespace
-
 static StringRef getValueOfValueInit(const QualType InitType) {
   switch (InitType->getScalarTypeKind()) {
   case Type::STK_CPointer:
@@ -35,7 +29,7 @@ static StringRef getValueOfValueInit(const QualType InitType) {
     return "false";
 
   case Type::STK_Integral:
-    switch (InitType->castAs<BuiltinType>()->getKind()) {
+    switch (InitType->getAs<BuiltinType>()->getKind()) {
     case BuiltinType::Char_U:
     case BuiltinType::UChar:
     case BuiltinType::Char_S:
@@ -53,7 +47,7 @@ static StringRef getValueOfValueInit(const QualType InitType) {
     }
 
   case Type::STK_Floating:
-    switch (InitType->castAs<BuiltinType>()->getKind()) {
+    switch (InitType->getAs<BuiltinType>()->getKind()) {
     case BuiltinType::Half:
     case BuiltinType::Float:
       return "0.0f";
@@ -64,10 +58,10 @@ static StringRef getValueOfValueInit(const QualType InitType) {
   case Type::STK_FloatingComplex:
   case Type::STK_IntegralComplex:
     return getValueOfValueInit(
-        InitType->castAs<ComplexType>()->getElementType());
+        InitType->getAs<ComplexType>()->getElementType());
 
   case Type::STK_FixedPoint:
-    switch (InitType->castAs<BuiltinType>()->getKind()) {
+    switch (InitType->getAs<BuiltinType>()->getKind()) {
     case BuiltinType::ShortAccum:
     case BuiltinType::SatShortAccum:
       return "0.0hk";
@@ -143,7 +137,7 @@ static const Expr *ignoreUnaryPlus(const Expr *E) {
 static const Expr *getInitializer(const Expr *E) {
   auto *InitList = dyn_cast<InitListExpr>(E);
   if (InitList && InitList->getNumInits() == 1)
-    return InitList->getInit(0)->IgnoreParenImpCasts();
+    return InitList->getInit(0);
   return E;
 }
 
@@ -186,8 +180,8 @@ static bool sameValue(const Expr *E1, const Expr *E2) {
 UseDefaultMemberInitCheck::UseDefaultMemberInitCheck(StringRef Name,
                                                      ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      UseAssignment(Options.get("UseAssignment", false)),
-      IgnoreMacros(Options.getLocalOrGlobal("IgnoreMacros", true)) {}
+      UseAssignment(Options.get("UseAssignment", 0) != 0),
+      IgnoreMacros(Options.getLocalOrGlobal("IgnoreMacros", true) != 0) {}
 
 void UseDefaultMemberInitCheck::storeOptions(
     ClangTidyOptions::OptionMap &Opts) {
@@ -196,40 +190,41 @@ void UseDefaultMemberInitCheck::storeOptions(
 }
 
 void UseDefaultMemberInitCheck::registerMatchers(MatchFinder *Finder) {
-  auto InitBase =
+  if (!getLangOpts().CPlusPlus11)
+    return;
+
+  auto Init =
       anyOf(stringLiteral(), characterLiteral(), integerLiteral(),
-            unaryOperator(hasAnyOperatorName("+", "-"),
+            unaryOperator(anyOf(hasOperatorName("+"), hasOperatorName("-")),
                           hasUnaryOperand(integerLiteral())),
             floatLiteral(),
-            unaryOperator(hasAnyOperatorName("+", "-"),
+            unaryOperator(anyOf(hasOperatorName("+"), hasOperatorName("-")),
                           hasUnaryOperand(floatLiteral())),
             cxxBoolLiteral(), cxxNullPtrLiteralExpr(), implicitValueInitExpr(),
             declRefExpr(to(enumConstantDecl())));
 
-  auto Init =
-      anyOf(initListExpr(anyOf(allOf(initCountIs(1), hasInit(0, InitBase)),
-                               initCountIs(0))),
-            InitBase);
-
   Finder->addMatcher(
       cxxConstructorDecl(
-          isDefaultConstructor(),
+          isDefaultConstructor(), unless(isInstantiated()),
           forEachConstructorInitializer(
               cxxCtorInitializer(
-                  forField(unless(anyOf(getLangOpts().CPlusPlus20
+                  forField(unless(anyOf(getLangOpts().CPlusPlus2a
                                             ? unless(anything())
                                             : isBitField(),
                                         hasInClassInitializer(anything()),
                                         hasParent(recordDecl(isUnion()))))),
-                  withInitializer(Init))
+                  isWritten(), withInitializer(ignoringImplicit(Init)))
                   .bind("default"))),
       this);
 
   Finder->addMatcher(
-      cxxConstructorDecl(forEachConstructorInitializer(
-          cxxCtorInitializer(forField(hasInClassInitializer(anything())),
-                             withInitializer(Init))
-              .bind("existing"))),
+      cxxConstructorDecl(
+          unless(ast_matchers::isTemplateInstantiation()),
+          forEachConstructorInitializer(
+              cxxCtorInitializer(forField(hasInClassInitializer(anything())),
+                                 isWritten(),
+                                 withInitializer(ignoringImplicit(Init)))
+                  .bind("existing"))),
       this);
 }
 

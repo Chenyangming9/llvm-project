@@ -19,10 +19,8 @@ namespace llvm_check {
 
 void TwineLocalCheck::registerMatchers(MatchFinder *Finder) {
   auto TwineType =
-      qualType(hasDeclaration(cxxRecordDecl(hasName("::llvm::Twine"))));
-  Finder->addMatcher(
-      varDecl(unless(parmVarDecl()), hasType(TwineType)).bind("variable"),
-      this);
+      qualType(hasDeclaration(recordDecl(hasName("::llvm::Twine"))));
+  Finder->addMatcher(varDecl(hasType(TwineType)).bind("variable"), this);
 }
 
 void TwineLocalCheck::check(const MatchFinder::MatchResult &Result) {

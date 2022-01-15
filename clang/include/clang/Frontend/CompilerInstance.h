@@ -22,7 +22,6 @@
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/BuryPointer.h"
-#include "llvm/Support/FileSystem.h"
 #include <cassert>
 #include <list>
 #include <memory>
@@ -51,7 +50,6 @@ class Preprocessor;
 class Sema;
 class SourceManager;
 class TargetInfo;
-enum class DisableValidationForModuleKind;
 
 /// CompilerInstance - Helper class for managing a single instance of the Clang
 /// compiler.
@@ -118,7 +116,7 @@ class CompilerInstance : public ModuleLoader {
   std::unique_ptr<llvm::Timer> FrontendTimer;
 
   /// The ASTReader, if one exists.
-  IntrusiveRefCntPtr<ASTReader> TheASTReader;
+  IntrusiveRefCntPtr<ASTReader> ModuleManager;
 
   /// The module dependency collector for crashdumps
   std::shared_ptr<ModuleDependencyCollector> ModuleDepCollector;
@@ -128,9 +126,13 @@ class CompilerInstance : public ModuleLoader {
 
   std::vector<std::shared_ptr<DependencyCollector>> DependencyCollectors;
 
+  /// The set of top-level modules that has already been loaded,
+  /// along with the module map
+  llvm::DenseMap<const IdentifierInfo *, Module *> KnownModules;
+
   /// The set of top-level modules that has already been built on the
   /// fly as part of this overall compilation action.
-  std::map<std::string, std::string, std::less<>> BuiltModules;
+  std::map<std::string, std::string> BuiltModules;
 
   /// Should we delete the BuiltModules when we're done?
   bool DeleteBuiltModules = true;
@@ -151,13 +153,7 @@ class CompilerInstance : public ModuleLoader {
   bool HaveFullGlobalModuleIndex = false;
 
   /// One or more modules failed to build.
-  bool DisableGeneratingGlobalModuleIndex = false;
-
-  /// The stream for verbose output if owned, otherwise nullptr.
-  std::unique_ptr<raw_ostream> OwnedVerboseOutputStream;
-
-  /// The stream for verbose output.
-  raw_ostream *VerboseOutputStream = &llvm::errs();
+  bool ModuleBuildFailed = false;
 
   /// Holds information about the output file.
   ///
@@ -166,11 +162,17 @@ class CompilerInstance : public ModuleLoader {
   /// failed.
   struct OutputFile {
     std::string Filename;
-    Optional<llvm::sys::fs::TempFile> File;
+    std::string TempFilename;
 
-    OutputFile(std::string filename, Optional<llvm::sys::fs::TempFile> file)
-        : Filename(std::move(filename)), File(std::move(file)) {}
+    OutputFile(std::string filename, std::string tempFilename)
+        : Filename(std::move(filename)), TempFilename(std::move(tempFilename)) {
+    }
   };
+
+  /// If the output doesn't support seeking (terminal, pipe). we switch
+  /// the stream to a buffer_ostream. These are the buffer and the original
+  /// stream.
+  std::unique_ptr<llvm::raw_fd_ostream> NonSeekStream;
 
   /// The list of active output files.
   std::list<OutputFile> OutputFiles;
@@ -214,6 +216,9 @@ public:
   ///
   /// \param Act - The action to execute.
   /// \return - True on success.
+  //
+  // FIXME: This function should take the stream to write any debugging /
+  // verbose output to as an argument.
   //
   // FIXME: Eliminate the llvm_shutdown requirement, that should either be part
   // of the context or else not CompilerInstance specific.
@@ -345,21 +350,6 @@ public:
   }
 
   /// }
-  /// @name VerboseOutputStream
-  /// }
-
-  /// Replace the current stream for verbose output.
-  void setVerboseOutputStream(raw_ostream &Value);
-
-  /// Replace the current stream for verbose output.
-  void setVerboseOutputStream(std::unique_ptr<raw_ostream> Value);
-
-  /// Get the current stream for verbose output.
-  raw_ostream &getVerboseOutputStream() {
-    return *VerboseOutputStream;
-  }
-
-  /// }
   /// @name Target Info
   /// {
 
@@ -382,14 +372,13 @@ public:
   /// Replace the current AuxTarget.
   void setAuxTarget(TargetInfo *Value);
 
-  // Create Target and AuxTarget based on current options
-  bool createTarget();
-
   /// }
   /// @name Virtual File System
   /// {
 
-  llvm::vfs::FileSystem &getVirtualFileSystem() const;
+  llvm::vfs::FileSystem &getVirtualFileSystem() const {
+    return getFileManager().getVirtualFileSystem();
+  }
 
   /// }
   /// @name File Manager
@@ -511,8 +500,8 @@ public:
   /// @name Module Management
   /// {
 
-  IntrusiveRefCntPtr<ASTReader> getASTReader() const;
-  void setASTReader(IntrusiveRefCntPtr<ASTReader> Reader);
+  IntrusiveRefCntPtr<ASTReader> getModuleManager() const;
+  void setModuleManager(IntrusiveRefCntPtr<ASTReader> Reader);
 
   std::shared_ptr<ModuleDependencyCollector> getModuleDepCollector() const;
   void setModuleDepCollector(
@@ -581,6 +570,11 @@ public:
   /// @name Output Files
   /// {
 
+  /// addOutputFile - Add an output file onto the list of tracked output files.
+  ///
+  /// \param OutFile - The output file info.
+  void addOutputFile(OutputFile &&OutFile);
+
   /// clearOutputFiles - Clear the output file list. The underlying output
   /// streams must have been closed beforehand.
   ///
@@ -643,27 +637,23 @@ public:
   /// and replace any existing one with it.
   void createPreprocessor(TranslationUnitKind TUKind);
 
-  std::string getSpecificModuleCachePath(StringRef ModuleHash);
-  std::string getSpecificModuleCachePath() {
-    return getSpecificModuleCachePath(getInvocation().getModuleHash());
-  }
+  std::string getSpecificModuleCachePath();
 
   /// Create the AST context.
   void createASTContext();
 
   /// Create an external AST source to read a PCH file and attach it to the AST
   /// context.
-  void createPCHExternalASTSource(
-      StringRef Path, DisableValidationForModuleKind DisableValidation,
-      bool AllowPCHWithCompilerErrors, void *DeserializationListener,
-      bool OwnDeserializationListener);
+  void createPCHExternalASTSource(StringRef Path, bool DisablePCHValidation,
+                                  bool AllowPCHWithCompilerErrors,
+                                  void *DeserializationListener,
+                                  bool OwnDeserializationListener);
 
   /// Create an external AST source to read a PCH file.
   ///
   /// \return - The new object on success, or null on failure.
   static IntrusiveRefCntPtr<ASTReader> createPCHExternalASTSource(
-      StringRef Path, StringRef Sysroot,
-      DisableValidationForModuleKind DisableValidation,
+      StringRef Path, StringRef Sysroot, bool DisablePCHValidation,
       bool AllowPCHWithCompilerErrors, Preprocessor &PP,
       InMemoryModuleCache &ModuleCache, ASTContext &Context,
       const PCHContainerReader &PCHContainerRdr,
@@ -693,27 +683,25 @@ public:
   /// Create the default output file (from the invocation's options) and add it
   /// to the list of tracked output files.
   ///
-  /// The files created by this are usually removed on signal, and, depending
-  /// on FrontendOptions, may also use a temporary file (that is, the data is
-  /// written to a temporary file which will atomically replace the target
-  /// output on success).
+  /// The files created by this function always use temporary files to write to
+  /// their result (that is, the data is written to a temporary file which will
+  /// atomically replace the target output on success).
   ///
   /// \return - Null on error.
-  std::unique_ptr<raw_pwrite_stream> createDefaultOutputFile(
-      bool Binary = true, StringRef BaseInput = "", StringRef Extension = "",
-      bool RemoveFileOnSignal = true, bool CreateMissingDirectories = false,
-      bool ForceUseTemporary = false);
+  std::unique_ptr<raw_pwrite_stream>
+  createDefaultOutputFile(bool Binary = true, StringRef BaseInput = "",
+                          StringRef Extension = "");
 
-  /// Create a new output file, optionally deriving the output path name, and
-  /// add it to the list of tracked output files.
+  /// Create a new output file and add it to the list of tracked output files,
+  /// optionally deriving the output path name.
   ///
   /// \return - Null on error.
   std::unique_ptr<raw_pwrite_stream>
   createOutputFile(StringRef OutputPath, bool Binary, bool RemoveFileOnSignal,
-                   bool UseTemporary, bool CreateMissingDirectories = false);
+                   StringRef BaseInput, StringRef Extension, bool UseTemporary,
+                   bool CreateMissingDirectories = false);
 
-private:
-  /// Create a new output file and add it to the list of tracked output files.
+  /// Create a new output file, optionally deriving the output path name.
   ///
   /// If \p OutputPath is empty, then createOutputFile will derive an output
   /// path location as \p BaseInput, with any suffix removed, and \p Extension
@@ -722,6 +710,10 @@ private:
   /// renamed to \p OutputPath in the end.
   ///
   /// \param OutputPath - If given, the path to the output file.
+  /// \param Error [out] - On failure, the error.
+  /// \param BaseInput - If \p OutputPath is empty, the input path name to use
+  /// for deriving the output path.
+  /// \param Extension - The extension to use for derived output names.
   /// \param Binary - The mode to open the file in.
   /// \param RemoveFileOnSignal - Whether the file should be registered with
   /// llvm::sys::RemoveFileOnSignal. Note that this is not safe for
@@ -730,12 +722,17 @@ private:
   /// OutputPath in the end.
   /// \param CreateMissingDirectories - When \p UseTemporary is true, create
   /// missing directories in the output path.
-  Expected<std::unique_ptr<raw_pwrite_stream>>
-  createOutputFileImpl(StringRef OutputPath, bool Binary,
-                       bool RemoveFileOnSignal, bool UseTemporary,
-                       bool CreateMissingDirectories);
+  /// \param ResultPathName [out] - If given, the result path name will be
+  /// stored here on success.
+  /// \param TempPathName [out] - If given, the temporary file path name
+  /// will be stored here on success.
+  std::unique_ptr<raw_pwrite_stream>
+  createOutputFile(StringRef OutputPath, std::error_code &Error, bool Binary,
+                   bool RemoveFileOnSignal, StringRef BaseInput,
+                   StringRef Extension, bool UseTemporary,
+                   bool CreateMissingDirectories, std::string *ResultPathName,
+                   std::string *TempPathName);
 
-public:
   std::unique_ptr<raw_pwrite_stream> createNullOutputFile();
 
   /// }
@@ -755,7 +752,10 @@ public:
   static bool InitializeSourceManager(const FrontendInputFile &Input,
                                       DiagnosticsEngine &Diags,
                                       FileManager &FileMgr,
-                                      SourceManager &SourceMgr);
+                                      SourceManager &SourceMgr,
+                                      HeaderSearch *HS,
+                                      DependencyOutputOptions &DepOpts,
+                                      const FrontendOptions &Opts);
 
   /// }
 
@@ -767,34 +767,17 @@ public:
     return std::move(OutputStream);
   }
 
-  void createASTReader();
+  // Create module manager.
+  void createModuleManager();
 
   bool loadModuleFile(StringRef FileName);
 
-private:
-  /// Find a module, potentially compiling it, before reading its AST.  This is
-  /// the guts of loadModule.
-  ///
-  /// For prebuilt modules, the Module is not expected to exist in
-  /// HeaderSearch's ModuleMap.  If a ModuleFile by that name is in the
-  /// ModuleManager, then it will be loaded and looked up.
-  ///
-  /// For implicit modules, the Module is expected to already be in the
-  /// ModuleMap.  First attempt to load it from the given path on disk.  If that
-  /// fails, defer to compileModuleAndReadAST, which will first build and then
-  /// load it.
-  ModuleLoadResult findOrCompileModuleAndReadAST(StringRef ModuleName,
-                                                 SourceLocation ImportLoc,
-                                                 SourceLocation ModuleNameLoc,
-                                                 bool IsInclusionDirective);
-
-public:
   ModuleLoadResult loadModule(SourceLocation ImportLoc, ModuleIdPath Path,
                               Module::NameVisibilityKind Visibility,
                               bool IsInclusionDirective) override;
 
-  void createModuleFromSource(SourceLocation ImportLoc, StringRef ModuleName,
-                              StringRef Source) override;
+  void loadModuleFromSource(SourceLocation ImportLoc, StringRef ModuleName,
+                            StringRef Source) override;
 
   void makeModuleVisible(Module *Mod, Module::NameVisibilityKind Visibility,
                          SourceLocation ImportLoc) override;

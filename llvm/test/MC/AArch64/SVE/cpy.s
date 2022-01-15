@@ -3,7 +3,7 @@
 // RUN: not llvm-mc -triple=aarch64 -show-encoding < %s 2>&1 \
 // RUN:        | FileCheck %s --check-prefix=CHECK-ERROR
 // RUN: llvm-mc -triple=aarch64 -filetype=obj -mattr=+sve < %s \
-// RUN:        | llvm-objdump -d --mattr=+sve - | FileCheck %s --check-prefix=CHECK-INST
+// RUN:        | llvm-objdump -d -mattr=+sve - | FileCheck %s --check-prefix=CHECK-INST
 // RUN: llvm-mc -triple=aarch64 -filetype=obj -mattr=+sve < %s \
 // RUN:        | llvm-objdump -d - | FileCheck %s --check-prefix=CHECK-UNKNOWN
 
@@ -228,28 +228,6 @@ cpy     z21.d, p0/z, #32512
 // CHECK-ENCODING: [0xf5,0x2f,0xd0,0x05]
 // CHECK-ERROR: instruction requires: sve
 // CHECK-UNKNOWN: f5 2f d0 05  <unknown>
-
-// --------------------------------------------------------------------------//
-// Tests where the negative immediate is in bounds when interpreted
-// as the element type.
-
-cpy z0.b, p0/z, #-129
-// CHECK-INST: mov     z0.b, p0/z, #127
-// CHECK-ENCODING: [0xe0,0x0f,0x10,0x05]
-// CHECK-ERROR: instruction requires: sve
-// CHECK-UNKNOWN: e0 0f 10 05  <unknown>
-
-cpy z0.h, p0/z, #-33024
-// CHECK-INST: mov     z0.h, p0/z, #32512
-// CHECK-ENCODING: [0xe0,0x2f,0x50,0x05]
-// CHECK-ERROR: instruction requires: sve
-// CHECK-UNKNOWN: e0 2f 50 05  <unknown>
-
-cpy z0.h, p0/z, #-129, lsl #8
-// CHECK-INST: mov     z0.h, p0/z, #32512
-// CHECK-ENCODING: [0xe0,0x2f,0x50,0x05]
-// CHECK-ERROR: instruction requires: sve
-// CHECK-UNKNOWN: e0 2f 50 05  <unknown>
 
 
 // --------------------------------------------------------------------------//

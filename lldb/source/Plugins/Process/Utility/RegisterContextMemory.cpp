@@ -1,4 +1,4 @@
-//===-- RegisterContextMemory.cpp -----------------------------------------===//
+//===-- RegisterContextMemory.cpp -------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -39,7 +39,7 @@ RegisterContextMemory::RegisterContextMemory(Thread &thread,
 }
 
 // Destructor
-RegisterContextMemory::~RegisterContextMemory() = default;
+RegisterContextMemory::~RegisterContextMemory() {}
 
 void RegisterContextMemory::InvalidateAllRegisters() {
   if (m_reg_data_addr != LLDB_INVALID_ADDRESS)

@@ -36,8 +36,6 @@
 // configure time.
 #if !defined(NDEBUG) || LLVM_FORCE_ENABLE_STATS
 #define LLVM_ENABLE_STATS 1
-#else
-#define LLVM_ENABLE_STATS 0
 #endif
 
 namespace llvm {
@@ -46,35 +44,38 @@ class raw_ostream;
 class raw_fd_ostream;
 class StringRef;
 
-class TrackingStatistic {
+class Statistic {
 public:
-  const char *const DebugType;
-  const char *const Name;
-  const char *const Desc;
-
+  const char *DebugType;
+  const char *Name;
+  const char *Desc;
   std::atomic<unsigned> Value;
   std::atomic<bool> Initialized;
 
-  constexpr TrackingStatistic(const char *DebugType, const char *Name,
-                              const char *Desc)
-      : DebugType(DebugType), Name(Name), Desc(Desc), Value(0),
-        Initialized(false) {}
-
+  unsigned getValue() const { return Value.load(std::memory_order_relaxed); }
   const char *getDebugType() const { return DebugType; }
   const char *getName() const { return Name; }
   const char *getDesc() const { return Desc; }
 
-  unsigned getValue() const { return Value.load(std::memory_order_relaxed); }
+  /// construct - This should only be called for non-global statistics.
+  void construct(const char *debugtype, const char *name, const char *desc) {
+    DebugType = debugtype;
+    Name = name;
+    Desc = desc;
+    Value = 0;
+    Initialized = false;
+  }
 
   // Allow use of this class as the value itself.
   operator unsigned() const { return getValue(); }
 
-  const TrackingStatistic &operator=(unsigned Val) {
+#if LLVM_ENABLE_STATS
+   const Statistic &operator=(unsigned Val) {
     Value.store(Val, std::memory_order_relaxed);
     return init();
   }
 
-  const TrackingStatistic &operator++() {
+  const Statistic &operator++() {
     Value.fetch_add(1, std::memory_order_relaxed);
     return init();
   }
@@ -84,7 +85,7 @@ public:
     return Value.fetch_add(1, std::memory_order_relaxed);
   }
 
-  const TrackingStatistic &operator--() {
+  const Statistic &operator--() {
     Value.fetch_sub(1, std::memory_order_relaxed);
     return init();
   }
@@ -94,14 +95,14 @@ public:
     return Value.fetch_sub(1, std::memory_order_relaxed);
   }
 
-  const TrackingStatistic &operator+=(unsigned V) {
+  const Statistic &operator+=(unsigned V) {
     if (V == 0)
       return *this;
     Value.fetch_add(V, std::memory_order_relaxed);
     return init();
   }
 
-  const TrackingStatistic &operator-=(unsigned V) {
+  const Statistic &operator-=(unsigned V) {
     if (V == 0)
       return *this;
     Value.fetch_sub(V, std::memory_order_relaxed);
@@ -118,8 +119,42 @@ public:
     init();
   }
 
+#else  // Statistics are disabled in release builds.
+
+  const Statistic &operator=(unsigned Val) {
+    return *this;
+  }
+
+  const Statistic &operator++() {
+    return *this;
+  }
+
+  unsigned operator++(int) {
+    return 0;
+  }
+
+  const Statistic &operator--() {
+    return *this;
+  }
+
+  unsigned operator--(int) {
+    return 0;
+  }
+
+  const Statistic &operator+=(const unsigned &V) {
+    return *this;
+  }
+
+  const Statistic &operator-=(const unsigned &V) {
+    return *this;
+  }
+
+  void updateMax(unsigned V) {}
+
+#endif  // LLVM_ENABLE_STATS
+
 protected:
-  TrackingStatistic &init() {
+  Statistic &init() {
     if (!Initialized.load(std::memory_order_acquire))
       RegisterStatistic();
     return *this;
@@ -128,51 +163,13 @@ protected:
   void RegisterStatistic();
 };
 
-class NoopStatistic {
-public:
-  NoopStatistic(const char * /*DebugType*/, const char * /*Name*/,
-                const char * /*Desc*/) {}
-
-  unsigned getValue() const { return 0; }
-
-  // Allow use of this class as the value itself.
-  operator unsigned() const { return 0; }
-
-  const NoopStatistic &operator=(unsigned Val) { return *this; }
-
-  const NoopStatistic &operator++() { return *this; }
-
-  unsigned operator++(int) { return 0; }
-
-  const NoopStatistic &operator--() { return *this; }
-
-  unsigned operator--(int) { return 0; }
-
-  const NoopStatistic &operator+=(const unsigned &V) { return *this; }
-
-  const NoopStatistic &operator-=(const unsigned &V) { return *this; }
-
-  void updateMax(unsigned V) {}
-};
-
-#if LLVM_ENABLE_STATS
-using Statistic = TrackingStatistic;
-#else
-using Statistic = NoopStatistic;
-#endif
-
 // STATISTIC - A macro to make definition of statistics really simple.  This
 // automatically passes the DEBUG_TYPE of the file into the statistic.
 #define STATISTIC(VARNAME, DESC)                                               \
-  static llvm::Statistic VARNAME = {DEBUG_TYPE, #VARNAME, DESC}
-
-// ALWAYS_ENABLED_STATISTIC - A macro to define a statistic like STATISTIC but
-// it is enabled even if LLVM_ENABLE_STATS is off.
-#define ALWAYS_ENABLED_STATISTIC(VARNAME, DESC)                                \
-  static llvm::TrackingStatistic VARNAME = {DEBUG_TYPE, #VARNAME, DESC}
+  static llvm::Statistic VARNAME = {DEBUG_TYPE, #VARNAME, DESC, {0}, {false}}
 
 /// Enable the collection and printing of statistics.
-void EnableStatistics(bool DoPrintOnExit = true);
+void EnableStatistics(bool PrintOnExit = true);
 
 /// Check if statistics are enabled.
 bool AreStatisticsEnabled();

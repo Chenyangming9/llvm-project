@@ -6,19 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_ASTRESULTSYNTHESIZER_H
-#define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_ASTRESULTSYNTHESIZER_H
+#ifndef liblldb_ASTResultSynthesizer_h_
+#define liblldb_ASTResultSynthesizer_h_
 
+#include "lldb/Core/ClangForward.h"
 #include "lldb/Target/Target.h"
 #include "clang/Sema/SemaConsumer.h"
-
-namespace clang {
-class CompoundStmt;
-class DeclContext;
-class NamedDecl;
-class ObjCMethodDecl;
-class TypeDecl;
-} // namespace clang
 
 namespace lldb_private {
 
@@ -142,11 +135,18 @@ private:
   void RecordPersistentTypes(clang::DeclContext *FunDeclCtx);
 
   /// Given a TypeDecl, if it declares a type whose name starts with a dollar
-  /// sign, register it as a pointer type in the target's scratch AST context.
+  /// sign, register it as a pointer type in the target's scratch
+  /// AST context.
+  ///
+  /// \param[in] Body
+  ///     The body of the function.
   void MaybeRecordPersistentType(clang::TypeDecl *D);
 
   /// Given a NamedDecl, register it as a pointer type in the target's scratch
   /// AST context.
+  ///
+  /// \param[in] Body
+  ///     The body of the function.
   void RecordPersistentDecl(clang::NamedDecl *D);
 
   clang::ASTContext
@@ -170,4 +170,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_ASTRESULTSYNTHESIZER_H
+#endif // liblldb_ASTResultSynthesizer_h_

@@ -34,28 +34,18 @@ using namespace llvm;
 #define DEBUG_TYPE "wasm"
 
 // Emscripten's asm.js-style exception handling
-cl::opt<bool> EnableEmException(
+static cl::opt<bool> EnableEmException(
     "enable-emscripten-cxx-exceptions",
     cl::desc("WebAssembly Emscripten-style exception handling"),
     cl::init(false));
 
 // Emscripten's asm.js-style setjmp/longjmp handling
-cl::opt<bool> EnableEmSjLj(
+static cl::opt<bool> EnableEmSjLj(
     "enable-emscripten-sjlj",
     cl::desc("WebAssembly Emscripten-style setjmp/longjmp handling"),
     cl::init(false));
 
-// A command-line option to keep implicit locals
-// for the purpose of testing with lit/llc ONLY.
-// This produces output which is not valid WebAssembly, and is not supported
-// by assemblers/disassemblers and other MC based tools.
-static cl::opt<bool> WasmDisableExplicitLocals(
-    "wasm-disable-explicit-locals", cl::Hidden,
-    cl::desc("WebAssembly: output implicit locals in"
-             " instruction output for test purposes only."),
-    cl::init(false));
-
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeWebAssemblyTarget() {
+extern "C" void LLVMInitializeWebAssemblyTarget() {
   // Register the target.
   RegisterTargetMachine<WebAssemblyTargetMachine> X(
       getTheWebAssemblyTarget32());
@@ -77,7 +67,6 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeWebAssemblyTarget() {
   initializeWebAssemblyMemIntrinsicResultsPass(PR);
   initializeWebAssemblyRegStackifyPass(PR);
   initializeWebAssemblyRegColoringPass(PR);
-  initializeWebAssemblyNullifyDebugValueListsPass(PR);
   initializeWebAssemblyFixIrreducibleControlFlowPass(PR);
   initializeWebAssemblyLateEHPreparePass(PR);
   initializeWebAssemblyExceptionInfoPass(PR);
@@ -86,9 +75,8 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeWebAssemblyTarget() {
   initializeWebAssemblyExplicitLocalsPass(PR);
   initializeWebAssemblyLowerBrUnlessPass(PR);
   initializeWebAssemblyRegNumberingPass(PR);
-  initializeWebAssemblyDebugFixupPass(PR);
   initializeWebAssemblyPeepholePass(PR);
-  initializeWebAssemblyMCLowerPrePassPass(PR);
+  initializeWebAssemblyCallIndirectFixupPass(PR);
 }
 
 //===----------------------------------------------------------------------===//
@@ -120,17 +108,11 @@ WebAssemblyTargetMachine::WebAssemblyTargetMachine(
     const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
     const TargetOptions &Options, Optional<Reloc::Model> RM,
     Optional<CodeModel::Model> CM, CodeGenOpt::Level OL, bool JIT)
-    : LLVMTargetMachine(
-          T,
-          TT.isArch64Bit()
-              ? (TT.isOSEmscripten()
-                     ? "e-m:e-p:64:64-i64:64-f128:64-n32:64-S128-ni:1:10:20"
-                     : "e-m:e-p:64:64-i64:64-n32:64-S128-ni:1:10:20")
-              : (TT.isOSEmscripten()
-                     ? "e-m:e-p:32:32-i64:64-f128:64-n32:64-S128-ni:1:10:20"
-                     : "e-m:e-p:32:32-i64:64-n32:64-S128-ni:1:10:20"),
-          TT, CPU, FS, Options, getEffectiveRelocModel(RM, TT),
-          getEffectiveCodeModel(CM, CodeModel::Large), OL),
+    : LLVMTargetMachine(T,
+                        TT.isArch64Bit() ? "e-m:e-p:64:64-i64:64-n32:64-S128"
+                                         : "e-m:e-p:32:32-i64:64-n32:64-S128",
+                        TT, CPU, FS, Options, getEffectiveRelocModel(RM, TT),
+                        getEffectiveCodeModel(CM, CodeModel::Large), OL),
       TLOF(new WebAssemblyTargetObjectFile()) {
   // WebAssembly type-checks instructions, but a noreturn function with a return
   // type that doesn't match the context will cause a check failure. So we lower
@@ -153,17 +135,12 @@ WebAssemblyTargetMachine::WebAssemblyTargetMachine(
 
 WebAssemblyTargetMachine::~WebAssemblyTargetMachine() = default; // anchor.
 
-const WebAssemblySubtarget *WebAssemblyTargetMachine::getSubtargetImpl() const {
-  return getSubtargetImpl(std::string(getTargetCPU()),
-                          std::string(getTargetFeatureString()));
-}
-
 const WebAssemblySubtarget *
 WebAssemblyTargetMachine::getSubtargetImpl(std::string CPU,
                                            std::string FS) const {
   auto &I = SubtargetMap[CPU + FS];
   if (!I) {
-    I = std::make_unique<WebAssemblySubtarget>(TargetTriple, CPU, FS, *this);
+    I = llvm::make_unique<WebAssemblySubtarget>(TargetTriple, CPU, FS, *this);
   }
   return I.get();
 }
@@ -173,10 +150,12 @@ WebAssemblyTargetMachine::getSubtargetImpl(const Function &F) const {
   Attribute CPUAttr = F.getFnAttribute("target-cpu");
   Attribute FSAttr = F.getFnAttribute("target-features");
 
-  std::string CPU =
-      CPUAttr.isValid() ? CPUAttr.getValueAsString().str() : TargetCPU;
-  std::string FS =
-      FSAttr.isValid() ? FSAttr.getValueAsString().str() : TargetFS;
+  std::string CPU = !CPUAttr.hasAttribute(Attribute::None)
+                        ? CPUAttr.getValueAsString().str()
+                        : TargetCPU;
+  std::string FS = !FSAttr.hasAttribute(Attribute::None)
+                       ? FSAttr.getValueAsString().str()
+                       : TargetFS;
 
   // This needs to be done before we create a new subtarget since any
   // creation will depend on the TM and the code generation flags on the
@@ -204,7 +183,6 @@ public:
     FeatureBitset Features = coalesceFeatures(M);
 
     std::string FeatureStr = getFeatureString(Features);
-    WasmTM->setTargetFeatureString(FeatureStr);
     for (auto &F : M)
       replaceFeatures(F, FeatureStr);
 
@@ -232,8 +210,8 @@ private:
   FeatureBitset coalesceFeatures(const Module &M) {
     FeatureBitset Features =
         WasmTM
-            ->getSubtargetImpl(std::string(WasmTM->getTargetCPU()),
-                               std::string(WasmTM->getTargetFeatureString()))
+            ->getSubtargetImpl(WasmTM->getTargetCPU(),
+                               WasmTM->getTargetFeatureString())
             ->getFeatureBits();
     for (auto &F : M)
       Features |= WasmTM->getSubtargetImpl(F)->getFeatureBits();
@@ -285,9 +263,10 @@ private:
   bool stripThreadLocals(Module &M) {
     bool Stripped = false;
     for (auto &GV : M.globals()) {
-      if (GV.isThreadLocal()) {
+      if (GV.getThreadLocalMode() !=
+          GlobalValue::ThreadLocalMode::NotThreadLocal) {
         Stripped = true;
-        GV.setThreadLocal(false);
+        GV.setThreadLocalMode(GlobalValue::ThreadLocalMode::NotThreadLocal);
       }
     }
     return Stripped;
@@ -295,21 +274,20 @@ private:
 
   void recordFeatures(Module &M, const FeatureBitset &Features, bool Stripped) {
     for (const SubtargetFeatureKV &KV : WebAssemblyFeatureKV) {
-      if (Features[KV.Value]) {
-        // Mark features as used
-        std::string MDKey = (StringRef("wasm-feature-") + KV.Key).str();
+      std::string MDKey = (StringRef("wasm-feature-") + KV.Key).str();
+      if (KV.Value == WebAssembly::FeatureAtomics && Stripped) {
+        // "atomics" is special: code compiled without atomics may have had its
+        // atomics lowered to nonatomic operations. In that case, atomics is
+        // disallowed to prevent unsafe linking with atomics-enabled objects.
+        assert(!Features[WebAssembly::FeatureAtomics] ||
+               !Features[WebAssembly::FeatureBulkMemory]);
+        M.addModuleFlag(Module::ModFlagBehavior::Error, MDKey,
+                        wasm::WASM_FEATURE_PREFIX_DISALLOWED);
+      } else if (Features[KV.Value]) {
+        // Otherwise features are marked Used or not mentioned
         M.addModuleFlag(Module::ModFlagBehavior::Error, MDKey,
                         wasm::WASM_FEATURE_PREFIX_USED);
       }
-    }
-    // Code compiled without atomics or bulk-memory may have had its atomics or
-    // thread-local data lowered to nonatomic operations or non-thread-local
-    // data. In that case, we mark the pseudo-feature "shared-mem" as disallowed
-    // to tell the linker that it would be unsafe to allow this code ot be used
-    // in a module with shared memory.
-    if (Stripped) {
-      M.addModuleFlag(Module::ModFlagBehavior::Error, "wasm-feature-shared-mem",
-                      wasm::WASM_FEATURE_PREFIX_DISALLOWED);
     }
   }
 };
@@ -334,10 +312,10 @@ public:
   void addPreEmitPass() override;
 
   // No reg alloc
-  bool addRegAssignAndRewriteFast() override { return false; }
+  bool addRegAssignmentFast() override { return false; }
 
   // No reg alloc
-  bool addRegAssignAndRewriteOptimized() override { return false; }
+  bool addRegAssignmentOptimized() override { return false; }
 };
 } // end anonymous namespace
 
@@ -361,7 +339,7 @@ FunctionPass *WebAssemblyPassConfig::createTargetRegisterAllocator(bool) {
 //===----------------------------------------------------------------------===//
 
 void WebAssemblyPassConfig::addIRPasses() {
-  // Lower atomics and TLS if necessary
+  // Runs LowerAtomicPass if necessary
   addPass(new CoalesceFeaturesAndStripAtomics(&getWebAssemblyTargetMachine()));
 
   // This is a no-op if atomics are not used in the module
@@ -417,10 +395,6 @@ bool WebAssemblyPassConfig::addInstSelector() {
   // it's inconvenient to collect. Collect it now, and update the immediate
   // operands.
   addPass(createWebAssemblySetP2AlignOperands());
-
-  // Eliminate range checks and add default targets to br_table instructions.
-  addPass(createWebAssemblyFixBrTableDefaults());
-
   return false;
 }
 
@@ -449,16 +423,17 @@ void WebAssemblyPassConfig::addPostRegAlloc() {
 void WebAssemblyPassConfig::addPreEmitPass() {
   TargetPassConfig::addPreEmitPass();
 
-  // Nullify DBG_VALUE_LISTs that we cannot handle.
-  addPass(createWebAssemblyNullifyDebugValueLists());
+  // Rewrite pseudo call_indirect instructions as real instructions.
+  // This needs to run before register stackification, because we change the
+  // order of the arguments.
+  addPass(createWebAssemblyCallIndirectFixup());
 
   // Eliminate multiple-entry loops.
   addPass(createWebAssemblyFixIrreducibleControlFlow());
 
   // Do various transformations for exception handling.
   // Every CFG-changing optimizations should come before this.
-  if (TM->Options.ExceptionModel == ExceptionHandling::Wasm)
-    addPass(createWebAssemblyLateEHPrepare());
+  addPass(createWebAssemblyLateEHPrepare());
 
   // Now that we have a prologue and epilogue and all frame indices are
   // rewritten, eliminate SP and FP. This allows them to be stackified,
@@ -497,8 +472,7 @@ void WebAssemblyPassConfig::addPreEmitPass() {
   addPass(createWebAssemblyCFGStackify());
 
   // Insert explicit local.get and local.set operators.
-  if (!WasmDisableExplicitLocals)
-    addPass(createWebAssemblyExplicitLocals());
+  addPass(createWebAssemblyExplicitLocals());
 
   // Lower br_unless into br_if.
   addPass(createWebAssemblyLowerBrUnless());
@@ -509,13 +483,6 @@ void WebAssemblyPassConfig::addPreEmitPass() {
 
   // Create a mapping from LLVM CodeGen virtual registers to wasm registers.
   addPass(createWebAssemblyRegNumbering());
-
-  // Fix debug_values whose defs have been stackified.
-  if (!WasmDisableExplicitLocals)
-    addPass(createWebAssemblyDebugFixup());
-
-  // Collect information to prepare for MC lowering / asm printing.
-  addPass(createWebAssemblyMCLowerPrePass());
 }
 
 yaml::MachineFunctionInfo *

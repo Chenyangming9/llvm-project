@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONGROUPWATCHPOINT_H
-#define LLDB_INTERPRETER_OPTIONGROUPWATCHPOINT_H
+#ifndef liblldb_OptionGroupWatchpoint_h_
+#define liblldb_OptionGroupWatchpoint_h_
 
 #include "lldb/Interpreter/Options.h"
 
@@ -17,9 +17,9 @@ namespace lldb_private {
 
 class OptionGroupWatchpoint : public OptionGroup {
 public:
-  OptionGroupWatchpoint() = default;
+  OptionGroupWatchpoint();
 
-  ~OptionGroupWatchpoint() override = default;
+  ~OptionGroupWatchpoint() override;
 
   static bool IsWatchSizeSupported(uint32_t watch_size);
 
@@ -27,6 +27,7 @@ public:
 
   Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
                         ExecutionContext *execution_context) override;
+  Status SetOptionValue(uint32_t, const char *, ExecutionContext *) = delete;
 
   void OptionParsingStarting(ExecutionContext *execution_context) override;
 
@@ -45,11 +46,9 @@ public:
   bool watch_type_specified;
 
 private:
-  OptionGroupWatchpoint(const OptionGroupWatchpoint &) = delete;
-  const OptionGroupWatchpoint &
-  operator=(const OptionGroupWatchpoint &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(OptionGroupWatchpoint);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONGROUPWATCHPOINT_H
+#endif // liblldb_OptionGroupWatchpoint_h_

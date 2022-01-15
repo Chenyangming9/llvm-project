@@ -15,14 +15,16 @@
 #include "llvm/Analysis/IndirectCallPromotionAnalysis.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Analysis/IndirectCallVisitor.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/InstVisitor.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/ProfileData/InstrProf.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
-#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 using namespace llvm;
 
@@ -51,7 +53,7 @@ static cl::opt<unsigned>
                               "call callsite"));
 
 ICallPromotionAnalysis::ICallPromotionAnalysis() {
-  ValueDataArray = std::make_unique<InstrProfValueData[]>(MaxNumPromotions);
+  ValueDataArray = llvm::make_unique<InstrProfValueData[]>(MaxNumPromotions);
 }
 
 bool ICallPromotionAnalysis::isPromotionProfitable(uint64_t Count,

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONGROUPFORMAT_H
-#define LLDB_INTERPRETER_OPTIONGROUPFORMAT_H
+#ifndef liblldb_OptionGroupFormat_h_
+#define liblldb_OptionGroupFormat_h_
 
 #include "lldb/Interpreter/OptionValueFormat.h"
 #include "lldb/Interpreter/OptionValueSInt64.h"
@@ -32,12 +32,13 @@ public:
       uint64_t default_count =
           UINT64_MAX); // Pass UINT64_MAX to disable the "--count" option
 
-  ~OptionGroupFormat() override = default;
+  ~OptionGroupFormat() override;
 
   llvm::ArrayRef<OptionDefinition> GetDefinitions() override;
 
   Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
                         ExecutionContext *execution_context) override;
+  Status SetOptionValue(uint32_t, const char *, ExecutionContext *) = delete;
 
   void OptionParsingStarting(ExecutionContext *execution_context) override;
 
@@ -77,4 +78,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONGROUPFORMAT_H
+#endif // liblldb_OptionGroupFormat_h_

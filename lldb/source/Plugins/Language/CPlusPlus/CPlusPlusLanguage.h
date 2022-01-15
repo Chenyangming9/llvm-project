@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_LANGUAGE_CPLUSPLUS_CPLUSPLUSLANGUAGE_H
-#define LLDB_SOURCE_PLUGINS_LANGUAGE_CPLUSPLUS_CPLUSPLUSLANGUAGE_H
+#ifndef liblldb_CPlusPlusLanguage_h_
+#define liblldb_CPlusPlusLanguage_h_
 
 #include <set>
 #include <vector>
@@ -28,7 +28,8 @@ public:
   class MethodName {
   public:
     MethodName()
-        : m_full(), m_basename(), m_context(), m_arguments(), m_qualifiers() {}
+        : m_full(), m_basename(), m_context(), m_arguments(), m_qualifiers(),
+          m_parsed(false), m_parse_error(false) {}
 
     MethodName(ConstString s)
         : m_full(s), m_basename(), m_context(), m_arguments(), m_qualifiers(),
@@ -67,8 +68,8 @@ public:
     llvm::StringRef m_context;    // Decl context: "lldb::SBTarget"
     llvm::StringRef m_arguments;  // Arguments:    "(unsigned int)"
     llvm::StringRef m_qualifiers; // Qualifiers:   "const"
-    bool m_parsed = false;
-    bool m_parse_error = false;
+    bool m_parsed;
+    bool m_parse_error;
   };
 
   CPlusPlusLanguage() = default;
@@ -87,10 +88,6 @@ public:
   HardcodedFormatters::HardcodedSyntheticFinder
   GetHardcodedSynthetics() override;
 
-  bool IsNilReference(ValueObject &valobj) override;
-
-  llvm::StringRef GetNilReferenceSummaryString() override { return "nullptr"; }
-
   bool IsSourceFile(llvm::StringRef file_path) const override;
 
   const Highlighter *GetHighlighter() const override { return &m_highlighter; }
@@ -104,9 +101,7 @@ public:
 
   static lldb_private::ConstString GetPluginNameStatic();
 
-  bool SymbolNameFitsToLanguage(Mangled mangled) const override;
-
-  static bool IsCPPMangledName(llvm::StringRef name);
+  static bool IsCPPMangledName(const char *name);
 
   // Extract C++ context and identifier from a string using heuristic matching
   // (as opposed to
@@ -138,4 +133,4 @@ public:
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_LANGUAGE_CPLUSPLUS_CPLUSPLUSLANGUAGE_H
+#endif // liblldb_CPlusPlusLanguage_h_

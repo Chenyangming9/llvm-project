@@ -1,10 +1,4 @@
-; RUN: llc -mtriple=arm-eabi        %s -o - | FileCheck %s
-; RUN: llc -mtriple=thumbv7-windows %s -o - | FileCheck %s -check-prefix=CHECK-WIN
-
-; The Windows runtime doesn't have these.
-; CHECK-WIN-NOT: __ashldi3
-; CHECK-WIN-NOT: __ashrdi3
-; CHECK-WIN-NOT: __lshrdi3
+; RUN: llc -mtriple=arm-eabi %s -o - | FileCheck %s
 
 define i64 @f0(i64 %val, i64 %amt) minsize optsize {
 ; CHECK-LABEL:   f0:

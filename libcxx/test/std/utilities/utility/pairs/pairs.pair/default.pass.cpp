@@ -10,7 +10,12 @@
 
 // template <class T1, class T2> struct pair
 
-// explicit(see-below) constexpr pair();
+// constexpr pair();
+
+// This test doesn't pass due to a constexpr bug in GCC 4.9 that fails
+// to initialize any type without a user provided constructor in a constant
+// expression (e.g. float).
+// XFAIL: gcc-4.9
 
 // NOTE: The SFINAE on the default constructor is tested in
 //       default-sfinae.pass.cpp
@@ -21,7 +26,7 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "archetypes.h"
+#include "archetypes.hpp"
 
 int main(int, char**)
 {
@@ -44,11 +49,6 @@ int main(int, char**)
         static_assert(!std::is_default_constructible<P>::value, "");
         using P2 = std::pair<NoDefault, int>;
         static_assert(!std::is_default_constructible<P2>::value, "");
-    }
-    {
-        struct Base { };
-        struct Derived : Base { protected: Derived() = default; };
-        static_assert(!std::is_default_constructible<std::pair<Derived, int> >::value, "");
     }
 #endif
 

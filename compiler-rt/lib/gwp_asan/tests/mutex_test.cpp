@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "gwp_asan/mutex.h"
-#include "gwp_asan/tests/harness.h"
+#include "gtest/gtest.h"
 
 #include <atomic>
 #include <mutex>

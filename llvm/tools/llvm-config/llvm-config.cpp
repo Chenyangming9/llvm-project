@@ -46,10 +46,6 @@ using namespace llvm;
 // create entries for pseudo groups like x86 or all-targets.
 #include "LibraryDependencies.inc"
 
-// Built-in extensions also register their dependencies, but in a separate file,
-// later in the process.
-#include "ExtensionDependencies.inc"
-
 // LinkMode determines what libraries and flags are returned by llvm-config.
 enum LinkMode {
   // LinkModeAuto will link with the default link mode for the installation,
@@ -112,25 +108,6 @@ static void VisitComponent(const std::string &Name,
     VisitComponent(AC->RequiredLibraries[i], ComponentMap, VisitedComponents,
                    RequiredLibs, IncludeNonInstalled, GetComponentNames,
                    GetComponentLibraryPath, Missing, DirSep);
-  }
-
-  // Special handling for the special 'extensions' component. Its content is
-  // not populated by llvm-build, but later in the process and loaded from
-  // ExtensionDependencies.inc.
-  if (Name == "extensions") {
-    for (auto const &AvailableExtension : AvailableExtensions) {
-      for (const char *const *Iter = &AvailableExtension.RequiredLibraries[0];
-           *Iter; ++Iter) {
-        AvailableComponent *AC = ComponentMap.lookup(*Iter);
-        if (!AC) {
-          RequiredLibs.push_back(*Iter);
-        } else {
-          VisitComponent(*Iter, ComponentMap, VisitedComponents, RequiredLibs,
-                         IncludeNonInstalled, GetComponentNames,
-                         GetComponentLibraryPath, Missing, DirSep);
-        }
-      }
-    }
   }
 
   if (GetComponentNames) {
@@ -235,6 +212,7 @@ Options:\n\
   --assertion-mode  Print assertion mode of LLVM tree (ON or OFF).\n\
   --build-system    Print the build system used to build LLVM (always cmake).\n\
   --has-rtti        Print whether or not LLVM was built with rtti (YES or NO).\n\
+  --has-global-isel Print whether or not LLVM was built with global-isel support (ON or OFF).\n\
   --shared-mode     Print how the provided components can be collectively linked (`shared` or `static`).\n\
   --link-shared     Link the components as shared libraries.\n\
   --link-static     Link the component libraries statically.\n\
@@ -313,8 +291,8 @@ int main(int argc, char **argv) {
     IsInDevelopmentTree = true;
     DevelopmentTreeLayout = CMakeStyle;
     ActiveObjRoot = LLVM_OBJ_ROOT;
-  } else if (sys::fs::equivalent(sys::path::parent_path(CurrentExecPrefix),
-                                 LLVM_OBJ_ROOT)) {
+  } else if (sys::fs::equivalent(CurrentExecPrefix,
+                                 Twine(LLVM_OBJ_ROOT) + "/bin")) {
     IsInDevelopmentTree = true;
     DevelopmentTreeLayout = CMakeBuildModeStyle;
     ActiveObjRoot = LLVM_OBJ_ROOT;
@@ -341,14 +319,11 @@ int main(int argc, char **argv) {
       ActiveCMakeDir = ActiveLibDir + "/cmake/llvm";
       break;
     case CMakeBuildModeStyle:
-      // FIXME: Should we consider the build-mode-specific path as the prefix?
       ActivePrefix = ActiveObjRoot;
-      ActiveBinDir = ActiveObjRoot + "/" + build_mode + "/bin";
+      ActiveBinDir = ActiveObjRoot + "/bin/" + build_mode;
       ActiveLibDir =
-          ActiveObjRoot + "/" + build_mode + "/lib" + LLVM_LIBDIR_SUFFIX;
-      // The CMake directory isn't separated by build mode.
-      ActiveCMakeDir =
-          ActivePrefix + "/lib" + LLVM_LIBDIR_SUFFIX + "/cmake/llvm";
+          ActiveObjRoot + "/lib" + LLVM_LIBDIR_SUFFIX + "/" + build_mode;
+      ActiveCMakeDir = ActiveLibDir + "/cmake/llvm";
       break;
     }
 
@@ -360,7 +335,7 @@ int main(int argc, char **argv) {
     ActiveIncludeDir = ActivePrefix + "/include";
     SmallString<256> path(StringRef(LLVM_TOOLS_INSTALL_DIR));
     sys::fs::make_absolute(ActivePrefix, path);
-    ActiveBinDir = std::string(path.str());
+    ActiveBinDir = path.str();
     ActiveLibDir = ActivePrefix + "/lib" + LLVM_LIBDIR_SUFFIX;
     ActiveCMakeDir = ActiveLibDir + "/cmake/llvm";
     ActiveIncludeOption = "-I" + ActiveIncludeDir;
@@ -374,14 +349,12 @@ int main(int argc, char **argv) {
   /// in the first place. This can't be done at configure/build time.
 
   StringRef SharedExt, SharedVersionedExt, SharedDir, SharedPrefix, StaticExt,
-      StaticPrefix, StaticDir = "lib";
-  std::string DirSep = "/";
+      StaticPrefix, StaticDir = "lib", DirSep = "/";
   const Triple HostTriple(Triple::normalize(LLVM_HOST_TRIPLE));
   if (HostTriple.isOSWindows()) {
     SharedExt = "dll";
     SharedVersionedExt = LLVM_DYLIB_VERSION ".dll";
     if (HostTriple.isOSCygMing()) {
-      SharedPrefix = "lib";
       StaticExt = "a";
       StaticPrefix = "lib";
     } else {
@@ -473,7 +446,7 @@ int main(int argc, char **argv) {
         // already has the necessary prefix and suffix (e.g. `.so`) added so
         // just return it unmodified.
         assert(Lib.endswith(SharedExt) && "DyLib is missing suffix");
-        LibFileName = std::string(Lib);
+        LibFileName = Lib;
       } else {
         LibFileName = (SharedPrefix + Lib + "." + SharedExt).str();
       }
@@ -579,6 +552,8 @@ int main(int argc, char **argv) {
         OS << LLVM_BUILD_SYSTEM << '\n';
       } else if (Arg == "--has-rtti") {
         OS << (LLVM_HAS_RTTI ? "YES" : "NO") << '\n';
+      } else if (Arg == "--has-global-isel") {
+        OS << (LLVM_HAS_GLOBAL_ISEL ? "ON" : "OFF") << '\n';
       } else if (Arg == "--shared-mode") {
         PrintSharedMode = true;
       } else if (Arg == "--obj-root") {

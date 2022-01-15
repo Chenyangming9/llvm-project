@@ -18,8 +18,8 @@ class ProcessLaunchInfo;
 
 class ProcessLauncherWindows : public ProcessLauncher {
 public:
-  HostProcess LaunchProcess(const ProcessLaunchInfo &launch_info,
-                            Status &error) override;
+  virtual HostProcess LaunchProcess(const ProcessLaunchInfo &launch_info,
+                                    Status &error);
 
 protected:
   HANDLE GetStdioHandle(const ProcessLaunchInfo &launch_info, int fd);

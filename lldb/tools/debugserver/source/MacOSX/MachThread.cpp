@@ -15,8 +15,8 @@
 #include "DNBLog.h"
 #include "MachProcess.h"
 #include "ThreadInfo.h"
-#include <cinttypes>
 #include <dlfcn.h>
+#include <inttypes.h>
 #include <mach/thread_policy.h>
 
 static uint32_t GetSequenceID() {
@@ -49,7 +49,7 @@ MachThread::MachThread(MachProcess *process, bool is_64_bit,
   DNBLogThreadedIf(LOG_THREAD | LOG_VERBOSE,
                    "MachThread::MachThread ( process = %p, tid = 0x%8.8" PRIx64
                    ", seq_id = %u )",
-                   static_cast<void *>(&m_process), m_unique_id, m_seq_id);
+                   reinterpret_cast<void *>(&m_process), m_unique_id, m_seq_id);
 }
 
 MachThread::~MachThread() {
@@ -534,12 +534,9 @@ bool MachThread::RestoreRegisterState(uint32_t save_id) {
   return m_arch_up->RestoreRegisterState(save_id);
 }
 
-uint32_t MachThread::EnableHardwareBreakpoint(const DNBBreakpoint *bp,
-                                              bool also_set_on_task) {
-  if (bp != NULL && bp->IsBreakpoint()) {
-    return m_arch_up->EnableHardwareBreakpoint(bp->Address(), bp->ByteSize(),
-                                               also_set_on_task);
-  }
+uint32_t MachThread::EnableHardwareBreakpoint(const DNBBreakpoint *bp) {
+  if (bp != NULL && bp->IsBreakpoint())
+    return m_arch_up->EnableHardwareBreakpoint(bp->Address(), bp->ByteSize());
   return INVALID_NUB_HW_INDEX;
 }
 
@@ -558,12 +555,9 @@ bool MachThread::RollbackTransForHWP() {
 
 bool MachThread::FinishTransForHWP() { return m_arch_up->FinishTransForHWP(); }
 
-bool MachThread::DisableHardwareBreakpoint(const DNBBreakpoint *bp,
-                                           bool also_set_on_task) {
-  if (bp != NULL && bp->IsHardware()) {
-    return m_arch_up->DisableHardwareBreakpoint(bp->GetHardwareIndex(),
-                                                also_set_on_task);
-  }
+bool MachThread::DisableHardwareBreakpoint(const DNBBreakpoint *bp) {
+  if (bp != NULL && bp->IsHardware())
+    return m_arch_up->DisableHardwareBreakpoint(bp->GetHardwareIndex());
   return false;
 }
 

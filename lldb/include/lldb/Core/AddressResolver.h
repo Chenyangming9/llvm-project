@@ -6,14 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_ADDRESSRESOLVER_H
-#define LLDB_CORE_ADDRESSRESOLVER_H
+#ifndef liblldb_AddressResolver_h_
+#define liblldb_AddressResolver_h_
 
 #include "lldb/Core/AddressRange.h"
 #include "lldb/Core/SearchFilter.h"
 #include "lldb/lldb-defines.h"
 
-#include <cstddef>
+#include <stddef.h>
 #include <vector>
 
 namespace lldb_private {
@@ -55,10 +55,9 @@ protected:
   std::vector<AddressRange> m_address_ranges;
 
 private:
-  AddressResolver(const AddressResolver &) = delete;
-  const AddressResolver &operator=(const AddressResolver &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(AddressResolver);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_ADDRESSRESOLVER_H
+#endif // liblldb_AddressResolver_h_

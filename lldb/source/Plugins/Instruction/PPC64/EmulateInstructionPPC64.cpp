@@ -1,4 +1,4 @@
-//===-- EmulateInstructionPPC64.cpp ---------------------------------------===//
+//===-- EmulateInstructionPPC64.cpp ------------------------------*- C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,7 +8,7 @@
 
 #include "EmulateInstructionPPC64.h"
 
-#include <cstdlib>
+#include <stdlib.h>
 
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Symbol/UnwindPlan.h"
@@ -24,8 +24,6 @@
 
 using namespace lldb;
 using namespace lldb_private;
-
-LLDB_PLUGIN_DEFINE_ADV(EmulateInstructionPPC64, InstructionPPC64)
 
 EmulateInstructionPPC64::EmulateInstructionPPC64(const ArchSpec &arch)
     : EmulateInstruction(arch) {}
@@ -137,7 +135,6 @@ bool EmulateInstructionPPC64::CreateFunctionEntryUnwind(
   unwind_plan.SetSourceName("EmulateInstructionPPC64");
   unwind_plan.SetSourcedFromCompiler(eLazyBoolNo);
   unwind_plan.SetUnwindPlanValidAtAllInstructions(eLazyBoolYes);
-  unwind_plan.SetUnwindPlanForSignalTrap(eLazyBoolNo);
   unwind_plan.SetReturnAddressRegister(gpr_lr_ppc64le);
   return true;
 }
@@ -198,7 +195,7 @@ bool EmulateInstructionPPC64::EvaluateInstruction(uint32_t evaluate_options) {
     if (!success)
       return false;
 
-    if (new_pc_value == orig_pc_value) {
+    if (auto_advance_pc && (new_pc_value == orig_pc_value)) {
       EmulateInstruction::Context context;
       context.type = eContextAdvancePC;
       context.SetNoArgs();

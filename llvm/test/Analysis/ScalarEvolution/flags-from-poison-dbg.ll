@@ -1,5 +1,4 @@
-; RUN: opt -analyze -enable-new-pm=0 -scalar-evolution < %s | FileCheck %s
-; RUN: opt -disable-output "-passes=print<scalar-evolution>" < %s 2>&1 | FileCheck %s
+; RUN: opt -analyze -scalar-evolution < %s | FileCheck %s
 
 ; Make sure poison value tracking works in the presence of @llvm.dbg
 ; intrinsics.  Unfortunately, I was not able to reduce this file

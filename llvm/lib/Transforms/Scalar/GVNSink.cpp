@@ -47,6 +47,7 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/GlobalsModRef.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
@@ -58,7 +59,6 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
 #include "llvm/IR/Value.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/ArrayRecycler.h"
@@ -71,7 +71,6 @@
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Scalar/GVNExpression.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/Transforms/Utils/Local.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -158,7 +157,8 @@ public:
 
   void restrictToBlocks(SmallSetVector<BasicBlock *, 4> &Blocks) {
     for (auto II = Insts.begin(); II != Insts.end();) {
-      if (!llvm::is_contained(Blocks, (*II)->getParent())) {
+      if (std::find(Blocks.begin(), Blocks.end(), (*II)->getParent()) ==
+          Blocks.end()) {
         ActiveBlocks.remove((*II)->getParent());
         II = Insts.erase(II);
       } else {
@@ -276,7 +276,8 @@ public:
     auto VI = Values.begin();
     while (BI != Blocks.end()) {
       assert(VI != Values.end());
-      if (!llvm::is_contained(NewBlocks, *BI)) {
+      if (std::find(NewBlocks.begin(), NewBlocks.end(), *BI) ==
+          NewBlocks.end()) {
         BI = Blocks.erase(BI);
         VI = Values.erase(VI);
       } else {
@@ -348,7 +349,6 @@ using ModelledPHISet = DenseSet<ModelledPHI, DenseMapInfo<ModelledPHI>>;
 class InstructionUseExpr : public GVNExpression::BasicExpression {
   unsigned MemoryUseOrder = -1;
   bool Volatile = false;
-  ArrayRef<int> ShuffleMask;
 
 public:
   InstructionUseExpr(Instruction *I, ArrayRecycler<Value *> &R,
@@ -357,9 +357,6 @@ public:
     allocateOperands(R, A);
     setOpcode(I->getOpcode());
     setType(I->getType());
-
-    if (ShuffleVectorInst *SVI = dyn_cast<ShuffleVectorInst>(I))
-      ShuffleMask = SVI->getShuffleMask().copy(A);
 
     for (auto &U : I->uses())
       op_push_back(U.getUser());
@@ -371,12 +368,12 @@ public:
 
   hash_code getHashValue() const override {
     return hash_combine(GVNExpression::BasicExpression::getHashValue(),
-                        MemoryUseOrder, Volatile, ShuffleMask);
+                        MemoryUseOrder, Volatile);
   }
 
   template <typename Function> hash_code getHashValue(Function MapFn) {
-    hash_code H = hash_combine(getOpcode(), getType(), MemoryUseOrder, Volatile,
-                               ShuffleMask);
+    hash_code H =
+        hash_combine(getOpcode(), getType(), MemoryUseOrder, Volatile);
     for (auto *V : operands())
       H = hash_combine(H, MapFn(V));
     return H;
@@ -477,7 +474,6 @@ public:
     case Instruction::PtrToInt:
     case Instruction::IntToPtr:
     case Instruction::BitCast:
-    case Instruction::AddrSpaceCast:
     case Instruction::Select:
     case Instruction::ExtractElement:
     case Instruction::InsertElement:
@@ -579,7 +575,7 @@ public:
 private:
   ValueTable VN;
 
-  bool shouldAvoidSinkingInstruction(Instruction *I) {
+  bool isInstructionBlacklisted(Instruction *I) {
     // These instructions may change or break semantics if moved.
     if (isa<PHINode>(I) || I->isEHPad() || isa<AllocaInst>(I) ||
         I->getType()->isTokenTy())
@@ -671,7 +667,7 @@ Optional<SinkingInstructionCandidate> GVNSink::analyzeInstructionForSinking(
       NewInsts.push_back(I);
   }
   for (auto *I : NewInsts)
-    if (shouldAvoidSinkingInstruction(I))
+    if (isInstructionBlacklisted(I))
       return None;
 
   // If we've restricted the incoming blocks, restrict all needed PHIs also
@@ -692,8 +688,10 @@ Optional<SinkingInstructionCandidate> GVNSink::analyzeInstructionForSinking(
   ModelledPHI NewPHI(NewInsts, ActivePreds);
 
   // Does sinking this instruction render previous PHIs redundant?
-  if (NeededPHIs.erase(NewPHI))
+  if (NeededPHIs.find(NewPHI) != NeededPHIs.end()) {
+    NeededPHIs.erase(NewPHI);
     RecomputePHIContents = true;
+  }
 
   if (RecomputePHIContents) {
     // The needed PHIs have changed, so recompute the set of all needed
@@ -754,7 +752,8 @@ Optional<SinkingInstructionCandidate> GVNSink::analyzeInstructionForSinking(
   Cand.NumMemoryInsts = MemoryInstNum;
   Cand.NumBlocks = ActivePreds.size();
   Cand.NumPHIs = NeededPHIs.size();
-  append_range(Cand.Blocks, ActivePreds);
+  for (auto *C : ActivePreds)
+    Cand.Blocks.push_back(C);
 
   return Cand;
 }
@@ -912,7 +911,10 @@ PreservedAnalyses GVNSinkPass::run(Function &F, FunctionAnalysisManager &AM) {
   GVNSink G;
   if (!G.run(F))
     return PreservedAnalyses::all();
-  return PreservedAnalyses::none();
+
+  PreservedAnalyses PA;
+  PA.preserve<GlobalsAA>();
+  return PA;
 }
 
 char GVNSinkLegacyPass::ID = 0;

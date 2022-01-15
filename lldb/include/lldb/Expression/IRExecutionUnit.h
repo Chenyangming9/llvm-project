@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_EXPRESSION_IREXECUTIONUNIT_H
-#define LLDB_EXPRESSION_IREXECUTIONUNIT_H
+#ifndef liblldb_IRExecutionUnit_h_
+#define liblldb_IRExecutionUnit_h_
 
 #include <atomic>
 #include <memory>
@@ -71,7 +71,7 @@ public:
   llvm::Module *GetModule() { return m_module; }
 
   llvm::Function *GetFunction() {
-    return ((m_module != nullptr) ? m_module->getFunction(m_name.GetStringRef())
+    return ((m_module != nullptr) ? m_module->getFunction(m_name.AsCString())
                                   : nullptr);
   }
 
@@ -173,8 +173,6 @@ private:
   ///     The address in the target process.
   lldb::addr_t GetRemoteAddressForLocal(lldb::addr_t local_address);
 
-  typedef std::pair<lldb::addr_t, uintptr_t> AddrRange;
-
   /// Look up the object in m_address_map that contains a given address, find
   /// where it was copied to, and return its address range in the target
   /// process
@@ -184,11 +182,12 @@ private:
   ///
   /// \return
   ///     The range of the containing object in the target process.
+  typedef std::pair<lldb::addr_t, uintptr_t> AddrRange;
   AddrRange GetRemoteRangeForLocal(lldb::addr_t local_address);
 
   /// Commit all allocations to the process and record where they were stored.
   ///
-  /// \param[in] process_sp
+  /// \param[in] process
   ///     The process to allocate memory in.
   ///
   /// \return
@@ -205,7 +204,7 @@ private:
 
   /// Write the contents of all allocations to the process.
   ///
-  /// \param[in] process_sp
+  /// \param[in] local_address
   ///     The process containing the allocations.
   ///
   /// \return
@@ -299,18 +298,16 @@ private:
       return false;
     }
 
-    // Ignore any EHFrame registration.
     void registerEHFrames(uint8_t *Addr, uint64_t LoadAddr,
                           size_t Size) override {}
-    void deregisterEHFrames() override {}
 
     uint64_t getSymbolAddress(const std::string &Name) override;
-
+    
     // Find the address of the symbol Name.  If Name is a missing weak symbol
     // then missing_weak will be true.
-    uint64_t GetSymbolAddressAndPresence(const std::string &Name,
+    uint64_t GetSymbolAddressAndPresence(const std::string &Name, 
                                          bool &missing_weak);
-
+    
     llvm::JITSymbol findSymbol(const std::string &Name) override;
 
     void *getPointerToNamedFunction(const std::string &Name,
@@ -329,16 +326,18 @@ private:
 
   static const unsigned eSectionIDInvalid = (unsigned)-1;
 
+  /// \class AllocationRecord IRExecutionUnit.h
+  /// "lldb/Expression/IRExecutionUnit.h" Encapsulates a single allocation
+  /// request made by the JIT.
+  ///
+  /// Allocations made by the JIT are first queued up and then applied in bulk
+  /// to the underlying process.
   enum class AllocationKind { Stub, Code, Data, Global, Bytes };
 
   static lldb::SectionType
   GetSectionTypeFromSectionName(const llvm::StringRef &name,
                                 AllocationKind alloc_kind);
 
-  /// Encapsulates a single allocation request made by the JIT.
-  ///
-  /// Allocations made by the JIT are first queued up and then applied in bulk
-  /// to the underlying process.
   struct AllocationRecord {
     std::string m_name;
     lldb::addr_t m_process_address;
@@ -406,4 +405,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_EXPRESSION_IREXECUTIONUNIT_H
+#endif // liblldb_IRExecutionUnit_h_

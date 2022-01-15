@@ -1,4 +1,4 @@
-//===-- RegisterContextPOSIXCore_arm.cpp ----------------------------------===//
+//===-- RegisterContextPOSIXCore_arm.cpp ------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,16 +16,16 @@
 using namespace lldb_private;
 
 RegisterContextCorePOSIX_arm::RegisterContextCorePOSIX_arm(
-    Thread &thread, std::unique_ptr<RegisterInfoPOSIX_arm> register_info,
+    Thread &thread, RegisterInfoInterface *register_info,
     const DataExtractor &gpregset, llvm::ArrayRef<CoreNote> notes)
-    : RegisterContextPOSIX_arm(thread, std::move(register_info)) {
+    : RegisterContextPOSIX_arm(thread, 0, register_info) {
   m_gpr_buffer = std::make_shared<DataBufferHeap>(gpregset.GetDataStart(),
                                                   gpregset.GetByteSize());
   m_gpr.SetData(m_gpr_buffer);
   m_gpr.SetByteOrder(gpregset.GetByteOrder());
 }
 
-RegisterContextCorePOSIX_arm::~RegisterContextCorePOSIX_arm() = default;
+RegisterContextCorePOSIX_arm::~RegisterContextCorePOSIX_arm() {}
 
 bool RegisterContextCorePOSIX_arm::ReadGPR() { return true; }
 
@@ -44,12 +44,10 @@ bool RegisterContextCorePOSIX_arm::WriteFPR() {
 bool RegisterContextCorePOSIX_arm::ReadRegister(const RegisterInfo *reg_info,
                                                 RegisterValue &value) {
   lldb::offset_t offset = reg_info->byte_offset;
-  if (offset + reg_info->byte_size <= GetGPRSize()) {
-    uint64_t v = m_gpr.GetMaxU64(&offset, reg_info->byte_size);
-    if (offset == reg_info->byte_offset + reg_info->byte_size) {
-      value = v;
-      return true;
-    }
+  uint64_t v = m_gpr.GetMaxU64(&offset, reg_info->byte_size);
+  if (offset == reg_info->byte_offset + reg_info->byte_size) {
+    value = v;
+    return true;
   }
   return false;
 }

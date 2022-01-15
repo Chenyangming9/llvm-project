@@ -39,7 +39,7 @@ namespace lldb_private {
 /// Debugger maintains a list of BroadcastEventSpec's and when it is made
 class BroadcastEventSpec {
 public:
-  BroadcastEventSpec(const ConstString &broadcaster_class, uint32_t event_bits)
+  BroadcastEventSpec(ConstString broadcaster_class, uint32_t event_bits)
       : m_broadcaster_class(broadcaster_class), m_event_bits(event_bits) {}
 
   ~BroadcastEventSpec() = default;
@@ -65,6 +65,7 @@ public:
   }
 
   bool operator<(const BroadcastEventSpec &rhs) const;
+  BroadcastEventSpec &operator=(const BroadcastEventSpec &rhs);
 
 private:
   ConstString m_broadcaster_class;
@@ -117,7 +118,7 @@ private:
 
   class BroadcasterClassMatches {
   public:
-    BroadcasterClassMatches(const ConstString &broadcaster_class)
+    BroadcasterClassMatches(ConstString broadcaster_class)
         : m_broadcaster_class(broadcaster_class) {}
 
     ~BroadcasterClassMatches() = default;
@@ -259,6 +260,19 @@ public:
   void CheckInWithManager();
 
   /// Broadcast an event which has no associated data.
+  ///
+  /// \param[in] event_type
+  ///     The element from the enum defining this broadcaster's events
+  ///     that is being broadcast.
+  ///
+  /// \param[in] event_data
+  ///     User event data that will be owned by the lldb::Event that
+  ///     is created internally.
+  ///
+  /// \param[in] unique
+  ///     If true, then only add an event of this type if there isn't
+  ///     one already in the queue.
+  ///
   void BroadcastEvent(lldb::EventSP &event_sp) {
     m_broadcaster_sp->BroadcastEvent(event_sp);
   }
@@ -295,7 +309,7 @@ public:
   /// different from what is requested in \a event_mask, and to track this the
   /// actual event bits that are acquired get returned.
   ///
-  /// \param[in] listener_sp
+  /// \param[in] listener
   ///     The Listener object that wants to monitor the events that
   ///     get broadcast by this object.
   ///
@@ -334,6 +348,9 @@ public:
   /// \param[in] event_mask
   ///     A bit mask that indicates which events the listener is
   ///     asking to monitor.
+  ///
+  /// \return
+  ///     The NULL terminated C string name of this Broadcaster.
   void SetEventName(uint32_t event_mask, const char *name) {
     m_broadcaster_sp->SetEventName(event_mask, name);
   }
@@ -351,7 +368,7 @@ public:
   /// (assuming \a listener was listening to this object) for other listener
   /// objects to use.
   ///
-  /// \param[in] listener_sp
+  /// \param[in] listener
   ///     A Listener object that previously called AddListener.
   ///
   /// \param[in] event_mask
@@ -373,7 +390,7 @@ public:
   /// now go to the hijacking listener. Only one hijack can occur at a time.
   /// If we need more than this we will have to implement a Listener stack.
   ///
-  /// \param[in] listener_sp
+  /// \param[in] listener
   ///     A Listener object.  You do not need to call StartListeningForEvents
   ///     for this broadcaster (that would fail anyway since the event bits
   ///     would most likely be taken by the listener(s) you are usurping.
@@ -514,8 +531,7 @@ protected:
     std::vector<uint32_t> m_hijacking_masks;
 
   private:
-    BroadcasterImpl(const BroadcasterImpl &) = delete;
-    const BroadcasterImpl &operator=(const BroadcasterImpl &) = delete;
+    DISALLOW_COPY_AND_ASSIGN(BroadcasterImpl);
   };
 
   typedef std::shared_ptr<BroadcasterImpl> BroadcasterImplSP;
@@ -534,8 +550,7 @@ private:
   /// The name of this broadcaster object.
   const ConstString m_broadcaster_name;
 
-  Broadcaster(const Broadcaster &) = delete;
-  const Broadcaster &operator=(const Broadcaster &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(Broadcaster);
 };
 
 } // namespace lldb_private

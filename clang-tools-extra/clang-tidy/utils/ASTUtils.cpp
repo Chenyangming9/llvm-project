@@ -25,12 +25,14 @@ const FunctionDecl *getSurroundingFunction(ASTContext &Context,
 }
 
 bool IsBinaryOrTernary(const Expr *E) {
-  const Expr *EBase = E->IgnoreImpCasts();
-  if (isa<BinaryOperator>(EBase) || isa<ConditionalOperator>(EBase)) {
+  const Expr *E_base = E->IgnoreImpCasts();
+  if (clang::isa<clang::BinaryOperator>(E_base) ||
+      clang::isa<clang::ConditionalOperator>(E_base)) {
     return true;
   }
 
-  if (const auto *Operator = dyn_cast<CXXOperatorCallExpr>(EBase)) {
+  if (const auto *Operator =
+          clang::dyn_cast<clang::CXXOperatorCallExpr>(E_base)) {
     return Operator->isInfixBinaryOp();
   }
 
@@ -54,7 +56,7 @@ bool exprHasBitFlagWithSpelling(const Expr *Flags, const SourceManager &SM,
   }
   // If it's a binary OR operation.
   if (const auto *BO = dyn_cast<BinaryOperator>(Flags))
-    if (BO->getOpcode() == BinaryOperatorKind::BO_Or)
+    if (BO->getOpcode() == clang::BinaryOperatorKind::BO_Or)
       return exprHasBitFlagWithSpelling(BO->getLHS()->IgnoreParenCasts(), SM,
                                         LangOpts, FlagName) ||
              exprHasBitFlagWithSpelling(BO->getRHS()->IgnoreParenCasts(), SM,

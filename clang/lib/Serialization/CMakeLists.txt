@@ -16,7 +16,7 @@ add_clang_library(clangSerialization
   GeneratePCH.cpp
   GlobalModuleIndex.cpp
   InMemoryModuleCache.cpp
-  ModuleFile.cpp
+  Module.cpp
   ModuleFileExtension.cpp
   ModuleManager.cpp
   PCHContainerOperations.cpp
@@ -30,7 +30,4 @@ add_clang_library(clangSerialization
   clangBasic
   clangLex
   clangSema
-
-  DEPENDS
-  omp_gen
   )

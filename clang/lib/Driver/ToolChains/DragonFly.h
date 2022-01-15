@@ -18,10 +18,10 @@ namespace driver {
 namespace tools {
 /// dragonfly -- Directly call GNU Binutils assembler and linker
 namespace dragonfly {
-class LLVM_LIBRARY_VISIBILITY Assembler : public Tool {
+class LLVM_LIBRARY_VISIBILITY Assembler : public GnuTool {
 public:
   Assembler(const ToolChain &TC)
-      : Tool("dragonfly::Assembler", "assembler", TC) {}
+      : GnuTool("dragonfly::Assembler", "assembler", TC) {}
 
   bool hasIntegratedCPP() const override { return false; }
 
@@ -31,9 +31,9 @@ public:
                     const char *LinkingOutput) const override;
 };
 
-class LLVM_LIBRARY_VISIBILITY Linker : public Tool {
+class LLVM_LIBRARY_VISIBILITY Linker : public GnuTool {
 public:
-  Linker(const ToolChain &TC) : Tool("dragonfly::Linker", "linker", TC) {}
+  Linker(const ToolChain &TC) : GnuTool("dragonfly::Linker", "linker", TC) {}
 
   bool hasIntegratedCPP() const override { return false; }
   bool isLinkJob() const override { return true; }

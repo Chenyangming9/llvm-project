@@ -1,5 +1,6 @@
 // RUN: %clang_cc1 -verify -Wno-objc-root-class %s
 
+typedef struct objc_class *Class;
 @interface XX
 
 - (void)addObserver:(XX*)o; // expected-note 2{{passing argument to parameter 'o' here}}
@@ -22,3 +23,4 @@ static XX *obj;
   [obj addObserver:whatever]; // expected-warning {{incompatible pointer types sending 'Class' to parameter of type 'XX *'}}
 }
 @end
+

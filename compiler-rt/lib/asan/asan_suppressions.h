@@ -8,7 +8,7 @@
 //
 // This file is a part of AddressSanitizer, an address sanity checker.
 //
-// ASan-private header for asan_suppressions.cpp.
+// ASan-private header for asan_suppressions.cc.
 //===----------------------------------------------------------------------===//
 #ifndef ASAN_SUPPRESSIONS_H
 #define ASAN_SUPPRESSIONS_H

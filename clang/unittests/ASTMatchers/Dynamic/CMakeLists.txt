@@ -1,5 +1,4 @@
 set(LLVM_LINK_COMPONENTS
-  FrontendOpenMP
   Support
   )
 
@@ -17,6 +16,5 @@ clang_target_link_libraries(DynamicASTMatchersTests
   clangDynamicASTMatchers
   clangFrontend
   clangSerialization
-  clangTesting
   clangTooling
   )

@@ -6,16 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// Darwin TLV finalization routines fail when creating a thread-local variable
+// in the destructor for another thread-local variable:
+// http://lists.llvm.org/pipermail/cfe-dev/2016-November/051376.html
+// XFAIL: darwin
+// UNSUPPORTED: c++98, c++03
 // UNSUPPORTED: libcxxabi-no-threads
-
-// TODO: Investigate this failure
-// XFAIL: target=arm64-apple-{{.+}}
 
 #include <cassert>
 #include <thread>
-
-#include "make_test_thread.h"
 
 int seq = 0;
 
@@ -48,10 +47,10 @@ void thread_fn() {
   thread_local CreatesThreadLocalInDestructor<0> creates_tl0;
 }
 
-int main(int, char**) {
+int main() {
   static OrderChecker fn_static{6};
 
-  support::make_test_thread(thread_fn).join();
+  std::thread{thread_fn}.join();
   assert(seq == 3);
 
   thread_local OrderChecker fn_thread_local{4};

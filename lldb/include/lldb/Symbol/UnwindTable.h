@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SYMBOL_UNWINDTABLE_H
-#define LLDB_SYMBOL_UNWINDTABLE_H
+#ifndef liblldb_UnwindTable_h
+#define liblldb_UnwindTable_h
 
 #include <map>
 #include <mutex>
@@ -26,8 +26,6 @@ public:
   explicit UnwindTable(Module &module);
 
   ~UnwindTable();
-
-  lldb_private::CallFrameInfo *GetObjectFileUnwindInfo();
 
   lldb_private::DWARFCallFrameInfo *GetEHFrameInfo();
   lldb_private::DWARFCallFrameInfo *GetDebugFrameInfo();
@@ -73,16 +71,14 @@ private:
   bool m_initialized; // delay some initialization until ObjectFile is set up
   std::mutex m_mutex;
 
-  std::unique_ptr<CallFrameInfo> m_object_file_unwind_up;
   std::unique_ptr<DWARFCallFrameInfo> m_eh_frame_up;
   std::unique_ptr<DWARFCallFrameInfo> m_debug_frame_up;
   std::unique_ptr<CompactUnwindInfo> m_compact_unwind_up;
   std::unique_ptr<ArmUnwindInfo> m_arm_unwind_up;
 
-  UnwindTable(const UnwindTable &) = delete;
-  const UnwindTable &operator=(const UnwindTable &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(UnwindTable);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_SYMBOL_UNWINDTABLE_H
+#endif // liblldb_UnwindTable_h

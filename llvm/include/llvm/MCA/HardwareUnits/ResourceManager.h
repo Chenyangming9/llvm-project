@@ -12,9 +12,10 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_MCA_HARDWAREUNITS_RESOURCEMANAGER_H
-#define LLVM_MCA_HARDWAREUNITS_RESOURCEMANAGER_H
+#ifndef LLVM_MCA_RESOURCE_MANAGER_H
+#define LLVM_MCA_RESOURCE_MANAGER_H
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/MC/MCSchedule.h"
@@ -32,7 +33,8 @@ namespace mca {
 /// with a buffer size of -1 is always available if it is not reserved.
 ///
 /// Values of type ResourceStateEvent are returned by method
-/// ResourceManager::canBeDispatched()
+/// ResourceState::isBufferAvailable(), which is used to query the internal
+/// state of a resource.
 ///
 /// The naming convention for resource state events is:
 ///  * Event names start with prefix RS_
@@ -261,26 +263,16 @@ public:
   /// Returns RS_BUFFER_UNAVAILABLE if there are no available slots.
   ResourceStateEvent isBufferAvailable() const;
 
-  /// Reserve a buffer slot.
-  ///
-  /// Returns true if the buffer is not full.
-  /// It always returns true if BufferSize is set to zero.
-  bool reserveBuffer() {
-    if (BufferSize <= 0)
-      return true;
-
-    --AvailableSlots;
-    assert(AvailableSlots <= static_cast<unsigned>(BufferSize));
-    return AvailableSlots;
+  /// Reserve a slot in the buffer.
+  void reserveBuffer() {
+    if (AvailableSlots)
+      AvailableSlots--;
   }
 
-  /// Releases a slot in the buffer.
+  /// Release a slot in the buffer.
   void releaseBuffer() {
-    // Ignore dispatch hazards or invalid buffer sizes.
-    if (BufferSize <= 0)
-      return;
-
-    ++AvailableSlots;
+    if (BufferSize > 0)
+      AvailableSlots++;
     assert(AvailableSlots <= static_cast<unsigned>(BufferSize));
   }
 
@@ -359,15 +351,8 @@ class ResourceManager {
   // Set of processor resource units that are available during this cycle.
   uint64_t AvailableProcResUnits;
 
-  // Set of processor resources that are currently reserved.
+  // Set of processor resource groups that are currently reserved.
   uint64_t ReservedResourceGroups;
-
-  // Set of unavailable scheduler buffer resources. This is used internally to
-  // speedup `canBeDispatched()` queries.
-  uint64_t AvailableBuffers;
-
-  // Set of dispatch hazard buffer resources that are currently unavailable.
-  uint64_t ReservedBuffers;
 
   // Returns the actual resource unit that will be used.
   ResourceRef selectPipe(uint64_t ResourceID);
@@ -397,20 +382,17 @@ public:
 
   // Returns RS_BUFFER_AVAILABLE if buffered resources are not reserved, and if
   // there are enough available slots in the buffers.
-  ResourceStateEvent canBeDispatched(uint64_t ConsumedBuffers) const;
+  ResourceStateEvent canBeDispatched(ArrayRef<uint64_t> Buffers) const;
 
   // Return the processor resource identifier associated to this Mask.
   unsigned resolveResourceMask(uint64_t Mask) const;
 
-  // Acquires a slot from every buffered resource in mask `ConsumedBuffers`.
-  // Units that are dispatch hazards (i.e. BufferSize=0) are marked as reserved.
-  void reserveBuffers(uint64_t ConsumedBuffers);
+  // Consume a slot in every buffered resource from array 'Buffers'. Resource
+  // units that are dispatch hazards (i.e. BufferSize=0) are marked as reserved.
+  void reserveBuffers(ArrayRef<uint64_t> Buffers);
 
-  // Releases a slot from every buffered resource in mask `ConsumedBuffers`.
-  // ConsumedBuffers is a bitmask of previously acquired buffers (using method
-  // `reserveBuffers`). Units that are dispatch hazards (i.e. BufferSize=0) are
-  // not automatically unreserved by this method.
-  void releaseBuffers(uint64_t ConsumedBuffers);
+  // Release buffer entries previously allocated by method reserveBuffers.
+  void releaseBuffers(ArrayRef<uint64_t> Buffers);
 
   // Reserve a processor resource. A reserved resource is not available for
   // instruction issue until it is released.
@@ -444,4 +426,4 @@ public:
 } // namespace mca
 } // namespace llvm
 
-#endif // LLVM_MCA_HARDWAREUNITS_RESOURCEMANAGER_H
+#endif // LLVM_MCA_RESOURCE_MANAGER_H

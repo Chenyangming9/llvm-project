@@ -14,10 +14,11 @@
 #ifndef LLVM_C_COMDAT_H
 #define LLVM_C_COMDAT_H
 
-#include "llvm-c/ExternC.h"
 #include "llvm-c/Types.h"
 
-LLVM_C_EXTERN_C_BEGIN
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum {
   LLVMAnyComdatSelectionKind,        ///< The linker may choose any COMDAT.
@@ -25,7 +26,8 @@ typedef enum {
                                      ///< be the same.
   LLVMLargestComdatSelectionKind,    ///< The linker will choose the largest
                                      ///< COMDAT.
-  LLVMNoDeduplicateComdatSelectionKind, ///< No deduplication is performed.
+  LLVMNoDuplicatesComdatSelectionKind, ///< No other Module may specify this
+                                       ///< COMDAT.
   LLVMSameSizeComdatSelectionKind ///< The data referenced by the COMDAT must be
                                   ///< the same size.
 } LLVMComdatSelectionKind;
@@ -66,6 +68,8 @@ LLVMComdatSelectionKind LLVMGetComdatSelectionKind(LLVMComdatRef C);
  */
 void LLVMSetComdatSelectionKind(LLVMComdatRef C, LLVMComdatSelectionKind Kind);
 
-LLVM_C_EXTERN_C_END
+#ifdef __cplusplus
+}
+#endif
 
 #endif

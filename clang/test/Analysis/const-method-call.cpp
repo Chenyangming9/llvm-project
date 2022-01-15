@@ -235,7 +235,7 @@ public:
   void constMemberFunction() const;
 };
 
-HasConstMemberFunction hasNoReturn() { } // expected-warning {{non-void function does not return a value}}
+HasConstMemberFunction hasNoReturn() { } // expected-warning {{control reaches end of non-void function}}
 
 void testUnknownWithConstMemberFunction() {
   hasNoReturn().constMemberFunction();

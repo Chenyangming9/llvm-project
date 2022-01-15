@@ -17,20 +17,24 @@ namespace tidy {
 namespace bugprone {
 
 void ThrowKeywordMissingCheck::registerMatchers(MatchFinder *Finder) {
+  if (!getLangOpts().CPlusPlus)
+    return;
+
   auto CtorInitializerList =
       cxxConstructorDecl(hasAnyConstructorInitializer(anything()));
 
   Finder->addMatcher(
-      cxxConstructExpr(
-          hasType(cxxRecordDecl(
-              isSameOrDerivedFrom(matchesName("[Ee]xception|EXCEPTION")))),
-          unless(anyOf(hasAncestor(stmt(
-                           anyOf(cxxThrowExpr(), callExpr(), returnStmt()))),
-                       hasAncestor(varDecl()),
-                       allOf(hasAncestor(CtorInitializerList),
-                             unless(hasAncestor(cxxCatchStmt()))))))
+      expr(anyOf(cxxFunctionalCastExpr(), cxxBindTemporaryExpr(),
+                 cxxTemporaryObjectExpr()),
+           hasType(cxxRecordDecl(
+               isSameOrDerivedFrom(matchesName("[Ee]xception|EXCEPTION")))),
+           unless(anyOf(hasAncestor(stmt(
+                            anyOf(cxxThrowExpr(), callExpr(), returnStmt()))),
+                        hasAncestor(varDecl()),
+                        allOf(hasAncestor(CtorInitializerList),
+                              unless(hasAncestor(cxxCatchStmt()))))))
           .bind("temporary-exception-not-thrown"),
-      this);
+      this); 
 }
 
 void ThrowKeywordMissingCheck::check(const MatchFinder::MatchResult &Result) {

@@ -1,18 +1,12 @@
 ; RUN: lli -jit-kind=orc-lazy %s
 
-define private void @foo() {
-entry:
-  ret void
-}
-
-define void @"\01l_bar"() {
+define private void @_ZL3foov() {
 entry:
   ret void
 }
 
 define i32 @main(i32 %argc, i8** nocapture readnone %argv) {
 entry:
-  call void @foo()
-  call void @"\01l_bar"()
+  tail call void @_ZL3foov()
   ret i32 0
 }

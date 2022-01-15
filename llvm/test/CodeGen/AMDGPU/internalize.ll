@@ -1,7 +1,5 @@
-; RUN: opt -O0 -S -mtriple=amdgcn-unknown-amdhsa -amdgpu-internalize-symbols < %s | FileCheck -check-prefix=ALL -check-prefix=OPTNONE %s
-; RUN: opt -passes='default<O0>' -S -mtriple=amdgcn-unknown-amdhsa -amdgpu-internalize-symbols < %s | FileCheck -check-prefix=ALL -check-prefix=OPTNONE %s
 ; RUN: opt -O1 -S -mtriple=amdgcn-unknown-amdhsa -amdgpu-internalize-symbols < %s | FileCheck -check-prefix=ALL -check-prefix=OPT %s
-; RUN: opt -passes='default<O1>' -S -mtriple=amdgcn-unknown-amdhsa -amdgpu-internalize-symbols < %s | FileCheck -check-prefix=ALL -check-prefix=OPT %s
+; RUN: opt -O0 -S -mtriple=amdgcn-unknown-amdhsa -amdgpu-internalize-symbols < %s | FileCheck -check-prefix=ALL -check-prefix=OPTNONE %s
 
 ; OPT-NOT: gvar_unused
 ; OPTNONE: gvar_unused

@@ -17,7 +17,10 @@
 namespace llvm {
   class FunctionPass;
   class ImmutablePass;
+  class LoopPass;
   class ModulePass;
+  class Pass;
+  class PassInfo;
 
   //===--------------------------------------------------------------------===//
   //
@@ -99,13 +102,6 @@ namespace llvm {
   // entered and prints it with -analyze.
   //
   FunctionPass *createMustExecutePrinter();
-
-  //===--------------------------------------------------------------------===//
-  //
-  // createMustBeExecutedContextPrinter - This pass prints information about which
-  // instructions are guaranteed to execute together (run with -analyze).
-  //
-  ModulePass *createMustBeExecutedContextPrinter();
 
 }
 

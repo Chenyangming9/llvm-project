@@ -23,31 +23,18 @@ class MoveOnly
 
     int data_;
 public:
-    constexpr MoveOnly(int data = 1) : data_(data) {}
-    TEST_CONSTEXPR_CXX14 MoveOnly(MoveOnly&& x)
+    MoveOnly(int data = 1) : data_(data) {}
+    MoveOnly(MoveOnly&& x)
         : data_(x.data_) {x.data_ = 0;}
-    TEST_CONSTEXPR_CXX14 MoveOnly& operator=(MoveOnly&& x)
+    MoveOnly& operator=(MoveOnly&& x)
         {data_ = x.data_; x.data_ = 0; return *this;}
 
-    constexpr int get() const {return data_;}
+    int get() const {return data_;}
 
-    friend constexpr bool operator==(const MoveOnly& x, const MoveOnly& y)
-        { return x.data_ == y.data_; }
-    friend constexpr bool operator!=(const MoveOnly& x, const MoveOnly& y)
-        { return x.data_ != y.data_; }
-    friend constexpr bool operator< (const MoveOnly& x, const MoveOnly& y)
-        { return x.data_ <  y.data_; }
-    friend constexpr bool operator<=(const MoveOnly& x, const MoveOnly& y)
-        { return x.data_ <= y.data_; }
-    friend constexpr bool operator> (const MoveOnly& x, const MoveOnly& y)
-        { return x.data_ >  y.data_; }
-    friend constexpr bool operator>=(const MoveOnly& x, const MoveOnly& y)
-        { return x.data_ >= y.data_; }
-
-    TEST_CONSTEXPR_CXX14 MoveOnly operator+(const MoveOnly& x) const
-        { return MoveOnly{data_ + x.data_}; }
-    TEST_CONSTEXPR_CXX14 MoveOnly operator*(const MoveOnly& x) const
-        { return MoveOnly{data_ * x.data_}; }
+    bool operator==(const MoveOnly& x) const {return data_ == x.data_;}
+    bool operator< (const MoveOnly& x) const {return data_ <  x.data_;}
+    MoveOnly operator+(const MoveOnly& x) const { return MoveOnly{data_ + x.data_}; }
+    MoveOnly operator*(const MoveOnly& x) const { return MoveOnly{data_ * x.data_}; }
 };
 
 namespace std {
@@ -57,11 +44,11 @@ struct hash<MoveOnly>
 {
     typedef MoveOnly argument_type;
     typedef size_t result_type;
-    constexpr size_t operator()(const MoveOnly& x) const {return x.get();}
+    std::size_t operator()(const MoveOnly& x) const {return x.get();}
 };
 
 }
 
-#endif // TEST_STD_VER >= 11
+#endif  // TEST_STD_VER >= 11
 
-#endif // MOVEONLY_H
+#endif  // MOVEONLY_H

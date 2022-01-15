@@ -17,7 +17,7 @@ namespace std {
 }
 
 template<typename T> constexpr bool has_type(...) { return false; }
-template<typename T> constexpr bool has_type(T&) { return true; }
+template<typename T> constexpr bool has_type(T) { return true; }
 
 std::initializer_list il = {1, 2, 3, 4, 5};
 
@@ -172,10 +172,6 @@ namespace nondeducible {
   template<typename A = int,
            typename ...B>
   X(float) -> X<A, B...>; // ok
-
-  template <typename> struct UnnamedTemplateParam {};
-  template <typename>                                  // expected-note {{non-deducible template parameter (anonymous)}}
-  UnnamedTemplateParam() -> UnnamedTemplateParam<int>; // expected-error {{deduction guide template contains a template parameter that cannot be deduced}}
 }
 
 namespace default_args_from_ctor {
@@ -416,17 +412,6 @@ B b(0, {});
 
 }
 
-namespace no_crash_on_default_arg {
-class A {
-  template <typename T> class B {
-    B(int c = 1);
-  };
-  // This used to crash due to unparsed default arg above. The diagnostic could
-  // be improved, but the point of this test is to simply check we do not crash.
-  B(); // expected-error {{deduction guide declaration without trailing return type}}
-};
-} // namespace no_crash_on_default_arg
-
 #pragma clang diagnostic push
 #pragma clang diagnostic warning "-Wctad-maybe-unsupported"
 namespace test_implicit_ctad_warning {
@@ -522,39 +507,6 @@ umm m(1);
 
 }
 
-namespace PR45124 {
-  class a { int d; };
-  class b : a {};
-
-  struct x { ~x(); };
-  template<typename> class y { y(x = x()); };
-  template<typename z> y(z)->y<z>;
-
-  // Not a constant initializer, but trivial default initialization. We won't
-  // detect this as trivial default initialization if synthesizing the implicit
-  // deduction guide 'template<typename T> y(x = x()) -> Y<T>;' leaves behind a
-  // pending cleanup.
-  __thread b g;
-}
-
-namespace PR47175 {
-  template<typename T> struct A { A(T); T x; };
-  template<typename T> int &&n = A(T()).x;
-  int m = n<int>;
-}
-
-// Ensure we don't crash when CTAD fails.
-template <typename T1, typename T2>
-struct Foo {   // expected-note{{candidate function template not viable}}
-  Foo(T1, T2); // expected-note{{candidate function template not viable}}
-};
-
-template <typename... Args>
-void insert(Args &&...args);
-
-void foo() {
-  insert(Foo(2, 2, 2)); // expected-error{{no viable constructor or deduction guide}}
-}
 #else
 
 // expected-no-diagnostics

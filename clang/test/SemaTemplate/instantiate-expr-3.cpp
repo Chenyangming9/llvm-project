@@ -23,7 +23,7 @@ namespace N1 {
 }
 
 namespace N2 {
-  long& operator+=(N1::X&, long);
+  long& operator+=(N1::X&, long); // expected-note{{candidate}}
 
   template<typename T, typename U, typename Result>
   struct PlusEquals0 {
@@ -65,7 +65,7 @@ struct StatementExpr0 {
   void f(T t) {
     (void)({
         if (t) // expected-error{{contextually convertible}}
-          t = t + 17; // expected-error {{invalid operands to binary expression ('N1::X' and 'int')}}
+          t = t + 17;
         t + 12; // expected-error{{invalid operands}}
       });
   }

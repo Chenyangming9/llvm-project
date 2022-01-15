@@ -18,5 +18,7 @@ static_library("Driver") {
     "//llvm/lib/Option",
     "//llvm/lib/Support",
   ]
-  sources = [ "DarwinLdDriver.cpp" ]
+  sources = [
+    "DarwinLdDriver.cpp",
+  ]
 }

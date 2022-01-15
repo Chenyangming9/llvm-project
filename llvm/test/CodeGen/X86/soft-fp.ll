@@ -53,8 +53,5 @@ entry:
 ; SOFT2-NOT:   xmm{{[0-9]+}}
 ; SSE1:        xmm{{[0-9]+}}
 ; SSE2:        xmm{{[0-9]+}}
-; SOFT1:       ret{{[lq]}}
-; SOFT2:       ret{{[lq]}}
-; SSE1:       jmp __addtf3
-; SSE2:       jmp __addtf3
+; CHECK:       ret{{[lq]}}
 }

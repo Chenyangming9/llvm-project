@@ -1,4 +1,4 @@
-//===-- GDBRemoteCommunicationReplayServer.cpp ----------------------------===//
+//===-- GDBRemoteCommunicationReplayServer.cpp ------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,10 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cerrno>
+#include <errno.h>
 
 #include "lldb/Host/Config.h"
-#include "llvm/ADT/ScopeExit.h"
 
 #include "GDBRemoteCommunicationReplayServer.h"
 #include "ProcessGDBRemoteLog.h"
@@ -74,7 +73,7 @@ GDBRemoteCommunicationReplayServer::GDBRemoteCommunicationReplayServer()
       m_async_broadcaster(nullptr, "lldb.gdb-replay.async-broadcaster"),
       m_async_listener_sp(
           Listener::MakeListener("lldb.gdb-replay.async-listener")),
-      m_async_thread_state_mutex() {
+      m_async_thread_state_mutex(), m_skip_acks(false) {
   m_async_broadcaster.SetEventName(eBroadcastBitAsyncContinue,
                                    "async thread continue");
   m_async_broadcaster.SetEventName(eBroadcastBitAsyncThreadShouldExit,
@@ -128,47 +127,36 @@ GDBRemoteCommunicationReplayServer::GetPacketAndSendResponse(
   Log *log(ProcessGDBRemoteLog::GetLogIfAllCategoriesSet(GDBR_LOG_PROCESS));
   while (!m_packet_history.empty()) {
     // Pop last packet from the history.
-    GDBRemotePacket entry = m_packet_history.back();
+    GDBRemoteCommunicationHistory::Entry entry = m_packet_history.back();
     m_packet_history.pop_back();
-
-    // Decode run-length encoding.
-    const std::string expanded_data =
-        GDBRemoteCommunication::ExpandRLE(entry.packet.data);
 
     // We've handled the handshake implicitly before. Skip the packet and move
     // on.
     if (entry.packet.data == "+")
       continue;
 
-    if (entry.type == GDBRemotePacket::ePacketTypeSend) {
-      if (unexpected(expanded_data, packet.GetStringRef())) {
+    if (entry.type == GDBRemoteCommunicationHistory::ePacketTypeSend) {
+      if (unexpected(entry.packet.data, packet.GetStringRef())) {
         LLDB_LOG(log,
                  "GDBRemoteCommunicationReplayServer expected packet: '{0}'",
-                 expanded_data);
+                 entry.packet.data);
         LLDB_LOG(log, "GDBRemoteCommunicationReplayServer actual packet: '{0}'",
                  packet.GetStringRef());
-#ifndef NDEBUG
-        // This behaves like a regular assert, but prints the expected and
-        // received packet before aborting.
-        printf("Reproducer expected packet: '%s'\n", expanded_data.c_str());
-        printf("Reproducer received packet: '%s'\n",
-               packet.GetStringRef().data());
-        llvm::report_fatal_error("Encountered unexpected packet during replay");
-#endif
+        assert(false && "Encountered unexpected packet during replay");
         return PacketResult::ErrorSendFailed;
       }
 
       // Ignore QEnvironment packets as they're handled earlier.
-      if (expanded_data.find("QEnvironment") == 1) {
+      if (entry.packet.data.find("QEnvironment") == 1) {
         assert(m_packet_history.back().type ==
-               GDBRemotePacket::ePacketTypeRecv);
+               GDBRemoteCommunicationHistory::ePacketTypeRecv);
         m_packet_history.pop_back();
       }
 
       continue;
     }
 
-    if (entry.type == GDBRemotePacket::ePacketTypeInvalid) {
+    if (entry.type == GDBRemoteCommunicationHistory::ePacketTypeInvalid) {
       LLDB_LOG(
           log,
           "GDBRemoteCommunicationReplayServer skipped invalid packet: '{0}'",
@@ -186,6 +174,10 @@ GDBRemoteCommunicationReplayServer::GetPacketAndSendResponse(
 
   return packet_result;
 }
+
+LLVM_YAML_IS_DOCUMENT_LIST_VECTOR(
+    std::vector<
+        lldb_private::process_gdb_remote::GDBRemoteCommunicationHistory::Entry>)
 
 llvm::Error
 GDBRemoteCommunicationReplayServer::LoadReplayHistory(const FileSpec &path) {
@@ -215,9 +207,9 @@ bool GDBRemoteCommunicationReplayServer::StartAsyncThread() {
         "<lldb.gdb-replay.async>",
         GDBRemoteCommunicationReplayServer::AsyncThread, this);
     if (!async_thread) {
-      LLDB_LOG_ERROR(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST),
-                     async_thread.takeError(),
-                     "failed to launch host thread: {}");
+      LLDB_LOG(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST),
+               "failed to launch host thread: {}",
+               llvm::toString(async_thread.takeError()));
       return false;
     }
     m_async_thread = *async_thread;
@@ -264,10 +256,11 @@ void GDBRemoteCommunicationReplayServer::ReceivePacket(
 thread_result_t GDBRemoteCommunicationReplayServer::AsyncThread(void *arg) {
   GDBRemoteCommunicationReplayServer *server =
       (GDBRemoteCommunicationReplayServer *)arg;
-  auto D = make_scope_exit([&]() { server->Disconnect(); });
+
   EventSP event_sp;
   bool done = false;
-  while (!done) {
+
+  while (true) {
     if (server->m_async_listener_sp->GetEvent(event_sp, llvm::None)) {
       const uint32_t event_type = event_sp->GetType();
       if (event_sp->BroadcasterIs(&server->m_async_broadcaster)) {
@@ -284,31 +277,6 @@ thread_result_t GDBRemoteCommunicationReplayServer::AsyncThread(void *arg) {
       }
     }
   }
-
-  return {};
-}
-
-Status GDBRemoteCommunicationReplayServer::Connect(
-    process_gdb_remote::GDBRemoteCommunicationClient &client) {
-  repro::Loader *loader = repro::Reproducer::Instance().GetLoader();
-  if (!loader)
-    return Status("No loader provided.");
-
-  static std::unique_ptr<repro::MultiLoader<repro::GDBRemoteProvider>>
-      multi_loader = repro::MultiLoader<repro::GDBRemoteProvider>::Create(
-          repro::Reproducer::Instance().GetLoader());
-  if (!multi_loader)
-    return Status("No gdb remote provider found.");
-
-  llvm::Optional<std::string> history_file = multi_loader->GetNextFile();
-  if (!history_file)
-    return Status("No gdb remote packet log found.");
-
-  if (auto error = LoadReplayHistory(FileSpec(*history_file)))
-    return Status("Unable to load replay history");
-
-  if (auto error = GDBRemoteCommunication::ConnectLocally(client, *this))
-    return Status("Unable to connect to replay server");
 
   return {};
 }

@@ -1,4 +1,4 @@
-//===-- UDPSocket.cpp -----------------------------------------------------===//
+//===-- UDPSocket.cpp -------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,7 +11,7 @@
 #include "lldb/Host/Config.h"
 #include "lldb/Utility/Log.h"
 
-#if LLDB_ENABLE_POSIX
+#ifndef LLDB_DISABLE_POSIX
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #endif
@@ -53,19 +53,20 @@ Status UDPSocket::Accept(Socket *&socket) {
   return Status("%s", g_not_supported_error);
 }
 
-llvm::Expected<std::unique_ptr<UDPSocket>>
-UDPSocket::Connect(llvm::StringRef name, bool child_processes_inherit) {
-  std::unique_ptr<UDPSocket> socket;
+Status UDPSocket::Connect(llvm::StringRef name, bool child_processes_inherit,
+                          Socket *&socket) {
+  std::unique_ptr<UDPSocket> final_socket;
 
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_CONNECTION));
-  LLDB_LOG(log, "host/port = {0}", name);
+  if (log)
+    log->Printf("UDPSocket::%s (host/port = %s)", __FUNCTION__, name.data());
 
   Status error;
   std::string host_str;
   std::string port_str;
   int32_t port = INT32_MIN;
   if (!DecodeHostAndPort(name, host_str, port_str, port, &error))
-    return error.ToError();
+    return error;
 
   // At this point we have setup the receive port, now we need to setup the UDP
   // send socket
@@ -80,13 +81,13 @@ UDPSocket::Connect(llvm::StringRef name, bool child_processes_inherit) {
                           &service_info_list);
   if (err != 0) {
     error.SetErrorStringWithFormat(
-#if defined(_WIN32) && defined(UNICODE)
+#if defined(_MSC_VER) && defined(UNICODE)
         "getaddrinfo(%s, %s, &hints, &info) returned error %i (%S)",
 #else
         "getaddrinfo(%s, %s, &hints, &info) returned error %i (%s)",
 #endif
         host_str.c_str(), port_str.c_str(), err, gai_strerror(err));
-    return error.ToError();
+    return error;
   }
 
   for (struct addrinfo *service_info_ptr = service_info_list;
@@ -96,8 +97,8 @@ UDPSocket::Connect(llvm::StringRef name, bool child_processes_inherit) {
         service_info_ptr->ai_family, service_info_ptr->ai_socktype,
         service_info_ptr->ai_protocol, child_processes_inherit, error);
     if (error.Success()) {
-      socket.reset(new UDPSocket(send_fd));
-      socket->m_sockaddr = service_info_ptr;
+      final_socket.reset(new UDPSocket(send_fd));
+      final_socket->m_sockaddr = service_info_ptr;
       break;
     } else
       continue;
@@ -105,8 +106,8 @@ UDPSocket::Connect(llvm::StringRef name, bool child_processes_inherit) {
 
   ::freeaddrinfo(service_info_list);
 
-  if (!socket)
-    return error.ToError();
+  if (!final_socket)
+    return error;
 
   SocketAddress bind_addr;
 
@@ -118,25 +119,26 @@ UDPSocket::Connect(llvm::StringRef name, bool child_processes_inherit) {
 
   if (!bind_addr_success) {
     error.SetErrorString("Failed to get hostspec to bind for");
-    return error.ToError();
+    return error;
   }
 
   bind_addr.SetPort(0); // Let the source port # be determined dynamically
 
-  err = ::bind(socket->GetNativeSocket(), bind_addr, bind_addr.GetLength());
+  err = ::bind(final_socket->GetNativeSocket(), bind_addr, bind_addr.GetLength());
 
   struct sockaddr_in source_info;
   socklen_t address_len = sizeof (struct sockaddr_in);
-  err = ::getsockname(socket->GetNativeSocket(),
-                      (struct sockaddr *)&source_info, &address_len);
+  err = ::getsockname(final_socket->GetNativeSocket(), (struct sockaddr *) &source_info, &address_len);
 
-  return std::move(socket);
+  socket = final_socket.release();
+  error.Clear();
+  return error;
 }
 
 std::string UDPSocket::GetRemoteConnectionURI() const {
   if (m_socket != kInvalidSocketValue) {
-    return std::string(llvm::formatv(
-        "udp://[{0}]:{1}", m_sockaddr.GetIPAddress(), m_sockaddr.GetPort()));
+    return llvm::formatv("udp://[{0}]:{1}", m_sockaddr.GetIPAddress(),
+                         m_sockaddr.GetPort());
   }
   return "";
 }

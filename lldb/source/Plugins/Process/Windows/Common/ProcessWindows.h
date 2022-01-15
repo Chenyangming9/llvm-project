@@ -25,8 +25,7 @@ public:
   // Static functions.
   static lldb::ProcessSP CreateInstance(lldb::TargetSP target_sp,
                                         lldb::ListenerSP listener_sp,
-                                        const FileSpec *,
-                                        bool can_connect);
+                                        const FileSpec *);
 
   static void Initialize();
 
@@ -69,8 +68,8 @@ public:
   bool CanDebug(lldb::TargetSP target_sp,
                 bool plugin_specified_by_name) override;
   bool DestroyRequiresHalt() override { return false; }
-  bool DoUpdateThreadList(ThreadList &old_thread_list,
-                          ThreadList &new_thread_list) override;
+  bool UpdateThreadList(ThreadList &old_thread_list,
+                        ThreadList &new_thread_list) override;
   bool IsAlive() override;
 
   size_t DoReadMemory(lldb::addr_t vm_addr, void *buf, size_t size,
@@ -99,22 +98,6 @@ public:
   void OnUnloadDll(lldb::addr_t module_addr) override;
   void OnDebugString(const std::string &string) override;
   void OnDebuggerError(const Status &error, uint32_t type) override;
-
-  Status GetWatchpointSupportInfo(uint32_t &num) override;
-  Status GetWatchpointSupportInfo(uint32_t &num, bool &after) override;
-  Status EnableWatchpoint(Watchpoint *wp, bool notify = true) override;
-  Status DisableWatchpoint(Watchpoint *wp, bool notify = true) override;
-
-private:
-  struct WatchpointInfo {
-    uint32_t slot_id;
-    lldb::addr_t address;
-    uint32_t size;
-    bool read;
-    bool write;
-  };
-  std::map<lldb::break_id_t, WatchpointInfo> m_watchpoints;
-  std::vector<lldb::break_id_t> m_watchpoint_ids;
 };
 } // namespace lldb_private
 

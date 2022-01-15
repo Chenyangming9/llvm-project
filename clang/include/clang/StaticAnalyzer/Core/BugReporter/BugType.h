@@ -28,8 +28,8 @@ class ExprEngine;
 
 class BugType {
 private:
-  const CheckerNameRef CheckerName;
-  const std::string Description;
+  const CheckName Check;
+  const std::string Name;
   const std::string Category;
   const CheckerBase *Checker;
   bool SuppressOnSink;
@@ -37,27 +37,28 @@ private:
   virtual void anchor();
 
 public:
-  BugType(CheckerNameRef CheckerName, StringRef Name, StringRef Cat,
-          bool SuppressOnSink = false)
-      : CheckerName(CheckerName), Description(Name), Category(Cat),
-        Checker(nullptr), SuppressOnSink(SuppressOnSink) {}
+  BugType(CheckName Check, StringRef Name, StringRef Cat,
+          bool SuppressOnSink=false)
+      : Check(Check), Name(Name), Category(Cat), Checker(nullptr),
+        SuppressOnSink(SuppressOnSink) {}
   BugType(const CheckerBase *Checker, StringRef Name, StringRef Cat,
-          bool SuppressOnSink = false)
-      : CheckerName(Checker->getCheckerName()), Description(Name),
-        Category(Cat), Checker(Checker), SuppressOnSink(SuppressOnSink) {}
+          bool SuppressOnSink=false)
+      : Check(Checker->getCheckName()), Name(Name), Category(Cat),
+        Checker(Checker), SuppressOnSink(SuppressOnSink) {}
   virtual ~BugType() = default;
 
-  StringRef getDescription() const { return Description; }
+  StringRef getName() const { return Name; }
   StringRef getCategory() const { return Category; }
-  StringRef getCheckerName() const {
-    // FIXME: This is a workaround to ensure that the correct checerk name is
-    // used. The checker names are set after the constructors are run.
+  StringRef getCheckName() const {
+    // FIXME: This is a workaround to ensure that the correct check name is used
+    // The check names are set after the constructors are run.
     // In case the BugType object is initialized in the checker's ctor
-    // the CheckerName field will be empty. To circumvent this problem we use
+    // the Check field will be empty. To circumvent this problem we use
     // CheckerBase whenever it is possible.
-    StringRef Ret = Checker ? Checker->getCheckerName() : CheckerName;
-    assert(!Ret.empty() && "Checker name is not set properly.");
-    return Ret;
+    StringRef CheckName =
+        Checker ? Checker->getCheckName().getName() : Check.getName();
+    assert(!CheckName.empty() && "Check name is not set properly.");
+    return CheckName;
   }
 
   /// isSuppressOnSink - Returns true if bug reports associated with this bug
@@ -70,16 +71,12 @@ class BuiltinBug : public BugType {
   const std::string desc;
   void anchor() override;
 public:
-  BuiltinBug(class CheckerNameRef checker, const char *name,
-             const char *description)
-      : BugType(checker, name, categories::LogicError), desc(description) {}
+  BuiltinBug(class CheckName check, const char *name, const char *description)
+      : BugType(check, name, categories::LogicError), desc(description) {}
 
   BuiltinBug(const CheckerBase *checker, const char *name,
              const char *description)
       : BugType(checker, name, categories::LogicError), desc(description) {}
-
-  BuiltinBug(class CheckerNameRef checker, const char *name)
-      : BugType(checker, name, categories::LogicError), desc(name) {}
 
   BuiltinBug(const CheckerBase *checker, const char *name)
       : BugType(checker, name, categories::LogicError), desc(name) {}
@@ -87,7 +84,7 @@ public:
   StringRef getDescription() const { return desc; }
 };
 
-} // namespace ento
+} // end ento namespace
 
 } // end clang namespace
 #endif

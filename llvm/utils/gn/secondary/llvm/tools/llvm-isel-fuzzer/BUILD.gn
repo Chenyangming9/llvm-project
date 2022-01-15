@@ -18,5 +18,7 @@ fuzzer("llvm-isel-fuzzer") {
     "//llvm/lib/Transforms/Scalar",
   ]
   dummy_main = "DummyISelFuzzer.cpp"
-  sources = [ "llvm-isel-fuzzer.cpp" ]
+  sources = [
+    "llvm-isel-fuzzer.cpp",
+  ]
 }

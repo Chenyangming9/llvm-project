@@ -19,23 +19,24 @@ define dso_local void @test(i64 %arg, i64 %arg1) {
 ; CHECK-NEXT:    std r0, 16(r1)
 ; CHECK-NEXT:    stdu r1, -64(r1)
 ; CHECK-NEXT:    sub r30, r4, r3
-; CHECK-NEXT:    li r29, -4
+; CHECK-NEXT:    li r29, 0
 ; CHECK-NEXT:    .p2align 5
 ; CHECK-NEXT:  .LBB0_3: # %bb5
 ; CHECK-NEXT:    #
-; CHECK-NEXT:    lfsu f1, 4(r29)
+; CHECK-NEXT:    lfsx f1, 0, r29
 ; CHECK-NEXT:    bl lrint
 ; CHECK-NEXT:    nop
 ; CHECK-NEXT:    addi r30, r30, -1
+; CHECK-NEXT:    addi r29, r29, 4
 ; CHECK-NEXT:    cmpldi r30, 0
 ; CHECK-NEXT:    bne cr0, .LBB0_3
 ; CHECK-NEXT:  # %bb.4: # %bb15
 ; CHECK-NEXT:    stb r3, 0(r3)
 ; CHECK-NEXT:    addi r1, r1, 64
 ; CHECK-NEXT:    ld r0, 16(r1)
+; CHECK-NEXT:    mtlr r0
 ; CHECK-NEXT:    ld r30, -16(r1) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld r29, -24(r1) # 8-byte Folded Reload
-; CHECK-NEXT:    mtlr r0
 ; CHECK-NEXT:    blr
 ; CHECK-NEXT:  .LBB0_5: # %bb2
 ; CHECK-NEXT:  .LBB0_6: # %bb14

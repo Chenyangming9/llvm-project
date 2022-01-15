@@ -116,7 +116,7 @@ StringMap<uint32_t> NamedStreamMap::entries() const {
 
 uint32_t NamedStreamMap::appendStringData(StringRef S) {
   uint32_t Offset = NamesBuffer.size();
-  llvm::append_range(NamesBuffer, S);
+  NamesBuffer.insert(NamesBuffer.end(), S.begin(), S.end());
   NamesBuffer.push_back('\0');
   return Offset;
 }

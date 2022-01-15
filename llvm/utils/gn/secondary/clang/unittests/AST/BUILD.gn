@@ -8,17 +8,13 @@ unittest("ASTTests") {
     "//clang/lib/Analysis",
     "//clang/lib/Basic",
     "//clang/lib/Frontend",
-    "//clang/lib/Testing",
     "//clang/lib/Tooling",
     "//llvm/lib/Support",
-    "//llvm/lib/Testing/Support",
   ]
   sources = [
     "ASTContextParentMapTest.cpp",
     "ASTImporterFixtures.cpp",
     "ASTImporterGenericRedeclTest.cpp",
-    "ASTImporterODRStrategiesTest.cpp",
-    "ASTImporterObjCTest.cpp",
     "ASTImporterTest.cpp",
     "ASTImporterVisibilityTest.cpp",
     "ASTTraverserTest.cpp",
@@ -32,12 +28,11 @@ unittest("ASTTests") {
     "DeclTest.cpp",
     "EvaluateAsRValueTest.cpp",
     "ExternalASTSourceTest.cpp",
+    "Language.cpp",
     "NamedDeclPrinterTest.cpp",
-    "RecursiveASTVisitorTest.cpp",
-    "SizelessTypesTest.cpp",
+    "OMPStructuredBlockTest.cpp",
     "SourceLocationTest.cpp",
     "StmtPrinterTest.cpp",
     "StructuralEquivalenceTest.cpp",
-    "TypePrinterTest.cpp",
   ]
 }

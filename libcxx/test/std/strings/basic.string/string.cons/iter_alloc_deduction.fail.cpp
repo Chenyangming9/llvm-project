@@ -7,9 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 // <string>
-// UNSUPPORTED: c++03, c++11, c++14
-// UNSUPPORTED: clang-4.0
-// UNSUPPORTED: apple-clang-9
+// UNSUPPORTED: c++98, c++03, c++11, c++14
+// UNSUPPORTED: clang-3.3, clang-3.4, clang-3.5, clang-3.6, clang-3.7, clang-3.8, clang-3.9, clang-4.0
+// UNSUPPORTED: apple-clang-6, apple-clang-7, apple-clang-8, apple-clang-9
 
 // template<class InputIterator,
 //      class Allocator = allocator<typename iterator_traits<InputIterator>::value_type>>
@@ -41,6 +41,7 @@ int main(int, char**)
     std::basic_string s1{NotAnItertor{}, NotAnItertor{}, std::allocator<char>{}}; // expected-error {{no viable constructor or deduction guide for deduction of template arguments of 'basic_string'}}
     }
     { // Not an input iterator
+    const char16_t* s = u"12345678901234";
     std::basic_string<char16_t> s0;
     std::basic_string s1{std::back_insert_iterator(s0), //  expected-error {{no viable constructor or deduction guide for deduction of template arguments of 'basic_string'}}
                          std::back_insert_iterator(s0),
@@ -48,7 +49,6 @@ int main(int, char**)
     }
     { // Not an allocator
     const wchar_t* s = L"12345678901234";
-    (void)s;
     std::basic_string s1{s, s+10, NotAnAllocator<wchar_t>{}}; // expected-error {{no viable constructor or deduction guide for deduction of template arguments of 'basic_string'}}
     }
 

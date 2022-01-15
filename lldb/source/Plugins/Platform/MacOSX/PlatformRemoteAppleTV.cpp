@@ -1,4 +1,4 @@
-//===-- PlatformRemoteAppleTV.cpp -----------------------------------------===//
+//===-- PlatformRemoteAppleTV.cpp -------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -69,8 +69,8 @@ PlatformSP PlatformRemoteAppleTV::CreateInstance(bool force,
     const char *triple_cstr =
         arch ? arch->GetTriple().getTriple().c_str() : "<null>";
 
-    LLDB_LOGF(log, "PlatformRemoteAppleTV::%s(force=%s, arch={%s,%s})",
-              __FUNCTION__, force ? "true" : "false", arch_name, triple_cstr);
+    log->Printf("PlatformRemoteAppleTV::%s(force=%s, arch={%s,%s})",
+                __FUNCTION__, force ? "true" : "false", arch_name, triple_cstr);
   }
 
   bool create = force;
@@ -116,14 +116,16 @@ PlatformSP PlatformRemoteAppleTV::CreateInstance(bool force,
   }
 
   if (create) {
-    LLDB_LOGF(log, "PlatformRemoteAppleTV::%s() creating platform",
-              __FUNCTION__);
+    if (log)
+      log->Printf("PlatformRemoteAppleTV::%s() creating platform",
+                  __FUNCTION__);
 
     return lldb::PlatformSP(new PlatformRemoteAppleTV());
   }
 
-  LLDB_LOGF(log, "PlatformRemoteAppleTV::%s() aborting creation of platform",
-            __FUNCTION__);
+  if (log)
+    log->Printf("PlatformRemoteAppleTV::%s() aborting creation of platform",
+                __FUNCTION__);
 
   return lldb::PlatformSP();
 }
@@ -223,10 +225,15 @@ bool PlatformRemoteAppleTV::GetSupportedArchitectureAtIndex(uint32_t idx,
   return false;
 }
 
-llvm::StringRef PlatformRemoteAppleTV::GetDeviceSupportDirectoryName() {
-  return "tvOS DeviceSupport";
+
+void PlatformRemoteAppleTV::GetDeviceSupportDirectoryNames (std::vector<std::string> &dirnames) 
+{
+    dirnames.clear();
+    dirnames.push_back("tvOS DeviceSupport");
 }
 
-llvm::StringRef PlatformRemoteAppleTV::GetPlatformName() {
-  return "AppleTVOS.platform";
+std::string PlatformRemoteAppleTV::GetPlatformName ()
+{
+    return "AppleTVOS.platform";
 }
+

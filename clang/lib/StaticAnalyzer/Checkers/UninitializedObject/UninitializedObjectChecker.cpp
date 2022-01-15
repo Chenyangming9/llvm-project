@@ -24,7 +24,7 @@
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/DynamicType.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
 
 using namespace clang;
 using namespace clang::ento;
@@ -187,7 +187,7 @@ void UninitializedObjectChecker::checkEndFunction(
   if (Opts.ShouldConvertNotesToWarnings) {
     for (const auto &Pair : UninitFields) {
 
-      auto Report = std::make_unique<PathSensitiveBugReport>(
+      auto Report = llvm::make_unique<BugReport>(
           *BT_uninitField, Pair.second, Node, LocUsedForUniqueing,
           Node->getLocationContext()->getDecl());
       Context.emitReport(std::move(Report));
@@ -201,7 +201,7 @@ void UninitializedObjectChecker::checkEndFunction(
             << (UninitFields.size() == 1 ? "" : "s")
             << " at the end of the constructor call";
 
-  auto Report = std::make_unique<PathSensitiveBugReport>(
+  auto Report = llvm::make_unique<BugReport>(
       *BT_uninitField, WarningOS.str(), Node, LocUsedForUniqueing,
       Node->getLocationContext()->getDecl());
 
@@ -541,11 +541,14 @@ static bool hasUnguardedAccess(const FieldDecl *FD, ProgramStateRef State) {
   auto FieldAccessM = memberExpr(hasDeclaration(equalsNode(FD))).bind("access");
 
   auto AssertLikeM = callExpr(callee(functionDecl(
-      hasAnyName("exit", "panic", "error", "Assert", "assert", "ziperr",
-                 "assfail", "db_error", "__assert", "__assert2", "_wassert",
-                 "__assert_rtn", "__assert_fail", "dtrace_assfail",
-                 "yy_fatal_error", "_XCAssertionFailureHandler",
-                 "_DTAssertionFailureHandler", "_TSAssertionFailureHandler"))));
+      anyOf(hasName("exit"), hasName("panic"), hasName("error"),
+            hasName("Assert"), hasName("assert"), hasName("ziperr"),
+            hasName("assfail"), hasName("db_error"), hasName("__assert"),
+            hasName("__assert2"), hasName("_wassert"), hasName("__assert_rtn"),
+            hasName("__assert_fail"), hasName("dtrace_assfail"),
+            hasName("yy_fatal_error"), hasName("_XCAssertionFailureHandler"),
+            hasName("_DTAssertionFailureHandler"),
+            hasName("_TSAssertionFailureHandler")))));
 
   auto NoReturnFuncM = callExpr(callee(functionDecl(isNoReturn())));
 
@@ -599,13 +602,13 @@ std::string clang::ento::getVariableName(const FieldDecl *Field) {
     llvm_unreachable("No other capture type is expected!");
   }
 
-  return std::string(Field->getName());
+  return Field->getName();
 }
 
 void ento::registerUninitializedObjectChecker(CheckerManager &Mgr) {
   auto Chk = Mgr.registerChecker<UninitializedObjectChecker>();
 
-  const AnalyzerOptions &AnOpts = Mgr.getAnalyzerOptions();
+  AnalyzerOptions &AnOpts = Mgr.getAnalyzerOptions();
   UninitObjCheckerOptions &ChOpts = Chk->Opts;
 
   ChOpts.IsPedantic = AnOpts.getCheckerBooleanOption(Chk, "Pedantic");
@@ -614,7 +617,7 @@ void ento::registerUninitializedObjectChecker(CheckerManager &Mgr) {
   ChOpts.CheckPointeeInitialization = AnOpts.getCheckerBooleanOption(
       Chk, "CheckPointeeInitialization");
   ChOpts.IgnoredRecordsWithFieldPattern =
-      std::string(AnOpts.getCheckerStringOption(Chk, "IgnoreRecordsWithField"));
+      AnOpts.getCheckerStringOption(Chk, "IgnoreRecordsWithField");
   ChOpts.IgnoreGuardedFields =
       AnOpts.getCheckerBooleanOption(Chk, "IgnoreGuardedFields");
 
@@ -625,6 +628,6 @@ void ento::registerUninitializedObjectChecker(CheckerManager &Mgr) {
         "\"" + ErrorMsg + "\"");
 }
 
-bool ento::shouldRegisterUninitializedObjectChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterUninitializedObjectChecker(const LangOptions &LO) {
   return true;
 }

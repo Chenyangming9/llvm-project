@@ -1,4 +1,4 @@
-//===-- IRDynamicChecks.cpp -----------------------------------------------===//
+//===-- IRDynamicChecks.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -48,27 +48,29 @@ ClangDynamicCheckerFunctions::~ClangDynamicCheckerFunctions() = default;
 
 bool ClangDynamicCheckerFunctions::Install(
     DiagnosticManager &diagnostic_manager, ExecutionContext &exe_ctx) {
-  auto utility_fn_or_error = exe_ctx.GetTargetRef().CreateUtilityFunction(
-      g_valid_pointer_check_text, VALID_POINTER_CHECK_NAME,
-      lldb::eLanguageTypeC, exe_ctx);
-  if (!utility_fn_or_error) {
-    llvm::consumeError(utility_fn_or_error.takeError());
+  Status error;
+  m_valid_pointer_check.reset(
+      exe_ctx.GetTargetRef().GetUtilityFunctionForLanguage(
+          g_valid_pointer_check_text, lldb::eLanguageTypeC,
+          VALID_POINTER_CHECK_NAME, error));
+  if (error.Fail())
     return false;
-  }
-  m_valid_pointer_check = std::move(*utility_fn_or_error);
 
-  if (Process *process = exe_ctx.GetProcessPtr()) {
+  if (!m_valid_pointer_check->Install(diagnostic_manager, exe_ctx))
+    return false;
+
+  Process *process = exe_ctx.GetProcessPtr();
+
+  if (process) {
     ObjCLanguageRuntime *objc_language_runtime =
         ObjCLanguageRuntime::Get(*process);
 
     if (objc_language_runtime) {
-      auto utility_fn_or_error = objc_language_runtime->CreateObjectChecker(
-          VALID_OBJC_OBJECT_CHECK_NAME, exe_ctx);
-      if (!utility_fn_or_error) {
-        llvm::consumeError(utility_fn_or_error.takeError());
+      m_objc_object_check.reset(objc_language_runtime->CreateObjectChecker(
+          VALID_OBJC_OBJECT_CHECK_NAME));
+
+      if (!m_objc_object_check->Install(diagnostic_manager, exe_ctx))
         return false;
-      }
-      m_objc_object_check = std::move(*utility_fn_or_error);
     }
   }
 
@@ -179,8 +181,8 @@ protected:
   ///
   /// \param[in] inst
   ///     The instruction to be instrumented.
-  void RegisterInstruction(llvm::Instruction &inst) {
-    m_to_instrument.push_back(&inst);
+  void RegisterInstruction(llvm::Instruction &i) {
+    m_to_instrument.push_back(&i);
   }
 
   /// Determine whether a single instruction is interesting to instrument,
@@ -318,8 +320,9 @@ protected:
   bool InstrumentInstruction(llvm::Instruction *inst) override {
     Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
-    LLDB_LOGF(log, "Instrumenting load/store instruction: %s\n",
-              PrintValue(inst).c_str());
+    if (log)
+      log->Printf("Instrumenting load/store instruction: %s\n",
+                  PrintValue(inst).c_str());
 
     if (!m_valid_pointer_check_func)
       m_valid_pointer_check_func =
@@ -463,7 +466,7 @@ protected:
   }
 
   static llvm::Function *GetCalledFunction(llvm::CallInst *inst) {
-    return GetFunction(inst->getCalledOperand());
+    return GetFunction(inst->getCalledValue());
   }
 
   bool InspectInstruction(llvm::Instruction &i) override {
@@ -480,8 +483,9 @@ protected:
       std::string name_str = called_function->getName().str();
       const char *name_cstr = name_str.c_str();
 
-      LLDB_LOGF(log, "Found call to %s: %s\n", name_cstr,
-                PrintValue(call_inst).c_str());
+      if (log)
+        log->Printf("Found call to %s: %s\n", name_cstr,
+                    PrintValue(call_inst).c_str());
 
       if (name_str.find("objc_msgSend") == std::string::npos)
         return true;
@@ -516,9 +520,10 @@ protected:
         return true;
       }
 
-      LLDB_LOGF(log,
-                "Function name '%s' contains 'objc_msgSend' but is not handled",
-                name_str.c_str());
+      if (log)
+        log->Printf(
+            "Function name '%s' contains 'objc_msgSend' but is not handled",
+            name_str.c_str());
 
       return true;
     }
@@ -543,7 +548,8 @@ bool IRDynamicChecks::runOnModule(llvm::Module &M) {
   llvm::Function *function = M.getFunction(StringRef(m_func_name));
 
   if (!function) {
-    LLDB_LOGF(log, "Couldn't find %s() in the module", m_func_name.c_str());
+    if (log)
+      log->Printf("Couldn't find %s() in the module", m_func_name.c_str());
 
     return false;
   }
@@ -576,7 +582,7 @@ bool IRDynamicChecks::runOnModule(llvm::Module &M) {
 
     oss.flush();
 
-    LLDB_LOGF(log, "Module after dynamic checks: \n%s", s.c_str());
+    log->Printf("Module after dynamic checks: \n%s", s.c_str());
   }
 
   return true;

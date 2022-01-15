@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_DATAFORMATTERS_FORMATTERSHELPERS_H
-#define LLDB_DATAFORMATTERS_FORMATTERSHELPERS_H
+#ifndef lldb_FormattersHelpers_h_
+#define lldb_FormattersHelpers_h_
 
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-forward.h"
@@ -36,13 +36,11 @@ void AddOneLineSummary(TypeCategoryImpl::SharedPointer category_sp,
                        ConstString type_name, TypeSummaryImpl::Flags flags,
                        bool regex = false);
 
-/// Add a summary that is implemented by a C++ callback.
 void AddCXXSummary(TypeCategoryImpl::SharedPointer category_sp,
                    CXXFunctionSummaryFormat::Callback funct,
                    const char *description, ConstString type_name,
                    TypeSummaryImpl::Flags flags, bool regex = false);
 
-/// Add a synthetic that is implemented by a C++ callback.
 void AddCXXSynthetic(TypeCategoryImpl::SharedPointer category_sp,
                      CXXSyntheticChildren::CreateFrontEndCallback generator,
                      const char *description, ConstString type_name,
@@ -57,8 +55,6 @@ void AddFilter(TypeCategoryImpl::SharedPointer category_sp,
 size_t ExtractIndexFromString(const char *item_name);
 
 lldb::addr_t GetArrayAddressOrPointerValue(ValueObject &valobj);
-
-lldb::ValueObjectSP GetValueOfLibCXXCompressedPair(ValueObject &pair);
 
 time_t GetOSXEpoch();
 
@@ -188,4 +184,4 @@ private:
 } // namespace formatters
 } // namespace lldb_private
 
-#endif // LLDB_DATAFORMATTERS_FORMATTERSHELPERS_H
+#endif // lldb_FormattersHelpers_h_

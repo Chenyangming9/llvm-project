@@ -95,25 +95,10 @@ define double @test_FNMSUB1(double %A, double %B, double %C) {
 	%E = fsub double %C, %D		; <double> [#uses=1]
 	ret double %E
 ; CHECK-LABEL: test_FNMSUB1:
-; CHECK: fneg
-; CHECK-NEXT: fmadd
-; CHECK-NEXT: blr
-
-; CHECK-VSX-LABEL: test_FNMSUB1:
-; CHECK-VSX: xsnegdp
-; CHECK-VSX-NEXT: xsmaddmdp
-}
-
-; need nsz flag to generate fnmsub since it may affect sign of zero
-define double @test_FNMSUB1_NSZ(double %A, double %B, double %C) {
-	%D = fmul nsz double %A, %B		; <double> [#uses=1]
-	%E = fsub nsz double %C, %D		; <double> [#uses=1]
-	ret double %E
-; CHECK-LABEL: test_FNMSUB1_NSZ:
 ; CHECK: fnmsub
 ; CHECK-NEXT: blr
 
-; CHECK-VSX-LABEL: test_FNMSUB1_NSZ:
+; CHECK-VSX-LABEL: test_FNMSUB1:
 ; CHECK-VSX: xsnmsubmdp
 }
 
@@ -213,9 +198,6 @@ define float @test_XSNMADDASP(float %A, float %B, float %C) {
 	ret float %F
 ; CHECK-P8-LABEL: test_XSNMADDASP:
 ; CHECK-P8: xsnmaddasp
-
-; CHECK-VSX-LABEL: test_XSNMADDASP:
-; CHECK-VSX: fnmadds
 }
 
 define float @test_XSNMSUBASP(float %A, float %B, float %C) {
@@ -226,7 +208,4 @@ define float @test_XSNMSUBASP(float %A, float %B, float %C) {
 	ret float %F
 ; CHECK-P8-LABEL: test_XSNMSUBASP:
 ; CHECK-P8: xsnmsubasp
-
-; CHECK-VSX-LABEL: test_XSNMSUBASP:
-; CHECK-VSX: fnmsubs
 }

@@ -1,4 +1,4 @@
-//===-- UtilityFunction.cpp -----------------------------------------------===//
+//===-- UtilityFunction.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,9 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "lldb/Host/Config.h"
-
-#include <cstdio>
+#include <stdio.h>
 #if HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
@@ -31,8 +29,6 @@
 using namespace lldb_private;
 using namespace lldb;
 
-char UtilityFunction::ID;
-
 /// Constructor
 ///
 /// \param[in] text
@@ -41,10 +37,12 @@ char UtilityFunction::ID;
 /// \param[in] name
 ///     The name of the function, as used in the text.
 UtilityFunction::UtilityFunction(ExecutionContextScope &exe_scope,
-                                 std::string text, std::string name,
-                                 bool enable_debugging)
-    : Expression(exe_scope), m_execution_unit_sp(), m_jit_module_wp(),
-      m_function_text(std::move(text)), m_function_name(std::move(name)) {}
+                                 const char *text, const char *name,
+                                 ExpressionKind kind)
+    : Expression(exe_scope, kind),
+      m_execution_unit_sp(), m_jit_module_wp(),
+      m_function_text(),
+      m_function_name(name) {}
 
 UtilityFunction::~UtilityFunction() {
   lldb::ProcessSP process_sp(m_jit_process_wp.lock());

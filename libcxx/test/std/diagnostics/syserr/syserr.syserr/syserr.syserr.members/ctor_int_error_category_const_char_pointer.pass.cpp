@@ -20,7 +20,8 @@
 
 #include "test_macros.h"
 
-int main(int, char**) {
+int main(int, char**)
+{
     std::string what_arg("test message");
     std::system_error se(static_cast<int>(std::errc::not_a_directory),
                          std::generic_category(), what_arg.c_str());
@@ -29,5 +30,5 @@ int main(int, char**) {
     assert(what_message.find(what_arg) != std::string::npos);
     assert(what_message.find("Not a directory") != std::string::npos);
 
-    return 0;
+  return 0;
 }

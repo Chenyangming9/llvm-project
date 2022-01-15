@@ -1,6 +1,5 @@
 ; RUN: opt -S < %s 2>&1 | FileCheck %s
 
-!named = !{!0, !1}
+!named = !{!0}
 ; CHECK-NOT: invalid expression
-!0 = !DIExpression(DW_OP_LLVM_entry_value, 1)
-!1 = !DIExpression(DW_OP_LLVM_entry_value, 1, DW_OP_lit0, DW_OP_plus)
+!0 = !DIExpression(DW_OP_entry_value, 1)

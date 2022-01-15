@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03,
-// UNSUPPORTED: no-exceptions
+// UNSUPPORTED: c++98, c++03, libcxxabi-no-exceptions
 
 #include <cassert>
 #include <cstdlib>
@@ -25,7 +24,7 @@ static void catch_nullptr_test() {
   }
 }
 
-int main(int, char**)
+int main()
 {
   using nullptr_t = decltype(nullptr);
 
@@ -46,6 +45,4 @@ int main(int, char**)
   catch_nullptr_test<int A::*, false>();
   catch_nullptr_test<int (A::*)(), false>();
 #endif
-
-  return 0;
 }

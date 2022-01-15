@@ -58,22 +58,16 @@ There are currently the following groups of checks:
 Name prefix            Description
 ====================== =========================================================
 ``abseil-``            Checks related to Abseil library.
-``altera-``            Checks related to OpenCL programming for FPGAs.
 ``android-``           Checks related to Android.
 ``boost-``             Checks related to Boost library.
 ``bugprone-``          Checks that target bugprone code constructs.
 ``cert-``              Checks related to CERT Secure Coding Guidelines.
-``clang-analyzer-``    Clang Static Analyzer checks.
-``concurrency-``       Checks related to concurrent programming (including
-                       threads, fibers, coroutines, etc.).
 ``cppcoreguidelines-`` Checks related to C++ Core Guidelines.
-``darwin-``            Checks related to Darwin coding conventions.
+``clang-analyzer-``    Clang Static Analyzer checks.
 ``fuchsia-``           Checks related to Fuchsia coding conventions.
 ``google-``            Checks related to Google coding conventions.
 ``hicpp-``             Checks related to High Integrity C++ Coding Standard.
-``linuxkernel-``       Checks related to the Linux Kernel coding conventions.
 ``llvm-``              Checks related to the LLVM coding conventions.
-``llvmlibc-``          Checks related to the LLVM-libc coding standards.
 ``misc-``              Checks that we didn't have a better category for.
 ``modernize-``         Checks that advocate usage of modern (currently "modern"
                        means "C++11") language constructs.
@@ -161,9 +155,7 @@ An overview of all the command-line options:
                                      stored fixes can be applied to the input source
                                      code with clang-apply-replacements.
     --extra-arg=<string>           - Additional argument to append to the compiler command line
-                                     Can be used several times.
     --extra-arg-before=<string>    - Additional argument to prepend to the compiler command line
-                                     Can be used several times.
     --fix                          -
                                      Apply suggested fixes. Without -fix-errors
                                      clang-tidy will bail out if any compilation
@@ -173,12 +165,6 @@ An overview of all the command-line options:
                                      errors were found. If compiler errors have
                                      attached fix-its, clang-tidy will apply them as
                                      well.
-    --fix-notes                    - 
-                                     If a warning has no fix, but a single fix can 
-                                     be found through an associated diagnostic note, 
-                                     apply the fix. 
-                                     Specifying this flag will implicitly enable the 
-                                     '--fix' flag.
     --format-style=<string>        -
                                      Style for formatting code around applied fixes:
                                        - 'none' (default) turns off formatting
@@ -256,20 +242,17 @@ An overview of all the command-line options:
   Configuration files:
     clang-tidy attempts to read configuration for each source file from a
     .clang-tidy file located in the closest parent directory of the source
-    file. If InheritParentConfig is true in a config file, the configuration file
-    in the parent directory (if any exists) will be taken and current config file
-    will be applied on top of the parent one. If any configuration options have
-    a corresponding command-line option, command-line option takes precedence.
-    The effective configuration can be inspected using -dump-config:
+    file. If any configuration options have a corresponding command-line
+    option, command-line option takes precedence. The effective
+    configuration can be inspected using -dump-config:
 
       $ clang-tidy -dump-config
       ---
-      Checks:              '-*,some-check'
-      WarningsAsErrors:    ''
-      HeaderFilterRegex:   ''
-      FormatStyle:         none
-      InheritParentConfig: true
-      User:                user
+      Checks:          '-*,some-check'
+      WarningsAsErrors: ''
+      HeaderFilterRegex: ''
+      FormatStyle:     none
+      User:            user
       CheckOptions:
         - key:             some-check.SomeOption
           value:           'some value'

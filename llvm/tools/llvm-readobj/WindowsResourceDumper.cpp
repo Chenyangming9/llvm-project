@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "WindowsResourceDumper.h"
+#include "Error.h"
 #include "llvm/Object/WindowsResource.h"
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/ScopedPrinter.h"
@@ -55,12 +56,8 @@ void Dumper::printEntry(const ResourceEntryRef &Ref) {
   if (Ref.checkTypeString()) {
     auto NarrowStr = stripUTF16(Ref.getTypeString());
     SW.printString("Resource type (string)", NarrowStr);
-  } else {
-    SmallString<20> IDStr;
-    raw_svector_ostream OS(IDStr);
-    printResourceTypeName(Ref.getTypeID(), OS);
-    SW.printString("Resource type (int)", IDStr);
-  }
+  } else
+    SW.printNumber("Resource type (int)", Ref.getTypeID());
 
   if (Ref.checkNameString()) {
     auto NarrowStr = stripUTF16(Ref.getNameString());

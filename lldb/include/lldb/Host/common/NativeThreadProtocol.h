@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_HOST_COMMON_NATIVETHREADPROTOCOL_H
-#define LLDB_HOST_COMMON_NATIVETHREADPROTOCOL_H
+#ifndef liblldb_NativeThreadProtocol_h_
+#define liblldb_NativeThreadProtocol_h_
 
 #include <memory>
 
@@ -21,7 +21,7 @@ class NativeThreadProtocol {
 public:
   NativeThreadProtocol(NativeProcessProtocol &process, lldb::tid_t tid);
 
-  virtual ~NativeThreadProtocol() = default;
+  virtual ~NativeThreadProtocol() {}
 
   virtual std::string GetName() = 0;
 
@@ -53,4 +53,4 @@ protected:
 };
 }
 
-#endif // LLDB_HOST_COMMON_NATIVETHREADPROTOCOL_H
+#endif // #ifndef liblldb_NativeThreadProtocol_h_

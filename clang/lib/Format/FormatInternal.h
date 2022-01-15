@@ -16,6 +16,7 @@
 #define LLVM_CLANG_LIB_FORMAT_FORMATINTERNAL_H
 
 #include "BreakableToken.h"
+#include "clang/Tooling/Core/Lookup.h"
 #include <utility>
 
 namespace clang {

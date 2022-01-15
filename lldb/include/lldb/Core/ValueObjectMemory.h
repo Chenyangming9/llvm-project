@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_VALUEOBJECTMEMORY_H
-#define LLDB_CORE_VALUEOBJECTMEMORY_H
+#ifndef liblldb_ValueObjectMemory_h_
+#define liblldb_ValueObjectMemory_h_
 
 #include "lldb/Core/Address.h"
 #include "lldb/Core/ValueObject.h"
@@ -18,14 +18,14 @@
 #include "lldb/lldb-forward.h"
 #include "llvm/ADT/StringRef.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace lldb_private {
 class ExecutionContextScope;
 
-/// A ValueObject that represents memory at a given address, viewed as some
-/// set lldb type.
+// A ValueObject that represents memory at a given address, viewed as some
+// set lldb type.
 class ValueObjectMemory : public ValueObject {
 public:
   ~ValueObjectMemory() override;
@@ -40,7 +40,7 @@ public:
                                     const Address &address,
                                     const CompilerType &ast_type);
 
-  llvm::Optional<uint64_t> GetByteSize() override;
+  uint64_t GetByteSize() override;
 
   ConstString GetTypeName() override;
 
@@ -64,18 +64,15 @@ protected:
   CompilerType m_compiler_type;
 
 private:
-  ValueObjectMemory(ExecutionContextScope *exe_scope,
-                    ValueObjectManager &manager, llvm::StringRef name,
+  ValueObjectMemory(ExecutionContextScope *exe_scope, llvm::StringRef name,
                     const Address &address, lldb::TypeSP &type_sp);
 
-  ValueObjectMemory(ExecutionContextScope *exe_scope,
-                    ValueObjectManager &manager, llvm::StringRef name,
+  ValueObjectMemory(ExecutionContextScope *exe_scope, llvm::StringRef name,
                     const Address &address, const CompilerType &ast_type);
   // For ValueObject only
-  ValueObjectMemory(const ValueObjectMemory &) = delete;
-  const ValueObjectMemory &operator=(const ValueObjectMemory &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(ValueObjectMemory);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_VALUEOBJECTMEMORY_H
+#endif // liblldb_ValueObjectMemory_h_

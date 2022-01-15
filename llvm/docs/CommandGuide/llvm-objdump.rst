@@ -33,7 +33,7 @@ combined with other commands:
 
   Disassemble all sections found in the input files.
   
-.. option:: --disassemble-symbols=<symbol1[,symbol2,...]>
+.. option:: --disassemble-functions=<symbol1[,symbol2,...]>
 
   Disassemble only the specified symbols. Takes demangled symbol names when
   :option:`--demangle` is specified, otherwise takes mangled symbol names.
@@ -85,18 +85,13 @@ combined with other commands:
 
   Display the symbol table.
 
-.. option:: -T, --dynamic-syms
-
-  Display the contents of the dynamic symbol table.
-
 .. option:: -u, --unwind-info
 
   Display the unwind info of the input(s).
 
-.. option:: -v, --version
+.. option:: --version
 
-  Display the version of the :program:`llvm-objdump` executable. Does not stack
-  with other commands.
+  Display the version of this program. Does not stack with other commands.
 
 .. option:: -x, --all-headers
 
@@ -123,17 +118,6 @@ OPTIONS
 
   Demangle symbol names in the output.
 
-.. option:: --debug-vars=<format>
-
-  Print the locations (in registers or memory) of source-level variables
-  alongside disassembly. ``format`` may be ``unicode`` or ``ascii``, defaulting
-  to ``unicode`` if omitted.
-
-.. option:: --debug-vars-indent=<width>
-
-  Distance to indent the source-level variable display, relative to the start
-  of the disassembly. Defaults to 52 characters.
-
 .. option:: -j, --section=<section1[,section2,...]>
 
   Perform commands on the specified sections only. For Mach-O use
@@ -146,14 +130,8 @@ OPTIONS
 
 .. option:: -M, --disassembler-options=<opt1[,opt2,...]>
 
-  Pass target-specific disassembler options. Available options:
-
-  * ``reg-names-std``: ARM only (default). Print in ARM 's instruction set documentation, with r13/r14/r15 replaced by sp/lr/pc.
-  * ``reg-names-raw``: ARM only. Use r followed by the register number.
-  * ``no-aliases``: AArch64 and RISC-V only. Print raw instruction mnemonic instead of pesudo instruction mnemonic.
-  * ``numeric``: RISC-V only. Print raw register names instead of ABI mnemonic. (e.g. print x1 instead of ra)
-  * ``att``: x86 only (default). Print in the AT&T syntax.
-  * ``intel``: x86 only. Print in the intel syntax.
+  Pass target-specific disassembler options. Currently supported for ARM targets
+  only. Available options are ``reg-names-std`` and ``reg-names-raw``.
 
 .. option:: --mcpu=<cpu-name>
 
@@ -162,31 +140,16 @@ OPTIONS
 
 .. option:: --mattr=<a1,+a2,-a3,...>
 
-  Enable/disable target-specific attributes. Specify ``--mattr=help`` to display
+  Enable/disable target-specific attributes. Specify ``--mcpu=help`` to display
   the available attributes.
 
 .. option:: --no-leading-addr
 
   When disassembling, do not print leading addresses.
 
-.. option:: --no-print-imm-hex
-
-  Do not use hex format for immediate values in disassembly output (default).
-
 .. option:: --no-show-raw-insn
 
   When disassembling, do not print the raw bytes of each instruction.
-
-.. option:: --prefix=<prefix>
-
-  When disassembling with the :option:`--source` option, prepend ``prefix`` to
-  absolute paths.
-
-.. option:: --prefix-strip=<level>
-
-  When disassembling with the :option:`--source` option, strip out ``level``
-  initial directories from absolute paths. This option has no effect without
-  :option:`--prefix`.
 
 .. option:: --print-imm-hex
 
@@ -218,30 +181,6 @@ OPTIONS
 
   When printing symbols, only print symbols with a value up to ``address``.
 
-.. option:: --symbolize-operands
-
-  When disassembling, symbolize a branch target operand to print a label instead of a real address.
-
-  When printing a PC-relative global symbol reference, print it as an offset from the leading symbol.
-
-  Only works with an X86 linked image.
-
-  Example:
-    A non-symbolized branch instruction with a local target and pc-relative memory access like
-
-  .. code-block:: none
-
-      cmp eax, dword ptr [rip + 4112]
-      jge 0x20117e <_start+0x25>
-
-  might become
-
-  .. code-block:: none
-
-     <L0>:
-       cmp eax, dword ptr <g>
-       jge	<L0>
-
 .. option:: --triple=<string>
 
   Target triple to disassemble for, see ``--version`` for available targets.
@@ -252,7 +191,6 @@ OPTIONS
 
 .. option:: --x86-asm-syntax=<style>
 
-  Deprecated.
   When used with :option:`--disassemble`, choose style of code to emit from
   X86 backend. Supported values are:
 
@@ -292,6 +230,11 @@ MACH-O ONLY OPTIONS AND COMMANDS
 
   Display binding info
 
+.. option:: --cfg
+
+  Create a CFG for every symbol in the object file and write it to a graphviz
+  file.
+
 .. option:: --data-in-code
 
   Display the data in code table.
@@ -315,10 +258,6 @@ MACH-O ONLY OPTIONS AND COMMANDS
 .. option:: --exports-trie
 
   Display exported symbols.
-
-.. option:: --function-starts
-
-  Print the function starts table for Mach-O objects.
 
 .. option:: -g
 
@@ -373,10 +312,6 @@ MACH-O ONLY OPTIONS AND COMMANDS
 
   Display rebasing information.
 
-.. option:: --rpaths
-
-  Display runtime search paths for the binary.
-
 .. option:: --universal-headers
 
   Display universal headers.
@@ -385,20 +320,12 @@ MACH-O ONLY OPTIONS AND COMMANDS
 
   Display weak binding information.
 
-XCOFF ONLY OPTIONS AND COMMANDS
----------------------------------
-
-.. option:: --symbol-description
-
-  Add symbol description to disassembly output.
-
 BUGS
 ----
 
-To report bugs, please visit <https://bugs.llvm.org/>.
+To report bugs, please visit <http://llvm.org/bugs/>.
 
 SEE ALSO
 --------
 
-:manpage:`llvm-nm(1)`, :manpage:`llvm-otool(1)`, :manpage:`llvm-readelf(1)`,
-:manpage:`llvm-readobj(1)`
+:manpage:`llvm-nm(1)`, :manpage:`llvm-readelf(1)`, :manpage:`llvm-readobj(1)`

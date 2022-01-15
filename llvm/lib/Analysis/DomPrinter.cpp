@@ -20,7 +20,6 @@
 #include "llvm/Analysis/DomPrinter.h"
 #include "llvm/Analysis/DOTGraphTraitsPass.h"
 #include "llvm/Analysis/PostDominators.h"
-#include "llvm/InitializePasses.h"
 
 using namespace llvm;
 
@@ -40,11 +39,11 @@ struct DOTGraphTraits<DomTreeNode*> : public DefaultDOTGraphTraits {
 
 
     if (isSimple())
-      return DOTGraphTraits<DOTFuncInfo *>
-        ::getSimpleNodeLabel(BB, nullptr);
+      return DOTGraphTraits<const Function*>
+        ::getSimpleNodeLabel(BB, BB->getParent());
     else
-      return DOTGraphTraits<DOTFuncInfo *>
-        ::getCompleteNodeLabel(BB, nullptr);
+      return DOTGraphTraits<const Function*>
+        ::getCompleteNodeLabel(BB, BB->getParent());
   }
 };
 

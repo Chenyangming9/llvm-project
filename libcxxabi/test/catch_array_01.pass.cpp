@@ -11,11 +11,11 @@
 // GCC incorrectly allows array types to be caught by reference.
 // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=69372
 // XFAIL: gcc
-// UNSUPPORTED: no-exceptions
+// UNSUPPORTED: libcxxabi-no-exceptions
 
 #include <cassert>
 
-int main(int, char**)
+int main()
 {
     typedef char Array[4];
     Array a = {'H', 'i', '!', 0};
@@ -31,6 +31,4 @@ int main(int, char**)
     catch (...)
     {
     }
-
-    return 0;
 }

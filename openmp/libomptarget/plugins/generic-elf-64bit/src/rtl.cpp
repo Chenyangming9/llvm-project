@@ -12,8 +12,8 @@
 
 #include <cassert>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
+#include <cstdlib>
 #include <dlfcn.h>
 #include <ffi.h>
 #include <gelf.h>
@@ -22,22 +22,35 @@
 #include <string>
 #include <vector>
 
-#include "Debug.h"
 #include "omptargetplugin.h"
 
 #ifndef TARGET_NAME
 #define TARGET_NAME Generic ELF - 64bit
 #endif
-#define DEBUG_PREFIX "TARGET " GETNAME(TARGET_NAME) " RTL"
 
 #ifndef TARGET_ELF_ID
 #define TARGET_ELF_ID 0
 #endif
 
-#include "elf_common.h"
+#ifdef OMPTARGET_DEBUG
+static int DebugLevel = 0;
+
+#define GETNAME2(name) #name
+#define GETNAME(name) GETNAME2(name)
+#define DP(...) \
+  do { \
+    if (DebugLevel > 0) { \
+      DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__); \
+    } \
+  } while (false)
+#else // OMPTARGET_DEBUG
+#define DP(...) {}
+#endif // OMPTARGET_DEBUG
+
+#include "../../common/elf_common.c"
 
 #define NUMBER_OF_DEVICES 4
-#define OFFLOADSECTIONNAME "omp_offloading_entries"
+#define OFFLOADSECTIONNAME ".omp_offloading.entries"
 
 /// Array of Dynamic libraries loaded for this target.
 struct DynLibTy {
@@ -93,7 +106,15 @@ public:
     return &E.Table;
   }
 
-  RTLDeviceInfoTy(int32_t num_devices) { FuncGblEntries.resize(num_devices); }
+  RTLDeviceInfoTy(int32_t num_devices) {
+#ifdef OMPTARGET_DEBUG
+    if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
+      DebugLevel = std::stoi(envStr);
+    }
+#endif // OMPTARGET_DEBUG
+
+    FuncGblEntries.resize(num_devices);
+  }
 
   ~RTLDeviceInfoTy() {
     // Close dynamic libraries
@@ -227,7 +248,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
   Elf64_Addr entries_addr = libInfo->l_addr + entries_offset;
 
   DP("Pointer to first entry to be loaded is (" DPxMOD ").\n",
-     DPxPTR(entries_addr));
+      DPxPTR(entries_addr));
 
   // Table of pointers to all the entries in the target.
   __tgt_offload_entry *entries_table = (__tgt_offload_entry *)entries_addr;
@@ -242,7 +263,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
   }
 
   DP("Entries table range is (" DPxMOD ")->(" DPxMOD ")\n",
-     DPxPTR(entries_begin), DPxPTR(entries_end));
+      DPxPTR(entries_begin), DPxPTR(entries_end));
   DeviceInfo.createOffloadTable(device_id, entries_begin, entries_end);
 
   elf_end(e);
@@ -250,23 +271,8 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
   return DeviceInfo.getOffloadEntriesTable(device_id);
 }
 
-// Sample implementation of explicit memory allocator. For this plugin all kinds
-// are equivalent to each other.
-void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr,
-                           int32_t kind) {
-  void *ptr = NULL;
-
-  switch (kind) {
-  case TARGET_ALLOC_DEVICE:
-  case TARGET_ALLOC_HOST:
-  case TARGET_ALLOC_SHARED:
-  case TARGET_ALLOC_DEFAULT:
-    ptr = malloc(size);
-    break;
-  default:
-    REPORT("Invalid target data allocation kind");
-  }
-
+void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr) {
+  void *ptr = malloc(size);
   return ptr;
 }
 
@@ -288,11 +294,8 @@ int32_t __tgt_rtl_data_delete(int32_t device_id, void *tgt_ptr) {
 }
 
 int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
-                                         void **tgt_args,
-                                         ptrdiff_t *tgt_offsets,
-                                         int32_t arg_num, int32_t team_num,
-                                         int32_t thread_limit,
-                                         uint64_t loop_tripcount /*not used*/) {
+    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t team_num,
+    int32_t thread_limit, uint64_t loop_tripcount /*not used*/) {
   // ignore team num and thread limit.
 
   // Use libffi to launch execution.
@@ -319,17 +322,16 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   DP("Running entry point at " DPxMOD "...\n", DPxPTR(tgt_entry_ptr));
 
   void (*entry)(void);
-  *((void **)&entry) = tgt_entry_ptr;
+  *((void**) &entry) = tgt_entry_ptr;
   ffi_call(&cif, entry, NULL, &args[0]);
   return OFFLOAD_SUCCESS;
 }
 
 int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
-                                    void **tgt_args, ptrdiff_t *tgt_offsets,
-                                    int32_t arg_num) {
+    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num) {
   // use one team and one thread.
   return __tgt_rtl_run_target_team_region(device_id, tgt_entry_ptr, tgt_args,
-                                          tgt_offsets, arg_num, 1, 1, 0);
+      tgt_offsets, arg_num, 1, 1, 0);
 }
 
 #ifdef __cplusplus

@@ -80,7 +80,7 @@ int handleVoidInComma() {
   return [obj voidM], 0;
 }
 
-int marker(void) { // non-void function does not return a value
+int marker(void) { // control reaches end of non-void function
 }
 
 // CHECK-darwin8: warning: The receiver of message 'longDoubleM' is nil and returns a value of type 'long double' that will be garbage

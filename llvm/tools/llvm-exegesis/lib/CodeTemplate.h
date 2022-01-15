@@ -23,7 +23,7 @@ namespace exegesis {
 
 // A template for an Instruction holding values for each of its Variables.
 struct InstructionTemplate {
-  InstructionTemplate(const Instruction *Instr);
+  InstructionTemplate(const Instruction &Instr);
 
   InstructionTemplate(const InstructionTemplate &);            // default
   InstructionTemplate &operator=(const InstructionTemplate &); // default
@@ -31,27 +31,19 @@ struct InstructionTemplate {
   InstructionTemplate &operator=(InstructionTemplate &&);      // default
 
   unsigned getOpcode() const;
-  MCOperand &getValueFor(const Variable &Var);
-  const MCOperand &getValueFor(const Variable &Var) const;
-  MCOperand &getValueFor(const Operand &Op);
-  const MCOperand &getValueFor(const Operand &Op) const;
+  llvm::MCOperand &getValueFor(const Variable &Var);
+  const llvm::MCOperand &getValueFor(const Variable &Var) const;
+  llvm::MCOperand &getValueFor(const Operand &Op);
+  const llvm::MCOperand &getValueFor(const Operand &Op) const;
   bool hasImmediateVariables() const;
-  const Instruction &getInstr() const { return *Instr; }
-  ArrayRef<MCOperand> getVariableValues() const { return VariableValues; }
-  void setVariableValues(ArrayRef<MCOperand> NewVariableValues) {
-    assert(VariableValues.size() == NewVariableValues.size() &&
-           "Value count mismatch");
-    VariableValues.assign(NewVariableValues.begin(), NewVariableValues.end());
-  }
 
-  // Builds an MCInst from this InstructionTemplate setting its operands
+  // Builds an llvm::MCInst from this InstructionTemplate setting its operands
   // to the corresponding variable values. Precondition: All VariableValues must
   // be set.
-  MCInst build() const;
+  llvm::MCInst build() const;
 
-private:
-  const Instruction *Instr;
-  SmallVector<MCOperand, 4> VariableValues;
+  Instruction Instr;
+  llvm::SmallVector<llvm::MCOperand, 4> VariableValues;
 };
 
 enum class ExecutionMode : uint8_t {
@@ -99,14 +91,14 @@ enum class ExecutionMode : uint8_t {
 bool isEnumValue(ExecutionMode Execution);
 
 // Returns a human readable string for the enum.
-StringRef getName(ExecutionMode Execution);
+llvm::StringRef getName(ExecutionMode Execution);
 
 // Returns a sequence of increasing powers of two corresponding to all the
 // Execution flags.
-ArrayRef<ExecutionMode> getAllExecutionBits();
+llvm::ArrayRef<ExecutionMode> getAllExecutionBits();
 
 // Decomposes Execution into individual set bits.
-SmallVector<ExecutionMode, 4> getExecutionModeBits(ExecutionMode);
+llvm::SmallVector<ExecutionMode, 4> getExecutionModeBits(ExecutionMode);
 
 LLVM_ENABLE_BITMASK_ENUMS_IN_NAMESPACE();
 
@@ -123,8 +115,6 @@ struct CodeTemplate {
   CodeTemplate &operator=(const CodeTemplate &) = delete;
 
   ExecutionMode Execution = ExecutionMode::UNKNOWN;
-  // See InstructionBenchmarkKey.::Config.
-  std::string Config;
   // Some information about how this template has been created.
   std::string Info;
   // The list of the instructions for this template.

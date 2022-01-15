@@ -6,26 +6,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_MODULEDEPENDENCYCOLLECTOR_H
-#define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_MODULEDEPENDENCYCOLLECTOR_H
+#ifndef liblldb_ModuleDependencyCollector_h_
+#define liblldb_ModuleDependencyCollector_h_
 
+#include "lldb/Utility/FileCollector.h"
 #include "clang/Frontend/Utils.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/FileCollector.h"
 
 namespace lldb_private {
 class ModuleDependencyCollectorAdaptor
     : public clang::ModuleDependencyCollector {
 public:
-  ModuleDependencyCollectorAdaptor(
-      std::shared_ptr<llvm::FileCollectorBase> file_collector)
+  ModuleDependencyCollectorAdaptor(FileCollector &file_collector)
       : clang::ModuleDependencyCollector(""), m_file_collector(file_collector) {
   }
 
   void addFile(llvm::StringRef Filename,
                llvm::StringRef FileDst = {}) override {
-    if (m_file_collector)
-      m_file_collector->addFile(Filename);
+    m_file_collector.AddFile(Filename);
   }
 
   bool insertSeen(llvm::StringRef Filename) override { return false; }
@@ -33,7 +31,7 @@ public:
   void writeFileMap() override {}
 
 private:
-  std::shared_ptr<llvm::FileCollectorBase> m_file_collector;
+  FileCollector &m_file_collector;
 };
 } // namespace lldb_private
 

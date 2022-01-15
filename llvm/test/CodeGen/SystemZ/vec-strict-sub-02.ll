@@ -7,19 +7,19 @@ declare <4 x float> @llvm.experimental.constrained.fsub.v4f32(<4 x float>, <4 x 
 
 ; Test a v4f32 subtraction.
 define <4 x float> @f6(<4 x float> %dummy, <4 x float> %val1,
-                       <4 x float> %val2) #0 {
+                       <4 x float> %val2) {
 ; CHECK-LABEL: f6:
 ; CHECK: vfssb %v24, %v26, %v28
 ; CHECK: br %r14
   %ret = call <4 x float> @llvm.experimental.constrained.fsub.v4f32(
                         <4 x float> %val1, <4 x float> %val2,
                         metadata !"round.dynamic",
-                        metadata !"fpexcept.strict") #0
+                        metadata !"fpexcept.strict")
   ret <4 x float> %ret
 }
 
 ; Test an f32 subtraction that uses vector registers.
-define float @f7(<4 x float> %val1, <4 x float> %val2) #0 {
+define float @f7(<4 x float> %val1, <4 x float> %val2) {
 ; CHECK-LABEL: f7:
 ; CHECK: wfssb %f0, %v24, %v26
 ; CHECK: br %r14
@@ -28,8 +28,6 @@ define float @f7(<4 x float> %val1, <4 x float> %val2) #0 {
   %ret = call float @llvm.experimental.constrained.fsub.f32(
                         float %scalar1, float %scalar2,
                         metadata !"round.dynamic",
-                        metadata !"fpexcept.strict") #0
+                        metadata !"fpexcept.strict")
   ret float %ret
 }
-
-attributes #0 = { strictfp }

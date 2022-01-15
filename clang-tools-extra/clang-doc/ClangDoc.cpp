@@ -29,13 +29,13 @@ namespace doc {
 class MapperActionFactory : public tooling::FrontendActionFactory {
 public:
   MapperActionFactory(ClangDocContext CDCtx) : CDCtx(CDCtx) {}
-  std::unique_ptr<FrontendAction> create() override;
+  clang::FrontendAction *create() override;
 
 private:
   ClangDocContext CDCtx;
 };
 
-std::unique_ptr<FrontendAction> MapperActionFactory::create() {
+clang::FrontendAction *MapperActionFactory::create() {
   class ClangDocAction : public clang::ASTFrontendAction {
   public:
     ClangDocAction(ClangDocContext CDCtx) : CDCtx(CDCtx) {}
@@ -43,18 +43,18 @@ std::unique_ptr<FrontendAction> MapperActionFactory::create() {
     std::unique_ptr<clang::ASTConsumer>
     CreateASTConsumer(clang::CompilerInstance &Compiler,
                       llvm::StringRef InFile) override {
-      return std::make_unique<MapASTVisitor>(&Compiler.getASTContext(), CDCtx);
+      return llvm::make_unique<MapASTVisitor>(&Compiler.getASTContext(), CDCtx);
     }
 
   private:
     ClangDocContext CDCtx;
   };
-  return std::make_unique<ClangDocAction>(CDCtx);
+  return new ClangDocAction(CDCtx);
 }
 
 std::unique_ptr<tooling::FrontendActionFactory>
 newMapperActionFactory(ClangDocContext CDCtx) {
-  return std::make_unique<MapperActionFactory>(CDCtx);
+  return llvm::make_unique<MapperActionFactory>(CDCtx);
 }
 
 } // namespace doc

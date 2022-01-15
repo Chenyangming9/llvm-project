@@ -12,12 +12,28 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
-#include "GCNSubtarget.h"
+#include "AMDGPUSubtarget.h"
+#include "Utils/AMDGPUBaseInfo.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
-#include "llvm/IR/IntrinsicsAMDGPU.h"
-#include "llvm/IR/IntrinsicsR600.h"
+#include "llvm/IR/CallSite.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Use.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Target/TargetMachine.h"
 
 #define DEBUG_TYPE "amdgpu-annotate-kernel-features"
@@ -25,13 +41,6 @@
 using namespace llvm;
 
 namespace {
-static constexpr StringLiteral ImplicitAttrNames[] = {
-    // X ids unnecessarily propagated to kernels.
-    "amdgpu-work-item-id-x",  "amdgpu-work-item-id-y",
-    "amdgpu-work-item-id-z",  "amdgpu-work-group-id-x",
-    "amdgpu-work-group-id-y", "amdgpu-work-group-id-z",
-    "amdgpu-dispatch-ptr",    "amdgpu-dispatch-id",
-    "amdgpu-queue-ptr",       "amdgpu-implicitarg-ptr"};
 
 class AMDGPUAnnotateKernelFeatures : public CallGraphSCCPass {
 private:
@@ -62,8 +71,7 @@ public:
   static bool visitConstantExpr(const ConstantExpr *CE);
   static bool visitConstantExprsRecursively(
     const Constant *EntryC,
-    SmallPtrSet<const Constant *, 8> &ConstantExprVisited, bool IsFunc,
-    bool HasApertureRegs);
+    SmallPtrSet<const Constant *, 8> &ConstantExprVisited);
 };
 
 } // end anonymous namespace
@@ -85,14 +93,6 @@ static bool castRequiresQueuePtr(const AddrSpaceCastInst *ASC) {
   return castRequiresQueuePtr(ASC->getSrcAddressSpace());
 }
 
-static bool isDSAddress(const Constant *C) {
-  const GlobalValue *GV = dyn_cast<GlobalValue>(C);
-  if (!GV)
-    return false;
-  unsigned AS = GV->getAddressSpace();
-  return AS == AMDGPUAS::LOCAL_ADDRESS || AS == AMDGPUAS::REGION_ADDRESS;
-}
-
 bool AMDGPUAnnotateKernelFeatures::visitConstantExpr(const ConstantExpr *CE) {
   if (CE->getOpcode() == Instruction::AddrSpaceCast) {
     unsigned SrcAS = CE->getOperand(0)->getType()->getPointerAddressSpace();
@@ -104,8 +104,7 @@ bool AMDGPUAnnotateKernelFeatures::visitConstantExpr(const ConstantExpr *CE) {
 
 bool AMDGPUAnnotateKernelFeatures::visitConstantExprsRecursively(
   const Constant *EntryC,
-  SmallPtrSet<const Constant *, 8> &ConstantExprVisited,
-  bool IsFunc, bool HasApertureRegs) {
+  SmallPtrSet<const Constant *, 8> &ConstantExprVisited) {
 
   if (!ConstantExprVisited.insert(EntryC).second)
     return false;
@@ -116,13 +115,9 @@ bool AMDGPUAnnotateKernelFeatures::visitConstantExprsRecursively(
   while (!Stack.empty()) {
     const Constant *C = Stack.pop_back_val();
 
-    // We need to trap on DS globals in non-entry functions.
-    if (IsFunc && isDSAddress(C))
-      return true;
-
     // Check this constant expression.
     if (const auto *CE = dyn_cast<ConstantExpr>(C)) {
-      if (!HasApertureRegs && visitConstantExpr(CE))
+      if (visitConstantExpr(CE))
         return true;
     }
 
@@ -178,9 +173,6 @@ static StringRef intrinsicToAttrName(Intrinsic::ID ID,
   case Intrinsic::amdgcn_implicitarg_ptr:
     return "amdgpu-implicitarg-ptr";
   case Intrinsic::amdgcn_queue_ptr:
-  case Intrinsic::amdgcn_is_shared:
-  case Intrinsic::amdgcn_is_private:
-    // TODO: Does not require queue ptr on gfx9+
   case Intrinsic::trap:
   case Intrinsic::debugtrap:
     IsQueuePtr = true;
@@ -201,10 +193,24 @@ static bool handleAttr(Function &Parent, const Function &Callee,
 
 static void copyFeaturesToFunction(Function &Parent, const Function &Callee,
                                    bool &NeedQueuePtr) {
+  // X ids unnecessarily propagated to kernels.
+  static const StringRef AttrNames[] = {
+    { "amdgpu-work-item-id-x" },
+    { "amdgpu-work-item-id-y" },
+    { "amdgpu-work-item-id-z" },
+    { "amdgpu-work-group-id-x" },
+    { "amdgpu-work-group-id-y" },
+    { "amdgpu-work-group-id-z" },
+    { "amdgpu-dispatch-ptr" },
+    { "amdgpu-dispatch-id" },
+    { "amdgpu-kernarg-segment-ptr" },
+    { "amdgpu-implicitarg-ptr" }
+  };
+
   if (handleAttr(Parent, Callee, "amdgpu-queue-ptr"))
     NeedQueuePtr = true;
 
-  for (StringRef AttrName : ImplicitAttrNames)
+  for (StringRef AttrName : AttrNames)
     handleAttr(Parent, Callee, AttrName);
 }
 
@@ -260,45 +266,25 @@ bool AMDGPUAnnotateKernelFeatures::propagateUniformWorkGroupAttribute(
 
 bool AMDGPUAnnotateKernelFeatures::addFeatureAttributes(Function &F) {
   const GCNSubtarget &ST = TM->getSubtarget<GCNSubtarget>(F);
+  bool HasFlat = ST.hasFlatAddressSpace();
   bool HasApertureRegs = ST.hasApertureRegs();
   SmallPtrSet<const Constant *, 8> ConstantExprVisited;
 
-  bool HaveStackObjects = false;
   bool Changed = false;
   bool NeedQueuePtr = false;
   bool HaveCall = false;
-  bool HasIndirectCall = false;
   bool IsFunc = !AMDGPU::isEntryFunctionCC(F.getCallingConv());
-  CallingConv::ID CC = F.getCallingConv();
-  bool CallingConvSupportsAllImplicits = (CC != CallingConv::AMDGPU_Gfx);
-
-  // If this function hasAddressTaken() = true
-  // then add all attributes corresponding to the implicit args.
-  if (CallingConvSupportsAllImplicits &&
-      F.hasAddressTaken(nullptr, true, true, true)) {
-    for (StringRef AttrName : ImplicitAttrNames) {
-      F.addFnAttr(AttrName);
-    }
-    Changed = true;
-  }
 
   for (BasicBlock &BB : F) {
     for (Instruction &I : BB) {
-      if (isa<AllocaInst>(I)) {
-        HaveStackObjects = true;
-        continue;
-      }
+      CallSite CS(&I);
+      if (CS) {
+        Function *Callee = CS.getCalledFunction();
 
-      if (auto *CB = dyn_cast<CallBase>(&I)) {
-        const Function *Callee =
-            dyn_cast<Function>(CB->getCalledOperand()->stripPointerCasts());
-
-        // Note the occurence of indirect call.
+        // TODO: Do something with indirect calls.
         if (!Callee) {
-          if (!CB->isInlineAsm()) {
-            HasIndirectCall = true;
+          if (!CS.isInlineAsm())
             HaveCall = true;
-          }
           continue;
         }
 
@@ -309,25 +295,20 @@ bool AMDGPUAnnotateKernelFeatures::addFeatureAttributes(Function &F) {
           Changed = true;
         } else {
           bool NonKernelOnly = false;
-
-          if (!IsFunc && IID == Intrinsic::amdgcn_kernarg_segment_ptr) {
-            F.addFnAttr("amdgpu-kernarg-segment-ptr");
-          } else {
-            StringRef AttrName = intrinsicToAttrName(IID, NonKernelOnly,
-                                                     NeedQueuePtr);
-            if (!AttrName.empty() && (IsFunc || !NonKernelOnly)) {
-              F.addFnAttr(AttrName);
-              Changed = true;
-            }
+          StringRef AttrName = intrinsicToAttrName(IID,
+                                                   NonKernelOnly, NeedQueuePtr);
+          if (!AttrName.empty() && (IsFunc || !NonKernelOnly)) {
+            F.addFnAttr(AttrName);
+            Changed = true;
           }
         }
       }
 
-      if (NeedQueuePtr || (!IsFunc && HasApertureRegs))
+      if (NeedQueuePtr || HasApertureRegs)
         continue;
 
       if (const AddrSpaceCastInst *ASC = dyn_cast<AddrSpaceCastInst>(&I)) {
-        if (!HasApertureRegs && castRequiresQueuePtr(ASC)) {
+        if (castRequiresQueuePtr(ASC)) {
           NeedQueuePtr = true;
           continue;
         }
@@ -338,8 +319,7 @@ bool AMDGPUAnnotateKernelFeatures::addFeatureAttributes(Function &F) {
         if (!OpC)
           continue;
 
-        if (visitConstantExprsRecursively(OpC, ConstantExprVisited, IsFunc,
-                                          HasApertureRegs)) {
+        if (visitConstantExprsRecursively(OpC, ConstantExprVisited)) {
           NeedQueuePtr = true;
           break;
         }
@@ -355,35 +335,8 @@ bool AMDGPUAnnotateKernelFeatures::addFeatureAttributes(Function &F) {
   // TODO: We could refine this to captured pointers that could possibly be
   // accessed by flat instructions. For now this is mostly a poor way of
   // estimating whether there are calls before argument lowering.
-  if (!IsFunc && HaveCall) {
-    F.addFnAttr("amdgpu-calls");
-    Changed = true;
-  }
-
-  if (HaveStackObjects) {
-    F.addFnAttr("amdgpu-stack-objects");
-    Changed = true;
-  }
-
-  // This pass cannot copy attributes from callees to callers
-  // if there is an indirect call and in thus such cases,
-  // hasAddressTaken() would be false for kernels and functions
-  // making an indirect call (if they are themselves not indirectly called).
-  // We must tag all such kernels/functions with all implicits attributes
-  // for correctness.
-  // e.g.
-  // 1. Kernel K1 makes an indirect call to function F1.
-  //    Without detecting an indirect call in K1, this pass will not
-  //    add all implicit args to K1 (which is incorrect).
-  // 2. Kernel K1 makes direct call to F1 which makes indirect call to function
-  // F2.
-  //    Without detecting an indirect call in F1 (whose hasAddressTaken() is
-  //    false), the pass will not add all implicit args to F1 (which is
-  //    essential for correctness).
-  if (CallingConvSupportsAllImplicits && HasIndirectCall) {
-    for (StringRef AttrName : ImplicitAttrNames) {
-      F.addFnAttr(AttrName);
-    }
+  if (HasFlat && !IsFunc && HaveCall) {
+    F.addFnAttr("amdgpu-flat-scratch");
     Changed = true;
   }
 
@@ -403,11 +356,9 @@ bool AMDGPUAnnotateKernelFeatures::runOnSCC(CallGraphSCC &SCC) {
     }
 
     Function *F = I->getFunction();
-    // Ignore functions with graphics calling conventions, these are currently
-    // not allowed to have kernel arguments.
-    if (!F || F->isDeclaration() || AMDGPU::isGraphics(F->getCallingConv()))
-      continue;
     // Add feature attributes
+    if (!F || F->isDeclaration())
+      continue;
     Changed |= addFeatureAttributes(*F);
   }
 

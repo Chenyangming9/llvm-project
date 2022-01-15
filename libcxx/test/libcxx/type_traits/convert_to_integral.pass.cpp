@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // TODO: Make this test pass for all standards.
-// XFAIL: c++03
+// XFAIL: c++98, c++03
 
 // <type_traits>
 
@@ -21,7 +21,7 @@
 #include <cstdint>
 #include <cassert>
 
-#include "user_defined_integral.h"
+#include "user_defined_integral.hpp"
 
 #include "test_macros.h"
 

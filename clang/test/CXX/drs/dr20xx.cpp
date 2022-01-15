@@ -2,100 +2,11 @@
 // RUN:            -Wno-variadic-macros -Wno-c11-extensions
 // RUN: %clang_cc1 -std=c++11 -triple x86_64-unknown-unknown %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
 // RUN: %clang_cc1 -std=c++14 -triple x86_64-unknown-unknown %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
-// RUN: %clang_cc1 -std=c++17 -triple x86_64-unknown-unknown %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
-// RUN: %clang_cc1 -std=c++2a -triple x86_64-unknown-unknown %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
+// RUN: %clang_cc1 -std=c++1z -triple x86_64-unknown-unknown %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
 
 #if __cplusplus < 201103L
 #define static_assert(...) _Static_assert(__VA_ARGS__)
 #endif
-
-namespace dr2026 { // dr2026: 11
-  template<int> struct X {};
-
-  const int a = a + 1; // expected-warning {{uninitialized}} expected-note {{here}} expected-note 0-1{{outside its lifetime}}
-  X<a> xa; // expected-error {{constant expression}} expected-note {{initializer of 'a'}}
-
-#if __cplusplus >= 201103L
-  constexpr int b = b; // expected-error {{constant expression}} expected-note {{outside its lifetime}}
-  [[clang::require_constant_initialization]] int c = c; // expected-error {{constant initializer}} expected-note {{attribute}}
-#if __cplusplus == 201103L
-  // expected-note@-2 {{read of non-const variable}} expected-note@-2 {{declared here}}
-#else
-  // expected-note@-4 {{outside its lifetime}}
-#endif
-#endif
-
-#if __cplusplus > 201703L
-  constinit int d = d; // expected-error {{constant initializer}} expected-note {{outside its lifetime}} expected-note {{'constinit'}}
-#endif
-
-  void f() {
-    static const int e = e + 1; // expected-warning {{suspicious}} expected-note {{here}} expected-note 0-1{{outside its lifetime}}
-    X<e> xe; // expected-error {{constant expression}} expected-note {{initializer of 'e'}}
-
-#if __cplusplus >= 201103L
-    static constexpr int f = f; // expected-error {{constant expression}} expected-note {{outside its lifetime}}
-    [[clang::require_constant_initialization]] static int g = g; // expected-error {{constant initializer}} expected-note {{attribute}}
-#if __cplusplus == 201103L
-    // expected-note@-2 {{read of non-const variable}} expected-note@-2 {{declared here}}
-#else
-    // expected-note@-4 {{outside its lifetime}}
-#endif
-#endif
-
-#if __cplusplus > 201703L
-    static constinit int h = h; // expected-error {{constant initializer}} expected-note {{outside its lifetime}} expected-note {{'constinit'}}
-#endif
-  }
-}
-
-namespace dr2076 { // dr2076: 13
-#if __cplusplus >= 201103L
-  namespace std_example {
-    struct A { A(int); };
-    struct B { B(A); };
-    B b{{0}};
-
-    struct Params { int a; int b; };
-    struct Foo {
-      Foo(Params);
-    };
-    Foo foo{{1, 2}};
-  }
-
-  struct string_view {
-    string_view(int); // not an aggregate
-  };
-  struct string {
-    string(int); // not an aggregate
-    operator string_view() const;
-  };
-
-  void foo(const string &); // expected-note {{cannot convert initializer list}}
-  void bar(string_view); // expected-note 2{{cannot convert initializer list}}
-
-  void func(const string &arg) {
-    // An argument in one set of braces is subject to user-defined conversions;
-    // an argument in two sets of braces is not, but an identity conversion is
-    // still OK.
-    foo(arg);
-    foo({arg});
-    foo({{arg}});
-    foo({{{arg}}}); // expected-error {{no matching function}}
-    bar(arg);
-    bar({arg});
-    bar({{arg}}); // expected-error {{no matching function}}
-    bar({{{arg}}}); // expected-error {{no matching function}}
-  }
-#endif
-}
-
-namespace dr2082 { // dr2082: 11
-  void test1(int x, int = sizeof(x)); // ok
-#if __cplusplus >= 201103L
-  void test2(int x, int = decltype(x){}); // ok
-#endif
-}
 
 namespace dr2083 { // dr2083: partial
 #if __cplusplus >= 201103L

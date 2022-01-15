@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <filesystem>
 
@@ -26,15 +26,16 @@
 // size_t hash_value(path const&) noexcept;
 
 
-#include "filesystem_include.h"
+#include "filesystem_include.hpp"
 #include <type_traits>
 #include <vector>
 #include <cassert>
 
 #include "test_macros.h"
 #include "test_iterators.h"
-#include "count_new.h"
-#include "filesystem_test_helper.h"
+#include "count_new.hpp"
+#include "filesystem_test_helper.hpp"
+#include "verbose_assert.h"
 
 struct PathCompareTest {
   const char* LHS;
@@ -65,8 +66,8 @@ const PathCompareTest CompareTestCases[] =
     {"/foo/bar/", "/foo/bar", 1}, // trailing separator
     {"foo", "/foo", -1}, // if !this->has_root_directory() and p.has_root_directory(), a value less than 0.
     {"/foo", "foo", 1}, //  if this->has_root_directory() and !p.has_root_directory(), a value greater than 0.
-    {("//" LONGA "////" LONGB "/" LONGC "///" LONGD), ("//" LONGA "/" LONGB "/" LONGC "/" LONGD), 0},
-    {(LONGA "/" LONGB "/" LONGC), (LONGA "/" LONGB "/" LONGB), 1}
+    {"//" LONGA "////" LONGB "/" LONGC "///" LONGD, "//" LONGA "/" LONGB "/" LONGC "/" LONGD, 0},
+    { LONGA "/" LONGB "/" LONGC, LONGA "/" LONGB "/" LONGB, 1}
 
 };
 #undef LONGA
@@ -85,10 +86,8 @@ void test_compare_basic()
   for (auto const & TC : CompareTestCases) {
     const path p1(TC.LHS);
     const path p2(TC.RHS);
-    std::string RHS(TC.RHS);
-    const path::string_type R(RHS.begin(), RHS.end());
-    const std::basic_string_view<path::value_type> RV(R);
-    const path::value_type *Ptr = R.c_str();
+    const std::string R(TC.RHS);
+    const std::string_view RV(TC.RHS);
     const int E = TC.expect;
     { // compare(...) functions
       DisableAllocationGuard g; // none of these operations should allocate
@@ -96,14 +95,15 @@ void test_compare_basic()
       // check runtime results
       int ret1 = normalize_ret(p1.compare(p2));
       int ret2 = normalize_ret(p1.compare(R));
-      int ret3 = normalize_ret(p1.compare(Ptr));
+      int ret3 = normalize_ret(p1.compare(TC.RHS));
       int ret4 = normalize_ret(p1.compare(RV));
 
       g.release();
-      assert(ret1 == ret2);
-      assert(ret1 == ret3);
-      assert(ret1 == ret4);
-      assert(ret1 == E);
+      ASSERT_EQ(ret1, ret2);
+      ASSERT_EQ(ret1, ret3);
+      ASSERT_EQ(ret1, ret4);
+      ASSERT_EQ(ret1, E)
+          << DISPLAY(TC.LHS) << DISPLAY(TC.RHS);
 
       // check signatures
       ASSERT_NOEXCEPT(p1.compare(p2));

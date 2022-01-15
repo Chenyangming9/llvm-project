@@ -18,30 +18,30 @@
 # RUN: llvm-objdump -d --no-show-raw-insn %t | FileCheck --check-prefix=IE %s
 
 ## DT_PPC_GOT represents the address of _GLOBAL_OFFSET_TABLE_.
-# GD-DYN: PPC_GOT 0x20358
+# GD-DYN: PPC_GOT 0x20078
 
 # GD-REL:      .rela.dyn {
-# GD-REL-NEXT:   0x20364 R_PPC_DTPMOD32 a 0x0
-# GD-REL-NEXT:   0x20368 R_PPC_DTPREL32 a 0x0
-# GD-REL-NEXT:   0x2036C R_PPC_DTPMOD32 b 0x0
-# GD-REL-NEXT:   0x20370 R_PPC_DTPREL32 b 0x0
-# GD-REL-NEXT:   0x20374 R_PPC_DTPMOD32 c 0x0
-# GD-REL-NEXT:   0x20378 R_PPC_DTPREL32 c 0x0
+# GD-REL-NEXT:   0x20078 R_PPC_DTPMOD32 a 0x0
+# GD-REL-NEXT:   0x2007C R_PPC_DTPREL32 a 0x0
+# GD-REL-NEXT:   0x20080 R_PPC_DTPMOD32 b 0x0
+# GD-REL-NEXT:   0x20084 R_PPC_DTPREL32 b 0x0
+# GD-REL-NEXT:   0x20088 R_PPC_DTPMOD32 c 0x0
+# GD-REL-NEXT:   0x2008C R_PPC_DTPREL32 c 0x0
 # GD-REL-NEXT: }
 
-## &DTPMOD(a) - _GLOBAL_OFFSET_TABLE_ = 12
-# GD:      addi 3, 31, 12
-# GD-NEXT: bl 0x1028c
+## &DTPMOD(a) - _GLOBAL_OFFSET_TABLE_ = 0x20078 - 0x20078 = 0
+# GD:      addi 3, 31, 0
+# GD-NEXT: bl .+32
 # GD-NEXT: lwz 3, 0(3)
 
-## &DTPMOD(b) - _GLOBAL_OFFSET_TABLE_ = 20
-# GD-NEXT: addi 3, 31, 20
-# GD-NEXT: bl 0x1028c
+## &DTPMOD(b) - _GLOBAL_OFFSET_TABLE_ = 0x20080 - 0x20078 = 8
+# GD-NEXT: addi 3, 31, 8
+# GD-NEXT: bl .+20
 # GD-NEXT: lwz 3, 0(3)
 
-## &DTPMOD(c) - _GLOBAL_OFFSET_TABLE_ = 28
-# GD-NEXT: addi 3, 9, 28
-# GD-NEXT: bl 0x1028c
+## &DTPMOD(c) - _GLOBAL_OFFSET_TABLE_ = 0x20088 - 0x20078 = 16
+# GD-NEXT: addi 3, 9, 16
+# GD-NEXT: bl .+8
 # GD-NEXT: lwz 3, 0(3)
 
 # NOREL: no relocations
@@ -60,8 +60,8 @@
 # LE-NEXT: lwz 3, 0(3)
 
 # IE-REL:      .rela.dyn {
-# IE-REL-NEXT:   0x10020280 R_PPC_TPREL32 b 0x0
-# IE-REL-NEXT:   0x10020284 R_PPC_TPREL32 c 0x0
+# IE-REL-NEXT:   0x10020068 R_PPC_TPREL32 b 0x0
+# IE-REL-NEXT:   0x1002006C R_PPC_TPREL32 c 0x0
 # IE-REL-NEXT: }
 
 ## a is relaxed to use LE.
@@ -69,12 +69,12 @@
 # IE:      addis 3, 2, 0
 # IE-NEXT: addi 3, 3, -28664
 # IE-NEXT: lwz 3, 0(3)
-## &.got[3] - _GLOBAL_OFFSET_TABLE_ = 12
-# IE-NEXT: lwz 3, 12(31)
+## &.got[0] - _GLOBAL_OFFSET_TABLE_ = 0
+# IE-NEXT: lwz 3, 0(31)
 # IE-NEXT: add 3, 3, 2
 # IE-NEXT: lwz 3, 0(3)
-## &.got[4] - _GLOBAL_OFFSET_TABLE_ = 16
-# IE-NEXT: lwz 3, 16(9)
+## &.got[1] - _GLOBAL_OFFSET_TABLE_ = 4
+# IE-NEXT: lwz 3, 4(9)
 # IE-NEXT: add 3, 3, 2
 # IE-NEXT: lwz 3, 0(3)
 

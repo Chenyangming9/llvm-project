@@ -47,29 +47,19 @@ if (LLVM_TREE_AVAILABLE)
          ${LLVM_INCLUDE_TESTS})
   option(COMPILER_RT_ENABLE_WERROR "Fail and stop if warning is triggered"
          ${LLVM_ENABLE_WERROR})
-
   # Use just-built Clang to compile/link tests on all platforms.
-  if (CMAKE_CROSSCOMPILING)
-    if (CMAKE_HOST_WIN32)
-      set(_host_executable_suffix ".exe")
-    else()
-      set(_host_executable_suffix "")
-    endif()
-  else()
-    set(_host_executable_suffix ${CMAKE_EXECUTABLE_SUFFIX})
-  endif()
   set(COMPILER_RT_TEST_COMPILER
-    ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang${_host_executable_suffix})
+    ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang${CMAKE_EXECUTABLE_SUFFIX})
   set(COMPILER_RT_TEST_CXX_COMPILER
-    ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang++${_host_executable_suffix})
+    ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang++${CMAKE_EXECUTABLE_SUFFIX})
 else()
     # Take output dir and install path from the user.
   set(COMPILER_RT_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE PATH
     "Path where built compiler-rt libraries should be stored.")
   set(COMPILER_RT_EXEC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/bin CACHE PATH
     "Path where built compiler-rt executables should be stored.")
-  set(COMPILER_RT_INSTALL_PATH "" CACHE PATH
-    "Prefix for directories where built compiler-rt artifacts should be installed.")
+  set(COMPILER_RT_INSTALL_PATH ${CMAKE_INSTALL_PREFIX} CACHE PATH
+    "Path where built compiler-rt libraries should be installed.")
   option(COMPILER_RT_INCLUDE_TESTS "Generate and build compiler-rt unit tests." OFF)
   option(COMPILER_RT_ENABLE_WERROR "Fail and stop if warning is triggered" OFF)
   # Use a host compiler to compile/link tests.
@@ -85,63 +75,31 @@ else()
   set(COMPILER_RT_TEST_COMPILER_ID GNU)
 endif()
 
-function(extend_install_path joined_path current_segment)
-  if("${current_segment}" STREQUAL "")
-    set(temp_path "${COMPILER_RT_INSTALL_PATH}")
-  elseif("${COMPILER_RT_INSTALL_PATH}" STREQUAL "")
-    set(temp_path "${current_segment}")
-  elseif(IS_ABSOLUTE "${current_segment}")
-    message(WARNING "Since \"${current_segment}\" is absolute, it overrides COMPILER_RT_INSTALL_PATH: \"${COMPILER_RT_INSTALL_PATH}\".")
-    set(temp_path "${current_segment}")
-  else()
-    set(temp_path "${COMPILER_RT_INSTALL_PATH}/${current_segment}")
-  endif()
-  set(${joined_path} "${temp_path}" PARENT_SCOPE)
-endfunction()
-
 if(NOT DEFINED COMPILER_RT_OS_DIR)
   string(TOLOWER ${CMAKE_SYSTEM_NAME} COMPILER_RT_OS_DIR)
 endif()
 if(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR AND NOT APPLE)
-  set(COMPILER_RT_OUTPUT_LIBRARY_DIR
-    ${COMPILER_RT_OUTPUT_DIR}/lib)
-  extend_install_path(default_install_path lib)
-  set(COMPILER_RT_INSTALL_LIBRARY_DIR "${default_install_path}" CACHE PATH
-    "Path where built compiler-rt libraries should be installed.")
-else(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR AND NOT APPLE)
-  set(COMPILER_RT_OUTPUT_LIBRARY_DIR
+  set(COMPILER_RT_LIBRARY_OUTPUT_DIR
+    ${COMPILER_RT_OUTPUT_DIR})
+  set(COMPILER_RT_LIBRARY_INSTALL_DIR
+    ${COMPILER_RT_INSTALL_PATH})
+else(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR)
+  set(COMPILER_RT_LIBRARY_OUTPUT_DIR
     ${COMPILER_RT_OUTPUT_DIR}/lib/${COMPILER_RT_OS_DIR})
-  extend_install_path(default_install_path "lib/${COMPILER_RT_OS_DIR}")
-  set(COMPILER_RT_INSTALL_LIBRARY_DIR "${default_install_path}" CACHE PATH
-    "Path where built compiler-rt libraries should be installed.")
+  set(COMPILER_RT_LIBRARY_INSTALL_DIR
+    ${COMPILER_RT_INSTALL_PATH}/lib/${COMPILER_RT_OS_DIR})
 endif()
-extend_install_path(default_install_path bin)
-set(COMPILER_RT_INSTALL_BINARY_DIR "${default_install_path}" CACHE PATH
-  "Path where built compiler-rt executables should be installed.")
-extend_install_path(default_install_path include)
-set(COMPILER_RT_INSTALL_INCLUDE_DIR "${default_install_path}" CACHE PATH
-  "Path where compiler-rt headers should be installed.")
-extend_install_path(default_install_path share)
-set(COMPILER_RT_INSTALL_DATA_DIR "${default_install_path}" CACHE PATH
-  "Path where compiler-rt data files should be installed.")
 
 if(APPLE)
-  # On Darwin if /usr/include/c++ doesn't exist, the user probably has Xcode but
-  # not the command line tools (or is using macOS 10.14 or newer). If this is
-  # the case, we need to find the OS X sysroot to pass to clang.
-  if(NOT EXISTS /usr/include/c++)
-    execute_process(COMMAND xcrun -sdk macosx --show-sdk-path
+  # On Darwin if /usr/include doesn't exist, the user probably has Xcode but not
+  # the command line tools. If this is the case, we need to find the OS X
+  # sysroot to pass to clang.
+  if(NOT EXISTS /usr/include)
+    execute_process(COMMAND xcodebuild -version -sdk macosx Path
        OUTPUT_VARIABLE OSX_SYSROOT
        ERROR_QUIET
        OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if (NOT OSX_SYSROOT OR NOT EXISTS ${OSX_SYSROOT})
-      message(WARNING "Detected OSX_SYSROOT ${OSX_SYSROOT} does not exist")
-    else()
-      message(STATUS "Found OSX_SYSROOT: ${OSX_SYSROOT}")
-      set(OSX_SYSROOT_FLAG "-isysroot${OSX_SYSROOT}")
-    endif()
-  else()
-    set(OSX_SYSROOT_FLAG "")
+    set(OSX_SYSROOT_FLAG "-isysroot${OSX_SYSROOT}")
   endif()
 
   option(COMPILER_RT_ENABLE_IOS "Enable building for iOS" On)
@@ -195,8 +153,16 @@ macro(test_targets)
       add_default_target_arch(${COMPILER_RT_DEFAULT_TARGET_ARCH})
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "i[2-6]86|x86|amd64")
       if(NOT MSVC)
-        test_target_arch(x86_64 "" "-m64")
-        test_target_arch(i386 __i386__ "-m32")
+        if(CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
+          if (CMAKE_SIZEOF_VOID_P EQUAL 4)
+            test_target_arch(i386 __i386__ "-m32")
+          else()
+            test_target_arch(x86_64 "" "-m64")
+          endif()
+        else()
+          test_target_arch(x86_64 "" "-m64")
+          test_target_arch(i386 __i386__ "-m32")
+        endif()
       else()
         if (CMAKE_SIZEOF_VOID_P EQUAL 4)
           test_target_arch(i386 "" "")
@@ -204,13 +170,19 @@ macro(test_targets)
           test_target_arch(x86_64 "" "")
         endif()
       endif()
-    elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "powerpc64le|ppc64le")
-      test_target_arch(powerpc64le "" "-m64")
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "powerpc")
-      if(CMAKE_SYSTEM_NAME MATCHES "AIX")
-        test_target_arch(powerpc "" "-m32")
+      # Strip out -nodefaultlibs when calling TEST_BIG_ENDIAN. Configuration
+      # will fail with this option when building with a sanitizer.
+      cmake_push_check_state()
+      string(REPLACE "-nodefaultlibs" "" CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
+      TEST_BIG_ENDIAN(HOST_IS_BIG_ENDIAN)
+      cmake_pop_check_state()
+
+      if(HOST_IS_BIG_ENDIAN)
+        test_target_arch(powerpc64 "" "-m64")
+      else()
+        test_target_arch(powerpc64le "" "-m64")
       endif()
-      test_target_arch(powerpc64 "" "-m64")
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "s390x")
       test_target_arch(s390x "" "")
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "sparc")
@@ -247,8 +219,6 @@ macro(test_targets)
       test_target_arch(wasm32 "" "--target=wasm32-unknown-unknown")
     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "wasm64")
       test_target_arch(wasm64 "" "--target=wasm64-unknown-unknown")
-    elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "ve")
-      test_target_arch(ve "__ve__" "--target=ve-unknown-none")
     endif()
     set(COMPILER_RT_OS_SUFFIX "")
   endif()

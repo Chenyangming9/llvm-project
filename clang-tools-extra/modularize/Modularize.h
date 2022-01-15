@@ -7,7 +7,7 @@
 //===--------------------------------------------------------------------===//
 ///
 /// \file
-/// Common definitions for Modularize.
+/// \brief Common definitions for Modularize.
 ///
 //===--------------------------------------------------------------------===//
 
@@ -41,7 +41,7 @@ typedef llvm::StringMap<DependentsVector> DependencyMap;
 /// \param HeaderPrefix Tells the code where the headers are, if they
 ///   aren's in the current directory, allowing the generator to strip
 ///   the leading, non-relative beginning of the header paths.
-/// RootModuleName If not empty, specifies that a root module
+/// \brief RootModuleName If not empty, specifies that a root module
 ///   should be created with this name.
 /// \returns True if successful.
 bool createModuleMap(llvm::StringRef ModuleMapPath,

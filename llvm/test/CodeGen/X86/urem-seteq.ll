@@ -6,6 +6,10 @@
 ; Odd divisors
 ;------------------------------------------------------------------------------;
 
+; This tests the BuildREMEqFold optimization with UREM, i32, odd divisor, SETEQ.
+; The corresponding pseudocode is:
+; Q <- [N * multInv(5, 2^32)] <=> [N * 0xCCCCCCCD] <=> [N * (-858993459)]
+; res <- [Q <= (2^32 - 1) / 5] <=> [Q <= 858993459] <=> [Q < 858993460]
 define i32 @test_urem_odd(i32 %X) nounwind {
 ; X86-LABEL: test_urem_odd:
 ; X86:       # %bb.0:
@@ -100,6 +104,12 @@ define i32 @test_urem_odd_bit31(i32 %X) nounwind {
 ; Even divisors
 ;------------------------------------------------------------------------------;
 
+; This tests the BuildREMEqFold optimization with UREM, i16, even divisor, SETNE.
+; In this case, D <=> 14 <=> 7 * 2^1, so D0 = 7 and K = 1.
+; The corresponding pseudocode is:
+; Q <- [N * multInv(D0, 2^16)] <=> [N * multInv(7, 2^16)] <=> [N * 28087]
+; Q <- [Q >>rot K] <=> [Q >>rot 1]
+; res <- ![Q <= (2^16 - 1) / 7] <=> ![Q <= 9362] <=> [Q > 9362]
 define i16 @test_urem_even(i16 %X) nounwind {
 ; X86-LABEL: test_urem_even:
 ; X86:       # %bb.0:
@@ -107,8 +117,8 @@ define i16 @test_urem_even(i16 %X) nounwind {
 ; X86-NEXT:    rorw %ax
 ; X86-NEXT:    movzwl %ax, %ecx
 ; X86-NEXT:    xorl %eax, %eax
-; X86-NEXT:    cmpl $4682, %ecx # imm = 0x124A
-; X86-NEXT:    setae %al
+; X86-NEXT:    cmpl $4681, %ecx # imm = 0x1249
+; X86-NEXT:    seta %al
 ; X86-NEXT:    # kill: def $ax killed $ax killed $eax
 ; X86-NEXT:    retl
 ;
@@ -118,8 +128,8 @@ define i16 @test_urem_even(i16 %X) nounwind {
 ; X64-NEXT:    rorw %ax
 ; X64-NEXT:    movzwl %ax, %ecx
 ; X64-NEXT:    xorl %eax, %eax
-; X64-NEXT:    cmpl $4682, %ecx # imm = 0x124A
-; X64-NEXT:    setae %al
+; X64-NEXT:    cmpl $4681, %ecx # imm = 0x1249
+; X64-NEXT:    seta %al
 ; X64-NEXT:    # kill: def $ax killed $ax killed $eax
 ; X64-NEXT:    retq
   %urem = urem i16 %X, 14
@@ -212,64 +222,18 @@ define i32 @test_urem_odd_setne(i32 %X) nounwind {
 ; X86:       # %bb.0:
 ; X86-NEXT:    imull $-858993459, {{[0-9]+}}(%esp), %ecx # imm = 0xCCCCCCCD
 ; X86-NEXT:    xorl %eax, %eax
-; X86-NEXT:    cmpl $858993460, %ecx # imm = 0x33333334
-; X86-NEXT:    setae %al
+; X86-NEXT:    cmpl $858993459, %ecx # imm = 0x33333333
+; X86-NEXT:    seta %al
 ; X86-NEXT:    retl
 ;
 ; X64-LABEL: test_urem_odd_setne:
 ; X64:       # %bb.0:
 ; X64-NEXT:    imull $-858993459, %edi, %ecx # imm = 0xCCCCCCCD
 ; X64-NEXT:    xorl %eax, %eax
-; X64-NEXT:    cmpl $858993460, %ecx # imm = 0x33333334
-; X64-NEXT:    setae %al
+; X64-NEXT:    cmpl $858993459, %ecx # imm = 0x33333333
+; X64-NEXT:    seta %al
 ; X64-NEXT:    retq
   %urem = urem i32 %X, 5
-  %cmp = icmp ne i32 %urem, 0
-  %ret = zext i1 %cmp to i32
-  ret i32 %ret
-}
-
-; The fold is only valid for positive divisors, negative-ones should be negated.
-define i32 @test_urem_negative_odd(i32 %X) nounwind {
-; X86-LABEL: test_urem_negative_odd:
-; X86:       # %bb.0:
-; X86-NEXT:    imull $858993459, {{[0-9]+}}(%esp), %ecx # imm = 0x33333333
-; X86-NEXT:    xorl %eax, %eax
-; X86-NEXT:    cmpl $2, %ecx
-; X86-NEXT:    setae %al
-; X86-NEXT:    retl
-;
-; X64-LABEL: test_urem_negative_odd:
-; X64:       # %bb.0:
-; X64-NEXT:    imull $858993459, %edi, %ecx # imm = 0x33333333
-; X64-NEXT:    xorl %eax, %eax
-; X64-NEXT:    cmpl $2, %ecx
-; X64-NEXT:    setae %al
-; X64-NEXT:    retq
-  %urem = urem i32 %X, -5
-  %cmp = icmp ne i32 %urem, 0
-  %ret = zext i1 %cmp to i32
-  ret i32 %ret
-}
-define i32 @test_urem_negative_even(i32 %X) nounwind {
-; X86-LABEL: test_urem_negative_even:
-; X86:       # %bb.0:
-; X86-NEXT:    imull $-920350135, {{[0-9]+}}(%esp), %ecx # imm = 0xC9249249
-; X86-NEXT:    rorl %ecx
-; X86-NEXT:    xorl %eax, %eax
-; X86-NEXT:    cmpl $2, %ecx
-; X86-NEXT:    setae %al
-; X86-NEXT:    retl
-;
-; X64-LABEL: test_urem_negative_even:
-; X64:       # %bb.0:
-; X64-NEXT:    imull $-920350135, %edi, %ecx # imm = 0xC9249249
-; X64-NEXT:    rorl %ecx
-; X64-NEXT:    xorl %eax, %eax
-; X64-NEXT:    cmpl $2, %ecx
-; X64-NEXT:    setae %al
-; X64-NEXT:    retq
-  %urem = urem i32 %X, -14
   %cmp = icmp ne i32 %urem, 0
   %ret = zext i1 %cmp to i32
   ret i32 %ret
@@ -279,55 +243,13 @@ define i32 @test_urem_negative_even(i32 %X) nounwind {
 ; Negative tests
 ;------------------------------------------------------------------------------;
 
-; We can lower remainder of division by one much better elsewhere.
+; The fold is invalid if divisor is 1.
 define i32 @test_urem_one(i32 %X) nounwind {
 ; CHECK-LABEL: test_urem_one:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    movl $1, %eax
 ; CHECK-NEXT:    ret{{[l|q]}}
   %urem = urem i32 %X, 1
-  %cmp = icmp eq i32 %urem, 0
-  %ret = zext i1 %cmp to i32
-  ret i32 %ret
-}
-
-; We can lower remainder of division by powers of two much better elsewhere.
-define i32 @test_urem_pow2(i32 %X) nounwind {
-; X86-LABEL: test_urem_pow2:
-; X86:       # %bb.0:
-; X86-NEXT:    xorl %eax, %eax
-; X86-NEXT:    testb $15, {{[0-9]+}}(%esp)
-; X86-NEXT:    sete %al
-; X86-NEXT:    retl
-;
-; X64-LABEL: test_urem_pow2:
-; X64:       # %bb.0:
-; X64-NEXT:    xorl %eax, %eax
-; X64-NEXT:    testb $15, %dil
-; X64-NEXT:    sete %al
-; X64-NEXT:    retq
-  %urem = urem i32 %X, 16
-  %cmp = icmp eq i32 %urem, 0
-  %ret = zext i1 %cmp to i32
-  ret i32 %ret
-}
-
-; The fold is only valid for positive divisors, and we can't negate INT_MIN.
-define i32 @test_urem_int_min(i32 %X) nounwind {
-; X86-LABEL: test_urem_int_min:
-; X86:       # %bb.0:
-; X86-NEXT:    xorl %eax, %eax
-; X86-NEXT:    testl $2147483647, {{[0-9]+}}(%esp) # imm = 0x7FFFFFFF
-; X86-NEXT:    sete %al
-; X86-NEXT:    retl
-;
-; X64-LABEL: test_urem_int_min:
-; X64:       # %bb.0:
-; X64-NEXT:    xorl %eax, %eax
-; X64-NEXT:    testl $2147483647, %edi # imm = 0x7FFFFFFF
-; X64-NEXT:    sete %al
-; X64-NEXT:    retq
-  %urem = urem i32 %X, 2147483648
   %cmp = icmp eq i32 %urem, 0
   %ret = zext i1 %cmp to i32
   ret i32 %ret
@@ -357,35 +279,23 @@ define i32 @test_urem_allones(i32 %X) nounwind {
   ret i32 %ret
 }
 
-; Check illegal types.
-
-; https://bugs.chromium.org/p/oss-fuzz/issues/detail?id=34366
-define void @ossfuzz34366() {
-; X86-LABEL: ossfuzz34366:
+; We can lower remainder of division by powers of two much better elsewhere.
+define i32 @test_urem_pow2(i32 %X) nounwind {
+; X86-LABEL: test_urem_pow2:
 ; X86:       # %bb.0:
-; X86-NEXT:    movl (%eax), %eax
-; X86-NEXT:    movl %eax, %ecx
-; X86-NEXT:    andl $2147483647, %ecx # imm = 0x7FFFFFFF
-; X86-NEXT:    orl %eax, %ecx
-; X86-NEXT:    orl %eax, %ecx
-; X86-NEXT:    orl %eax, %ecx
-; X86-NEXT:    orl %eax, %ecx
-; X86-NEXT:    sete (%eax)
+; X86-NEXT:    xorl %eax, %eax
+; X86-NEXT:    testb $15, {{[0-9]+}}(%esp)
+; X86-NEXT:    sete %al
 ; X86-NEXT:    retl
 ;
-; X64-LABEL: ossfuzz34366:
+; X64-LABEL: test_urem_pow2:
 ; X64:       # %bb.0:
-; X64-NEXT:    movq (%rax), %rax
-; X64-NEXT:    movabsq $9223372036854775807, %rcx # imm = 0x7FFFFFFFFFFFFFFF
-; X64-NEXT:    andq %rax, %rcx
-; X64-NEXT:    orq %rax, %rcx
-; X64-NEXT:    orq %rax, %rcx
-; X64-NEXT:    orq %rax, %rcx
-; X64-NEXT:    sete (%rax)
+; X64-NEXT:    xorl %eax, %eax
+; X64-NEXT:    testb $15, %dil
+; X64-NEXT:    sete %al
 ; X64-NEXT:    retq
-  %L10 = load i448, i448* undef, align 4
-  %B18 = urem i448 %L10, -363419362147803445274661903944002267176820680343659030140745099590319644056698961663095525356881782780381260803133088966767300814307328
-  %C13 = icmp ule i448 %B18, 0
-  store i1 %C13, i1* undef, align 1
-  ret void
+  %urem = urem i32 %X, 16
+  %cmp = icmp eq i32 %urem, 0
+  %ret = zext i1 %cmp to i32
+  ret i32 %ret
 }

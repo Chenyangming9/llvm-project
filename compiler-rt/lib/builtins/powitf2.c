@@ -10,14 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define QUAD_PRECISION
-#include "fp_lib.h"
+#include "int_lib.h"
 
-#if defined(CRT_HAS_128BIT) && defined(CRT_LDBL_128BIT)
+#if _ARCH_PPC
 
 // Returns: a ^ b
 
-COMPILER_RT_ABI long double __powitf2(long double a, int b) {
+COMPILER_RT_ABI long double __powitf2(long double a, si_int b) {
   const int recip = b < 0;
   long double r = 1;
   while (1) {

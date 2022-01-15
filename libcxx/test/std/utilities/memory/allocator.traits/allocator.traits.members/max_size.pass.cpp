@@ -11,7 +11,7 @@
 // template <class Alloc>
 // struct allocator_traits
 // {
-//     static constexpr size_type max_size(const allocator_type& a) noexcept;
+//     static size_type max_size(const allocator_type& a) noexcept;
 //     ...
 // };
 
@@ -36,13 +36,13 @@ struct B
 {
     typedef T value_type;
 
-    TEST_CONSTEXPR_CXX20 size_t max_size() const
+    size_t max_size() const
     {
         return 100;
     }
 };
 
-TEST_CONSTEXPR_CXX20 bool test()
+int main(int, char**)
 {
     {
         B<int> b;
@@ -75,16 +75,5 @@ TEST_CONSTEXPR_CXX20 bool test()
     }
 #endif
 
-    return true;
-}
-
-int main(int, char**)
-{
-    test();
-
-#if TEST_STD_VER > 17
-    static_assert(test());
-#endif
-
-    return 0;
+  return 0;
 }

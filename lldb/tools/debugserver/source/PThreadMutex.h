@@ -10,12 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TOOLS_DEBUGSERVER_SOURCE_PTHREADMUTEX_H
-#define LLDB_TOOLS_DEBUGSERVER_SOURCE_PTHREADMUTEX_H
+#ifndef __PThreadMutex_h__
+#define __PThreadMutex_h__
 
-#include <cassert>
-#include <cstdint>
+#include <assert.h>
 #include <pthread.h>
+#include <stdint.h>
 
 //#define DEBUG_PTHREAD_MUTEX_DEADLOCKS 1
 

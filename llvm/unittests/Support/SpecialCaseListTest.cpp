@@ -9,7 +9,6 @@
 #include "llvm/Support/SpecialCaseList.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/VirtualFileSystem.h"
 #include "gtest/gtest.h"
 
 using namespace llvm;
@@ -39,7 +38,7 @@ protected:
     raw_fd_ostream OF(FD, true, true);
     OF << Contents;
     OF.close();
-    return std::string(Path.str());
+    return Path.str();
   }
 };
 
@@ -162,8 +161,7 @@ TEST_F(SpecialCaseListTest, InvalidSpecialCaseList) {
   EXPECT_EQ("malformed regex in line 2: 'fun(a': parentheses not balanced",
             Error);
   std::vector<std::string> Files(1, "unexisting");
-  EXPECT_EQ(nullptr,
-            SpecialCaseList::create(Files, *vfs::getRealFileSystem(), Error));
+  EXPECT_EQ(nullptr, SpecialCaseList::create(Files, Error));
   EXPECT_EQ(0U, Error.find("can't open file 'unexisting':"));
 }
 
@@ -172,14 +170,14 @@ TEST_F(SpecialCaseListTest, EmptySpecialCaseList) {
   EXPECT_FALSE(SCL->inSection("", "foo", "bar"));
 }
 
-TEST_F(SpecialCaseListTest, MultipleExclusions) {
+TEST_F(SpecialCaseListTest, MultipleBlacklists) {
   std::vector<std::string> Files;
   Files.push_back(makeSpecialCaseListFile("src:bar\n"
                                           "src:*foo*\n"
                                           "src:ban=init\n"));
   Files.push_back(makeSpecialCaseListFile("src:baz\n"
                                           "src:*fog*\n"));
-  auto SCL = SpecialCaseList::createOrDie(Files, *vfs::getRealFileSystem());
+  auto SCL = SpecialCaseList::createOrDie(Files);
   EXPECT_TRUE(SCL->inSection("", "src", "bar"));
   EXPECT_TRUE(SCL->inSection("", "src", "baz"));
   EXPECT_FALSE(SCL->inSection("", "src", "ban"));

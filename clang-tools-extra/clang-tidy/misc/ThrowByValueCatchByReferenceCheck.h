@@ -15,7 +15,7 @@ namespace clang {
 namespace tidy {
 namespace misc {
 
-///checks for locations that do not throw by value
+///\brief checks for locations that do not throw by value
 // or catch by reference.
 // The check is C++ only. It checks that all throw locations
 // throw by value and not by pointer. Additionally it
@@ -29,9 +29,6 @@ namespace misc {
 class ThrowByValueCatchByReferenceCheck : public ClangTidyCheck {
 public:
   ThrowByValueCatchByReferenceCheck(StringRef Name, ClangTidyContext *Context);
-  bool isLanguageVersionSupported(const LangOptions &LangOpts) const override {
-    return LangOpts.CPlusPlus;
-  }
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
@@ -45,7 +42,6 @@ private:
   bool isFunctionOrCatchVar(const DeclRefExpr *declRefExpr);
   const bool CheckAnonymousTemporaries;
   const bool WarnOnLargeObject;
-  const uint64_t MaxSizeOptions; // The raw value read from the options.
   uint64_t MaxSize; // No `const` because we have to set it in two steps.
 };
 

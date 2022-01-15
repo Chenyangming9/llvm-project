@@ -10,17 +10,13 @@
 #define LLD_ELF_CONFIG_H
 
 #include "lld/Common/ErrorHandler.h"
-#include "llvm/ADT/CachedHashString.h"
 #include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Support/CachePruning.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Endian.h"
-#include "llvm/Support/GlobPattern.h"
-#include "llvm/Support/PrettyStackTrace.h"
 #include <atomic>
 #include <vector>
 
@@ -37,10 +33,6 @@ enum ELFKind {
   ELF64LEKind,
   ELF64BEKind
 };
-
-// For -Bno-symbolic, -Bsymbolic-non-weak-functions, -Bsymbolic-functions,
-// -Bsymbolic.
-enum class BsymbolicKind { None, NonWeakFunctions, Functions, All };
 
 // For --build-id.
 enum class BuildIdKind { None, Fast, Md5, Sha1, Hexstring, Uuid };
@@ -69,12 +61,6 @@ enum class Target2Policy { Abs, Rel, GotRel };
 // For tracking ARM Float Argument PCS
 enum class ARMVFPArgKind { Default, Base, VFP, ToolChain };
 
-// For -z noseparate-code, -z separate-code and -z separate-loadable-segments.
-enum class SeparateSegmentKind { None, Code, Loadable };
-
-// For -z *stack
-enum class GnuStackKind { None, Exec, NoExec };
-
 struct SymbolVersion {
   llvm::StringRef name;
   bool isExternCpp;
@@ -85,9 +71,8 @@ struct SymbolVersion {
 // can be found in version script if it is used for link.
 struct VersionDefinition {
   llvm::StringRef name;
-  uint16_t id;
-  std::vector<SymbolVersion> nonLocalPatterns;
-  std::vector<SymbolVersion> localPatterns;
+  uint16_t id = 0;
+  std::vector<SymbolVersion> globals;
 };
 
 // This struct contains the global configuration for the linker.
@@ -98,13 +83,10 @@ struct Configuration {
   uint8_t osabi = 0;
   uint32_t andFeatures = 0;
   llvm::CachePruningPolicy thinLTOCachePolicy;
-  llvm::SetVector<llvm::CachedHashString> dependencyFiles; // for --dependency-file
   llvm::StringMap<uint64_t> sectionStartMap;
-  llvm::StringRef bfdname;
   llvm::StringRef chroot;
-  llvm::StringRef dependencyFile;
-  llvm::StringRef dwoDir;
   llvm::StringRef dynamicLinker;
+  llvm::StringRef dwoDir;
   llvm::StringRef entry;
   llvm::StringRef emulation;
   llvm::StringRef fini;
@@ -117,17 +99,14 @@ struct Configuration {
   llvm::StringRef mapFile;
   llvm::StringRef outputFile;
   llvm::StringRef optRemarksFilename;
-  llvm::Optional<uint64_t> optRemarksHotnessThreshold = 0;
   llvm::StringRef optRemarksPasses;
   llvm::StringRef optRemarksFormat;
   llvm::StringRef progName;
-  llvm::StringRef printArchiveStats;
   llvm::StringRef printSymbolOrder;
   llvm::StringRef soName;
   llvm::StringRef sysroot;
   llvm::StringRef thinLTOCacheDir;
   llvm::StringRef thinLTOIndexOnlyArg;
-  llvm::StringRef ltoBasicBlockSections;
   std::pair<llvm::StringRef, llvm::StringRef> thinLTOObjectSuffixReplace;
   std::pair<llvm::StringRef, llvm::StringRef> thinLTOPrefixReplace;
   std::string rpath;
@@ -136,26 +115,27 @@ struct Configuration {
   std::vector<llvm::StringRef> filterList;
   std::vector<llvm::StringRef> searchPaths;
   std::vector<llvm::StringRef> symbolOrderingFile;
-  std::vector<llvm::StringRef> thinLTOModulesToCompile;
   std::vector<llvm::StringRef> undefined;
   std::vector<SymbolVersion> dynamicList;
+  std::vector<SymbolVersion> versionScriptGlobals;
+  std::vector<SymbolVersion> versionScriptLocals;
   std::vector<uint8_t> buildIdVector;
   llvm::MapVector<std::pair<const InputSectionBase *, const InputSectionBase *>,
                   uint64_t>
       callGraphProfile;
   bool allowMultipleDefinition;
+  bool allowShlibUndefined;
   bool androidPackDynRelocs;
   bool armHasBlx = false;
   bool armHasMovtMovw = false;
   bool armJ1J2BranchEncoding = false;
   bool asNeeded = false;
-  BsymbolicKind bsymbolic = BsymbolicKind::None;
+  bool bsymbolic;
+  bool bsymbolicFunctions;
   bool callGraphProfileSort;
   bool checkSections;
-  bool checkDynamicRelocs;
   bool compressDebugSections;
   bool cref;
-  std::vector<std::pair<llvm::GlobPattern, uint64_t>> deadRelocInNonAlloc;
   bool defineCommon;
   bool demangle = true;
   bool dependentLibraries;
@@ -167,36 +147,29 @@ struct Configuration {
   bool executeOnly;
   bool exportDynamic;
   bool fixCortexA53Errata843419;
-  bool fixCortexA8;
+  bool forceBTI;
   bool formatBinary = false;
-  bool fortranCommon;
+  bool requireCET;
   bool gcSections;
   bool gdbIndex;
   bool gnuHash = false;
   bool gnuUnique;
+  bool hasDynamicList = false;
   bool hasDynSymTab;
   bool ignoreDataAddressEquality;
   bool ignoreFunctionAddressEquality;
   bool ltoCSProfileGenerate;
   bool ltoDebugPassManager;
-  bool ltoEmitAsm;
   bool ltoNewPassManager;
-  bool ltoPseudoProbeForProfiling;
-  bool ltoUniqueBasicBlockSectionNames;
-  bool ltoWholeProgramVisibility;
   bool mergeArmExidx;
   bool mipsN32Abi = false;
-  bool mmapOutputFile;
   bool nmagic;
-  bool noDynamicLinker = false;
   bool noinhibitExec;
   bool nostdlib;
   bool oFormatBinary;
   bool omagic;
-  bool optEB = false;
-  bool optEL = false;
-  bool optimizeBBJumps;
   bool optRemarksWithHotness;
+  bool pacPlt;
   bool picThunk;
   bool pie;
   bool printGcSections;
@@ -204,32 +177,26 @@ struct Configuration {
   bool relocatable;
   bool relrPackDynRelocs;
   bool saveTemps;
-  std::vector<std::pair<llvm::GlobPattern, uint32_t>> shuffleSections;
   bool singleRoRx;
   bool shared;
-  bool symbolic;
   bool isStatic = false;
   bool sysvHash = false;
   bool target1Rel;
   bool trace;
   bool thinLTOEmitImportsFiles;
   bool thinLTOIndexOnly;
-  bool timeTraceEnabled;
   bool tocOptimize;
-  bool pcRelOptimize;
   bool undefinedVersion;
-  bool unique;
   bool useAndroidRelrTags = false;
   bool warnBackrefs;
-  std::vector<llvm::GlobPattern> warnBackrefsExclude;
   bool warnCommon;
+  bool warnIfuncTextrel;
   bool warnMissingEntry;
   bool warnSymbolOrdering;
   bool writeAddends;
   bool zCombreloc;
   bool zCopyreloc;
-  bool zForceBti;
-  bool zForceIbt;
+  bool zExecstack;
   bool zGlobal;
   bool zHazardplt;
   bool zIfuncNoplt;
@@ -241,29 +208,22 @@ struct Configuration {
   bool zNodlopen;
   bool zNow;
   bool zOrigin;
-  bool zPacPlt;
   bool zRelro;
   bool zRodynamic;
-  bool zShstk;
-  bool zStartStopGC;
-  uint8_t zStartStopVisibility;
   bool zText;
   bool zRetpolineplt;
   bool zWxneeded;
   DiscardPolicy discard;
-  GnuStackKind zGnustack;
   ICFLevel icf;
   OrphanHandlingPolicy orphanHandling;
   SortSectionPolicy sortSection;
   StripPolicy strip;
   UnresolvedPolicy unresolvedSymbols;
-  UnresolvedPolicy unresolvedSymbolsInShlib;
   Target2Policy target2;
-  bool Power10Stub;
   ARMVFPArgKind armVFPArgs = ARMVFPArgKind::Default;
   BuildIdKind buildId = BuildIdKind::None;
-  SeparateSegmentKind zSeparate;
   ELFKind ekind = ELFNoneKind;
+  uint16_t defaultSymbolVersion = llvm::ELF::VER_NDX_GLOBAL;
   uint16_t emachine = llvm::ELF::EM_NONE;
   llvm::Optional<uint64_t> imageBase;
   uint64_t commonPageSize;
@@ -273,12 +233,11 @@ struct Configuration {
   unsigned ltoPartitions;
   unsigned ltoo;
   unsigned optimize;
-  StringRef thinLTOJobs;
-  unsigned timeTraceGranularity;
+  unsigned thinLTOJobs;
   int32_t splitStackAdjustSize;
 
   // The following config options do not directly correspond to any
-  // particular command line options.
+  // particualr command line options.
 
   // True if we need to pass through relocations in input files to the
   // output file. Usually false because we consume relocations.
@@ -350,24 +309,12 @@ struct Configuration {
 // The only instance of Configuration struct.
 extern Configuration *config;
 
-// The first two elements of versionDefinitions represent VER_NDX_LOCAL and
-// VER_NDX_GLOBAL. This helper returns other elements.
-static inline ArrayRef<VersionDefinition> namedVersionDefs() {
-  return llvm::makeArrayRef(config->versionDefinitions).slice(2);
-}
-
 static inline void errorOrWarn(const Twine &msg) {
   if (!config->noinhibitExec)
     error(msg);
   else
     warn(msg);
 }
-
-static inline void internalLinkerError(StringRef loc, const Twine &msg) {
-  errorOrWarn(loc + "internal linker error: " + msg + "\n" +
-              llvm::getBugReportMsg());
-}
-
 } // namespace elf
 } // namespace lld
 

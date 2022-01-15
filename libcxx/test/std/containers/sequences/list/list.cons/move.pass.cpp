@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <list>
 
@@ -29,12 +29,10 @@ int main(int, char**)
             l.push_back(i);
             lo.push_back(i);
         }
-        std::list<MoveOnly, test_allocator<MoveOnly> >::iterator it = l.begin();
         std::list<MoveOnly, test_allocator<MoveOnly> > l2 = std::move(l);
         assert(l2 == lo);
         assert(l.empty());
         assert(l2.get_allocator() == lo.get_allocator());
-        assert(it == l2.begin());  // Iterators remain valid
     }
     {
         std::list<MoveOnly, other_allocator<MoveOnly> > l(other_allocator<MoveOnly>(5));
@@ -44,12 +42,10 @@ int main(int, char**)
             l.push_back(i);
             lo.push_back(i);
         }
-        std::list<MoveOnly, other_allocator<MoveOnly> >::iterator it = l.begin();
         std::list<MoveOnly, other_allocator<MoveOnly> > l2 = std::move(l);
         assert(l2 == lo);
         assert(l.empty());
         assert(l2.get_allocator() == lo.get_allocator());
-        assert(it == l2.begin());  // Iterators remain valid
     }
     {
         std::list<MoveOnly, min_allocator<MoveOnly> > l(min_allocator<MoveOnly>{});
@@ -59,12 +55,10 @@ int main(int, char**)
             l.push_back(i);
             lo.push_back(i);
         }
-        std::list<MoveOnly, min_allocator<MoveOnly> >::iterator it = l.begin();
         std::list<MoveOnly, min_allocator<MoveOnly> > l2 = std::move(l);
         assert(l2 == lo);
         assert(l.empty());
         assert(l2.get_allocator() == lo.get_allocator());
-        assert(it == l2.begin());  // Iterators remain valid
     }
 
   return 0;

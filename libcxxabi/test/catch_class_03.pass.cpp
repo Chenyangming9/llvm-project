@@ -12,13 +12,7 @@
     check against.
 */
 
-// UNSUPPORTED: no-exceptions
-
-// FIXME: GCC doesn't allow turning off the warning for exceptions being caught
-//        by earlier handlers, which this test is exercising. We have to disable
-//        warnings altogether to remove the error.
-//        See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=97675.
-// ADDITIONAL_COMPILE_FLAGS: -Wno-error
+// UNSUPPORTED: libcxxabi-no-exceptions
 
 #include <exception>
 #include <stdlib.h>
@@ -187,7 +181,7 @@ void f4()
     }
 }
 
-int main(int, char**)
+int main()
 {
     try
     {
@@ -201,6 +195,4 @@ int main(int, char**)
     assert(C1::count == 0);
     assert(C2::count == 0);
     assert(B::count == 0);
-
-    return 0;
 }

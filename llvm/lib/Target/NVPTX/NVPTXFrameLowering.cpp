@@ -25,7 +25,7 @@
 using namespace llvm;
 
 NVPTXFrameLowering::NVPTXFrameLowering()
-    : TargetFrameLowering(TargetFrameLowering::StackGrowsUp, Align(8), 0) {}
+    : TargetFrameLowering(TargetFrameLowering::StackGrowsUp, 8, 0) {}
 
 bool NVPTXFrameLowering::hasFP(const MachineFunction &MF) const { return true; }
 
@@ -63,13 +63,12 @@ void NVPTXFrameLowering::emitPrologue(MachineFunction &MF,
   }
 }
 
-StackOffset
-NVPTXFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
-                                           Register &FrameReg) const {
+int NVPTXFrameLowering::getFrameIndexReference(const MachineFunction &MF,
+                                               int FI,
+                                               unsigned &FrameReg) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   FrameReg = NVPTX::VRDepot;
-  return StackOffset::getFixed(MFI.getObjectOffset(FI) -
-                               getOffsetOfLocalArea());
+  return MFI.getObjectOffset(FI) - getOffsetOfLocalArea();
 }
 
 void NVPTXFrameLowering::emitEpilogue(MachineFunction &MF,
@@ -83,9 +82,4 @@ MachineBasicBlock::iterator NVPTXFrameLowering::eliminateCallFramePseudoInstr(
   // Simply discard ADJCALLSTACKDOWN,
   // ADJCALLSTACKUP instructions.
   return MBB.erase(I);
-}
-
-TargetFrameLowering::DwarfFrameBase
-NVPTXFrameLowering::getDwarfFrameBase(const MachineFunction &MF) const {
-  return {DwarfFrameBase::CFA, {0}};
 }

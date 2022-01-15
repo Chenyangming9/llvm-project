@@ -14,8 +14,7 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/SlotIndexes.h"
-#include "llvm/IR/PrintPasses.h"
-#include "llvm/InitializePasses.h"
+#include "llvm/IR/IRPrintingPasses.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -44,7 +43,7 @@ struct MachineFunctionPrinterPass : public MachineFunctionPass {
   }
 
   bool runOnMachineFunction(MachineFunction &MF) override {
-    if (!isFunctionInPrintList(MF.getName()))
+    if (!llvm::isFunctionInPrintList(MF.getName()))
       return false;
     OS << "# " << Banner << ":\n";
     MF.print(OS, getAnalysisIfAvailable<SlotIndexes>());

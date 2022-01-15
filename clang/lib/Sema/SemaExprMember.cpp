@@ -231,10 +231,12 @@ static void diagnoseInstanceReference(Sema &SemaRef,
 }
 
 /// Builds an expression which might be an implicit member expression.
-ExprResult Sema::BuildPossibleImplicitMemberExpr(
-    const CXXScopeSpec &SS, SourceLocation TemplateKWLoc, LookupResult &R,
-    const TemplateArgumentListInfo *TemplateArgs, const Scope *S,
-    UnresolvedLookupExpr *AsULE) {
+ExprResult
+Sema::BuildPossibleImplicitMemberExpr(const CXXScopeSpec &SS,
+                                      SourceLocation TemplateKWLoc,
+                                      LookupResult &R,
+                                const TemplateArgumentListInfo *TemplateArgs,
+                                      const Scope *S) {
   switch (ClassifyImplicitMemberAccess(*this, R)) {
   case IMA_Instance:
     return BuildImplicitMemberExpr(SS, TemplateKWLoc, R, TemplateArgs, true, S);
@@ -255,7 +257,7 @@ ExprResult Sema::BuildPossibleImplicitMemberExpr(
   case IMA_Unresolved_StaticContext:
     if (TemplateArgs || TemplateKWLoc.isValid())
       return BuildTemplateIdExpr(SS, TemplateKWLoc, R, false, TemplateArgs);
-    return AsULE ? AsULE : BuildDeclarationNameExpr(SS, R, false);
+    return BuildDeclarationNameExpr(SS, R, false);
 
   case IMA_Error_StaticContext:
   case IMA_Error_Unrelated:
@@ -338,12 +340,13 @@ CheckExtVectorComponent(Sema &S, QualType baseType, ExprValueKind &VK,
       compStr++;
     } while (*compStr && (Idx = vecType->getPointAccessorIdx(*compStr)) != -1);
 
-    // Emit a warning if an rgba selector is used earlier than OpenCL C 3.0.
+    // Emit a warning if an rgba selector is used earlier than OpenCL 2.2
     if (HasRGBA || (*compStr && IsRGBA(*compStr))) {
-      if (S.getLangOpts().OpenCL && S.getLangOpts().OpenCLVersion < 300) {
+      if (S.getLangOpts().OpenCL && S.getLangOpts().OpenCLVersion < 220) {
         const char *DiagBegin = HasRGBA ? CompName->getNameStart() : compStr;
         S.Diag(OpLoc, diag::ext_opencl_ext_vector_type_rgba_selector)
-            << StringRef(DiagBegin, 1) << SourceRange(CompLoc);
+          << StringRef(DiagBegin, 1)
+          << S.getLangOpts().OpenCLVersion << SourceRange(CompLoc);
       }
     }
   } else {
@@ -408,8 +411,7 @@ CheckExtVectorComponent(Sema &S, QualType baseType, ExprValueKind &VK,
   if (CompSize == 1)
     return vecType->getElementType();
 
-  if (HasRepeated)
-    VK = VK_PRValue;
+  if (HasRepeated) VK = VK_RValue;
 
   QualType VT = S.Context.getExtVectorType(vecType->getElementType(), CompSize);
   // Now look up the TypeDefDecl from the vector type. Without this,
@@ -627,7 +629,7 @@ public:
   }
 
   std::unique_ptr<CorrectionCandidateCallback> clone() override {
-    return std::make_unique<RecordMemberExprValidatorCCC>(*this);
+    return llvm::make_unique<RecordMemberExprValidatorCCC>(*this);
   }
 
 private:
@@ -761,7 +763,7 @@ Sema::BuildMemberReferenceExpr(Expr *Base, QualType BaseType,
   if (!Base) {
     TypoExpr *TE = nullptr;
     QualType RecordTy = BaseType;
-    if (IsArrow) RecordTy = RecordTy->castAs<PointerType>()->getPointeeType();
+    if (IsArrow) RecordTy = RecordTy->getAs<PointerType>()->getPointeeType();
     if (LookupMemberExprInRecord(
             *this, R, nullptr, RecordTy->getAs<RecordType>(), OpLoc, IsArrow,
             SS, TemplateArgs != nullptr, TemplateKWLoc, TE))
@@ -910,26 +912,13 @@ MemberExpr *Sema::BuildMemberExpr(
     bool HadMultipleCandidates, const DeclarationNameInfo &MemberNameInfo,
     QualType Ty, ExprValueKind VK, ExprObjectKind OK,
     const TemplateArgumentListInfo *TemplateArgs) {
-  assert((!IsArrow || Base->isPRValue()) &&
-         "-> base must be a pointer prvalue");
+  assert((!IsArrow || Base->isRValue()) && "-> base must be a pointer rvalue");
   MemberExpr *E =
       MemberExpr::Create(Context, Base, IsArrow, OpLoc, NNS, TemplateKWLoc,
                          Member, FoundDecl, MemberNameInfo, TemplateArgs, Ty,
                          VK, OK, getNonOdrUseReasonInCurrentContext(Member));
   E->setHadMultipleCandidates(HadMultipleCandidates);
   MarkMemberReferenced(E);
-
-  // C++ [except.spec]p17:
-  //   An exception-specification is considered to be needed when:
-  //   - in an expression the function is the unique lookup result or the
-  //     selected member of a set of overloaded functions
-  if (auto *FPT = Ty->getAs<FunctionProtoType>()) {
-    if (isUnresolvedExceptionSpec(FPT->getExceptionSpecType())) {
-      if (auto *NewFPT = ResolveExceptionSpec(MemberNameInfo.getLoc(), FPT))
-        E->setType(Context.getQualifiedType(NewFPT, Ty.getQualifiers()));
-    }
-  }
-
   return E;
 }
 
@@ -943,6 +932,28 @@ static bool IsInFnTryBlockHandler(const Scope *S) {
       return (S->getFlags() & Scope::TryScope) != Scope::TryScope;
   }
   return false;
+}
+
+static VarDecl *
+getVarTemplateSpecialization(Sema &S, VarTemplateDecl *VarTempl,
+                      const TemplateArgumentListInfo *TemplateArgs,
+                      const DeclarationNameInfo &MemberNameInfo,
+                      SourceLocation TemplateKWLoc) {
+  if (!TemplateArgs) {
+    S.diagnoseMissingTemplateArguments(TemplateName(VarTempl),
+                                       MemberNameInfo.getBeginLoc());
+    return nullptr;
+  }
+
+  DeclResult VDecl = S.CheckVarTemplateId(
+      VarTempl, TemplateKWLoc, MemberNameInfo.getLoc(), *TemplateArgs);
+  if (VDecl.isInvalid())
+    return nullptr;
+  VarDecl *Var = cast<VarDecl>(VDecl.get());
+  if (!Var->getTemplateSpecializationKind())
+    Var->setTemplateSpecializationKind(TSK_ImplicitInstantiation,
+                                       MemberNameInfo.getLoc());
+  return Var;
 }
 
 ExprResult
@@ -965,12 +976,13 @@ Sema::BuildMemberReferenceExpr(Expr *BaseExpr, QualType BaseExprType,
 
   // C++1z [expr.ref]p2:
   //   For the first option (dot) the first expression shall be a glvalue [...]
-  if (!IsArrow && BaseExpr && BaseExpr->isPRValue()) {
+  if (!IsArrow && BaseExpr && BaseExpr->isRValue()) {
     ExprResult Converted = TemporaryMaterializationConversion(BaseExpr);
     if (Converted.isInvalid())
       return ExprError();
     BaseExpr = Converted.get();
   }
+
 
   const DeclarationNameInfo &MemberNameInfo = R.getLookupNameInfo();
   DeclarationName MemberName = MemberNameInfo.getName();
@@ -994,7 +1006,7 @@ Sema::BuildMemberReferenceExpr(Expr *BaseExpr, QualType BaseExprType,
     // Rederive where we looked up.
     DeclContext *DC = (SS.isSet()
                        ? computeDeclContext(SS, false)
-                       : BaseType->castAs<RecordType>()->getDecl());
+                       : BaseType->getAs<RecordType>()->getDecl());
 
     if (ExtraArgs) {
       ExprResult RetryExpr;
@@ -1075,11 +1087,19 @@ Sema::BuildMemberReferenceExpr(Expr *BaseExpr, QualType BaseExprType,
   if (!BaseExpr) {
     // If this is not an instance member, convert to a non-member access.
     if (!MemberDecl->isCXXInstanceMember()) {
-      // We might have a variable template specialization (or maybe one day a
-      // member concept-id).
-      if (TemplateArgs || TemplateKWLoc.isValid())
-        return BuildTemplateIdExpr(SS, TemplateKWLoc, R, /*ADL*/false, TemplateArgs);
-
+      // If this is a variable template, get the instantiated variable
+      // declaration corresponding to the supplied template arguments
+      // (while emitting diagnostics as necessary) that will be referenced
+      // by this expression.
+      assert((!TemplateArgs || isa<VarTemplateDecl>(MemberDecl)) &&
+             "How did we get template arguments here sans a variable template");
+      if (isa<VarTemplateDecl>(MemberDecl)) {
+        MemberDecl = getVarTemplateSpecialization(
+            *this, cast<VarTemplateDecl>(MemberDecl), TemplateArgs,
+            R.getLookupNameInfo(), TemplateKWLoc);
+        if (!MemberDecl)
+          return ExprError();
+      }
       return BuildDeclarationNameExpr(SS, R.getLookupNameInfo(), MemberDecl,
                                       FoundDecl, TemplateArgs);
     }
@@ -1119,7 +1139,7 @@ Sema::BuildMemberReferenceExpr(Expr *BaseExpr, QualType BaseExprType,
     ExprValueKind valueKind;
     QualType type;
     if (MemberFn->isInstance()) {
-      valueKind = VK_PRValue;
+      valueKind = VK_RValue;
       type = Context.BoundMemberTy;
     } else {
       valueKind = VK_LValue;
@@ -1135,35 +1155,17 @@ Sema::BuildMemberReferenceExpr(Expr *BaseExpr, QualType BaseExprType,
   if (EnumConstantDecl *Enum = dyn_cast<EnumConstantDecl>(MemberDecl)) {
     return BuildMemberExpr(BaseExpr, IsArrow, OpLoc, &SS, TemplateKWLoc, Enum,
                            FoundDecl, /*HadMultipleCandidates=*/false,
-                           MemberNameInfo, Enum->getType(), VK_PRValue,
+                           MemberNameInfo, Enum->getType(), VK_RValue,
                            OK_Ordinary);
   }
-
   if (VarTemplateDecl *VarTempl = dyn_cast<VarTemplateDecl>(MemberDecl)) {
-    if (!TemplateArgs) {
-      diagnoseMissingTemplateArguments(TemplateName(VarTempl), MemberLoc);
-      return ExprError();
-    }
-
-    DeclResult VDecl = CheckVarTemplateId(VarTempl, TemplateKWLoc,
-                                          MemberNameInfo.getLoc(), *TemplateArgs);
-    if (VDecl.isInvalid())
-      return ExprError();
-
-    // Non-dependent member, but dependent template arguments.
-    if (!VDecl.get())
-      return ActOnDependentMemberExpr(
-          BaseExpr, BaseExpr->getType(), IsArrow, OpLoc, SS, TemplateKWLoc,
-          FirstQualifierInScope, MemberNameInfo, TemplateArgs);
-
-    VarDecl *Var = cast<VarDecl>(VDecl.get());
-    if (!Var->getTemplateSpecializationKind())
-      Var->setTemplateSpecializationKind(TSK_ImplicitInstantiation, MemberLoc);
-
-    return BuildMemberExpr(
-        BaseExpr, IsArrow, OpLoc, &SS, TemplateKWLoc, Var, FoundDecl,
-        /*HadMultipleCandidates=*/false, MemberNameInfo,
-        Var->getType().getNonReferenceType(), VK_LValue, OK_Ordinary);
+    if (VarDecl *Var = getVarTemplateSpecialization(
+            *this, VarTempl, TemplateArgs, MemberNameInfo, TemplateKWLoc))
+      return BuildMemberExpr(
+          BaseExpr, IsArrow, OpLoc, &SS, TemplateKWLoc, Var, FoundDecl,
+          /*HadMultipleCandidates=*/false, MemberNameInfo,
+          Var->getType().getNonReferenceType(), VK_LValue, OK_Ordinary);
+    return ExprError();
   }
 
   // We found something that we didn't expect. Complain.
@@ -1734,28 +1736,14 @@ ExprResult Sema::ActOnMemberAccessExpr(Scope *S, Expr *Base,
 }
 
 void Sema::CheckMemberAccessOfNoDeref(const MemberExpr *E) {
-  if (isUnevaluatedContext())
-    return;
-
   QualType ResultTy = E->getType();
 
-  // Member accesses have four cases:
-  // 1: non-array member via "->": dereferences
-  // 2: non-array member via ".": nothing interesting happens
-  // 3: array member access via "->": nothing interesting happens
-  //    (this returns an array lvalue and does not actually dereference memory)
-  // 4: array member access via ".": *adds* a layer of indirection
-  if (ResultTy->isArrayType()) {
-    if (!E->isArrow()) {
-      // This might be something like:
-      //     (*structPtr).arrayMember
-      // which behaves roughly like:
-      //     &(*structPtr).pointerMember
-      // in that the apparent dereference in the base expression does not
-      // actually happen.
-      CheckAddressOfNoDeref(E->getBase());
-    }
-  } else if (E->isArrow()) {
+  // Do not warn on member accesses to arrays since this returns an array
+  // lvalue and does not actually dereference memory.
+  if (isa<ArrayType>(ResultTy))
+    return;
+
+  if (E->isArrow()) {
     if (const auto *Ptr = dyn_cast<PointerType>(
             E->getBase()->getType().getDesugaredType(Context))) {
       if (Ptr->getPointeeType()->hasAttr(attr::NoDeref))
@@ -1779,9 +1767,9 @@ Sema::BuildFieldReferenceExpr(Expr *BaseExpr, bool IsArrow,
     if (BaseExpr->getObjectKind() == OK_Ordinary)
       VK = BaseExpr->getValueKind();
     else
-      VK = VK_PRValue;
+      VK = VK_RValue;
   }
-  if (VK != VK_PRValue && Field->isBitField())
+  if (VK != VK_RValue && Field->isBitField())
     OK = OK_BitField;
 
   // Figure out the type of the member; see C99 6.5.2.3p3, C++ [expr.ref]
@@ -1791,7 +1779,7 @@ Sema::BuildFieldReferenceExpr(Expr *BaseExpr, bool IsArrow,
     VK = VK_LValue;
   } else {
     QualType BaseType = BaseExpr->getType();
-    if (IsArrow) BaseType = BaseType->castAs<PointerType>()->getPointeeType();
+    if (IsArrow) BaseType = BaseType->getAs<PointerType>()->getPointeeType();
 
     Qualifiers BaseQuals = BaseType.getQualifiers();
 
@@ -1810,14 +1798,6 @@ Sema::BuildFieldReferenceExpr(Expr *BaseExpr, bool IsArrow,
     Qualifiers Combined = BaseQuals + MemberQuals;
     if (Combined != MemberQuals)
       MemberType = Context.getQualifiedType(MemberType, Combined);
-
-    // Pick up NoDeref from the base in case we end up using AddrOf on the
-    // result. E.g. the expression
-    //     &someNoDerefPtr->pointerMember
-    // should be a noderef pointer again.
-    if (BaseType->hasAttr(attr::NoDeref))
-      MemberType =
-          Context.getAttributedType(attr::NoDeref, MemberType, MemberType);
   }
 
   auto *CurMethod = dyn_cast<CXXMethodDecl>(CurContext);
@@ -1862,6 +1842,7 @@ Sema::BuildImplicitMemberExpr(const CXXScopeSpec &SS,
 
   // If this is known to be an instance access, go ahead and build an
   // implicit 'this' expression now.
+  // 'this' expression now.
   QualType ThisTy = getCurrentThisType();
   assert(!ThisTy.isNull() && "didn't correctly pre-flight capture of 'this'");
 

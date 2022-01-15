@@ -2,10 +2,7 @@
 
 // RUN: %clang_cc1 -verify -fopenmp-simd %s -Wuninitialized
 
-#pragma omp requires dynamic_allocators
-
 typedef void **omp_allocator_handle_t;
-extern const omp_allocator_handle_t omp_null_allocator;
 extern const omp_allocator_handle_t omp_default_mem_alloc;
 extern const omp_allocator_handle_t omp_large_cap_mem_alloc;
 extern const omp_allocator_handle_t omp_const_mem_alloc;
@@ -20,13 +17,6 @@ void foo() {
 
 bool foobool(int argc) {
   return argc;
-}
-
-void xxx(int argc) {
-  int fp; // expected-note {{initialize the variable 'fp' to silence this warning}}
-#pragma omp target parallel for simd firstprivate(fp) // expected-warning {{variable 'fp' is uninitialized when used here}}
-  for (int i = 0; i < 10; ++i)
-    ;
 }
 
 struct S1; // expected-note 2 {{declared here}} expected-note 2 {{forward declaration of 'S1'}}

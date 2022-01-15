@@ -63,16 +63,18 @@ createExecutorFromCommandLineArgsImpl(int &argc, const char **argv,
                                   /*Overview=*/Overview);
   if (!OptionsParser)
     return OptionsParser.takeError();
-  for (const auto &TEPlugin : ToolExecutorPluginRegistry::entries()) {
-    if (TEPlugin.getName() != ExecutorName) {
+  for (auto I = ToolExecutorPluginRegistry::begin(),
+            E = ToolExecutorPluginRegistry::end();
+       I != E; ++I) {
+    if (I->getName() != ExecutorName) {
       continue;
     }
-    std::unique_ptr<ToolExecutorPlugin> Plugin(TEPlugin.instantiate());
+    std::unique_ptr<ToolExecutorPlugin> Plugin(I->instantiate());
     llvm::Expected<std::unique_ptr<ToolExecutor>> Executor =
         Plugin->create(*OptionsParser);
     if (!Executor) {
       return llvm::make_error<llvm::StringError>(
-          llvm::Twine("Failed to create '") + TEPlugin.getName() +
+          llvm::Twine("Failed to create '") + I->getName() +
               "': " + llvm::toString(Executor.takeError()) + "\n",
           llvm::inconvertibleErrorCode());
     }

@@ -19,21 +19,12 @@
 namespace clang {
 namespace clangd {
 
-enum class RelationKind : uint8_t {
-  BaseOf,
-  OverriddenBy,
-};
-
 /// Represents a relation between two symbols.
-/// For an example:
-///   - "A is a base class of B" is represented as
-///     { Subject = A, Predicate = BaseOf, Object = B }.
-///   - "Derived::Foo overrides Base::Foo" is represented as
-///     { Subject = Base::Foo, Predicate = OverriddenBy, Object = Derived::Foo
-///     }.
+/// For an example "A is a base class of B" may be represented
+/// as { Subject = A, Predicate = RelationBaseOf, Object = B }.
 struct Relation {
   SymbolID Subject;
-  RelationKind Predicate;
+  index::SymbolRole Predicate;
   SymbolID Object;
 
   bool operator==(const Relation &Other) const {
@@ -46,8 +37,6 @@ struct Relation {
            std::tie(Other.Subject, Other.Predicate, Other.Object);
   }
 };
-llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, const RelationKind R);
-llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, const Relation &R);
 
 class RelationSlab {
 public:
@@ -70,7 +59,7 @@ public:
 
   /// Lookup all relations matching the given subject and predicate.
   llvm::iterator_range<iterator> lookup(const SymbolID &Subject,
-                                        RelationKind Predicate) const;
+                                        index::SymbolRole Predicate) const;
 
   /// RelationSlab::Builder is a mutable container that can 'freeze' to
   /// RelationSlab.
@@ -95,5 +84,32 @@ private:
 
 } // namespace clangd
 } // namespace clang
+
+namespace llvm {
+
+// Support index::SymbolRole as a DenseMap key for the purpose of looking up
+// relations.
+template <> struct DenseMapInfo<clang::index::SymbolRole> {
+  static inline clang::index::SymbolRole getEmptyKey() {
+    // Choose an enumerator that's not a relation.
+    return clang::index::SymbolRole::Declaration;
+  }
+
+  static inline clang::index::SymbolRole getTombstoneKey() {
+    // Choose another enumerator that's not a relation.
+    return clang::index::SymbolRole::Definition;
+  }
+
+  static unsigned getHashValue(const clang::index::SymbolRole &Key) {
+    return hash_value(Key);
+  }
+
+  static bool isEqual(const clang::index::SymbolRole &LHS,
+                      const clang::index::SymbolRole &RHS) {
+    return LHS == RHS;
+  }
+};
+
+} // namespace llvm
 
 #endif // LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_RELATION_H

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SYMBOL_TYPELIST_H
-#define LLDB_SYMBOL_TYPELIST_H
+#ifndef liblldb_TypeList_h_
+#define liblldb_TypeList_h_
 
 #include "lldb/Symbol/Type.h"
 #include "lldb/Utility/Iterable.h"
@@ -28,13 +28,14 @@ public:
 
   void Dump(Stream *s, bool show_context);
 
+  //    lldb::TypeSP
+  //    FindType(lldb::user_id_t uid);
+
   TypeList FindTypes(ConstString name);
 
   void Insert(const lldb::TypeSP &type);
 
   uint32_t GetSize() const;
-
-  bool Empty() const { return !GetSize(); }
 
   lldb::TypeSP GetTypeAtIndex(uint32_t idx);
 
@@ -63,10 +64,9 @@ private:
 
   collection m_types;
 
-  TypeList(const TypeList &) = delete;
-  const TypeList &operator=(const TypeList &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(TypeList);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_SYMBOL_TYPELIST_H
+#endif // liblldb_TypeList_h_

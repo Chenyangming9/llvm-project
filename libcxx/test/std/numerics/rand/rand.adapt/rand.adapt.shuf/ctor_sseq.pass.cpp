@@ -13,9 +13,6 @@
 
 // template<class Sseq> explicit shuffle_order_engine(Sseq& q);
 
-// Serializing/deserializing the state of the RNG requires iostreams
-// UNSUPPORTED: libcpp-has-no-localization
-
 #include <random>
 #include <sstream>
 #include <cassert>

@@ -28,27 +28,25 @@
 
 using namespace llvm;
 
-void MachineFrameInfo::ensureMaxAlignment(Align Alignment) {
+void MachineFrameInfo::ensureMaxAlignment(unsigned Align) {
   if (!StackRealignable)
-    assert(Alignment <= StackAlignment &&
-           "For targets without stack realignment, Alignment is out of limit!");
-  if (MaxAlignment < Alignment)
-    MaxAlignment = Alignment;
+    assert(Align <= StackAlignment &&
+           "For targets without stack realignment, Align is out of limit!");
+  if (MaxAlignment < Align) MaxAlignment = Align;
 }
 
 /// Clamp the alignment if requested and emit a warning.
-static inline Align clampStackAlignment(bool ShouldClamp, Align Alignment,
-                                        Align StackAlignment) {
-  if (!ShouldClamp || Alignment <= StackAlignment)
-    return Alignment;
-  LLVM_DEBUG(dbgs() << "Warning: requested alignment " << DebugStr(Alignment)
-                    << " exceeds the stack alignment "
-                    << DebugStr(StackAlignment)
+static inline unsigned clampStackAlignment(bool ShouldClamp, unsigned Align,
+                                           unsigned StackAlign) {
+  if (!ShouldClamp || Align <= StackAlign)
+    return Align;
+  LLVM_DEBUG(dbgs() << "Warning: requested alignment " << Align
+                    << " exceeds the stack alignment " << StackAlign
                     << " when stack realignment is off" << '\n');
-  return StackAlignment;
+  return StackAlign;
 }
 
-int MachineFrameInfo::CreateStackObject(uint64_t Size, Align Alignment,
+int MachineFrameInfo::CreateStackObject(uint64_t Size, unsigned Alignment,
                                         bool IsSpillSlot,
                                         const AllocaInst *Alloca,
                                         uint8_t StackID) {
@@ -63,7 +61,8 @@ int MachineFrameInfo::CreateStackObject(uint64_t Size, Align Alignment,
   return Index;
 }
 
-int MachineFrameInfo::CreateSpillStackObject(uint64_t Size, Align Alignment) {
+int MachineFrameInfo::CreateSpillStackObject(uint64_t Size,
+                                             unsigned Alignment) {
   Alignment = clampStackAlignment(!StackRealignable, Alignment, StackAlignment);
   CreateStackObject(Size, Alignment, true);
   int Index = (int)Objects.size() - NumFixedObjects - 1;
@@ -71,7 +70,7 @@ int MachineFrameInfo::CreateSpillStackObject(uint64_t Size, Align Alignment) {
   return Index;
 }
 
-int MachineFrameInfo::CreateVariableSizedObject(Align Alignment,
+int MachineFrameInfo::CreateVariableSizedObject(unsigned Alignment,
                                                 const AllocaInst *Alloca) {
   HasVarSizedObjects = true;
   Alignment = clampStackAlignment(!StackRealignable, Alignment, StackAlignment);
@@ -89,8 +88,7 @@ int MachineFrameInfo::CreateFixedObject(uint64_t Size, int64_t SPOffset,
   // object is 16-byte aligned. Note that unlike the non-fixed case, if the
   // stack needs realignment, we can't assume that the stack will in fact be
   // aligned.
-  Align Alignment =
-      commonAlignment(ForcedRealign ? Align(1) : StackAlignment, SPOffset);
+  unsigned Alignment = MinAlign(SPOffset, ForcedRealign ? 1 : StackAlignment);
   Alignment = clampStackAlignment(!StackRealignable, Alignment, StackAlignment);
   Objects.insert(Objects.begin(),
                  StackObject(Size, Alignment, SPOffset, IsImmutable,
@@ -102,8 +100,7 @@ int MachineFrameInfo::CreateFixedObject(uint64_t Size, int64_t SPOffset,
 int MachineFrameInfo::CreateFixedSpillStackObject(uint64_t Size,
                                                   int64_t SPOffset,
                                                   bool IsImmutable) {
-  Align Alignment =
-      commonAlignment(ForcedRealign ? Align(1) : StackAlignment, SPOffset);
+  unsigned Alignment = MinAlign(SPOffset, ForcedRealign ? 1 : StackAlignment);
   Alignment = clampStackAlignment(!StackRealignable, Alignment, StackAlignment);
   Objects.insert(Objects.begin(),
                  StackObject(Size, Alignment, SPOffset, IsImmutable,
@@ -134,11 +131,11 @@ BitVector MachineFrameInfo::getPristineRegs(const MachineFunction &MF) const {
   return BV;
 }
 
-uint64_t MachineFrameInfo::estimateStackSize(const MachineFunction &MF) const {
+unsigned MachineFrameInfo::estimateStackSize(const MachineFunction &MF) const {
   const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
   const TargetRegisterInfo *RegInfo = MF.getSubtarget().getRegisterInfo();
-  Align MaxAlign = getMaxAlign();
-  int64_t Offset = 0;
+  unsigned MaxAlign = getMaxAlignment();
+  int Offset = 0;
 
   // This code is very, very similar to PEI::calculateFrameObjectOffsets().
   // It really should be refactored to share code. Until then, changes
@@ -148,7 +145,7 @@ uint64_t MachineFrameInfo::estimateStackSize(const MachineFunction &MF) const {
     // Only estimate stack size of default stack.
     if (getStackID(i) != TargetStackID::Default)
       continue;
-    int64_t FixedOff = -getObjectOffset(i);
+    int FixedOff = -getObjectOffset(i);
     if (FixedOff > Offset) Offset = FixedOff;
   }
   for (unsigned i = 0, e = getObjectIndexEnd(); i != e; ++i) {
@@ -156,11 +153,11 @@ uint64_t MachineFrameInfo::estimateStackSize(const MachineFunction &MF) const {
     if (isDeadObjectIndex(i) || getStackID(i) != TargetStackID::Default)
       continue;
     Offset += getObjectSize(i);
-    Align Alignment = getObjectAlign(i);
+    unsigned Align = getObjectAlignment(i);
     // Adjust to alignment boundary
-    Offset = alignTo(Offset, Alignment);
+    Offset = (Offset+Align-1)/Align*Align;
 
-    MaxAlign = std::max(Alignment, MaxAlign);
+    MaxAlign = std::max(Align, MaxAlign);
   }
 
   if (adjustsStack() && TFI->hasReservedCallFrame(MF))
@@ -171,17 +168,20 @@ uint64_t MachineFrameInfo::estimateStackSize(const MachineFunction &MF) const {
   // ensure that the callee's frame or the alloca data is suitably aligned;
   // otherwise, for leaf functions, align to the TransientStackAlignment
   // value.
-  Align StackAlign;
+  unsigned StackAlign;
   if (adjustsStack() || hasVarSizedObjects() ||
-      (RegInfo->hasStackRealignment(MF) && getObjectIndexEnd() != 0))
-    StackAlign = TFI->getStackAlign();
+      (RegInfo->needsStackRealignment(MF) && getObjectIndexEnd() != 0))
+    StackAlign = TFI->getStackAlignment();
   else
-    StackAlign = TFI->getTransientStackAlign();
+    StackAlign = TFI->getTransientStackAlignment();
 
   // If the frame pointer is eliminated, all frame offsets will be relative to
   // SP not FP. Align to MaxAlign so this works.
   StackAlign = std::max(StackAlign, MaxAlign);
-  return alignTo(Offset, StackAlign);
+  unsigned AlignMask = StackAlign - 1;
+  Offset = (Offset + AlignMask) & ~uint64_t(AlignMask);
+
+  return (unsigned)Offset;
 }
 
 void MachineFrameInfo::computeMaxCallFrameSize(const MachineFunction &MF) {
@@ -232,7 +232,7 @@ void MachineFrameInfo::print(const MachineFunction &MF, raw_ostream &OS) const{
       OS << "variable sized";
     else
       OS << "size=" << SO.Size;
-    OS << ", align=" << SO.Alignment.value();
+    OS << ", align=" << SO.Alignment;
 
     if (i < NumFixedObjects)
       OS << ", fixed";

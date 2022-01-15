@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: libcpp-has-no-localization
-
 // <random>
 
 // template <class UIntType, UIntType a, UIntType c, UIntType m>

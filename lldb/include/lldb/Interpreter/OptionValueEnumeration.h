@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONVALUEENUMERATION_H
-#define LLDB_INTERPRETER_OPTIONVALUEENUMERATION_H
+#ifndef liblldb_OptionValueEnumeration_h_
+#define liblldb_OptionValueEnumeration_h_
 
 #include "lldb/Core/UniqueCStringMap.h"
 #include "lldb/Interpreter/OptionValue.h"
@@ -19,8 +19,7 @@
 
 namespace lldb_private {
 
-class OptionValueEnumeration
-    : public Cloneable<OptionValueEnumeration, OptionValue> {
+class OptionValueEnumeration : public OptionValue {
 public:
   typedef int64_t enum_type;
   struct EnumeratorInfo {
@@ -32,7 +31,7 @@ public:
 
   OptionValueEnumeration(const OptionEnumValues &enumerators, enum_type value);
 
-  ~OptionValueEnumeration() override = default;
+  ~OptionValueEnumeration() override;
 
   // Virtual subclass pure virtual overrides
 
@@ -44,14 +43,20 @@ public:
   Status
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
+  Status
+  SetValueFromString(const char *,
+                     VarSetOperationType = eVarSetOperationAssign) = delete;
 
-  void Clear() override {
+  bool Clear() override {
     m_current_value = m_default_value;
     m_value_was_set = false;
+    return true;
   }
 
-  void AutoComplete(CommandInterpreter &interpreter,
-                    CompletionRequest &request) override;
+  lldb::OptionValueSP DeepCopy() const override;
+
+  size_t AutoComplete(CommandInterpreter &interpreter,
+                      CompletionRequest &request) override;
 
   // Subclass specific functions
 
@@ -78,4 +83,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONVALUEENUMERATION_H
+#endif // liblldb_OptionValueEnumeration_h_

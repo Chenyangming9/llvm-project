@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_DYNAMICLOADER_HEXAGON_DYLD_HEXAGONDYLDRENDEZVOUS_H
-#define LLDB_SOURCE_PLUGINS_DYNAMICLOADER_HEXAGON_DYLD_HEXAGONDYLDRENDEZVOUS_H
+#ifndef liblldb_HexagonDYLDRendezvous_H_
+#define liblldb_HexagonDYLDRendezvous_H_
 
 #include <limits.h>
 #include <list>
@@ -35,13 +35,15 @@ class HexagonDYLDRendezvous {
   // the layout of this struct is not binary compatible, it is simply large
   // enough to hold the information on both 32 and 64 bit platforms.
   struct Rendezvous {
-    uint64_t version = 0;
-    lldb::addr_t map_addr = LLDB_INVALID_ADDRESS;
-    lldb::addr_t brk = LLDB_INVALID_ADDRESS;
-    uint64_t state = 0;
-    lldb::addr_t ldbase = 0;
+    uint64_t version;
+    lldb::addr_t map_addr;
+    lldb::addr_t brk;
+    uint64_t state;
+    lldb::addr_t ldbase;
 
-    Rendezvous() = default;
+    Rendezvous()
+        : version(0), map_addr(LLDB_INVALID_ADDRESS), brk(LLDB_INVALID_ADDRESS),
+          state(0), ldbase(0) {}
   };
 
 public:
@@ -241,4 +243,4 @@ protected:
   bool FindMetadata(const char *name, PThreadField field, uint32_t &value);
 };
 
-#endif // LLDB_SOURCE_PLUGINS_DYNAMICLOADER_HEXAGON_DYLD_HEXAGONDYLDRENDEZVOUS_H
+#endif // liblldb_HexagonDYLDRendezvous_H_

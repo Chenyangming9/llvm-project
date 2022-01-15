@@ -30,7 +30,6 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Driver/Options.h"
 #include "clang/Frontend/CompilerInstance.h"
-#include "clang/Frontend/FrontendAction.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Tooling/Execution.h"
@@ -86,8 +85,8 @@ protected:
                                                  StringRef InFile) override {
     Preprocessor &PP = CI.getPreprocessor();
     PP.addPPCallbacks(
-        std::make_unique<PPCallbacksTracker>(Filters, CallbackCalls, PP));
-    return std::make_unique<ASTConsumer>();
+        llvm::make_unique<PPCallbacksTracker>(Filters, CallbackCalls, PP));
+    return llvm::make_unique<ASTConsumer>();
   }
 
   void EndSourceFileAction() override {
@@ -113,9 +112,7 @@ public:
   PPTraceFrontendActionFactory(const FilterType &Filters, raw_ostream &OS)
       : Filters(Filters), OS(OS) {}
 
-  std::unique_ptr<FrontendAction> create() override {
-    return std::make_unique<PPTraceAction>(Filters, OS);
-  }
+  PPTraceAction *create() override { return new PPTraceAction(Filters, OS); }
 
 private:
   const FilterType &Filters;
@@ -152,7 +149,7 @@ int main(int argc, const char **argv) {
                                  OptionsParser->getSourcePathList());
 
   std::error_code EC;
-  llvm::ToolOutputFile Out(OutputFileName, EC, llvm::sys::fs::OF_TextWithCRLF);
+  llvm::ToolOutputFile Out(OutputFileName, EC, llvm::sys::fs::F_Text);
   if (EC)
     error(EC.message());
   PPTraceFrontendActionFactory Factory(Filters, Out.os());

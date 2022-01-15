@@ -16,11 +16,10 @@
 
 #include <locale>
 #include <cassert>
-#include <ios>
 #include "test_macros.h"
 #include "test_iterators.h"
 
-typedef cpp17_input_iterator<const wchar_t*> I;
+typedef input_iterator<const wchar_t*> I;
 
 typedef std::time_get<wchar_t, I> F;
 

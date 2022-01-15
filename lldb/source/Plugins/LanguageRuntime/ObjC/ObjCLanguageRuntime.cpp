@@ -1,4 +1,4 @@
-//===-- ObjCLanguageRuntime.cpp -------------------------------------------===//
+//===-- ObjCLanguageRuntime.cpp ---------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,11 +9,11 @@
 
 #include "ObjCLanguageRuntime.h"
 
-#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/Core/MappedHash.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/ValueObject.h"
+#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Symbol/SymbolFile.h"
 #include "lldb/Symbol/Type.h"
@@ -32,7 +32,7 @@ using namespace lldb_private;
 char ObjCLanguageRuntime::ID = 0;
 
 // Destructor
-ObjCLanguageRuntime::~ObjCLanguageRuntime() = default;
+ObjCLanguageRuntime::~ObjCLanguageRuntime() {}
 
 ObjCLanguageRuntime::ObjCLanguageRuntime(Process *process)
     : LanguageRuntime(process), m_impl_cache(),
@@ -41,7 +41,7 @@ ObjCLanguageRuntime::ObjCLanguageRuntime(Process *process)
       m_isa_to_descriptor_stop_id(UINT32_MAX), m_complete_class_cache(),
       m_negative_complete_class_cache() {}
 
-bool ObjCLanguageRuntime::IsAllowedRuntimeValue(ConstString name) {
+bool ObjCLanguageRuntime::IsWhitelistedRuntimeValue(ConstString name) {
   static ConstString g_self = ConstString("self");
   static ConstString g_cmd = ConstString("_cmd");
   return name == g_self || name == g_cmd;
@@ -64,10 +64,9 @@ void ObjCLanguageRuntime::AddToMethodCache(lldb::addr_t class_addr,
                                            lldb::addr_t impl_addr) {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
   if (log) {
-    LLDB_LOGF(log,
-              "Caching: class 0x%" PRIx64 " selector 0x%" PRIx64
-              " implementation 0x%" PRIx64 ".",
-              class_addr, selector, impl_addr);
+    log->Printf("Caching: class 0x%" PRIx64 " selector 0x%" PRIx64
+                " implementation 0x%" PRIx64 ".",
+                class_addr, selector, impl_addr);
   }
   m_impl_cache.insert(std::pair<ClassAndSel, lldb::addr_t>(
       ClassAndSel(class_addr, selector), impl_addr));
@@ -103,8 +102,8 @@ ObjCLanguageRuntime::LookupInCompleteClassCache(ConstString &name) {
   const ModuleList &modules = m_process->GetTarget().GetImages();
 
   SymbolContextList sc_list;
-  modules.FindSymbolsWithNameAndType(name, eSymbolTypeObjCClass, sc_list);
-  const size_t matching_symbols = sc_list.GetSize();
+  const size_t matching_symbols =
+      modules.FindSymbolsWithNameAndType(name, eSymbolTypeObjCClass, sc_list);
 
   if (matching_symbols) {
     SymbolContext sc;
@@ -121,17 +120,20 @@ ObjCLanguageRuntime::LookupInCompleteClassCache(ConstString &name) {
     TypeList types;
 
     llvm::DenseSet<SymbolFile *> searched_symbol_files;
-    module_sp->FindTypes(name, exact_match, max_matches, searched_symbol_files,
-                         types);
+    const uint32_t num_types = module_sp->FindTypes(
+        name, exact_match, max_matches, searched_symbol_files, types);
 
-    for (uint32_t i = 0; i < types.GetSize(); ++i) {
-      TypeSP type_sp(types.GetTypeAtIndex(i));
+    if (num_types) {
+      uint32_t i;
+      for (i = 0; i < num_types; ++i) {
+        TypeSP type_sp(types.GetTypeAtIndex(i));
 
-      if (TypeSystemClang::IsObjCObjectOrInterfaceType(
-              type_sp->GetForwardCompilerType())) {
-        if (TypePayloadClang(type_sp->GetPayload()).IsCompleteObjCClass()) {
-          m_complete_class_cache[name] = type_sp;
-          return type_sp;
+        if (ClangASTContext::IsObjCObjectOrInterfaceType(
+                type_sp->GetForwardCompilerType())) {
+          if (type_sp->IsCompleteObjCClass()) {
+            m_complete_class_cache[name] = type_sp;
+            return type_sp;
+          }
         }
       }
     }
@@ -222,6 +224,14 @@ ObjCLanguageRuntime::GetParentClass(ObjCLanguageRuntime::ObjCISA isa) {
   return 0;
 }
 
+ConstString
+ObjCLanguageRuntime::GetActualTypeName(ObjCLanguageRuntime::ObjCISA isa) {
+  ClassDescriptorSP objc_class_sp(GetNonKVOClassDescriptor(isa));
+  if (objc_class_sp)
+    return objc_class_sp->GetClassName();
+  return ConstString();
+}
+
 ObjCLanguageRuntime::ClassDescriptorSP
 ObjCLanguageRuntime::GetClassDescriptorFromClassName(
     ConstString class_name) {
@@ -305,7 +315,15 @@ ObjCLanguageRuntime::EncodingToType::RealizeType(const char *name,
   return CompilerType();
 }
 
-ObjCLanguageRuntime::EncodingToType::~EncodingToType() = default;
+CompilerType ObjCLanguageRuntime::EncodingToType::RealizeType(
+    ClangASTContext &ast_ctx, const char *name, bool for_expression) {
+  clang::ASTContext *clang_ast = ast_ctx.getASTContext();
+  if (!clang_ast)
+    return CompilerType();
+  return RealizeType(*clang_ast, name, for_expression);
+}
+
+ObjCLanguageRuntime::EncodingToType::~EncodingToType() {}
 
 ObjCLanguageRuntime::EncodingToTypeSP ObjCLanguageRuntime::GetEncodingToType() {
   return nullptr;
@@ -363,8 +381,7 @@ void ObjCLanguageRuntime::ObjCExceptionPrecondition::AddClassName(
   m_class_names.insert(class_name);
 }
 
-ObjCLanguageRuntime::ObjCExceptionPrecondition::ObjCExceptionPrecondition() =
-    default;
+ObjCLanguageRuntime::ObjCExceptionPrecondition::ObjCExceptionPrecondition() {}
 
 bool ObjCLanguageRuntime::ObjCExceptionPrecondition::EvaluatePrecondition(
     StoppointCallbackContext &context) {
@@ -388,9 +405,9 @@ ObjCLanguageRuntime::GetRuntimeType(CompilerType base_type) {
   CompilerType class_type;
   bool is_pointer_type = false;
 
-  if (TypeSystemClang::IsObjCObjectPointerType(base_type, &class_type))
+  if (ClangASTContext::IsObjCObjectPointerType(base_type, &class_type))
     is_pointer_type = true;
-  else if (TypeSystemClang::IsObjCObjectOrInterfaceType(base_type))
+  else if (ClangASTContext::IsObjCObjectOrInterfaceType(base_type))
     class_type = base_type;
   else
     return llvm::None;
@@ -398,7 +415,7 @@ ObjCLanguageRuntime::GetRuntimeType(CompilerType base_type) {
   if (!class_type)
     return llvm::None;
 
-  ConstString class_name(class_type.GetTypeName());
+  ConstString class_name(class_type.GetConstTypeName());
   if (!class_name)
     return llvm::None;
 

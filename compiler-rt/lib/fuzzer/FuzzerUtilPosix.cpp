@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 // Misc utils implementation using Posix API.
 //===----------------------------------------------------------------------===//
-#include "FuzzerPlatform.h"
+#include "FuzzerDefs.h"
 #if LIBFUZZER_POSIX
 #include "FuzzerIO.h"
 #include "FuzzerInternal.h"
@@ -37,6 +37,7 @@ static void (*upstream_segv_handler)(int, siginfo_t *, void *);
 
 static void SegvHandler(int sig, siginfo_t *si, void *ucontext) {
   assert(si->si_signo == SIGSEGV);
+  if (TPC.UnprotectLazyCounters(si->si_addr)) return;
   if (upstream_segv_handler)
     return upstream_segv_handler(sig, si, ucontext);
   Fuzzer::StaticCrashSignalCallback();
@@ -77,30 +78,13 @@ static void SetSigaction(int signum,
       return;
   }
 
-  struct sigaction new_sigact = {};
-  // Address sanitizer needs SA_ONSTACK (causing the signal handler to run on a
-  // dedicated stack) in order to be able to detect stack overflows; keep the
-  // flag if it's set.
-  new_sigact.sa_flags = SA_SIGINFO | (sigact.sa_flags & SA_ONSTACK);
-  new_sigact.sa_sigaction = callback;
-  if (sigaction(signum, &new_sigact, nullptr)) {
+  sigact = {};
+  sigact.sa_flags = SA_SIGINFO;
+  sigact.sa_sigaction = callback;
+  if (sigaction(signum, &sigact, 0)) {
     Printf("libFuzzer: sigaction failed with %d\n", errno);
     exit(1);
   }
-}
-
-// Return true on success, false otherwise.
-bool ExecuteCommand(const Command &Cmd, std::string *CmdOutput) {
-  FILE *Pipe = popen(Cmd.toString().c_str(), "r");
-  if (!Pipe)
-    return false;
-
-  if (CmdOutput) {
-    char TmpBuffer[128];
-    while (fgets(TmpBuffer, sizeof(TmpBuffer), Pipe))
-      CmdOutput->append(TmpBuffer);
-  }
-  return pclose(Pipe) == 0;
 }
 
 void SetTimer(int Seconds) {
@@ -114,9 +98,13 @@ void SetTimer(int Seconds) {
   SetSigaction(SIGALRM, AlarmHandler);
 }
 
+bool Mprotect(void *Ptr, size_t Size, bool AllowReadWrite) {
+  return 0 == mprotect(Ptr, Size,
+                       AllowReadWrite ? (PROT_READ | PROT_WRITE) : PROT_NONE);
+}
+
 void SetSignalHandler(const FuzzingOptions& Options) {
-  // setitimer is not implemented in emscripten.
-  if (Options.HandleAlrm && Options.UnitTimeoutSec > 0 && !LIBFUZZER_EMSCRIPTEN)
+  if (Options.UnitTimeoutSec > 0)
     SetTimer(Options.UnitTimeoutSec / 2 + 1);
   if (Options.HandleInt)
     SetSigaction(SIGINT, InterruptHandler);
@@ -151,7 +139,7 @@ size_t GetPeakRSSMb() {
   if (getrusage(RUSAGE_SELF, &usage))
     return 0;
   if (LIBFUZZER_LINUX || LIBFUZZER_FREEBSD || LIBFUZZER_NETBSD ||
-      LIBFUZZER_EMSCRIPTEN) {
+      LIBFUZZER_OPENBSD) {
     // ru_maxrss is in KiB
     return usage.ru_maxrss >> 10;
   } else if (LIBFUZZER_APPLE) {
@@ -164,10 +152,6 @@ size_t GetPeakRSSMb() {
 
 FILE *OpenProcessPipe(const char *Command, const char *Mode) {
   return popen(Command, Mode);
-}
-
-int CloseProcessPipe(FILE *F) {
-  return pclose(F);
 }
 
 const void *SearchMemory(const void *Data, size_t DataLen, const void *Patt,

@@ -6,4 +6,4 @@ void* allocate(long size);
 
 void* main(void* context, long size) {
   if (context) return allocate(size);
-} // expected-warning {{non-void function does not return a value in all control paths}}
+} // expected-warning {{control may reach end of non-void function}}

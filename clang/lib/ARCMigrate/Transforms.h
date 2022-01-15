@@ -93,12 +93,12 @@ public:
     bool FullyMigratable;
   };
   std::vector<GCAttrOccurrence> GCAttrs;
-  llvm::DenseSet<SourceLocation> AttrSet;
-  llvm::DenseSet<SourceLocation> RemovedAttrSet;
+  llvm::DenseSet<unsigned> AttrSet;
+  llvm::DenseSet<unsigned> RemovedAttrSet;
 
   /// Set of raw '@' locations for 'assign' properties group that contain
   /// GC __weak.
-  llvm::DenseSet<SourceLocation> AtPropsWeak;
+  llvm::DenseSet<unsigned> AtPropsWeak;
 
   explicit MigrationContext(MigrationPass &pass) : Pass(pass) {}
   ~MigrationContext();

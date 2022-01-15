@@ -18,7 +18,6 @@
 
 namespace clang_fuzzer {
 void HandleCXX(const std::string &S,
-               const char *FileName,
                const std::vector<const char *> &ExtraArgs);
 } // namespace clang_fuzzer
 

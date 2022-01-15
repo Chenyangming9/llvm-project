@@ -31,9 +31,6 @@ __clang__::fallthrough: __has_cpp_attribute(__clang__::fallthrough)
 // CHECK: _Clang::fallthrough: 201603L
 CXX11(_Clang::fallthrough)
 
-// CHECK: __nodiscard__: 201907L
-CXX11(__nodiscard__)
-
 // CHECK: __gnu__::__const__: 1
 CXX11(__gnu__::__const__)
 
@@ -62,13 +59,13 @@ CXX11(unlikely)
 // FIXME(201806L) CHECK: ensures: 0
 // FIXME(201806L) CHECK: expects: 0
 // CHECK: fallthrough: 201603L
-// CHECK: likely: 201803L
+// FIXME(201803L) CHECK: likely: 0
 // CHECK: maybe_unused: 201603L
 // ITANIUM: no_unique_address: 201803L
 // WINDOWS: no_unique_address: 0
-// CHECK: nodiscard: 201907L
+// CHECK: nodiscard: 201603L
 // CHECK: noreturn: 200809L
-// CHECK: unlikely: 201803L
+// FIXME(201803L) CHECK: unlikely: 0
 
 // Test for Microsoft __declspec attributes
 

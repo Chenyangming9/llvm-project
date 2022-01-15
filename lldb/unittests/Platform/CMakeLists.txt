@@ -1,5 +1,4 @@
 add_lldb_unittest(LLDBPlatformTests
-  PlatformAppleSimulatorTest.cpp
   PlatformDarwinTest.cpp
 
   LINK_LIBS
@@ -7,5 +6,3 @@ add_lldb_unittest(LLDBPlatformTests
   LINK_COMPONENTS
     Support
   )
-
-add_subdirectory(Android)

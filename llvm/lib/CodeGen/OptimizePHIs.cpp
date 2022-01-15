@@ -21,7 +21,6 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include <cassert>
 
@@ -83,8 +82,8 @@ bool OptimizePHIs::runOnMachineFunction(MachineFunction &Fn) {
   // introduce new opportunities, e.g., when i64 values are split up for
   // 32-bit targets.
   bool Changed = false;
-  for (MachineBasicBlock &MBB : Fn)
-    Changed |= OptimizeBB(MBB);
+  for (MachineFunction::iterator I = Fn.begin(), E = Fn.end(); I != E; ++I)
+    Changed |= OptimizeBB(*I);
 
   return Changed;
 }
@@ -98,7 +97,7 @@ bool OptimizePHIs::IsSingleValuePHICycle(MachineInstr *MI,
                                          unsigned &SingleValReg,
                                          InstrSet &PHIsInCycle) {
   assert(MI->isPHI() && "IsSingleValuePHICycle expects a PHI instruction");
-  Register DstReg = MI->getOperand(0).getReg();
+  unsigned DstReg = MI->getOperand(0).getReg();
 
   // See if we already saw this register.
   if (!PHIsInCycle.insert(MI).second)
@@ -110,15 +109,16 @@ bool OptimizePHIs::IsSingleValuePHICycle(MachineInstr *MI,
 
   // Scan the PHI operands.
   for (unsigned i = 1; i != MI->getNumOperands(); i += 2) {
-    Register SrcReg = MI->getOperand(i).getReg();
+    unsigned SrcReg = MI->getOperand(i).getReg();
     if (SrcReg == DstReg)
       continue;
     MachineInstr *SrcMI = MRI->getVRegDef(SrcReg);
 
     // Skip over register-to-register moves.
-    if (SrcMI && SrcMI->isCopy() && !SrcMI->getOperand(0).getSubReg() &&
+    if (SrcMI && SrcMI->isCopy() &&
+        !SrcMI->getOperand(0).getSubReg() &&
         !SrcMI->getOperand(1).getSubReg() &&
-        Register::isVirtualRegister(SrcMI->getOperand(1).getReg())) {
+        TargetRegisterInfo::isVirtualRegister(SrcMI->getOperand(1).getReg())) {
       SrcReg = SrcMI->getOperand(1).getReg();
       SrcMI = MRI->getVRegDef(SrcReg);
     }
@@ -142,8 +142,8 @@ bool OptimizePHIs::IsSingleValuePHICycle(MachineInstr *MI,
 /// other PHIs in a cycle.
 bool OptimizePHIs::IsDeadPHICycle(MachineInstr *MI, InstrSet &PHIsInCycle) {
   assert(MI->isPHI() && "IsDeadPHICycle expects a PHI instruction");
-  Register DstReg = MI->getOperand(0).getReg();
-  assert(Register::isVirtualRegister(DstReg) &&
+  unsigned DstReg = MI->getOperand(0).getReg();
+  assert(TargetRegisterInfo::isVirtualRegister(DstReg) &&
          "PHI destination is not a virtual register");
 
   // See if we already saw this register.
@@ -177,7 +177,7 @@ bool OptimizePHIs::OptimizeBB(MachineBasicBlock &MBB) {
     InstrSet PHIsInCycle;
     if (IsSingleValuePHICycle(MI, SingleValReg, PHIsInCycle) &&
         SingleValReg != 0) {
-      Register OldReg = MI->getOperand(0).getReg();
+      unsigned OldReg = MI->getOperand(0).getReg();
       if (!MRI->constrainRegClass(SingleValReg, MRI->getRegClass(OldReg)))
         continue;
 
@@ -195,7 +195,9 @@ bool OptimizePHIs::OptimizeBB(MachineBasicBlock &MBB) {
     // Check for dead PHI cycles.
     PHIsInCycle.clear();
     if (IsDeadPHICycle(MI, PHIsInCycle)) {
-      for (MachineInstr *PhiMI : PHIsInCycle) {
+      for (InstrSetIterator PI = PHIsInCycle.begin(), PE = PHIsInCycle.end();
+           PI != PE; ++PI) {
+        MachineInstr *PhiMI = *PI;
         if (MII == PhiMI)
           ++MII;
         PhiMI->eraseFromParent();

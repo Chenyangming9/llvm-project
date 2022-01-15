@@ -683,8 +683,8 @@ void TextDiagnostic::emitDiagnosticMessage(
   if (DiagOpts->ShowColors)
     OS.resetColor();
 
-  if (DiagOpts->ShowLevel)
-    printDiagnosticLevel(OS, Level, DiagOpts->ShowColors);
+  printDiagnosticLevel(OS, Level, DiagOpts->ShowColors,
+                       DiagOpts->CLFallbackMode);
   printDiagnosticMessage(OS,
                          /*IsSupplemental*/ Level == DiagnosticsEngine::Note,
                          Message, OS.tell() - StartOfLocationInfo,
@@ -694,7 +694,8 @@ void TextDiagnostic::emitDiagnosticMessage(
 /*static*/ void
 TextDiagnostic::printDiagnosticLevel(raw_ostream &OS,
                                      DiagnosticsEngine::Level Level,
-                                     bool ShowColors) {
+                                     bool ShowColors,
+                                     bool CLFallbackMode) {
   if (ShowColors) {
     // Print diagnostic category in bold and color
     switch (Level) {
@@ -711,12 +712,21 @@ TextDiagnostic::printDiagnosticLevel(raw_ostream &OS,
   switch (Level) {
   case DiagnosticsEngine::Ignored:
     llvm_unreachable("Invalid diagnostic type");
-  case DiagnosticsEngine::Note:    OS << "note: "; break;
-  case DiagnosticsEngine::Remark:  OS << "remark: "; break;
-  case DiagnosticsEngine::Warning: OS << "warning: "; break;
-  case DiagnosticsEngine::Error:   OS << "error: "; break;
-  case DiagnosticsEngine::Fatal:   OS << "fatal error: "; break;
+  case DiagnosticsEngine::Note:    OS << "note"; break;
+  case DiagnosticsEngine::Remark:  OS << "remark"; break;
+  case DiagnosticsEngine::Warning: OS << "warning"; break;
+  case DiagnosticsEngine::Error:   OS << "error"; break;
+  case DiagnosticsEngine::Fatal:   OS << "fatal error"; break;
   }
+
+  // In clang-cl /fallback mode, print diagnostics as "error(clang):". This
+  // makes it more clear whether a message is coming from clang or cl.exe,
+  // and it prevents MSBuild from concluding that the build failed just because
+  // there is an "error:" in the output.
+  if (CLFallbackMode)
+    OS << "(clang)";
+
+  OS << ": ";
 
   if (ShowColors)
     OS.resetColor();
@@ -750,12 +760,11 @@ void TextDiagnostic::printDiagnosticMessage(raw_ostream &OS,
 }
 
 void TextDiagnostic::emitFilename(StringRef Filename, const SourceManager &SM) {
-#ifdef _WIN32
-  SmallString<4096> TmpFilename;
-#endif
+  SmallVector<char, 128> AbsoluteFilename;
   if (DiagOpts->AbsolutePath) {
-    auto File = SM.getFileManager().getFile(Filename);
-    if (File) {
+    const DirectoryEntry *Dir = SM.getFileManager().getDirectory(
+        llvm::sys::path::parent_path(Filename));
+    if (Dir) {
       // We want to print a simplified absolute path, i. e. without "dots".
       //
       // The hardest part here are the paths like "<part1>/<link>/../<part2>".
@@ -771,14 +780,16 @@ void TextDiagnostic::emitFilename(StringRef Filename, const SourceManager &SM) {
       // on Windows we can just use llvm::sys::path::remove_dots(), because,
       // on that system, both aforementioned paths point to the same place.
 #ifdef _WIN32
-      TmpFilename = (*File)->getName();
-      llvm::sys::fs::make_absolute(TmpFilename);
-      llvm::sys::path::native(TmpFilename);
-      llvm::sys::path::remove_dots(TmpFilename, /* remove_dot_dot */ true);
-      Filename = StringRef(TmpFilename.data(), TmpFilename.size());
+      SmallString<4096> DirName = Dir->getName();
+      llvm::sys::fs::make_absolute(DirName);
+      llvm::sys::path::native(DirName);
+      llvm::sys::path::remove_dots(DirName, /* remove_dot_dot */ true);
 #else
-      Filename = SM.getFileManager().getCanonicalName(*File);
+      StringRef DirName = SM.getFileManager().getCanonicalName(Dir);
 #endif
+      llvm::sys::path::append(AbsoluteFilename, DirName,
+                              llvm::sys::path::filename(Filename));
+      Filename = StringRef(AbsoluteFilename.data(), AbsoluteFilename.size());
     }
   }
 
@@ -816,10 +827,7 @@ void TextDiagnostic::emitDiagnosticLoc(FullSourceLoc Loc, PresumedLoc PLoc,
 
   emitFilename(PLoc.getFilename(), Loc.getManager());
   switch (DiagOpts->getFormat()) {
-  case DiagnosticOptions::Clang:
-    if (DiagOpts->ShowLine)
-      OS << ':' << LineNo;
-    break;
+  case DiagnosticOptions::Clang: OS << ':'  << LineNo; break;
   case DiagnosticOptions::MSVC:  OS << '('  << LineNo; break;
   case DiagnosticOptions::Vi:    OS << " +" << LineNo; break;
   }

@@ -7,7 +7,8 @@ define <4 x float> @f1(<4 x float> %dummy, <4 x float> %val) {
 ; CHECK-LABEL: f1:
 ; CHECK: vflcsb %v24, %v26
 ; CHECK: br %r14
-  %ret = fneg <4 x float> %val
+  %ret = fsub <4 x float> <float -0.0, float -0.0,
+                           float -0.0, float -0.0>, %val
   ret <4 x float> %ret
 }
 
@@ -17,6 +18,6 @@ define float @f2(<4 x float> %val) {
 ; CHECK: wflcsb %f0, %v24
 ; CHECK: br %r14
   %scalar = extractelement <4 x float> %val, i32 0
-  %ret = fneg float %scalar
+  %ret = fsub float -0.0, %scalar
   ret float %ret
 }

@@ -16,6 +16,7 @@
 #include "X86Subtarget.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Target/TargetMachine.h"
 #include <memory>
@@ -23,13 +24,12 @@
 namespace llvm {
 
 class StringRef;
-class TargetTransformInfo;
+class X86Subtarget;
+class X86RegisterBankInfo;
 
 class X86TargetMachine final : public LLVMTargetMachine {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   mutable StringMap<std::unique_ptr<X86Subtarget>> SubtargetMap;
-  // True if this is used in JIT.
-  bool IsJIT;
 
 public:
   X86TargetMachine(const Target &T, const Triple &TT, StringRef CPU,
@@ -52,10 +52,6 @@ public:
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();
   }
-
-  bool isJIT() const { return IsJIT; }
-
-  bool isNoopAddrSpaceCast(unsigned SrcAS, unsigned DestAS) const override;
 };
 
 } // end namespace llvm

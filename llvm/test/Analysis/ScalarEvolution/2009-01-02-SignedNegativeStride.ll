@@ -1,5 +1,4 @@
-; RUN: opt < %s -analyze -enable-new-pm=0 -scalar-evolution | FileCheck %s
-; RUN: opt < %s -disable-output "-passes=print<scalar-evolution>" 2>&1 | FileCheck %s
+; RUN: opt < %s -analyze -scalar-evolution | FileCheck %s
 ; PR3275
 
 ; CHECK: Printing analysis 'Scalar Evolution Analysis' for function 'func_15'

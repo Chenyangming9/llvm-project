@@ -20,8 +20,9 @@
 
 ; CHECK-LABEL: # %bb.{{.*}}:
 ; CHECK:        #DEBUG_VALUE: main:aa <- 0
-; CHECK: .LBB0_1:
 ; CHECK: 	#DEBUG_VALUE: main:aa <- $[[REG:[0-9a-z]+]]
+; CHECK: .LBB0_1:
+; CHECK:        #DEBUG_VALUE: main:aa <- $[[REG]]
 ; CHECK:        je      .LBB0_4
 ; CHECK: # %bb.{{.*}}:
 ; CHECK:        #DEBUG_VALUE: main:aa <- $[[REG]]

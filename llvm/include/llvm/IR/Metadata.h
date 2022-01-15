@@ -22,7 +22,6 @@
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/ilist_node.h"
 #include "llvm/ADT/iterator_range.h"
@@ -52,10 +51,6 @@ enum LLVMConstants : uint32_t {
   DEBUG_METADATA_VERSION = 3 // Current debug info version number.
 };
 
-/// Magic number in the value profile metadata showing a target has been
-/// promoted for the instruction and shouldn't be promoted again.
-const uint64_t NOMORE_ICP_MAGICNUM = -1;
-
 /// Root of the metadata hierarchy.
 ///
 /// This is a root class for typeless data in the IR.
@@ -71,8 +66,10 @@ protected:
 
   /// Storage flag for non-uniqued, otherwise unowned, metadata.
   unsigned char Storage : 7;
+  // TODO: expose remaining bits to subclasses.
 
-  unsigned char SubclassData1 : 1;
+  unsigned char ImplicitCode : 1;
+
   unsigned short SubclassData16 = 0;
   unsigned SubclassData32 = 0;
 
@@ -84,7 +81,7 @@ public:
 
 protected:
   Metadata(unsigned ID, StorageType Storage)
-      : SubclassID(ID), Storage(Storage), SubclassData1(false) {
+      : SubclassID(ID), Storage(Storage), ImplicitCode(false) {
     static_assert(sizeof(*this) == 8, "Metadata fields poorly packed");
   }
 
@@ -303,9 +300,6 @@ public:
   /// Replace all uses of this with \c MD, which is allowed to be null.
   void replaceAllUsesWith(Metadata *MD);
 
-  /// Returns the list of all DIArgList users of this.
-  SmallVector<Metadata *> getAllArgListUsers();
-
   /// Resolve all uses of this.
   ///
   /// Resolve all uses of this, turning off RAUW permanently.  If \c
@@ -384,10 +378,6 @@ public:
   Value *getValue() const { return V; }
   Type *getType() const { return V->getType(); }
   LLVMContext &getContext() const { return V->getContext(); }
-
-  SmallVector<Metadata *> getAllArgListUsers() {
-    return ReplaceableMetadataImpl::getAllArgListUsers();
-  }
 
   static void handleDeletion(Value *V);
   static void handleRAUW(Value *From, Value *To);
@@ -536,7 +526,7 @@ template <class V, class M> struct IsValidReference {
 /// As an analogue to \a isa(), check whether \c MD has an \a Value inside of
 /// type \c X.
 template <class X, class Y>
-inline std::enable_if_t<detail::IsValidPointer<X, Y>::value, bool>
+inline typename std::enable_if<detail::IsValidPointer<X, Y>::value, bool>::type
 hasa(Y &&MD) {
   assert(MD && "Null pointer sent into hasa");
   if (auto *V = dyn_cast<ConstantAsMetadata>(MD))
@@ -544,8 +534,9 @@ hasa(Y &&MD) {
   return false;
 }
 template <class X, class Y>
-inline std::enable_if_t<detail::IsValidReference<X, Y &>::value, bool>
-hasa(Y &MD) {
+inline
+    typename std::enable_if<detail::IsValidReference<X, Y &>::value, bool>::type
+    hasa(Y &MD) {
   return hasa(&MD);
 }
 
@@ -553,13 +544,14 @@ hasa(Y &MD) {
 ///
 /// As an analogue to \a cast(), extract the \a Value subclass \c X from \c MD.
 template <class X, class Y>
-inline std::enable_if_t<detail::IsValidPointer<X, Y>::value, X *>
+inline typename std::enable_if<detail::IsValidPointer<X, Y>::value, X *>::type
 extract(Y &&MD) {
   return cast<X>(cast<ConstantAsMetadata>(MD)->getValue());
 }
 template <class X, class Y>
-inline std::enable_if_t<detail::IsValidReference<X, Y &>::value, X *>
-extract(Y &MD) {
+inline
+    typename std::enable_if<detail::IsValidReference<X, Y &>::value, X *>::type
+    extract(Y &MD) {
   return extract(&MD);
 }
 
@@ -568,7 +560,7 @@ extract(Y &MD) {
 /// As an analogue to \a cast_or_null(), extract the \a Value subclass \c X
 /// from \c MD, allowing \c MD to be null.
 template <class X, class Y>
-inline std::enable_if_t<detail::IsValidPointer<X, Y>::value, X *>
+inline typename std::enable_if<detail::IsValidPointer<X, Y>::value, X *>::type
 extract_or_null(Y &&MD) {
   if (auto *V = cast_or_null<ConstantAsMetadata>(MD))
     return cast<X>(V->getValue());
@@ -581,7 +573,7 @@ extract_or_null(Y &&MD) {
 /// from \c MD, return null if \c MD doesn't contain a \a Value or if the \a
 /// Value it does contain is of the wrong subclass.
 template <class X, class Y>
-inline std::enable_if_t<detail::IsValidPointer<X, Y>::value, X *>
+inline typename std::enable_if<detail::IsValidPointer<X, Y>::value, X *>::type
 dyn_extract(Y &&MD) {
   if (auto *V = dyn_cast<ConstantAsMetadata>(MD))
     return dyn_cast<X>(V->getValue());
@@ -594,7 +586,7 @@ dyn_extract(Y &&MD) {
 /// from \c MD, return null if \c MD doesn't contain a \a Value or if the \a
 /// Value it does contain is of the wrong subclass, allowing \c MD to be null.
 template <class X, class Y>
-inline std::enable_if_t<detail::IsValidPointer<X, Y>::value, X *>
+inline typename std::enable_if<detail::IsValidPointer<X, Y>::value, X *>::type
 dyn_extract_or_null(Y &&MD) {
   if (auto *V = dyn_cast_or_null<ConstantAsMetadata>(MD))
     return dyn_cast<X>(V->getValue());
@@ -609,7 +601,7 @@ dyn_extract_or_null(Y &&MD) {
 /// These are used to efficiently contain a byte sequence for metadata.
 /// MDString is always unnamed.
 class MDString : public Metadata {
-  friend class StringMapEntryStorage<MDString>;
+  friend class StringMapEntry<MDString>;
 
   StringMapEntry<MDString> *Entry = nullptr;
 
@@ -649,62 +641,37 @@ public:
 /// A collection of metadata nodes that might be associated with a
 /// memory access used by the alias-analysis infrastructure.
 struct AAMDNodes {
-  explicit AAMDNodes() = default;
-  explicit AAMDNodes(MDNode *T, MDNode *TS, MDNode *S, MDNode *N)
-      : TBAA(T), TBAAStruct(TS), Scope(S), NoAlias(N) {}
+  explicit AAMDNodes(MDNode *T = nullptr, MDNode *S = nullptr,
+                     MDNode *N = nullptr)
+      : TBAA(T), Scope(S), NoAlias(N) {}
 
   bool operator==(const AAMDNodes &A) const {
-    return TBAA == A.TBAA && TBAAStruct == A.TBAAStruct && Scope == A.Scope &&
-           NoAlias == A.NoAlias;
+    return TBAA == A.TBAA && Scope == A.Scope && NoAlias == A.NoAlias;
   }
 
   bool operator!=(const AAMDNodes &A) const { return !(*this == A); }
 
-  explicit operator bool() const {
-    return TBAA || TBAAStruct || Scope || NoAlias;
-  }
+  explicit operator bool() const { return TBAA || Scope || NoAlias; }
 
   /// The tag for type-based alias analysis.
-  MDNode *TBAA = nullptr;
-
-  /// The tag for type-based alias analysis (tbaa struct).
-  MDNode *TBAAStruct = nullptr;
+  MDNode *TBAA;
 
   /// The tag for alias scope specification (used with noalias).
-  MDNode *Scope = nullptr;
+  MDNode *Scope;
 
   /// The tag specifying the noalias scope.
-  MDNode *NoAlias = nullptr;
-
-  // Shift tbaa Metadata node to start off bytes later
-  static MDNode *shiftTBAA(MDNode *M, size_t off);
-
-  // Shift tbaa.struct Metadata node to start off bytes later
-  static MDNode *shiftTBAAStruct(MDNode *M, size_t off);
+  MDNode *NoAlias;
 
   /// Given two sets of AAMDNodes that apply to the same pointer,
   /// give the best AAMDNodes that are compatible with both (i.e. a set of
   /// nodes whose allowable aliasing conclusions are a subset of those
   /// allowable by both of the inputs). However, for efficiency
   /// reasons, do not create any new MDNodes.
-  AAMDNodes intersect(const AAMDNodes &Other) const {
+  AAMDNodes intersect(const AAMDNodes &Other) {
     AAMDNodes Result;
     Result.TBAA = Other.TBAA == TBAA ? TBAA : nullptr;
-    Result.TBAAStruct = Other.TBAAStruct == TBAAStruct ? TBAAStruct : nullptr;
     Result.Scope = Other.Scope == Scope ? Scope : nullptr;
     Result.NoAlias = Other.NoAlias == NoAlias ? NoAlias : nullptr;
-    return Result;
-  }
-
-  /// Create a new AAMDNode that describes this AAMDNode after applying a
-  /// constant offset to the start of the pointer.
-  AAMDNodes shift(size_t Offset) const {
-    AAMDNodes Result;
-    Result.TBAA = TBAA ? shiftTBAA(TBAA, Offset) : nullptr;
-    Result.TBAAStruct =
-        TBAAStruct ? shiftTBAAStruct(TBAAStruct, Offset) : nullptr;
-    Result.Scope = Scope;
-    Result.NoAlias = NoAlias;
     return Result;
   }
 };
@@ -714,17 +681,16 @@ template<>
 struct DenseMapInfo<AAMDNodes> {
   static inline AAMDNodes getEmptyKey() {
     return AAMDNodes(DenseMapInfo<MDNode *>::getEmptyKey(),
-                     nullptr, nullptr, nullptr);
+                     nullptr, nullptr);
   }
 
   static inline AAMDNodes getTombstoneKey() {
     return AAMDNodes(DenseMapInfo<MDNode *>::getTombstoneKey(),
-                     nullptr, nullptr, nullptr);
+                     nullptr, nullptr);
   }
 
   static unsigned getHashValue(const AAMDNodes &Val) {
     return DenseMapInfo<MDNode *>::getHashValue(Val.TBAA) ^
-           DenseMapInfo<MDNode *>::getHashValue(Val.TBAAStruct) ^
            DenseMapInfo<MDNode *>::getHashValue(Val.Scope) ^
            DenseMapInfo<MDNode *>::getHashValue(Val.NoAlias);
   }
@@ -840,7 +806,7 @@ public:
   /// Ensure that this has RAUW support, and then return it.
   ReplaceableMetadataImpl *getOrCreateReplaceableUses() {
     if (!hasReplaceableUses())
-      makeReplaceable(std::make_unique<ReplaceableMetadataImpl>(getContext()));
+      makeReplaceable(llvm::make_unique<ReplaceableMetadataImpl>(getContext()));
     return getReplaceableUses();
   }
 
@@ -897,7 +863,6 @@ struct TempMDNodeDeleter {
 class MDNode : public Metadata {
   friend class ReplaceableMetadataImpl;
   friend class LLVMContextImpl;
-  friend class DIArgList;
 
   unsigned NumOperands;
   unsigned NumUnresolved;
@@ -1002,7 +967,7 @@ public:
   /// Try to create a uniqued version of \c N -- in place, if possible -- and
   /// return it.  If \c N cannot be uniqued, return a distinct node instead.
   template <class T>
-  static std::enable_if_t<std::is_base_of<MDNode, T>::value, T *>
+  static typename std::enable_if<std::is_base_of<MDNode, T>::value, T *>::type
   replaceWithPermanent(std::unique_ptr<T, TempMDNodeDeleter> N) {
     return cast<T>(N.release()->replaceWithPermanentImpl());
   }
@@ -1014,7 +979,7 @@ public:
   ///
   /// \pre N does not self-reference.
   template <class T>
-  static std::enable_if_t<std::is_base_of<MDNode, T>::value, T *>
+  static typename std::enable_if<std::is_base_of<MDNode, T>::value, T *>::type
   replaceWithUniqued(std::unique_ptr<T, TempMDNodeDeleter> N) {
     return cast<T>(N.release()->replaceWithUniquedImpl());
   }
@@ -1024,7 +989,7 @@ public:
   /// Create a distinct version of \c N -- in place, if possible -- and return
   /// it.  Takes ownership of the temporary node.
   template <class T>
-  static std::enable_if_t<std::is_base_of<MDNode, T>::value, T *>
+  static typename std::enable_if<std::is_base_of<MDNode, T>::value, T *>::type
   replaceWithDistinct(std::unique_ptr<T, TempMDNodeDeleter> N) {
     return cast<T>(N.release()->replaceWithDistinctImpl());
   }
@@ -1156,7 +1121,8 @@ class MDTuple : public MDNode {
                           StorageType Storage, bool ShouldCreate = true);
 
   TempMDTuple cloneImpl() const {
-    return getTemporary(getContext(), SmallVector<Metadata *, 4>(operands()));
+    return getTemporary(getContext(),
+                        SmallVector<Metadata *, 4>(op_begin(), op_end()));
   }
 
 public:
@@ -1217,47 +1183,17 @@ void TempMDNodeDeleter::operator()(MDNode *Node) const {
   MDNode::deleteTemporary(Node);
 }
 
-/// This is a simple wrapper around an MDNode which provides a higher-level
-/// interface by hiding the details of how alias analysis information is encoded
-/// in its operands.
-class AliasScopeNode {
-  const MDNode *Node = nullptr;
-
-public:
-  AliasScopeNode() = default;
-  explicit AliasScopeNode(const MDNode *N) : Node(N) {}
-
-  /// Get the MDNode for this AliasScopeNode.
-  const MDNode *getNode() const { return Node; }
-
-  /// Get the MDNode for this AliasScopeNode's domain.
-  const MDNode *getDomain() const {
-    if (Node->getNumOperands() < 2)
-      return nullptr;
-    return dyn_cast_or_null<MDNode>(Node->getOperand(1));
-  }
-  StringRef getName() const {
-    if (Node->getNumOperands() > 2)
-      if (MDString *N = dyn_cast_or_null<MDString>(Node->getOperand(2)))
-        return N->getString();
-    return StringRef();
-  }
-};
-
 /// Typed iterator through MDNode operands.
 ///
 /// An iterator that transforms an \a MDNode::iterator into an iterator over a
 /// particular Metadata subclass.
-template <class T> class TypedMDOperandIterator {
+template <class T>
+class TypedMDOperandIterator
+    : public std::iterator<std::input_iterator_tag, T *, std::ptrdiff_t, void,
+                           T *> {
   MDNode::op_iterator I = nullptr;
 
 public:
-  using iterator_category = std::input_iterator_tag;
-  using value_type = T *;
-  using difference_type = std::ptrdiff_t;
-  using pointer = void;
-  using reference = T *;
-
   TypedMDOperandIterator() = default;
   explicit TypedMDOperandIterator(MDNode::op_iterator I) : I(I) {}
 
@@ -1292,13 +1228,15 @@ public:
   template <class U>
   MDTupleTypedArrayWrapper(
       const MDTupleTypedArrayWrapper<U> &Other,
-      std::enable_if_t<std::is_convertible<U *, T *>::value> * = nullptr)
+      typename std::enable_if<std::is_convertible<U *, T *>::value>::type * =
+          nullptr)
       : N(Other.get()) {}
 
   template <class U>
   explicit MDTupleTypedArrayWrapper(
       const MDTupleTypedArrayWrapper<U> &Other,
-      std::enable_if_t<!std::is_convertible<U *, T *>::value> * = nullptr)
+      typename std::enable_if<!std::is_convertible<U *, T *>::value>::type * =
+          nullptr)
       : N(Other.get()) {}
 
   explicit operator bool() const { return get(); }
@@ -1396,7 +1334,9 @@ class NamedMDNode : public ilist_node<NamedMDNode> {
 
   explicit NamedMDNode(const Twine &N);
 
-  template <class T1, class T2> class op_iterator_impl {
+  template<class T1, class T2>
+  class op_iterator_impl :
+      public std::iterator<std::bidirectional_iterator_tag, T2> {
     friend class NamedMDNode;
 
     const NamedMDNode *Node = nullptr;
@@ -1405,12 +1345,6 @@ class NamedMDNode : public ilist_node<NamedMDNode> {
     op_iterator_impl(const NamedMDNode *N, unsigned i) : Node(N), Idx(i) {}
 
   public:
-    using iterator_category = std::bidirectional_iterator_tag;
-    using value_type = T2;
-    using difference_type = std::ptrdiff_t;
-    using pointer = value_type *;
-    using reference = value_type &;
-
     op_iterator_impl() = default;
 
     bool operator==(const op_iterator_impl &o) const { return Idx == o.Idx; }

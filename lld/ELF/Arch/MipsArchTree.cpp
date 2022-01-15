@@ -166,17 +166,17 @@ static ArchTreeEdge archTree[] = {
     {EF_MIPS_ARCH_2, EF_MIPS_ARCH_1},
 };
 
-static bool isArchMatched(uint32_t newFlags, uint32_t res) {
-  if (newFlags == res)
+static bool isArchMatched(uint32_t New, uint32_t res) {
+  if (New == res)
     return true;
-  if (newFlags == EF_MIPS_ARCH_32 && isArchMatched(EF_MIPS_ARCH_64, res))
+  if (New == EF_MIPS_ARCH_32 && isArchMatched(EF_MIPS_ARCH_64, res))
     return true;
-  if (newFlags == EF_MIPS_ARCH_32R2 && isArchMatched(EF_MIPS_ARCH_64R2, res))
+  if (New == EF_MIPS_ARCH_32R2 && isArchMatched(EF_MIPS_ARCH_64R2, res))
     return true;
   for (const auto &edge : archTree) {
     if (res == edge.child) {
       res = edge.parent;
-      if (res == newFlags)
+      if (res == New)
         return true;
     }
   }
@@ -278,18 +278,18 @@ static uint32_t getArchFlags(ArrayRef<FileFlags> files) {
   uint32_t ret = files[0].flags & (EF_MIPS_ARCH | EF_MIPS_MACH);
 
   for (const FileFlags &f : files.slice(1)) {
-    uint32_t newFlags = f.flags & (EF_MIPS_ARCH | EF_MIPS_MACH);
+    uint32_t New = f.flags & (EF_MIPS_ARCH | EF_MIPS_MACH);
 
     // Check ISA compatibility.
-    if (isArchMatched(newFlags, ret))
+    if (isArchMatched(New, ret))
       continue;
-    if (!isArchMatched(ret, newFlags)) {
+    if (!isArchMatched(ret, New)) {
       error("incompatible target ISA:\n>>> " + toString(files[0].file) + ": " +
             getFullArchName(ret) + "\n>>> " + toString(f.file) + ": " +
-            getFullArchName(newFlags));
+            getFullArchName(New));
       return 0;
     }
-    ret = newFlags;
+    ret = New;
   }
   return ret;
 }
@@ -297,15 +297,9 @@ static uint32_t getArchFlags(ArrayRef<FileFlags> files) {
 template <class ELFT> uint32_t elf::calcMipsEFlags() {
   std::vector<FileFlags> v;
   for (InputFile *f : objectFiles)
-    v.push_back({f, cast<ObjFile<ELFT>>(f)->getObj().getHeader().e_flags});
-  if (v.empty()) {
-    // If we don't have any input files, we'll have to rely on the information
-    // we can derive from emulation information, since this at least gets us
-    // ABI.
-    if (config->emulation.empty() || config->is64)
-      return 0;
-    return config->mipsN32Abi ? EF_MIPS_ABI2 : EF_MIPS_ABI_O32;
-  }
+    v.push_back({f, cast<ObjFile<ELFT>>(f)->getObj().getHeader()->e_flags});
+  if (v.empty())
+    return 0;
   checkFlags(v);
   return getMiscFlags(v) | getPicFlags(v) | getArchFlags(v);
 }
@@ -363,7 +357,7 @@ uint8_t elf::getMipsFpAbiFlag(uint8_t oldFlag, uint8_t newFlag,
 
 template <class ELFT> static bool isN32Abi(const InputFile *f) {
   if (auto *ef = dyn_cast<ELFFileBase>(f))
-    return ef->template getObj<ELFT>().getHeader().e_flags & EF_MIPS_ABI2;
+    return ef->template getObj<ELFT>().getHeader()->e_flags & EF_MIPS_ABI2;
   return false;
 }
 

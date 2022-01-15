@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_COMMANDINTERPRETER_H
-#define LLDB_INTERPRETER_COMMANDINTERPRETER_H
+#ifndef liblldb_CommandInterpreter_h_
+#define liblldb_CommandInterpreter_h_
 
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/IOHandler.h"
@@ -20,41 +20,12 @@
 #include "lldb/Utility/CompletionRequest.h"
 #include "lldb/Utility/Event.h"
 #include "lldb/Utility/Log.h"
-#include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/StringList.h"
 #include "lldb/lldb-forward.h"
 #include "lldb/lldb-private.h"
-
 #include <mutex>
-#include <stack>
 
 namespace lldb_private {
-class CommandInterpreter;
-
-class CommandInterpreterRunResult {
-public:
-  CommandInterpreterRunResult() = default;
-
-  uint32_t GetNumErrors() const { return m_num_errors; }
-
-  lldb::CommandInterpreterResult GetResult() const { return m_result; }
-
-  bool IsResult(lldb::CommandInterpreterResult result) {
-    return m_result == result;
-  }
-
-protected:
-  friend CommandInterpreter;
-
-  void IncrementNumberOfErrors() { m_num_errors++; }
-
-  void SetResult(lldb::CommandInterpreterResult result) { m_result = result; }
-
-private:
-  int m_num_errors = 0;
-  lldb::CommandInterpreterResult m_result =
-      lldb::eCommandInterpreterResultSuccess;
-};
 
 class CommandInterpreterRunOptions {
 public:
@@ -80,7 +51,7 @@ public:
   /// \param[in] echo_comments
   ///    If \b true, echo command even if it is a pure comment line. If
   ///    \b false, print no ouput in this case. This setting has an effect only
-  ///    if echo_commands is \b true.
+  ///    if \param echo_commands is \b true.
   /// \param[in] print_results
   ///    If \b true and the command succeeds, print the results of the command
   ///    after executing it. If \b false, execute silently.
@@ -100,7 +71,14 @@ public:
         m_echo_comment_commands(echo_comments), m_print_results(print_results),
         m_print_errors(print_errors), m_add_to_history(add_to_history) {}
 
-  CommandInterpreterRunOptions() = default;
+  CommandInterpreterRunOptions()
+      : m_stop_on_continue(eLazyBoolCalculate),
+        m_stop_on_error(eLazyBoolCalculate),
+        m_stop_on_crash(eLazyBoolCalculate),
+        m_echo_commands(eLazyBoolCalculate),
+        m_echo_comment_commands(eLazyBoolCalculate),
+        m_print_results(eLazyBoolCalculate), m_print_errors(eLazyBoolCalculate),
+        m_add_to_history(eLazyBoolCalculate) {}
 
   void SetSilent(bool silent) {
     LazyBool value = silent ? eLazyBoolNo : eLazyBoolYes;
@@ -166,30 +144,14 @@ public:
     m_add_to_history = add_to_history ? eLazyBoolYes : eLazyBoolNo;
   }
 
-  bool GetAutoHandleEvents() const {
-    return DefaultToYes(m_auto_handle_events);
-  }
-
-  void SetAutoHandleEvents(bool auto_handle_events) {
-    m_auto_handle_events = auto_handle_events ? eLazyBoolYes : eLazyBoolNo;
-  }
-
-  bool GetSpawnThread() const { return DefaultToNo(m_spawn_thread); }
-
-  void SetSpawnThread(bool spawn_thread) {
-    m_spawn_thread = spawn_thread ? eLazyBoolYes : eLazyBoolNo;
-  }
-
-  LazyBool m_stop_on_continue = eLazyBoolCalculate;
-  LazyBool m_stop_on_error = eLazyBoolCalculate;
-  LazyBool m_stop_on_crash = eLazyBoolCalculate;
-  LazyBool m_echo_commands = eLazyBoolCalculate;
-  LazyBool m_echo_comment_commands = eLazyBoolCalculate;
-  LazyBool m_print_results = eLazyBoolCalculate;
-  LazyBool m_print_errors = eLazyBoolCalculate;
-  LazyBool m_add_to_history = eLazyBoolCalculate;
-  LazyBool m_auto_handle_events;
-  LazyBool m_spawn_thread;
+  LazyBool m_stop_on_continue;
+  LazyBool m_stop_on_error;
+  LazyBool m_stop_on_crash;
+  LazyBool m_echo_commands;
+  LazyBool m_echo_comment_commands;
+  LazyBool m_print_results;
+  LazyBool m_print_errors;
+  LazyBool m_add_to_history;
 
 private:
   static bool DefaultToYes(LazyBool flag) {
@@ -240,7 +202,7 @@ public:
 
   CommandInterpreter(Debugger &debugger, bool synchronous_execution);
 
-  ~CommandInterpreter() override = default;
+  ~CommandInterpreter() override;
 
   // These two functions fill out the Broadcaster interface:
 
@@ -251,7 +213,7 @@ public:
   }
 
   void SourceInitFileCwd(CommandReturnObject &result);
-  void SourceInitFileHome(CommandReturnObject &result, bool is_repl = false);
+  void SourceInitFileHome(CommandReturnObject &result);
 
   bool AddCommand(llvm::StringRef name, const lldb::CommandObjectSP &cmd_sp,
                   bool can_replace);
@@ -260,7 +222,7 @@ public:
                       bool can_replace);
 
   lldb::CommandObjectSP GetCommandSPExact(llvm::StringRef cmd,
-                                          bool include_aliases = false) const;
+                                          bool include_aliases) const;
 
   CommandObject *GetCommandObject(llvm::StringRef cmd,
                                   StringList *matches = nullptr,
@@ -295,11 +257,10 @@ public:
                                   CommandReturnObject &result);
 
   bool HandleCommand(const char *command_line, LazyBool add_to_history,
-                     const ExecutionContext &override_context,
-                     CommandReturnObject &result);
-
-  bool HandleCommand(const char *command_line, LazyBool add_to_history,
-                     CommandReturnObject &result);
+                     CommandReturnObject &result,
+                     ExecutionContext *override_context = nullptr,
+                     bool repeat_on_empty_command = true,
+                     bool no_context_switching = false);
 
   bool WasInterrupted() const;
 
@@ -308,7 +269,9 @@ public:
   /// \param[in] commands
   ///    The list of commands to execute.
   /// \param[in,out] context
-  ///    The execution context in which to run the commands.
+  ///    The execution context in which to run the commands. Can be nullptr in
+  ///    which case the default
+  ///    context will be used.
   /// \param[in] options
   ///    This object holds the options used to control when to stop, whether to
   ///    execute commands,
@@ -318,13 +281,8 @@ public:
   ///    safely,
   ///    and failed with some explanation if we aborted executing the commands
   ///    at some point.
-  void HandleCommands(const StringList &commands,
-                      const ExecutionContext &context,
-                      const CommandInterpreterRunOptions &options,
-                      CommandReturnObject &result);
-
-  void HandleCommands(const StringList &commands,
-                      const CommandInterpreterRunOptions &options,
+  void HandleCommands(const StringList &commands, ExecutionContext *context,
+                      CommandInterpreterRunOptions &options,
                       CommandReturnObject &result);
 
   /// Execute a list of commands from a file.
@@ -332,7 +290,9 @@ public:
   /// \param[in] file
   ///    The file from which to read in commands.
   /// \param[in,out] context
-  ///    The execution context in which to run the commands.
+  ///    The execution context in which to run the commands. Can be nullptr in
+  ///    which case the default
+  ///    context will be used.
   /// \param[in] options
   ///    This object holds the options used to control when to stop, whether to
   ///    execute commands,
@@ -342,26 +302,37 @@ public:
   ///    safely,
   ///    and failed with some explanation if we aborted executing the commands
   ///    at some point.
-  void HandleCommandsFromFile(FileSpec &file, const ExecutionContext &context,
-                              const CommandInterpreterRunOptions &options,
-                              CommandReturnObject &result);
-
-  void HandleCommandsFromFile(FileSpec &file,
-                              const CommandInterpreterRunOptions &options,
+  void HandleCommandsFromFile(FileSpec &file, ExecutionContext *context,
+                              CommandInterpreterRunOptions &options,
                               CommandReturnObject &result);
 
   CommandObject *GetCommandObjectForCommand(llvm::StringRef &command_line);
 
-  /// Returns the auto-suggestion string that should be added to the given
-  /// command line.
-  llvm::Optional<std::string> GetAutoSuggestionForCommand(llvm::StringRef line);
+  // This handles command line completion.  You are given a pointer to the
+  // command string buffer, to the current cursor, and to the end of the string
+  // (in case it is not NULL terminated). You also passed in an StringList
+  // object to fill with the returns. The first element of the array will be
+  // filled with the string that you would need to insert at the cursor point
+  // to complete the cursor point to the longest common matching prefix. If you
+  // want to limit the number of elements returned, set max_return_elements to
+  // the number of elements you want returned.  Otherwise set
+  // max_return_elements to -1. If you want to start some way into the match
+  // list, then set match_start_point to the desired start point. Returns: -1
+  // if the completion character should be inserted -2 if the entire command
+  // line should be deleted and replaced with matches.GetStringAtIndex(0)
+  // INT_MAX if the number of matches is > max_return_elements, but it is
+  // expensive to compute. Otherwise, returns the number of matches.
+  //
+  // FIXME: Only max_return_elements == -1 is supported at present.
+  int HandleCompletion(const char *current_line, const char *cursor,
+                       const char *last_char, int match_start_point,
+                       int max_return_elements, StringList &matches,
+                       StringList &descriptions);
 
-  // This handles command line completion.
-  void HandleCompletion(CompletionRequest &request);
-
-  // This version just returns matches, and doesn't compute the substring. It
-  // is here so the Help command can call it for the first argument.
-  void HandleCompletionMatches(CompletionRequest &request);
+  // This version just returns matches, and doesn't compute the substring.  It
+  // is here so the Help command can call it for the first argument. It uses
+  // a CompletionRequest for simplicity reasons.
+  int HandleCompletionMatches(CompletionRequest &request);
 
   int GetCommandNamesMatchingPartialString(const char *cmd_cstr,
                                            bool include_aliases,
@@ -392,7 +363,12 @@ public:
 
   Debugger &GetDebugger() { return m_debugger; }
 
-  ExecutionContext GetExecutionContext() const;
+  ExecutionContext GetExecutionContext() {
+    const bool thread_and_frame_only_if_stopped = true;
+    return m_exe_ctx_ref.Lock(thread_and_frame_only_if_stopped);
+  }
+
+  void UpdateExecutionContext(ExecutionContext *override_context);
 
   lldb::PlatformSP GetPlatform(bool prefer_target_platform);
 
@@ -469,16 +445,15 @@ public:
 
   bool IsActive();
 
-  CommandInterpreterRunResult
-  RunCommandInterpreter(CommandInterpreterRunOptions &options);
-
+  void RunCommandInterpreter(bool auto_handle_events, bool spawn_thread,
+                             CommandInterpreterRunOptions &options);
   void GetLLDBCommandsFromIOHandler(const char *prompt,
                                     IOHandlerDelegate &delegate,
-                                    void *baton = nullptr);
+                                    bool asynchronously, void *baton);
 
   void GetPythonCommandsFromIOHandler(const char *prompt,
                                       IOHandlerDelegate &delegate,
-                                      void *baton = nullptr);
+                                      bool asynchronously, void *baton);
 
   const char *GetCommandPrefix();
 
@@ -486,31 +461,14 @@ public:
   bool GetExpandRegexAliases() const;
 
   bool GetPromptOnQuit() const;
-  void SetPromptOnQuit(bool enable);
 
-  bool GetSaveSessionOnQuit() const;
-  void SetSaveSessionOnQuit(bool enable);
-
-  FileSpec GetSaveSessionDirectory() const;
-  void SetSaveSessionDirectory(llvm::StringRef path);
+  void SetPromptOnQuit(bool b);
 
   bool GetEchoCommands() const;
-  void SetEchoCommands(bool enable);
+  void SetEchoCommands(bool b);
 
   bool GetEchoCommentCommands() const;
-  void SetEchoCommentCommands(bool enable);
-
-  bool GetRepeatPreviousCommand() const;
-
-  const CommandObject::CommandMap &GetUserCommands() const {
-    return m_user_dict;
-  }
-
-  const CommandObject::CommandMap &GetCommands() const {
-    return m_command_dict;
-  }
-
-  const CommandObject::CommandMap &GetAliases() const { return m_alias_dict; }
+  void SetEchoCommentCommands(bool b);
 
   /// Specify if the command interpreter should allow that the user can
   /// specify a custom exit code when calling 'quit'.
@@ -534,25 +492,17 @@ public:
 
   bool GetStopCmdSourceOnError() const;
 
+  uint32_t GetNumErrors() const { return m_num_errors; }
+
+  bool GetQuitRequested() const { return m_quit_requested; }
+
   lldb::IOHandlerSP
   GetIOHandler(bool force_create = false,
                CommandInterpreterRunOptions *options = nullptr);
 
+  bool GetStoppedForCrash() const { return m_stopped_for_crash; }
+
   bool GetSpaceReplPrompts() const;
-
-  /// Save the current debugger session transcript to a file on disk.
-  /// \param output_file
-  ///     The file path to which the session transcript will be written. Since
-  ///     the argument is optional, an arbitrary temporary file will be create
-  ///     when no argument is passed.
-  /// \param result
-  ///     This is used to pass function output and error messages.
-  /// \return \b true if the session transcript was successfully written to
-  /// disk, \b false otherwise.
-  bool SaveTranscript(CommandReturnObject &result,
-                      llvm::Optional<std::string> output_file = llvm::None);
-
-  FileSpec GetCurrentSourceDir();
 
 protected:
   friend class Debugger;
@@ -569,9 +519,7 @@ protected:
 
   bool IOHandlerInterrupt(IOHandler &io_handler) override;
 
-  void GetProcessOutput();
-
-  bool DidProcessStopAbnormally() const;
+  size_t GetProcessOutput();
 
   void SetSynchronous(bool value);
 
@@ -582,10 +530,6 @@ protected:
                                      StringList *descriptions = nullptr) const;
 
 private:
-  void OverrideExecutionContext(const ExecutionContext &override_context);
-
-  void RestoreExecutionContext();
-
   Status PreprocessCommand(std::string &command);
 
   void SourceInitFile(FileSpec file, CommandReturnObject &result);
@@ -624,9 +568,8 @@ private:
 
   Debugger &m_debugger; // The debugger session that this interpreter is
                         // associated with
-  // Execution contexts that were temporarily set by some of HandleCommand*
-  // overloads.
-  std::stack<ExecutionContext> m_overriden_exe_contexts;
+  ExecutionContextRef m_exe_ctx_ref; // The current execution context to use
+                                     // when handling commands
   bool m_synchronous_execution;
   bool m_skip_lldbinit_files;
   bool m_skip_app_init_files;
@@ -645,25 +588,19 @@ private:
   ChildrenTruncatedWarningStatus m_truncation_warning; // Whether we truncated
                                                        // children and whether
                                                        // the user has been told
-
-  // FIXME: Stop using this to control adding to the history and then replace
-  // this with m_command_source_dirs.size().
   uint32_t m_command_source_depth;
-  /// A stack of directory paths. When not empty, the last one is the directory
-  /// of the file that's currently sourced.
-  std::vector<FileSpec> m_command_source_dirs;
   std::vector<uint32_t> m_command_source_flags;
-  CommandInterpreterRunResult m_result;
+  uint32_t m_num_errors;
+  bool m_quit_requested;
+  bool m_stopped_for_crash;
 
   // The exit code the user has requested when calling the 'quit' command.
   // No value means the user hasn't set a custom exit code so far.
   llvm::Optional<int> m_quit_exit_code;
   // If the driver is accepts custom exit codes for the 'quit' command.
   bool m_allow_exit_code = false;
-
-  StreamString m_transcript_stream;
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_COMMANDINTERPRETER_H
+#endif // liblldb_CommandInterpreter_h_

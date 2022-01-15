@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_HIGHLIGHTER_H
-#define LLDB_CORE_HIGHLIGHTER_H
+#ifndef liblldb_Highlighter_h_
+#define liblldb_Highlighter_h_
 
 #include <utility>
 #include <vector>
@@ -43,6 +43,8 @@ struct HighlightStyle {
     void Apply(Stream &s, llvm::StringRef value) const;
 
     /// Sets the prefix and suffix strings.
+    /// \param prefix
+    /// \param suffix
     void Set(llvm::StringRef prefix, llvm::StringRef suffix);
   };
 
@@ -91,15 +93,13 @@ class Highlighter {
 public:
   Highlighter() = default;
   virtual ~Highlighter() = default;
-  Highlighter(const Highlighter &) = delete;
-  const Highlighter &operator=(const Highlighter &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(Highlighter);
 
   /// Returns a human readable name for the selected highlighter.
   virtual llvm::StringRef GetName() const = 0;
 
   /// Highlights the given line
   /// \param options
-  ///     The highlight options.
   /// \param line
   ///     The user supplied line that needs to be highlighted.
   /// \param cursor_pos
@@ -153,4 +153,4 @@ public:
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_HIGHLIGHTER_H
+#endif // liblldb_Highlighter_h_

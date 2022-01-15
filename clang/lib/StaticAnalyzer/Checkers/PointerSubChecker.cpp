@@ -63,8 +63,7 @@ void PointerSubChecker::checkPreStmt(const BinaryOperator *B,
           new BuiltinBug(this, "Pointer subtraction",
                          "Subtraction of two pointers that do not point to "
                          "the same memory chunk may cause incorrect result."));
-    auto R =
-        std::make_unique<PathSensitiveBugReport>(*BT, BT->getDescription(), N);
+    auto R = llvm::make_unique<BugReport>(*BT, BT->getDescription(), N);
     R->addRange(B->getSourceRange());
     C.emitReport(std::move(R));
   }
@@ -74,6 +73,6 @@ void ento::registerPointerSubChecker(CheckerManager &mgr) {
   mgr.registerChecker<PointerSubChecker>();
 }
 
-bool ento::shouldRegisterPointerSubChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterPointerSubChecker(const LangOptions &LO) {
   return true;
 }

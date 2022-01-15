@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_VALUEOBJECTVARIABLE_H
-#define LLDB_CORE_VALUEOBJECTVARIABLE_H
+#ifndef liblldb_ValueObjectVariable_h_
+#define liblldb_ValueObjectVariable_h_
 
 #include "lldb/Core/ValueObject.h"
 
@@ -18,8 +18,8 @@
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-forward.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace lldb_private {
 class DataExtractor;
@@ -28,8 +28,8 @@ class Status;
 class ExecutionContextScope;
 class SymbolContextScope;
 
-/// A ValueObject that contains a root variable that may or may not
-/// have children.
+// A ValueObject that contains a root variable that may or may not
+// have children.
 class ValueObjectVariable : public ValueObject {
 public:
   ~ValueObjectVariable() override;
@@ -37,7 +37,7 @@ public:
   static lldb::ValueObjectSP Create(ExecutionContextScope *exe_scope,
                                     const lldb::VariableSP &var_sp);
 
-  llvm::Optional<uint64_t> GetByteSize() override;
+  uint64_t GetByteSize() override;
 
   ConstString GetTypeName() override;
 
@@ -67,26 +67,21 @@ public:
 
 protected:
   bool UpdateValue() override;
-  
-  void DoUpdateChildrenAddressType(ValueObject &valobj) override;
 
   CompilerType GetCompilerTypeImpl() override;
 
-  /// The variable that this value object is based upon.
-  lldb::VariableSP m_variable_sp;
-  ///< The value that DWARFExpression resolves this variable to before we patch
-  ///< it up.
-  Value m_resolved_value;
+  lldb::VariableSP
+      m_variable_sp;      ///< The variable that this value object is based upon
+  Value m_resolved_value; ///< The value that DWARFExpression resolves this
+                          ///variable to before we patch it up
 
 private:
   ValueObjectVariable(ExecutionContextScope *exe_scope,
-                      ValueObjectManager &manager,
                       const lldb::VariableSP &var_sp);
   // For ValueObject only
-  ValueObjectVariable(const ValueObjectVariable &) = delete;
-  const ValueObjectVariable &operator=(const ValueObjectVariable &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(ValueObjectVariable);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_VALUEOBJECTVARIABLE_H
+#endif // liblldb_ValueObjectVariable_h_

@@ -14,14 +14,12 @@
 //     size_t operator()(type_index index) const;
 // };
 
-// UNSUPPORTED: no-rtti
-
 #include <typeindex>
 #include <type_traits>
 
 #include "test_macros.h"
 #if TEST_STD_VER >= 11
-#include "poisoned_hash_helper.h"
+#include "poisoned_hash_helper.hpp"
 #endif
 
 int main(int, char**)

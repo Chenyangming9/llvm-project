@@ -1,4 +1,4 @@
-//===-- DiagnosticManager.cpp ---------------------------------------------===//
+//===-- DiagnosticManager.cpp -----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -47,9 +47,9 @@ static const char *StringForSeverity(DiagnosticSeverity severity) {
 std::string DiagnosticManager::GetString(char separator) {
   std::string ret;
 
-  for (const auto &diagnostic : Diagnostics()) {
+  for (const Diagnostic *diagnostic : Diagnostics()) {
     ret.append(StringForSeverity(diagnostic->GetSeverity()));
-    ret.append(std::string(diagnostic->GetMessage()));
+    ret.append(diagnostic->GetMessage());
     ret.push_back(separator);
   }
 
@@ -70,9 +70,19 @@ size_t DiagnosticManager::Printf(DiagnosticSeverity severity,
   return result;
 }
 
-void DiagnosticManager::PutString(DiagnosticSeverity severity,
-                                  llvm::StringRef str) {
+size_t DiagnosticManager::PutString(DiagnosticSeverity severity,
+                                    llvm::StringRef str) {
   if (str.empty())
-    return;
+    return 0;
   AddDiagnostic(str, severity, eDiagnosticOriginLLDB);
+  return str.size();
+}
+
+void DiagnosticManager::CopyDiagnostics(DiagnosticManager &otherDiagnostics) {
+  for (const DiagnosticList::value_type &other_diagnostic:
+       otherDiagnostics.Diagnostics()) {
+    AddDiagnostic(
+        other_diagnostic->GetMessage(), other_diagnostic->GetSeverity(),
+        other_diagnostic->getKind(), other_diagnostic->GetCompilerID());
+  }
 }

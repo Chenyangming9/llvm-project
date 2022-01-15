@@ -8,9 +8,9 @@ declare void @free(i8*)
 ; that takes a swifterror parameter and "caller" is the caller of "foo".
 define float @foo(%swift_error** swifterror %error_ptr_ref) {
 ; CHECK-LABEL: foo:
-; CHECK: mov w0, #16
-; CHECK: malloc
 ; CHECK: mov [[ID:w[0-9]+]], #1
+; CHECK: mov x0, #16
+; CHECK: malloc
 ; CHECK: strb [[ID]], [x0, #8]
 ; CHECK: mov x21, x0
 ; CHECK-NOT: x21
@@ -59,7 +59,7 @@ define float @caller2(i8* %error_ref) {
 ; CHECK-LABEL: caller2:
 ; CHECK: mov [[ID:x[0-9]+]], x0
 ; CHECK: fmov [[CMP:s[0-9]+]], #1.0
-; CHECK: mov x21, xzr
+; CHECK: mov x21, #0
 ; CHECK: bl {{.*}}foo
 ; CHECK: cbnz x21
 ; CHECK: fcmp s0, [[CMP]]
@@ -98,11 +98,11 @@ handler:
 define float @foo_if(%swift_error** swifterror %error_ptr_ref, i32 %cc) {
 ; CHECK-LABEL: foo_if:
 ; CHECK: cbz w0
-; CHECK: mov w0, #16
-; CHECK: malloc
-; CHECK: mov x21, x0
 ; CHECK: mov [[ID:w[0-9]+]], #1
+; CHECK: mov x0, #16
+; CHECK: malloc
 ; CHECK: strb [[ID]], [x0, #8]
+; CHECK: mov x21, x0
 ; CHECK-NOT: x21
 ; CHECK: ret
 
@@ -127,10 +127,12 @@ normal:
 define float @foo_loop(%swift_error** swifterror %error_ptr_ref, i32 %cc, float %cc2) {
 ; CHECK-LABEL: foo_loop:
 ; CHECK: cbz
-; CHECK: mov w0, #16
+; CHECK: mov x0, #16
 ; CHECK: malloc
 ; CHECK: mov x21, x0
 ; CHECK: strb w{{.*}}, [x0, #8]
+; CHECK: fcmp
+; CHECK: b.le
 ; CHECK: ret
 
 entry:
@@ -159,12 +161,12 @@ bb_end:
 
 ; "foo_sret" is a function that takes a swifterror parameter, it also has a sret
 ; parameter.
-define void @foo_sret(%struct.S* sret(%struct.S) %agg.result, i32 %val1, %swift_error** swifterror %error_ptr_ref) {
+define void @foo_sret(%struct.S* sret %agg.result, i32 %val1, %swift_error** swifterror %error_ptr_ref) {
 ; CHECK-LABEL: foo_sret:
 ; CHECK: mov [[SRET:x[0-9]+]], x8
-; CHECK: mov w0, #16
-; CHECK: malloc
 ; CHECK: mov [[ID:w[0-9]+]], #1
+; CHECK: mov x0, #16
+; CHECK: malloc
 ; CHECK: strb [[ID]], [x0, #8]
 ; CHECK: str w{{.*}}, [{{.*}}[[SRET]], #4]
 ; CHECK: mov x21, x0
@@ -185,7 +187,7 @@ entry:
 define float @caller3(i8* %error_ref) {
 ; CHECK-LABEL: caller3:
 ; CHECK: mov [[ID:x[0-9]+]], x0
-; CHECK: mov [[ZERO:x[0-9]+]], xzr
+; CHECK: mov [[ZERO:x[0-9]+]], #0
 ; CHECK: bl {{.*}}foo_sret
 ; CHECK: mov x0, x21
 ; CHECK: cbnz x21
@@ -198,7 +200,7 @@ entry:
   %s = alloca %struct.S, align 8
   %error_ptr_ref = alloca swifterror %swift_error*
   store %swift_error* null, %swift_error** %error_ptr_ref
-  call void @foo_sret(%struct.S* sret(%struct.S) %s, i32 1, %swift_error** swifterror %error_ptr_ref)
+  call void @foo_sret(%struct.S* sret %s, i32 1, %swift_error** swifterror %error_ptr_ref)
   %error_from_foo = load %swift_error*, %swift_error** %error_ptr_ref
   %had_error_from_foo = icmp ne %swift_error* %error_from_foo, null
   %tmp = bitcast %swift_error* %error_from_foo to i8*
@@ -218,17 +220,20 @@ handler:
 declare void @llvm.va_start(i8*) nounwind
 define float @foo_vararg(%swift_error** swifterror %error_ptr_ref, ...) {
 ; CHECK-LABEL: foo_vararg:
-; CHECK: mov w0, #16
-; CHECK: malloc
 ; CHECK-DAG: mov [[ID:w[0-9]+]], #1
+; CHECK: mov x0, #16
+; CHECK: malloc
 ; CHECK-DAG: strb [[ID]], [x0, #8]
 
 ; First vararg
-; CHECK: ldr {{w[0-9]+}}, [x[[ARG1:[0-9]+]]], #8
+; CHECK: ldr {{w[0-9]+}}, [x[[ARG1:[0-9]+]]]
 ; Second vararg
-; CHECK: ldr {{w[0-9]+}}, [x[[ARG1]]], #8
+; CHECK: mov [[EIGHT:x[0-9]+]], #8
+; CHECK: add x[[ARG2:[0-9]+]], x[[ARG1]], [[EIGHT]]
+; CHECK: ldr {{w[0-9]+}}, [x[[ARG2]]]
 ; Third vararg
-; CHECK: ldr {{w[0-9]+}}, [x[[ARG1]]], #8
+; CHECK: add x[[ARG3:[0-9]+]], x[[ARG2]], [[EIGHT]]
+; CHECK: ldr {{w[0-9]+}}, [x[[ARG3]]]
 
 ; CHECK: mov x21, x0
 ; CHECK-NOT: x21
@@ -261,8 +266,8 @@ define float @caller4(i8* %error_ref) {
 
 ; CHECK: mov [[ID:x[0-9]+]], x0
 ; CHECK: stp {{x[0-9]+}}, {{x[0-9]+}}, [sp]
+; CHECK: mov x21, #0
 ; CHECK: str {{x[0-9]+}}, [sp, #16]
-; CHECK: mov x21, xzr
 
 ; CHECK: bl {{.*}}foo_vararg
 ; CHECK: mov x0, x21
@@ -331,16 +336,16 @@ entry:
 ; CHECK:  mov      x27, x7
 ; CHECK:  mov      x28, x21
 ; Setup call.
-; CHECK:  mov     w0, #1
-; CHECK:  mov     w1, #2
-; CHECK:  mov     w2, #3
-; CHECK:  mov     w3, #4
-; CHECK:  mov     w4, #5
-; CHECK:  mov     w5, #6
-; CHECK:  mov     w6, #7
-; CHECK:  mov     w7, #8
-; CHECK:  str     xzr, [sp]
-; CHECK:  mov      x21, xzr
+; CHECK:  mov     x8, #0
+; CHECK:  mov     x0, #1
+; CHECK:  mov     x1, #2
+; CHECK:  mov     x2, #3
+; CHECK:  mov     x3, #4
+; CHECK:  mov     x4, #5
+; CHECK:  mov     x5, #6
+; CHECK:  mov     x6, #7
+; CHECK:  mov     x7, #8
+; CHECK:  mov      x21, #0
 ; CHECK:  bl      _params_in_reg2
 ; Restore original arguments for next call.
 ; CHECK:  ldr      x0, [sp
@@ -396,15 +401,15 @@ declare swiftcc void @params_in_reg2(i64, i64, i64, i64, i64, i64, i64, i64, i8*
 ; CHECK:  mov      x27, x7
 ; CHECK:  mov      x28, x21
 ; Setup call arguments.
-; CHECK:  mov     w0, #1
-; CHECK:  mov     w1, #2
-; CHECK:  mov     w2, #3
-; CHECK:  mov     w3, #4
-; CHECK:  mov     w4, #5
-; CHECK:  mov     w5, #6
-; CHECK:  mov     w6, #7
-; CHECK:  mov     w7, #8
-; CHECK:  mov      x21, xzr
+; CHECK:  mov     x0, #1
+; CHECK:  mov     x1, #2
+; CHECK:  mov     x2, #3
+; CHECK:  mov     x3, #4
+; CHECK:  mov     x4, #5
+; CHECK:  mov     x5, #6
+; CHECK:  mov     x6, #7
+; CHECK:  mov     x7, #8
+; CHECK:  mov      x21, #0
 ; CHECK:  bl      _params_in_reg2
 ; Store swifterror %error_ptr_ref.
 ; CHECK:  stp     {{x[0-9]+}}, x21, [sp]
@@ -431,14 +436,14 @@ declare swiftcc void @params_in_reg2(i64, i64, i64, i64, i64, i64, i64, i64, i8*
 ; Save swifterror %err.
 ; CHECK:  mov      x19, x21
 ; Setup call.
-; CHECK:  mov     w0, #1
-; CHECK:  mov     w1, #2
-; CHECK:  mov     w2, #3
-; CHECK:  mov     w3, #4
-; CHECK:  mov     w4, #5
-; CHECK:  mov     w5, #6
-; CHECK:  mov     w6, #7
-; CHECK:  mov     w7, #8
+; CHECK:  mov     x0, #1
+; CHECK:  mov     x1, #2
+; CHECK:  mov     x2, #3
+; CHECK:  mov     x3, #4
+; CHECK:  mov     x4, #5
+; CHECK:  mov     x5, #6
+; CHECK:  mov     x6, #7
+; CHECK:  mov     x7, #8
 ; ... setup call with swiferror %error_ptr_ref.
 ; CHECK:  ldr     x21, [sp, #8]
 ; CHECK:  bl      _params_in_reg2
@@ -485,18 +490,9 @@ entry:
   ret void
 }
 
-; CHECK: tailcall_from_swifterror2
-; CHECK-NOT: b _simple_fn
-; CHECK: bl _simple_fn
-declare void @simple_fn()
-define swiftcc void @tailcall_from_swifterror2(%swift_error** swifterror %error_ptr_ref) {
-  tail call void @simple_fn()
-  ret void
-}
-
 declare swiftcc void @foo2(%swift_error** swifterror)
 ; CHECK-LABEL: testAssign
-; CHECK: mov      x21, xzr
+; CHECK: mov      x21, #0
 ; CHECK: bl      _foo2
 ; CHECK: mov      x0, x21
 
@@ -510,68 +506,4 @@ entry:
 a:
   %error = load %swift_error*, %swift_error** %error_ptr
   ret %swift_error* %error
-}
-
-; foo takes a swifterror parameter. We should be able to see that even when
-; it isn't explicitly on the call.
-define float @swifterror_param_not_on_call(i8* %error_ref) {
-; CHECK-LABEL: swifterror_param_not_on_call:
-; CHECK: mov [[ID:x[0-9]+]], x0
-; CHECK: bl {{.*}}foo
-; CHECK: mov x0, x21
-; CHECK: cbnz x21
-; Access part of the error object and save it to error_ref
-; CHECK: ldrb [[CODE:w[0-9]+]], [x0, #8]
-; CHECK: strb [[CODE]], [{{.*}}[[ID]]]
-; CHECK: bl {{.*}}free
-
-entry:
-  %error_ptr_ref = alloca swifterror %swift_error*
-  store %swift_error* null, %swift_error** %error_ptr_ref
-  %call = call float @foo(%swift_error** %error_ptr_ref)
-  %error_from_foo = load %swift_error*, %swift_error** %error_ptr_ref
-  %had_error_from_foo = icmp ne %swift_error* %error_from_foo, null
-  %tmp = bitcast %swift_error* %error_from_foo to i8*
-  br i1 %had_error_from_foo, label %handler, label %cont
-cont:
-  %v1 = getelementptr inbounds %swift_error, %swift_error* %error_from_foo, i64 0, i32 1
-  %t = load i8, i8* %v1
-  store i8 %t, i8* %error_ref
-  br label %handler
-handler:
-  call void @free(i8* %tmp)
-  ret float 1.0
-}
-
-; foo_sret takes an sret parameter and a swifterror parameter. We should be
-; able to see that, even if it's not explicitly on the call.
-define float @swifterror_param_not_on_call2(i8* %error_ref) {
-; CHECK-LABEL: swifterror_param_not_on_call2:
-; CHECK: mov [[ID:x[0-9]+]], x0
-; CHECK: mov [[ZERO:x[0-9]+]], xzr
-; CHECK: bl {{.*}}foo_sret
-; CHECK: mov x0, x21
-; CHECK: cbnz x21
-; Access part of the error object and save it to error_ref
-; CHECK: ldrb [[CODE:w[0-9]+]], [x0, #8]
-; CHECK: strb [[CODE]], [{{.*}}[[ID]]]
-; CHECK: bl {{.*}}free
-
-entry:
-  %s = alloca %struct.S, align 8
-  %error_ptr_ref = alloca swifterror %swift_error*
-  store %swift_error* null, %swift_error** %error_ptr_ref
-  call void @foo_sret(%struct.S* %s, i32 1, %swift_error** %error_ptr_ref)
-  %error_from_foo = load %swift_error*, %swift_error** %error_ptr_ref
-  %had_error_from_foo = icmp ne %swift_error* %error_from_foo, null
-  %tmp = bitcast %swift_error* %error_from_foo to i8*
-  br i1 %had_error_from_foo, label %handler, label %cont
-cont:
-  %v1 = getelementptr inbounds %swift_error, %swift_error* %error_from_foo, i64 0, i32 1
-  %t = load i8, i8* %v1
-  store i8 %t, i8* %error_ref
-  br label %handler
-handler:
-  call void @free(i8* %tmp)
-  ret float 1.0
 }

@@ -2,7 +2,7 @@
 
 #ifdef LLDB_USE_LIBEDIT_READLINE_COMPAT_MODULE
 
-#include <cstdio>
+#include <stdio.h>
 
 #include <editline/readline.h>
 
@@ -67,7 +67,7 @@ simple_readline(FILE *stdin, FILE *stdout, char *prompt)
   char *ret = (char *)PyMem_Malloc(n + 2);
 #endif
   if (ret) {
-    memcpy(ret, line, n);
+    strncpy(ret, line, n);
     free(line);
     ret[n] = '\n';
     ret[n + 1] = '\0';

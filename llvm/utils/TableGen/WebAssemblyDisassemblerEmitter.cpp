@@ -39,15 +39,9 @@ void emitWebAssemblyDisassemblerTables(
             ->getValue());
     if (Opc == 0xFFFFFFFF)
       continue; // No opcode defined.
-    assert(Opc <= 0xFFFFFF);
-    unsigned Prefix;
-    if (Opc <= 0xFFFF) {
-      Prefix = Opc >> 8;
-      Opc = Opc & 0xFF;
-    } else {
-      Prefix = Opc >> 16;
-      Opc = Opc & 0xFFFF;
-    }
+    assert(Opc <= 0xFFFF);
+    auto Prefix = Opc >> 8;
+    Opc = Opc & 0xFF;
     auto &CGIP = OpcodeTable[Prefix][Opc];
     // All wasm instructions have a StackBased field of type string, we only
     // want the instructions for which this is "true".
@@ -139,7 +133,8 @@ void emitWebAssemblyDisassemblerTables(
         }
         // Store operands if no prior occurrence.
         if (OperandStart == OperandTable.size()) {
-          llvm::append_range(OperandTable, CurOperandList);
+          OperandTable.insert(OperandTable.end(), CurOperandList.begin(),
+                              CurOperandList.end());
         }
         OS << OperandStart;
       } else {
@@ -172,7 +167,7 @@ void emitWebAssemblyDisassemblerTables(
     OS << " },\n";
   }
   OS << "  { 0, nullptr }\n};\n\n";
-  OS << "} // end namespace llvm\n";
+  OS << "} // End llvm namespace\n";
 }
 
 } // namespace llvm

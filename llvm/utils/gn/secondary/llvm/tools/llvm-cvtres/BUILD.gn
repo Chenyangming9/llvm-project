@@ -12,5 +12,7 @@ executable("llvm-cvtres") {
     "//llvm/lib/Option",
     "//llvm/lib/Support",
   ]
-  sources = [ "llvm-cvtres.cpp" ]
+  sources = [
+    "llvm-cvtres.cpp",
+  ]
 }

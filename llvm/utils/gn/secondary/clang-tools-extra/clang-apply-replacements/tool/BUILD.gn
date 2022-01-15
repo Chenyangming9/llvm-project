@@ -10,5 +10,7 @@ executable("clang-apply-replacements") {
     "//llvm/lib/Support",
   ]
   include_dirs = [ "../include" ]
-  sources = [ "ClangApplyReplacementsMain.cpp" ]
+  sources = [
+    "ClangApplyReplacementsMain.cpp",
+  ]
 }

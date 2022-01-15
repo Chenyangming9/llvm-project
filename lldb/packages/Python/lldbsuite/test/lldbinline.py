@@ -82,9 +82,7 @@ class CommandParser:
 
 
 class InlineTest(TestBase):
-
-    def getBuildDirBasename(self):
-        return self.__class__.__name__ + "." + self.testMethodName
+    # Internal implementation
 
     def BuildMakefile(self):
         makefilePath = self.getBuildArtifact("Makefile")
@@ -92,6 +90,7 @@ class InlineTest(TestBase):
             return
 
         categories = {}
+
         for f in os.listdir(self.getSourceDir()):
             t = source_type(f)
             if t:
@@ -100,35 +99,37 @@ class InlineTest(TestBase):
                 else:
                     categories[t] = [f]
 
-        with open(makefilePath, 'w+') as makefile:
-            for t in list(categories.keys()):
-                line = t + " := " + " ".join(categories[t])
-                makefile.write(line + "\n")
+        makefile = open(makefilePath, 'w+')
 
-            if ('OBJCXX_SOURCES' in list(categories.keys())) or \
-               ('OBJC_SOURCES' in list(categories.keys())):
-                makefile.write(
-                    "LDFLAGS = $(CFLAGS) -lobjc -framework Foundation\n")
+        level = os.sep.join(
+            [".."] * len(self.mydir.split(os.sep))) + os.sep + "make"
 
-            if ('CXX_SOURCES' in list(categories.keys())):
-                makefile.write("CXXFLAGS += -std=c++11\n")
+        makefile.write("LEVEL = " + level + "\n")
 
-            makefile.write("include Makefile.rules\n")
+        for t in list(categories.keys()):
+            line = t + " := " + " ".join(categories[t])
+            makefile.write(line + "\n")
+
+        if ('OBJCXX_SOURCES' in list(categories.keys())) or (
+                'OBJC_SOURCES' in list(categories.keys())):
+            makefile.write(
+                "LDFLAGS = $(CFLAGS) -lobjc -framework Foundation\n")
+
+        if ('CXX_SOURCES' in list(categories.keys())):
+            makefile.write("CXXFLAGS += -std=c++11\n")
+
+        makefile.write("include $(LEVEL)/Makefile.rules\n")
+        makefile.write("\ncleanup:\n\trm -f Makefile *.d\n\n")
+        makefile.flush()
+        makefile.close()
 
     def _test(self):
         self.BuildMakefile()
-        self.build(dictionary=self._build_dict)
+        self.build()
         self.do_test()
 
     def execute_user_command(self, __command):
         exec(__command, globals(), locals())
-
-    def _get_breakpoint_ids(self, thread):
-        ids = set()
-        for i in range(0, thread.GetStopReasonDataCount(), 2):
-            ids.add(thread.GetStopReasonDataAtIndex(i))
-        self.assertGreater(len(ids), 0)
-        return sorted(ids)
 
     def do_test(self):
         exe = self.getBuildArtifact("a.out")
@@ -141,16 +142,14 @@ class InlineTest(TestBase):
         parser.set_breakpoints(target)
 
         process = target.LaunchSimple(None, None, self.get_process_working_directory())
-        self.assertIsNotNone(process, PROCESS_IS_VALID)
-
         hit_breakpoints = 0
 
         while lldbutil.get_stopped_thread(process, lldb.eStopReasonBreakpoint):
             hit_breakpoints += 1
             thread = lldbutil.get_stopped_thread(
                 process, lldb.eStopReasonBreakpoint)
-            for bp_id in self._get_breakpoint_ids(thread):
-                parser.handle_breakpoint(self, bp_id)
+            breakpoint_id = thread.GetStopReasonDataAtIndex(0)
+            parser.handle_breakpoint(self, breakpoint_id)
             process.Continue()
 
         self.assertTrue(hit_breakpoints > 0,
@@ -159,6 +158,8 @@ class InlineTest(TestBase):
         self.assertTrue(process.GetState() in [lldb.eStateStopped,
                                                lldb.eStateExited],
                         PROCESS_EXITED)
+
+    # Utilities for testcases
 
     def check_expression(self, expression, expected_result, use_summary=True):
         value = self.frame().EvaluateExpression(expression)
@@ -185,26 +186,24 @@ def ApplyDecoratorsToFunction(func, decorators):
     return tmp
 
 
-def MakeInlineTest(__file, __globals, decorators=None, name=None,
-        build_dict=None):
+def MakeInlineTest(__file, __globals, decorators=None):
     # Adjust the filename if it ends in .pyc.  We want filenames to
     # reflect the source python file, not the compiled variant.
     if __file is not None and __file.endswith(".pyc"):
         # Strip the trailing "c"
         __file = __file[0:-1]
 
-    if name is None:
-        # Derive the test name from the current file name
-        file_basename = os.path.basename(__file)
-        name, _ = os.path.splitext(file_basename)
+    # Derive the test name from the current file name
+    file_basename = os.path.basename(__file)
+
+    test_name, _ = os.path.splitext(file_basename)
 
     test_func = ApplyDecoratorsToFunction(InlineTest._test, decorators)
     # Build the test case
-    test_class = type(name, (InlineTest,), dict(test=test_func,
-        name=name, _build_dict=build_dict))
+    test_class = type(test_name, (InlineTest,), dict(test=test_func, name=test_name))
 
     # Add the test case to the globals, and hide InlineTest
-    __globals.update({name: test_class})
+    __globals.update({test_name: test_class})
 
     # Keep track of the original test filename so we report it
     # correctly in test results.

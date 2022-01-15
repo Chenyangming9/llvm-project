@@ -5,24 +5,21 @@ include(CheckCXXCompilerFlag)
 # Build Google Benchmark for libc++
 #==============================================================================
 
-set(CMAKE_FOLDER "${CMAKE_FOLDER}/Benchmarks")
-
 set(BENCHMARK_LIBCXX_COMPILE_FLAGS
     -Wno-unused-command-line-argument
     -nostdinc++
-    -isystem "${LIBCXX_GENERATED_INCLUDE_DIR}"
+    -isystem ${LIBCXX_SOURCE_DIR}/include
     -L${LIBCXX_LIBRARY_DIR}
     -Wl,-rpath,${LIBCXX_LIBRARY_DIR}
     ${SANITIZER_FLAGS}
     )
-if(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR AND NOT APPLE)
-  list(APPEND BENCHMARK_LIBCXX_COMPILE_FLAGS
-    -isystem "${LIBCXX_GENERATED_INCLUDE_TARGET_DIR}")
-endif()
 if (DEFINED LIBCXX_CXX_ABI_LIBRARY_PATH)
   list(APPEND BENCHMARK_LIBCXX_COMPILE_FLAGS
           -L${LIBCXX_CXX_ABI_LIBRARY_PATH}
           -Wl,-rpath,${LIBCXX_CXX_ABI_LIBRARY_PATH})
+endif()
+if (LIBCXX_NEEDS_SITE_CONFIG)
+  list(APPEND BENCHMARK_LIBCXX_COMPILE_FLAGS -include "${LIBCXX_BINARY_DIR}/__config_site")
 endif()
 split_list(BENCHMARK_LIBCXX_COMPILE_FLAGS)
 
@@ -75,19 +72,32 @@ set(BENCHMARK_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(BENCHMARK_LIBCXX_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/benchmark-libcxx)
 set(BENCHMARK_NATIVE_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/benchmark-native)
 
+check_flag_supported("-std=c++17")
+mangle_name("LIBCXX_SUPPORTS_STD_EQ_c++17_FLAG" BENCHMARK_SUPPORTS_STD_CXX17_FLAG)
+if (${BENCHMARK_SUPPORTS_STD_CXX17_FLAG})
+  set(BENCHMARK_DIALECT_FLAG "-std=c++17")
+else()
+  # If the compiler doesn't support -std=c++17, attempt to fall back to -std=c++1z while still
+  # requiring C++17 language features.
+  set(BENCHMARK_DIALECT_FLAG "-std=c++1z")
+endif()
 
 set(BENCHMARK_TEST_COMPILE_FLAGS
-    -O2
-    -fsized-deallocation
+    ${BENCHMARK_DIALECT_FLAG} -O2
     -I${BENCHMARK_LIBCXX_INSTALL}/include
     -I${LIBCXX_SOURCE_DIR}/test/support
 )
 set(BENCHMARK_TEST_LIBCXX_COMPILE_FLAGS
+    -nostdinc++
+    -isystem ${LIBCXX_SOURCE_DIR}/include
     ${BENCHMARK_TEST_COMPILE_FLAGS}
     ${SANITIZER_FLAGS}
     -Wno-user-defined-literals
-    -Wno-suggest-override
 )
+if (LIBCXX_NEEDS_SITE_CONFIG)
+  list(APPEND BENCHMARK_TEST_LIBCXX_COMPILE_FLAGS
+      -include "${LIBCXX_BINARY_DIR}/__config_site")
+endif()
 
 set(BENCHMARK_TEST_LIBCXX_LINK_FLAGS
     -nodefaultlibs
@@ -125,30 +135,26 @@ function(add_benchmark_test name source_file)
   set(libcxx_target ${name}_libcxx)
   list(APPEND libcxx_benchmark_targets ${libcxx_target})
   add_executable(${libcxx_target} EXCLUDE_FROM_ALL ${source_file})
-  add_dependencies(${libcxx_target} cxx google-benchmark-libcxx)
+  add_dependencies(${libcxx_target} cxx cxx-headers google-benchmark-libcxx)
   add_dependencies(cxx-benchmarks ${libcxx_target})
   if (LIBCXX_ENABLE_SHARED)
-    target_link_libraries(${libcxx_target} PRIVATE cxx_shared)
+    target_link_libraries(${libcxx_target} cxx_shared)
   else()
-    target_link_libraries(${libcxx_target} PRIVATE cxx_static)
+    target_link_libraries(${libcxx_target} cxx_static)
   endif()
   if (TARGET cxx_experimental)
-    target_link_libraries(${libcxx_target} PRIVATE cxx_experimental)
+    target_link_libraries(${libcxx_target} cxx_experimental)
   endif()
-  target_link_libraries(${libcxx_target} PRIVATE -lbenchmark)
+  target_link_libraries(${libcxx_target} -lbenchmark)
   if (LLVM_USE_SANITIZER)
-    target_link_libraries(${libcxx_target} PRIVATE -ldl)
+    target_link_libraries(${libcxx_target} -ldl)
   endif()
   set_target_properties(${libcxx_target}
     PROPERTIES
           OUTPUT_NAME "${name}.libcxx.out"
           RUNTIME_OUTPUT_DIRECTORY "${BENCHMARK_OUTPUT_DIR}"
           COMPILE_FLAGS "${BENCHMARK_TEST_LIBCXX_COMPILE_FLAGS}"
-          LINK_FLAGS "${BENCHMARK_TEST_LIBCXX_LINK_FLAGS}"
-          CXX_STANDARD 17
-          CXX_STANDARD_REQUIRED YES
-          CXX_EXTENSIONS NO)
-  cxx_link_system_libraries(${libcxx_target})
+          LINK_FLAGS "${BENCHMARK_TEST_LIBCXX_LINK_FLAGS}")
   if (LIBCXX_BENCHMARK_NATIVE_STDLIB)
     if (LIBCXX_BENCHMARK_NATIVE_STDLIB STREQUAL "libstdc++" AND NOT DEFINED LIBSTDCXX_FILESYSTEM_LIB
         AND "${name}" STREQUAL "filesystem")
@@ -158,14 +164,14 @@ function(add_benchmark_test name source_file)
     add_executable(${native_target} EXCLUDE_FROM_ALL ${source_file})
     add_dependencies(${native_target} google-benchmark-native
                                       google-benchmark-libcxx)
-    target_link_libraries(${native_target} PRIVATE -lbenchmark)
+    target_link_libraries(${native_target} -lbenchmark)
     if (LIBCXX_BENCHMARK_NATIVE_STDLIB STREQUAL "libstdc++")
-      target_link_libraries(${native_target} PRIVATE ${LIBSTDCXX_FILESYSTEM_LIB})
+      target_link_libraries(${native_target} ${LIBSTDCXX_FILESYSTEM_LIB})
     elseif (LIBCXX_BENCHMARK_NATIVE_STDLIB STREQUAL "libc++")
-      target_link_libraries(${native_target} PRIVATE -lc++fs -lc++experimental)
+      target_link_libraries(${native_target} -lc++fs -lc++experimental)
     endif()
     if (LIBCXX_HAS_PTHREAD_LIB)
-      target_link_libraries(${native_target} PRIVATE -pthread)
+      target_link_libraries(${native_target} -pthread)
     endif()
     add_dependencies(cxx-benchmarks ${native_target})
     set_target_properties(${native_target}
@@ -174,10 +180,7 @@ function(add_benchmark_test name source_file)
           RUNTIME_OUTPUT_DIRECTORY "${BENCHMARK_OUTPUT_DIR}"
           INCLUDE_DIRECTORIES ""
           COMPILE_FLAGS "${BENCHMARK_TEST_NATIVE_COMPILE_FLAGS}"
-          LINK_FLAGS "${BENCHMARK_TEST_NATIVE_LINK_FLAGS}"
-          CXX_STANDARD 17
-          CXX_STANDARD_REQUIRED YES
-          CXX_EXTENSIONS NO)
+          LINK_FLAGS "${BENCHMARK_TEST_NATIVE_LINK_FLAGS}")
   endif()
 endfunction()
 

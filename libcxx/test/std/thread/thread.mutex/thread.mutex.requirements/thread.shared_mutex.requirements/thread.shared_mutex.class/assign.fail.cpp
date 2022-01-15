@@ -7,10 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: libcpp-has-no-threads
-// UNSUPPORTED: c++03, c++11, c++14
-
-// shared_mutex was introduced in macosx10.12
-// UNSUPPORTED: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11}}
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 // <shared_mutex>
 

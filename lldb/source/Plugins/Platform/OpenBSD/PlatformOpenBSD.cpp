@@ -1,4 +1,4 @@
-//===-- PlatformOpenBSD.cpp -----------------------------------------------===//
+//===-- PlatformOpenBSD.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,8 +9,8 @@
 #include "PlatformOpenBSD.h"
 #include "lldb/Host/Config.h"
 
-#include <cstdio>
-#if LLDB_ENABLE_POSIX
+#include <stdio.h>
+#ifndef LLDB_DISABLE_POSIX
 #include <sys/utsname.h>
 #endif
 
@@ -33,8 +33,6 @@
 using namespace lldb;
 using namespace lldb_private;
 using namespace lldb_private::platform_openbsd;
-
-LLDB_PLUGIN_DEFINE(PlatformOpenBSD)
 
 static uint32_t g_initialize_count = 0;
 
@@ -123,6 +121,8 @@ PlatformOpenBSD::PlatformOpenBSD(bool is_host)
     : PlatformPOSIX(is_host) // This is the local host platform
 {}
 
+PlatformOpenBSD::~PlatformOpenBSD() = default;
+
 bool PlatformOpenBSD::GetSupportedArchitectureAtIndex(uint32_t idx,
                                                       ArchSpec &arch) {
   if (IsHost()) {
@@ -173,7 +173,7 @@ bool PlatformOpenBSD::GetSupportedArchitectureAtIndex(uint32_t idx,
 void PlatformOpenBSD::GetStatus(Stream &strm) {
   Platform::GetStatus(strm);
 
-#if LLDB_ENABLE_POSIX
+#ifndef LLDB_DISABLE_POSIX
   // Display local kernel information only when we are running in host mode.
   // Otherwise, we would end up printing non-OpenBSD information (when running
   // on Mac OS for example).

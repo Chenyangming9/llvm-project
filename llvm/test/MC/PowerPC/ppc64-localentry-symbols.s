@@ -1,12 +1,11 @@
 # RUN: llvm-mc -filetype=obj -triple=powerpc64-unknown-freebsd13.0 %s -o %t
-# RUN: llvm-readelf -s %t | FileCheck %s
+# RUN: llvm-objdump -t %t | FileCheck %s
 
-# CHECK:      Type Bind   Vis                     Ndx Name
-# CHECK:      FUNC GLOBAL DEFAULT [<other: 0x60>]   2 foo
-# CHECK-NEXT: FUNC WEAK   DEFAULT [<other: 0x60>]   2 __impl_foo
-# CHECK-NEXT: FUNC GLOBAL DEFAULT [<other: 0x60>]   2 func
-# CHECK-NEXT: FUNC WEAK   DEFAULT [<other: 0x60>]   2 weak_func
-# CHECK:      FUNC WEAK   DEFAULT [<other: 0x60>]   2 foo@FBSD_1.1
+# CHECK: 0000000000000000 gw    F .text  00000000 0x60 __impl_foo
+# CHECK: 0000000000000000 g     F .text  00000000 0x60 foo
+# CHECK: 0000000000000000 gw    F .text  00000000 0x60 foo@FBSD_1.1
+# CHECK: 0000000000000008 g     F .text  00000000 0x60 func
+# CHECK: 0000000000000008 gw    F .text  00000000 0x60 weak_func
 
 .text
 .abiversion 2
@@ -33,8 +32,3 @@ func:
   nop
   nop
   .localentry func, 8
-
-## PR44284 Don't crash if err is redefined after .set
-.set err, _err
-.globl err
-err:

@@ -4,7 +4,7 @@
 include "llvm/TableGen/SearchableTable.td"
 
 // CHECK-LABEL: GET_InstrTable_IMPL
-// CHECK: constexpr MyInstr InstrTable[] = {
+// CHECK: const MyInstr InstrTable[] = {
 // CHECK:   { B, 0xA },
 // CHECK:   { C, 0x0 },
 // CHECK:   { A, 0x5 },

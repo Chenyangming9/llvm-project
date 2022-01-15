@@ -19,6 +19,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/TargetFolder.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstVisitor.h"
 #include "llvm/IR/ValueHandle.h"
@@ -47,6 +48,7 @@ class LoadInst;
 class PHINode;
 class PointerType;
 class SelectInst;
+class TargetLibraryInfo;
 class Type;
 class UndefValue;
 class Value;
@@ -55,9 +57,6 @@ class Value;
 /// allocates or reallocates memory (either malloc, calloc, realloc, or strdup
 /// like).
 bool isAllocationFn(const Value *V, const TargetLibraryInfo *TLI,
-                    bool LookThroughBitCast = false);
-bool isAllocationFn(const Value *V,
-                    function_ref<const TargetLibraryInfo &(Function &)> GetTLI,
                     bool LookThroughBitCast = false);
 
 /// Tests if a value is a call or invoke to a function that returns a
@@ -69,17 +68,6 @@ bool isNoAliasFn(const Value *V, const TargetLibraryInfo *TLI,
 /// allocates uninitialized memory (such as malloc).
 bool isMallocLikeFn(const Value *V, const TargetLibraryInfo *TLI,
                     bool LookThroughBitCast = false);
-bool isMallocLikeFn(const Value *V,
-                    function_ref<const TargetLibraryInfo &(Function &)> GetTLI,
-                    bool LookThroughBitCast = false);
-
-/// Tests if a value is a call or invoke to a library function that
-/// allocates uninitialized memory with alignment (such as aligned_alloc).
-bool isAlignedAllocLikeFn(const Value *V, const TargetLibraryInfo *TLI,
-                          bool LookThroughBitCast = false);
-bool isAlignedAllocLikeFn(
-    const Value *V, function_ref<const TargetLibraryInfo &(Function &)> GetTLI,
-    bool LookThroughBitCast = false);
 
 /// Tests if a value is a call or invoke to a library function that
 /// allocates zero-filled memory (such as calloc).
@@ -105,16 +93,6 @@ bool isReallocLikeFn(const Value *V, const TargetLibraryInfo *TLI,
 /// reallocates memory (e.g., realloc).
 bool isReallocLikeFn(const Function *F, const TargetLibraryInfo *TLI);
 
-/// Tests if a value is a call or invoke to a library function that
-/// allocates memory and throws if an allocation failed (e.g., new).
-bool isOpNewLikeFn(const Value *V, const TargetLibraryInfo *TLI,
-                     bool LookThroughBitCast = false);
-
-/// Tests if a value is a call or invoke to a library function that
-/// allocates memory (strdup, strndup).
-bool isStrdupLikeFn(const Value *V, const TargetLibraryInfo *TLI,
-                     bool LookThroughBitCast = false);
-
 //===----------------------------------------------------------------------===//
 //  malloc Call Utility Functions.
 //
@@ -122,13 +100,9 @@ bool isStrdupLikeFn(const Value *V, const TargetLibraryInfo *TLI,
 /// extractMallocCall - Returns the corresponding CallInst if the instruction
 /// is a malloc call.  Since CallInst::CreateMalloc() only creates calls, we
 /// ignore InvokeInst here.
-const CallInst *
-extractMallocCall(const Value *I,
-                  function_ref<const TargetLibraryInfo &(Function &)> GetTLI);
-inline CallInst *
-extractMallocCall(Value *I,
-                  function_ref<const TargetLibraryInfo &(Function &)> GetTLI) {
-  return const_cast<CallInst *>(extractMallocCall((const Value *)I, GetTLI));
+const CallInst *extractMallocCall(const Value *I, const TargetLibraryInfo *TLI);
+inline CallInst *extractMallocCall(Value *I, const TargetLibraryInfo *TLI) {
+  return const_cast<CallInst*>(extractMallocCall((const Value*)I, TLI));
 }
 
 /// getMallocType - Returns the PointerType resulting from the malloc call.
@@ -212,10 +186,6 @@ struct ObjectSizeOpts {
 /// object size in Size if successful, and false otherwise. In this context, by
 /// object we mean the region of memory starting at Ptr to the end of the
 /// underlying object pointed to by Ptr.
-///
-/// WARNING: The object size returned is the allocation size.  This does not
-/// imply dereferenceability at site of use since the object may be freeed in
-/// between.
 bool getObjectSize(const Value *Ptr, uint64_t &Size, const DataLayout &DL,
                    const TargetLibraryInfo *TLI, ObjectSizeOpts Opts = {});
 
@@ -269,7 +239,7 @@ public:
   // compute() should be used by external users.
   SizeOffsetType visitAllocaInst(AllocaInst &I);
   SizeOffsetType visitArgument(Argument &A);
-  SizeOffsetType visitCallBase(CallBase &CB);
+  SizeOffsetType visitCallSite(CallSite CS);
   SizeOffsetType visitConstantPointerNull(ConstantPointerNull&);
   SizeOffsetType visitExtractElementInst(ExtractElementInst &I);
   SizeOffsetType visitExtractValueInst(ExtractValueInst &I);
@@ -339,7 +309,7 @@ public:
 
   // The individual instruction visitors should be treated as private.
   SizeOffsetEvalType visitAllocaInst(AllocaInst &I);
-  SizeOffsetEvalType visitCallBase(CallBase &CB);
+  SizeOffsetEvalType visitCallSite(CallSite CS);
   SizeOffsetEvalType visitExtractElementInst(ExtractElementInst &I);
   SizeOffsetEvalType visitExtractValueInst(ExtractValueInst &I);
   SizeOffsetEvalType visitGEPOperator(GEPOperator &GEP);

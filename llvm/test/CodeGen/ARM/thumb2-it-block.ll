@@ -16,7 +16,9 @@ entry:
 
 ; CHECK:        cmp
 ; CHECK-NEXT:   it    mi
-; CHECK-NEXT:   rsbmi
+; We shouldn't need to check for the extra 's' here; tRSB should be printed as
+; "rsb" inside an IT block, not "rsbs".
+; CHECK-NEXT:   rsb{{s?}}mi
 ; CHECK-NEXT:   cmp
 ; CHECK-NEXT:   it    mi
 ; CHECK-NEXT:   rsb{{s?}}mi

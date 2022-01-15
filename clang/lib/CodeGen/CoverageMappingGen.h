@@ -16,7 +16,6 @@
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Lex/PPCallbacks.h"
-#include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/Support/raw_ostream.h"
@@ -30,47 +29,15 @@ class Preprocessor;
 class Decl;
 class Stmt;
 
-struct SkippedRange {
-  SourceRange Range;
-  // The location of token before the skipped source range.
-  SourceLocation PrevTokLoc;
-  // The location of token after the skipped source range.
-  SourceLocation NextTokLoc;
-
-  SkippedRange(SourceRange Range, SourceLocation PrevTokLoc = SourceLocation(),
-               SourceLocation NextTokLoc = SourceLocation())
-      : Range(Range), PrevTokLoc(PrevTokLoc), NextTokLoc(NextTokLoc) {}
-};
-
 /// Stores additional source code information like skipped ranges which
 /// is required by the coverage mapping generator and is obtained from
 /// the preprocessor.
-class CoverageSourceInfo : public PPCallbacks,
-                           public CommentHandler,
-                           public EmptylineHandler {
-  // A vector of skipped source ranges and PrevTokLoc with NextTokLoc.
-  std::vector<SkippedRange> SkippedRanges;
-
-  SourceManager &SourceMgr;
-
+class CoverageSourceInfo : public PPCallbacks {
+  std::vector<SourceRange> SkippedRanges;
 public:
-  // Location of the token parsed before HandleComment is called. This is
-  // updated every time Preprocessor::Lex lexes a new token.
-  SourceLocation PrevTokLoc;
-
-  CoverageSourceInfo(SourceManager &SourceMgr) : SourceMgr(SourceMgr) {}
-
-  std::vector<SkippedRange> &getSkippedRanges() { return SkippedRanges; }
-
-  void AddSkippedRange(SourceRange Range);
+  ArrayRef<SourceRange> getSkippedRanges() const { return SkippedRanges; }
 
   void SourceRangeSkipped(SourceRange Range, SourceLocation EndifLoc) override;
-
-  void HandleEmptyline(SourceRange Range) override;
-
-  bool HandleComment(Preprocessor &PP, SourceRange Range) override;
-
-  void updateNextTokLoc(SourceLocation Loc);
 };
 
 namespace CodeGen {
@@ -80,32 +47,17 @@ class CodeGenModule;
 /// Organizes the cross-function state that is used while generating
 /// code coverage mapping data.
 class CoverageMappingModuleGen {
-  /// Information needed to emit a coverage record for a function.
-  struct FunctionInfo {
-    uint64_t NameHash;
-    uint64_t FuncHash;
-    std::string CoverageMapping;
-    bool IsUsed;
-  };
-
   CodeGenModule &CGM;
   CoverageSourceInfo &SourceInfo;
   llvm::SmallDenseMap<const FileEntry *, unsigned, 8> FileEntries;
+  std::vector<llvm::Constant *> FunctionRecords;
   std::vector<llvm::Constant *> FunctionNames;
-  std::vector<FunctionInfo> FunctionRecords;
-  std::map<std::string, std::string> CoveragePrefixMap;
-
-  std::string getCurrentDirname();
-  std::string normalizeFilename(StringRef Filename);
-
-  /// Emit a function record.
-  void emitFunctionMappingRecord(const FunctionInfo &Info,
-                                 uint64_t FilenamesRef);
+  llvm::StructType *FunctionRecordTy;
+  std::vector<std::string> CoverageMappings;
 
 public:
-  static CoverageSourceInfo *setUpCoverageCallbacks(Preprocessor &PP);
-
-  CoverageMappingModuleGen(CodeGenModule &CGM, CoverageSourceInfo &SourceInfo);
+  CoverageMappingModuleGen(CodeGenModule &CGM, CoverageSourceInfo &SourceInfo)
+      : CGM(CGM), SourceInfo(SourceInfo), FunctionRecordTy(nullptr) {}
 
   CoverageSourceInfo &getSourceInfo() const {
     return SourceInfo;
@@ -125,9 +77,6 @@ public:
   /// Return the coverage mapping translation unit file id
   /// for the given file.
   unsigned getFileID(const FileEntry *File);
-
-  /// Return an interface into CodeGenModule.
-  CodeGenModule &getCodeGenModule() { return CGM; }
 };
 
 /// Organizes the per-function state that is used while generating

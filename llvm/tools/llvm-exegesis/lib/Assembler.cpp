@@ -8,10 +8,7 @@
 
 #include "Assembler.h"
 
-#include "SnippetRepetitor.h"
 #include "Target.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/CodeGen/FunctionLoweringInfo.h"
 #include "llvm/CodeGen/GlobalISel/CallLowering.h"
 #include "llvm/CodeGen/GlobalISel/MachineIRBuilder.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -23,7 +20,6 @@
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/MC/MCInstrInfo.h"
-#include "llvm/Support/Alignment.h"
 #include "llvm/Support/MemoryBuffer.h"
 
 namespace llvm {
@@ -31,39 +27,39 @@ namespace exegesis {
 
 static constexpr const char ModuleID[] = "ExegesisInfoTest";
 static constexpr const char FunctionID[] = "foo";
-static const Align kFunctionAlignment(4096);
 
-// Fills the given basic block with register setup code, and returns true if
-// all registers could be setup correctly.
-static bool generateSnippetSetupCode(
-    const ExegesisTarget &ET, const MCSubtargetInfo *const MSI,
-    ArrayRef<RegisterValue> RegisterInitialValues, BasicBlockFiller &BBF) {
-  bool IsSnippetSetupComplete = true;
+static std::vector<llvm::MCInst>
+generateSnippetSetupCode(const ExegesisTarget &ET,
+                         const llvm::MCSubtargetInfo *const MSI,
+                         llvm::ArrayRef<RegisterValue> RegisterInitialValues,
+                         bool &IsSnippetSetupComplete) {
+  IsSnippetSetupComplete = true;
+  std::vector<llvm::MCInst> Result;
   for (const RegisterValue &RV : RegisterInitialValues) {
     // Load a constant in the register.
     const auto SetRegisterCode = ET.setRegTo(*MSI, RV.Register, RV.Value);
     if (SetRegisterCode.empty())
       IsSnippetSetupComplete = false;
-    BBF.addInstructions(SetRegisterCode);
+    Result.insert(Result.end(), SetRegisterCode.begin(), SetRegisterCode.end());
   }
-  return IsSnippetSetupComplete;
+  return Result;
 }
 
 // Small utility function to add named passes.
-static bool addPass(PassManagerBase &PM, StringRef PassName,
-                    TargetPassConfig &TPC) {
-  const PassRegistry *PR = PassRegistry::getPassRegistry();
-  const PassInfo *PI = PR->getPassInfo(PassName);
+static bool addPass(llvm::PassManagerBase &PM, llvm::StringRef PassName,
+                    llvm::TargetPassConfig &TPC) {
+  const llvm::PassRegistry *PR = llvm::PassRegistry::getPassRegistry();
+  const llvm::PassInfo *PI = PR->getPassInfo(PassName);
   if (!PI) {
-    errs() << " run-pass " << PassName << " is not registered.\n";
+    llvm::errs() << " run-pass " << PassName << " is not registered.\n";
     return true;
   }
 
   if (!PI->getNormalCtor()) {
-    errs() << " cannot create pass: " << PI->getPassName() << "\n";
+    llvm::errs() << " cannot create pass: " << PI->getPassName() << "\n";
     return true;
   }
-  Pass *P = PI->getNormalCtor()();
+  llvm::Pass *P = PI->getNormalCtor()();
   std::string Banner = std::string("After ") + std::string(P->getPassName());
   PM.add(P);
   TPC.printAndVerify(Banner);
@@ -71,217 +67,196 @@ static bool addPass(PassManagerBase &PM, StringRef PassName,
   return false;
 }
 
-MachineFunction &createVoidVoidPtrMachineFunction(StringRef FunctionName,
-                                                  Module *Module,
-                                                  MachineModuleInfo *MMI) {
-  Type *const ReturnType = Type::getInt32Ty(Module->getContext());
-  Type *const MemParamType = PointerType::get(
-      Type::getInt8Ty(Module->getContext()), 0 /*default address space*/);
-  FunctionType *FunctionType =
-      FunctionType::get(ReturnType, {MemParamType}, false);
-  Function *const F = Function::Create(
-      FunctionType, GlobalValue::InternalLinkage, FunctionName, Module);
+// Creates a void(int8*) MachineFunction.
+static llvm::MachineFunction &
+createVoidVoidPtrMachineFunction(llvm::StringRef FunctionID,
+                                 llvm::Module *Module,
+                                 llvm::MachineModuleInfo *MMI) {
+  llvm::Type *const ReturnType = llvm::Type::getInt32Ty(Module->getContext());
+  llvm::Type *const MemParamType = llvm::PointerType::get(
+      llvm::Type::getInt8Ty(Module->getContext()), 0 /*default address space*/);
+  llvm::FunctionType *FunctionType =
+      llvm::FunctionType::get(ReturnType, {MemParamType}, false);
+  llvm::Function *const F = llvm::Function::Create(
+      FunctionType, llvm::GlobalValue::InternalLinkage, FunctionID, Module);
   // Making sure we can create a MachineFunction out of this Function even if it
   // contains no IR.
   F->setIsMaterializable(true);
   return MMI->getOrCreateMachineFunction(*F);
 }
 
-BasicBlockFiller::BasicBlockFiller(MachineFunction &MF, MachineBasicBlock *MBB,
-                                   const MCInstrInfo *MCII)
-    : MF(MF), MBB(MBB), MCII(MCII) {}
-
-void BasicBlockFiller::addInstruction(const MCInst &Inst, const DebugLoc &DL) {
-  const unsigned Opcode = Inst.getOpcode();
-  const MCInstrDesc &MCID = MCII->get(Opcode);
-  MachineInstrBuilder Builder = BuildMI(MBB, DL, MCID);
-  for (unsigned OpIndex = 0, E = Inst.getNumOperands(); OpIndex < E;
-       ++OpIndex) {
-    const MCOperand &Op = Inst.getOperand(OpIndex);
-    if (Op.isReg()) {
-      const bool IsDef = OpIndex < MCID.getNumDefs();
-      unsigned Flags = 0;
-      const MCOperandInfo &OpInfo = MCID.operands().begin()[OpIndex];
-      if (IsDef && !OpInfo.isOptionalDef())
-        Flags |= RegState::Define;
-      Builder.addReg(Op.getReg(), Flags);
-    } else if (Op.isImm()) {
-      Builder.addImm(Op.getImm());
-    } else if (!Op.isValid()) {
-      llvm_unreachable("Operand is not set");
-    } else {
-      llvm_unreachable("Not yet implemented");
+static void fillMachineFunction(llvm::MachineFunction &MF,
+                                llvm::ArrayRef<unsigned> LiveIns,
+                                llvm::ArrayRef<llvm::MCInst> Instructions) {
+  llvm::MachineBasicBlock *MBB = MF.CreateMachineBasicBlock();
+  MF.push_back(MBB);
+  for (const unsigned Reg : LiveIns)
+    MBB->addLiveIn(Reg);
+  const llvm::MCInstrInfo *MCII = MF.getTarget().getMCInstrInfo();
+  llvm::DebugLoc DL;
+  for (const llvm::MCInst &Inst : Instructions) {
+    const unsigned Opcode = Inst.getOpcode();
+    const llvm::MCInstrDesc &MCID = MCII->get(Opcode);
+    llvm::MachineInstrBuilder Builder = llvm::BuildMI(MBB, DL, MCID);
+    for (unsigned OpIndex = 0, E = Inst.getNumOperands(); OpIndex < E;
+         ++OpIndex) {
+      const llvm::MCOperand &Op = Inst.getOperand(OpIndex);
+      if (Op.isReg()) {
+        const bool IsDef = OpIndex < MCID.getNumDefs();
+        unsigned Flags = 0;
+        const llvm::MCOperandInfo &OpInfo = MCID.operands().begin()[OpIndex];
+        if (IsDef && !OpInfo.isOptionalDef())
+          Flags |= llvm::RegState::Define;
+        Builder.addReg(Op.getReg(), Flags);
+      } else if (Op.isImm()) {
+        Builder.addImm(Op.getImm());
+      } else if (!Op.isValid()) {
+        llvm_unreachable("Operand is not set");
+      } else {
+        llvm_unreachable("Not yet implemented");
+      }
     }
   }
-}
-
-void BasicBlockFiller::addInstructions(ArrayRef<MCInst> Insts,
-                                       const DebugLoc &DL) {
-  for (const MCInst &Inst : Insts)
-    addInstruction(Inst, DL);
-}
-
-void BasicBlockFiller::addReturn(const DebugLoc &DL) {
   // Insert the return code.
-  const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
+  const llvm::TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
   if (TII->getReturnOpcode() < TII->getNumOpcodes()) {
-    BuildMI(MBB, DL, TII->get(TII->getReturnOpcode()));
+    llvm::BuildMI(MBB, DL, TII->get(TII->getReturnOpcode()));
   } else {
-    MachineIRBuilder MIB(MF);
+    llvm::MachineIRBuilder MIB(MF);
     MIB.setMBB(*MBB);
-
-    FunctionLoweringInfo FuncInfo;
-    FuncInfo.CanLowerReturn = true;
-    MF.getSubtarget().getCallLowering()->lowerReturn(MIB, nullptr, {},
-                                                     FuncInfo);
+    MF.getSubtarget().getCallLowering()->lowerReturn(MIB, nullptr, {});
   }
 }
 
-FunctionFiller::FunctionFiller(MachineFunction &MF,
-                               std::vector<unsigned> RegistersSetUp)
-    : MF(MF), MCII(MF.getTarget().getMCInstrInfo()), Entry(addBasicBlock()),
-      RegistersSetUp(std::move(RegistersSetUp)) {}
-
-BasicBlockFiller FunctionFiller::addBasicBlock() {
-  MachineBasicBlock *MBB = MF.CreateMachineBasicBlock();
-  MF.push_back(MBB);
-  return BasicBlockFiller(MF, MBB, MCII);
+static std::unique_ptr<llvm::Module>
+createModule(const std::unique_ptr<llvm::LLVMContext> &Context,
+             const llvm::DataLayout DL) {
+  auto Module = llvm::make_unique<llvm::Module>(ModuleID, *Context);
+  Module->setDataLayout(DL);
+  return Module;
 }
 
-ArrayRef<unsigned> FunctionFiller::getRegistersSetUp() const {
-  return RegistersSetUp;
-}
-
-static std::unique_ptr<Module>
-createModule(const std::unique_ptr<LLVMContext> &Context, const DataLayout DL) {
-  auto Mod = std::make_unique<Module>(ModuleID, *Context);
-  Mod->setDataLayout(DL);
-  return Mod;
-}
-
-BitVector getFunctionReservedRegs(const TargetMachine &TM) {
-  std::unique_ptr<LLVMContext> Context = std::make_unique<LLVMContext>();
-  std::unique_ptr<Module> Module = createModule(Context, TM.createDataLayout());
+llvm::BitVector getFunctionReservedRegs(const llvm::TargetMachine &TM) {
+  std::unique_ptr<llvm::LLVMContext> Context =
+      llvm::make_unique<llvm::LLVMContext>();
+  std::unique_ptr<llvm::Module> Module =
+      createModule(Context, TM.createDataLayout());
   // TODO: This only works for targets implementing LLVMTargetMachine.
-  const LLVMTargetMachine &LLVMTM = static_cast<const LLVMTargetMachine &>(TM);
-  std::unique_ptr<MachineModuleInfoWrapperPass> MMIWP =
-      std::make_unique<MachineModuleInfoWrapperPass>(&LLVMTM);
-  MachineFunction &MF = createVoidVoidPtrMachineFunction(
-      FunctionID, Module.get(), &MMIWP.get()->getMMI());
+  const LLVMTargetMachine &LLVMTM = static_cast<const LLVMTargetMachine&>(TM);
+  std::unique_ptr<llvm::MachineModuleInfo> MMI =
+      llvm::make_unique<llvm::MachineModuleInfo>(&LLVMTM);
+  llvm::MachineFunction &MF =
+      createVoidVoidPtrMachineFunction(FunctionID, Module.get(), MMI.get());
   // Saving reserved registers for client.
   return MF.getSubtarget().getRegisterInfo()->getReservedRegs(MF);
 }
 
-Error assembleToStream(const ExegesisTarget &ET,
-                       std::unique_ptr<LLVMTargetMachine> TM,
-                       ArrayRef<unsigned> LiveIns,
-                       ArrayRef<RegisterValue> RegisterInitialValues,
-                       const FillFunction &Fill, raw_pwrite_stream &AsmStream) {
-  auto Context = std::make_unique<LLVMContext>();
-  std::unique_ptr<Module> Module =
+void assembleToStream(const ExegesisTarget &ET,
+                      std::unique_ptr<llvm::LLVMTargetMachine> TM,
+                      llvm::ArrayRef<unsigned> LiveIns,
+                      llvm::ArrayRef<RegisterValue> RegisterInitialValues,
+                      llvm::ArrayRef<llvm::MCInst> Instructions,
+                      llvm::raw_pwrite_stream &AsmStream) {
+  std::unique_ptr<llvm::LLVMContext> Context =
+      llvm::make_unique<llvm::LLVMContext>();
+  std::unique_ptr<llvm::Module> Module =
       createModule(Context, TM->createDataLayout());
-  auto MMIWP = std::make_unique<MachineModuleInfoWrapperPass>(TM.get());
-  MachineFunction &MF = createVoidVoidPtrMachineFunction(
-      FunctionID, Module.get(), &MMIWP.get()->getMMI());
-  MF.ensureAlignment(kFunctionAlignment);
+  std::unique_ptr<llvm::MachineModuleInfo> MMI =
+      llvm::make_unique<llvm::MachineModuleInfo>(TM.get());
+  llvm::MachineFunction &MF =
+      createVoidVoidPtrMachineFunction(FunctionID, Module.get(), MMI.get());
 
   // We need to instruct the passes that we're done with SSA and virtual
   // registers.
   auto &Properties = MF.getProperties();
-  Properties.set(MachineFunctionProperties::Property::NoVRegs);
-  Properties.reset(MachineFunctionProperties::Property::IsSSA);
-  Properties.set(MachineFunctionProperties::Property::NoPHIs);
+  Properties.set(llvm::MachineFunctionProperties::Property::NoVRegs);
+  Properties.reset(llvm::MachineFunctionProperties::Property::IsSSA);
 
   for (const unsigned Reg : LiveIns)
     MF.getRegInfo().addLiveIn(Reg);
 
-  std::vector<unsigned> RegistersSetUp;
-  for (const auto &InitValue : RegisterInitialValues) {
-    RegistersSetUp.push_back(InitValue.Register);
-  }
-  FunctionFiller Sink(MF, std::move(RegistersSetUp));
-  auto Entry = Sink.getEntry();
-  for (const unsigned Reg : LiveIns)
-    Entry.MBB->addLiveIn(Reg);
+  bool IsSnippetSetupComplete;
+  std::vector<llvm::MCInst> Code =
+      generateSnippetSetupCode(ET, TM->getMCSubtargetInfo(),
+                               RegisterInitialValues, IsSnippetSetupComplete);
 
-  const bool IsSnippetSetupComplete = generateSnippetSetupCode(
-      ET, TM->getMCSubtargetInfo(), RegisterInitialValues, Entry);
+  Code.insert(Code.end(), Instructions.begin(), Instructions.end());
 
   // If the snippet setup is not complete, we disable liveliness tracking. This
   // means that we won't know what values are in the registers.
   if (!IsSnippetSetupComplete)
-    Properties.reset(MachineFunctionProperties::Property::TracksLiveness);
-
-  Fill(Sink);
+    Properties.reset(llvm::MachineFunctionProperties::Property::TracksLiveness);
 
   // prologue/epilogue pass needs the reserved registers to be frozen, this
   // is usually done by the SelectionDAGISel pass.
   MF.getRegInfo().freezeReservedRegs(MF);
 
+  // Fill the MachineFunction from the instructions.
+  fillMachineFunction(MF, LiveIns, Code);
+
   // We create the pass manager, run the passes to populate AsmBuffer.
-  MCContext &MCContext = MMIWP->getMMI().getContext();
-  legacy::PassManager PM;
+  llvm::MCContext &MCContext = MMI->getContext();
+  llvm::legacy::PassManager PM;
 
-  TargetLibraryInfoImpl TLII(Triple(Module->getTargetTriple()));
-  PM.add(new TargetLibraryInfoWrapperPass(TLII));
+  llvm::TargetLibraryInfoImpl TLII(llvm::Triple(Module->getTargetTriple()));
+  PM.add(new llvm::TargetLibraryInfoWrapperPass(TLII));
 
-  TargetPassConfig *TPC = TM->createPassConfig(PM);
+  llvm::TargetPassConfig *TPC = TM->createPassConfig(PM);
   PM.add(TPC);
-  PM.add(MMIWP.release());
+  PM.add(MMI.release());
   TPC->printAndVerify("MachineFunctionGenerator::assemble");
   // Add target-specific passes.
   ET.addTargetSpecificPasses(PM);
   TPC->printAndVerify("After ExegesisTarget::addTargetSpecificPasses");
   // Adding the following passes:
-  // - postrapseudos: expands pseudo return instructions used on some targets.
   // - machineverifier: checks that the MachineFunction is well formed.
   // - prologepilog: saves and restore callee saved registers.
-  for (const char *PassName :
-       {"postrapseudos", "machineverifier", "prologepilog"})
+  for (const char *PassName : {"machineverifier", "prologepilog"})
     if (addPass(PM, PassName, *TPC))
-      return make_error<Failure>("Unable to add a mandatory pass");
+      llvm::report_fatal_error("Unable to add a mandatory pass");
   TPC->setInitialized();
 
   // AsmPrinter is responsible for generating the assembly into AsmBuffer.
-  if (TM->addAsmPrinter(PM, AsmStream, nullptr, CGFT_ObjectFile, MCContext))
-    return make_error<Failure>("Cannot add AsmPrinter passes");
+  if (TM->addAsmPrinter(PM, AsmStream, nullptr,
+                        llvm::TargetMachine::CGFT_ObjectFile, MCContext))
+    llvm::report_fatal_error("Cannot add AsmPrinter passes");
 
   PM.run(*Module); // Run all the passes
-  return Error::success();
 }
 
-object::OwningBinary<object::ObjectFile>
-getObjectFromBuffer(StringRef InputData) {
+llvm::object::OwningBinary<llvm::object::ObjectFile>
+getObjectFromBuffer(llvm::StringRef InputData) {
   // Storing the generated assembly into a MemoryBuffer that owns the memory.
-  std::unique_ptr<MemoryBuffer> Buffer =
-      MemoryBuffer::getMemBufferCopy(InputData);
+  std::unique_ptr<llvm::MemoryBuffer> Buffer =
+      llvm::MemoryBuffer::getMemBufferCopy(InputData);
   // Create the ObjectFile from the MemoryBuffer.
-  std::unique_ptr<object::ObjectFile> Obj =
-      cantFail(object::ObjectFile::createObjectFile(Buffer->getMemBufferRef()));
+  std::unique_ptr<llvm::object::ObjectFile> Obj = llvm::cantFail(
+      llvm::object::ObjectFile::createObjectFile(Buffer->getMemBufferRef()));
   // Returning both the MemoryBuffer and the ObjectFile.
-  return object::OwningBinary<object::ObjectFile>(std::move(Obj),
-                                                  std::move(Buffer));
+  return llvm::object::OwningBinary<llvm::object::ObjectFile>(
+      std::move(Obj), std::move(Buffer));
 }
 
-object::OwningBinary<object::ObjectFile> getObjectFromFile(StringRef Filename) {
-  return cantFail(object::ObjectFile::createObjectFile(Filename));
+llvm::object::OwningBinary<llvm::object::ObjectFile>
+getObjectFromFile(llvm::StringRef Filename) {
+  return llvm::cantFail(llvm::object::ObjectFile::createObjectFile(Filename));
 }
 
 namespace {
 
 // Implementation of this class relies on the fact that a single object with a
 // single function will be loaded into memory.
-class TrackingSectionMemoryManager : public SectionMemoryManager {
+class TrackingSectionMemoryManager : public llvm::SectionMemoryManager {
 public:
   explicit TrackingSectionMemoryManager(uintptr_t *CodeSize)
       : CodeSize(CodeSize) {}
 
   uint8_t *allocateCodeSection(uintptr_t Size, unsigned Alignment,
                                unsigned SectionID,
-                               StringRef SectionName) override {
+                               llvm::StringRef SectionName) override {
     *CodeSize = Size;
-    return SectionMemoryManager::allocateCodeSection(Size, Alignment, SectionID,
-                                                     SectionName);
+    return llvm::SectionMemoryManager::allocateCodeSection(
+        Size, Alignment, SectionID, SectionName);
   }
 
 private:
@@ -291,9 +266,9 @@ private:
 } // namespace
 
 ExecutableFunction::ExecutableFunction(
-    std::unique_ptr<LLVMTargetMachine> TM,
-    object::OwningBinary<object::ObjectFile> &&ObjectFileHolder)
-    : Context(std::make_unique<LLVMContext>()) {
+    std::unique_ptr<llvm::LLVMTargetMachine> TM,
+    llvm::object::OwningBinary<llvm::object::ObjectFile> &&ObjectFileHolder)
+    : Context(llvm::make_unique<llvm::LLVMContext>()) {
   assert(ObjectFileHolder.getBinary() && "cannot create object file");
   // Initializing the execution engine.
   // We need to use the JIT EngineKind to be able to add an object file.
@@ -301,25 +276,24 @@ ExecutableFunction::ExecutableFunction(
   uintptr_t CodeSize = 0;
   std::string Error;
   ExecEngine.reset(
-      EngineBuilder(createModule(Context, TM->createDataLayout()))
+      llvm::EngineBuilder(createModule(Context, TM->createDataLayout()))
           .setErrorStr(&Error)
           .setMCPU(TM->getTargetCPU())
-          .setEngineKind(EngineKind::JIT)
+          .setEngineKind(llvm::EngineKind::JIT)
           .setMCJITMemoryManager(
-              std::make_unique<TrackingSectionMemoryManager>(&CodeSize))
+              llvm::make_unique<TrackingSectionMemoryManager>(&CodeSize))
           .create(TM.release()));
   if (!ExecEngine)
-    report_fatal_error(Error);
+    llvm::report_fatal_error(Error);
   // Adding the generated object file containing the assembled function.
   // The ExecutionEngine makes sure the object file is copied into an
   // executable page.
   ExecEngine->addObjectFile(std::move(ObjectFileHolder));
   // Fetching function bytes.
-  const uint64_t FunctionAddress = ExecEngine->getFunctionAddress(FunctionID);
-  assert(isAligned(kFunctionAlignment, FunctionAddress) &&
-         "function is not properly aligned");
   FunctionBytes =
-      StringRef(reinterpret_cast<const char *>(FunctionAddress), CodeSize);
+      llvm::StringRef(reinterpret_cast<const char *>(
+                          ExecEngine->getFunctionAddress(FunctionID)),
+                      CodeSize);
 }
 
 } // namespace exegesis

@@ -91,7 +91,7 @@ void rdar8875247_aux();
 
 int rdar8875247_test() {
   rdar8875247 f;
-} // expected-warning{{non-void function does not return a value}}
+} // expected-warning{{control reaches end of non-void function}}
 
 struct rdar8875247_B {
   rdar8875247_B();

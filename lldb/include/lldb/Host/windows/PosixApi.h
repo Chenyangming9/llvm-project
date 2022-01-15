@@ -9,17 +9,16 @@
 #ifndef liblldb_Host_windows_PosixApi_h
 #define liblldb_Host_windows_PosixApi_h
 
-#include "lldb/Host/Config.h"
 #include "llvm/Support/Compiler.h"
 #if !defined(_WIN32)
 #error "windows/PosixApi.h being #included on non Windows system!"
 #endif
 
 // va_start, va_end, etc macros.
-#include <cstdarg>
+#include <stdarg.h>
 
 // time_t, timespec, etc.
-#include <ctime>
+#include <time.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 32768
@@ -31,44 +30,25 @@
 #define SIGKILL 9
 #define SIGSTOP 20
 
-#ifndef S_IRUSR
+#if defined(_MSC_VER)
 #define S_IRUSR S_IREAD  /* read, user */
 #define S_IWUSR S_IWRITE /* write, user */
 #define S_IXUSR 0        /* execute, user */
 #endif
-#ifndef S_IRGRP
 #define S_IRGRP 0 /* read, group */
 #define S_IWGRP 0 /* write, group */
 #define S_IXGRP 0 /* execute, group */
-#endif
-#ifndef S_IROTH
 #define S_IROTH 0 /* read, others */
 #define S_IWOTH 0 /* write, others */
 #define S_IXOTH 0 /* execute, others */
-#endif
-#ifndef S_IRWXU
 #define S_IRWXU 0
-#endif
-#ifndef S_IRWXG
 #define S_IRWXG 0
-#endif
-#ifndef S_IRWXO
 #define S_IRWXO 0
-#endif
-
-#if HAVE_SYS_TYPES_H
-// pyconfig.h typedefs this.  We require python headers to be included before
-// any LLDB headers, but there's no way to prevent python's pid_t definition
-// from leaking, so this is the best option.
-#ifndef NO_PID_T
-#include <sys/types.h>
-#endif
-#endif // HAVE_SYS_TYPES_H
 
 #ifdef _MSC_VER
 
 // PRIxxx format macros for printf()
-#include <cinttypes>
+#include <inttypes.h>
 
 // open(), close(), creat(), etc.
 #include <io.h>
@@ -98,16 +78,14 @@ typedef uint32_t pid_t;
 // custom implementations.
 int vasprintf(char **ret, const char *fmt, va_list ap);
 char *strcasestr(const char *s, const char *find);
+char *realpath(const char *name, char *resolved);
 
-#ifdef _MSC_VER
-
+int usleep(uint32_t useconds);
 char *basename(char *path);
 char *dirname(char *path);
 
 int strcasecmp(const char *s1, const char *s2);
 int strncasecmp(const char *s1, const char *s2, size_t n);
-
-#endif // _MSC_VER
 
 // empty functions
 inline int posix_openpt(int flag) { LLVM_BUILTIN_UNREACHABLE; }

@@ -61,7 +61,6 @@
 #include "llvm/CodeGen/TargetSchedule.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DebugLoc.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/MC/MCSchedule.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
@@ -112,10 +111,9 @@ public:
   static char ID;
 
 private:
-  MachineRegisterInfo *MRI = nullptr;
-  const TargetInstrInfo *TII = nullptr;
-  const TargetRegisterInfo *TRI = nullptr;
-  MachineLoopInfo *MLI = nullptr;
+  MachineRegisterInfo *MRI;
+  const TargetInstrInfo *TII;
+  const TargetRegisterInfo *TRI;
   TargetSchedModel TSchedModel;
 
   /// List of consecutive CMOV instructions.
@@ -166,7 +164,7 @@ bool X86CmovConverterPass::runOnMachineFunction(MachineFunction &MF) {
                     << "**********\n");
 
   bool Changed = false;
-  MLI = &getAnalysis<MachineLoopInfo>();
+  MachineLoopInfo &MLI = getAnalysis<MachineLoopInfo>();
   const TargetSubtargetInfo &STI = MF.getSubtarget();
   MRI = &MF.getRegInfo();
   TII = STI.getInstrInfo();
@@ -222,7 +220,7 @@ bool X86CmovConverterPass::runOnMachineFunction(MachineFunction &MF) {
   //===--------------------------------------------------------------------===//
 
   // Build up the loops in pre-order.
-  SmallVector<MachineLoop *, 4> Loops(MLI->begin(), MLI->end());
+  SmallVector<MachineLoop *, 4> Loops(MLI.begin(), MLI.end());
   // Note that we need to check size on each iteration as we accumulate child
   // loops.
   for (int i = 0; i < (int)Loops.size(); ++i)
@@ -365,13 +363,12 @@ bool X86CmovConverterPass::collectCmovCandidates(
 /// \param TrueOpDepth depth cost of CMOV true value operand.
 /// \param FalseOpDepth depth cost of CMOV false value operand.
 static unsigned getDepthOfOptCmov(unsigned TrueOpDepth, unsigned FalseOpDepth) {
-  // The depth of the result after branch conversion is
-  // TrueOpDepth * TrueOpProbability + FalseOpDepth * FalseOpProbability.
-  // As we have no info about branch weight, we assume 75% for one and 25% for
-  // the other, and pick the result with the largest resulting depth.
-  return std::max(
-      divideCeil(TrueOpDepth * 3 + FalseOpDepth, 4),
-      divideCeil(FalseOpDepth * 3 + TrueOpDepth, 4));
+  //===--------------------------------------------------------------------===//
+  // With no info about branch weight, we assume 50% for each value operand.
+  // Thus, depth of optimized CMOV instruction is the rounded up average of
+  // its True-Operand-Value-Depth and False-Operand-Value-Depth.
+  //===--------------------------------------------------------------------===//
+  return (TrueOpDepth + FalseOpDepth + 1) / 2;
 }
 
 bool X86CmovConverterPass::checkForProfitableCmovCandidates(
@@ -439,8 +436,8 @@ bool X86CmovConverterPass::checkForProfitableCmovCandidates(
           // Checks for "isUse()" as "uses()" returns also implicit definitions.
           if (!MO.isReg() || !MO.isUse())
             continue;
-          Register Reg = MO.getReg();
-          auto &RDM = RegDefMaps[Reg.isVirtual()];
+          unsigned Reg = MO.getReg();
+          auto &RDM = RegDefMaps[TargetRegisterInfo::isVirtualRegister(Reg)];
           if (MachineInstr *DefMI = RDM.lookup(Reg)) {
             OperandToDefMap[&MO] = DefMI;
             DepthInfo Info = DepthMap.lookup(DefMI);
@@ -459,8 +456,8 @@ bool X86CmovConverterPass::checkForProfitableCmovCandidates(
         for (auto &MO : MI.operands()) {
           if (!MO.isReg() || !MO.isDef())
             continue;
-          Register Reg = MO.getReg();
-          RegDefMaps[Reg.isVirtual()][Reg] = &MI;
+          unsigned Reg = MO.getReg();
+          RegDefMaps[TargetRegisterInfo::isVirtualRegister(Reg)][Reg] = &MI;
         }
 
         unsigned Latency = TSchedModel.computeInstrLatency(&MI);
@@ -538,7 +535,7 @@ bool X86CmovConverterPass::checkForProfitableCmovCandidates(
       // This is another conservative check to avoid converting CMOV instruction
       // used with tree-search like algorithm, where the branch is unpredicted.
       auto UIs = MRI->use_instructions(MI->defs().begin()->getReg());
-      if (!UIs.empty() && ++UIs.begin() == UIs.end()) {
+      if (UIs.begin() != UIs.end() && ++UIs.begin() == UIs.end()) {
         unsigned Op = UIs.begin()->getOpcode();
         if (Op == X86::MOV64rm || Op == X86::MOV32rm) {
           WorthOpGroup = false;
@@ -713,7 +710,7 @@ void X86CmovConverterPass::convertCmovInstsToBranches(
     // Skip any CMOVs in this group which don't load from memory.
     if (!MI.mayLoad()) {
       // Remember the false-side register input.
-      Register FalseReg =
+      unsigned FalseReg =
           MI.getOperand(X86::getCondFromCMov(MI) == CC ? 1 : 2).getReg();
       // Walk back through any intermediate cmovs referenced.
       while (true) {
@@ -756,7 +753,7 @@ void X86CmovConverterPass::convertCmovInstsToBranches(
 
     // Get a fresh register to use as the destination of the MOV.
     const TargetRegisterClass *RC = MRI->getRegClass(MI.getOperand(0).getReg());
-    Register TmpReg = MRI->createVirtualRegister(RC);
+    unsigned TmpReg = MRI->createVirtualRegister(RC);
 
     SmallVector<MachineInstr *, 4> NewMIs;
     bool Unfolded = TII->unfoldMemoryOperand(*MBB->getParent(), MI, TmpReg,
@@ -813,9 +810,9 @@ void X86CmovConverterPass::convertCmovInstsToBranches(
   DenseMap<unsigned, std::pair<unsigned, unsigned>> RegRewriteTable;
 
   for (MachineBasicBlock::iterator MIIt = MIItBegin; MIIt != MIItEnd; ++MIIt) {
-    Register DestReg = MIIt->getOperand(0).getReg();
-    Register Op1Reg = MIIt->getOperand(1).getReg();
-    Register Op2Reg = MIIt->getOperand(2).getReg();
+    unsigned DestReg = MIIt->getOperand(0).getReg();
+    unsigned Op1Reg = MIIt->getOperand(1).getReg();
+    unsigned Op2Reg = MIIt->getOperand(2).getReg();
 
     // If this CMOV we are processing is the opposite condition from the jump we
     // generated, then we have to swap the operands for the PHI that is going to
@@ -849,12 +846,6 @@ void X86CmovConverterPass::convertCmovInstsToBranches(
 
   // Now remove the CMOV(s).
   MBB->erase(MIItBegin, MIItEnd);
-
-  // Add new basic blocks to MachineLoopInfo.
-  if (MachineLoop *L = MLI->getLoopFor(MBB)) {
-    L->addBasicBlockToLoop(FalseMBB, MLI->getBase());
-    L->addBasicBlockToLoop(SinkMBB, MLI->getBase());
-  }
 }
 
 INITIALIZE_PASS_BEGIN(X86CmovConverterPass, DEBUG_TYPE, "X86 cmov Conversion",

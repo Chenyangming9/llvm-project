@@ -9,27 +9,23 @@ import itertools
 import six
 
 # LLDB modules
+import use_lldb_suite
 import lldb
 
-windows, linux, macosx, darwin, ios, tvos, watchos, bridgeos, darwin_all, \
-    darwin_embedded, darwin_simulator, freebsd, netbsd, bsd_all, android \
-    = range(15)
-
-__darwin_embedded = ["ios", "tvos", "watchos", "bridgeos"]
-__darwin_simulators = ["iphonesimulator", "watchsimulator", "appletvsimulator"]
+windows, linux, macosx, darwin, ios, tvos, watchos, bridgeos, darwin_all, darwin_embedded, freebsd, netbsd, bsd_all, android = range(
+    14)
 
 __name_lookup = {
     windows: ["windows"],
     linux: ["linux"],
     macosx: ["macosx"],
     darwin: ["darwin"],
-    ios: ["ios", "iphonesimulator"],
-    tvos: ["tvos", "appletvsimulator"],
-    watchos: ["watchos", "watchsimulator"],
+    ios: ["ios"],
+    tvos: ["tvos"],
+    watchos: ["watchos"],
     bridgeos: ["bridgeos"],
-    darwin_all: ["macosx", "darwin"] + __darwin_embedded + __darwin_simulators,
-    darwin_embedded: __darwin_embedded + __darwin_simulators,
-    darwin_simulator: __darwin_simulators,
+    darwin_all: ["macosx", "darwin", "ios", "tvos", "watchos", "bridgeos"],
+    darwin_embedded: ["ios", "tvos", "watchos", "bridgeos"],
     freebsd: ["freebsd"],
     netbsd: ["netbsd"],
     bsd_all: ["freebsd", "netbsd"],

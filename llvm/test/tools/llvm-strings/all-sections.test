@@ -1,7 +1,3 @@
-## Show that the -a/--all switch is accepted. GNU strings checks specific object
-## file sections unless --all is specified. llvm-strings just looks at the entire
-## file, so this option is silently ignored.
-
-RUN: echo abcd | llvm-strings -a | FileCheck %s
-RUN: echo abcd | llvm-strings --all | FileCheck %s
+RUN: llvm-strings -a %S/Inputs/abcd | FileCheck %s
+RUN: llvm-strings --all %S/Inputs/abcd | FileCheck %s
 CHECK: abcd

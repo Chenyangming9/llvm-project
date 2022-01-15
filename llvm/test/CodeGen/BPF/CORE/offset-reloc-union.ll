@@ -1,6 +1,5 @@
-; RUN: opt -O2 %s | llvm-dis > %t1
-; RUN: llc -filetype=asm -o - %t1 | FileCheck -check-prefixes=CHECK %s
-; RUN: llc -mattr=+alu32 -filetype=asm -o - %t1 | FileCheck -check-prefixes=CHECK %s
+; RUN: llc -march=bpfel -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK %s
+; RUN: llc -march=bpfeb -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK %s
 ; Source code:
 ;   union sk_buff {
 ;     int i;
@@ -22,9 +21,7 @@
 ;     return dev_id;
 ;   }
 ; Compilation flag:
-;   clang -target bpf -O2 -g -S -emit-llvm -Xclang -disable-llvm-passes test.c
-
-target triple = "bpf"
+;   clang -target bpf -O2 -g -S -emit-llvm test.c
 
 %union.sk_buff = type { %struct.anon }
 %struct.anon = type { i32, %union.anon }
@@ -38,7 +35,7 @@ define dso_local i32 @bpf_prog(%union.sk_buff*) local_unnamed_addr #0 !dbg !15 {
   call void @llvm.lifetime.start.p0i8(i64 4, i8* nonnull %3) #4, !dbg !35
   %4 = tail call %union.sk_buff* @llvm.preserve.union.access.index.p0s_union.sk_buffs.p0s_union.sk_buffs(%union.sk_buff* %0, i32 1), !dbg !36, !llvm.preserve.access.index !19
   %5 = getelementptr inbounds %union.sk_buff, %union.sk_buff* %4, i64 0, i32 0, !dbg !36
-  %6 = tail call %union.anon* @llvm.preserve.struct.access.index.p0s_union.anons.p0s_struct.anons(%struct.anon* elementtype(%struct.anon) %5, i32 1, i32 1), !dbg !36, !llvm.preserve.access.index !23
+  %6 = tail call %union.anon* @llvm.preserve.struct.access.index.p0s_union.anons.p0s_struct.anons(%struct.anon* %5, i32 1, i32 1), !dbg !36, !llvm.preserve.access.index !23
   %7 = tail call %union.anon* @llvm.preserve.union.access.index.p0s_union.anons.p0s_union.anons(%union.anon* %6, i32 0), !dbg !36, !llvm.preserve.access.index !27
   %8 = bitcast %union.anon* %7 to i8*, !dbg !36
   %9 = call i32 inttoptr (i64 4 to i32 (i8*, i32, i8*)*)(i8* nonnull %3, i32 4, i8* %8) #4, !dbg !37
@@ -97,7 +94,7 @@ define dso_local i32 @bpf_prog(%union.sk_buff*) local_unnamed_addr #0 !dbg !15 {
 ; CHECK-NEXT:        .long   41
 ; CHECK-NEXT:        .long   1
 ; CHECK-NEXT:        .long   45                      # BTF_KIND_FUNC(id = 7)
-; CHECK-NEXT:        .long   201326593               # 0xc000001
+; CHECK-NEXT:        .long   201326592               # 0xc000000
 ; CHECK-NEXT:        .long   6
 ; CHECK-NEXT:        .byte   0                       # string offset=0
 ; CHECK-NEXT:        .ascii  "sk_buff"               # string offset=1
@@ -130,22 +127,23 @@ define dso_local i32 @bpf_prog(%union.sk_buff*) local_unnamed_addr #0 !dbg !15 {
 ; CHECK-NEXT:        .short  60319                   # 0xeb9f
 ; CHECK-NEXT:        .byte   1
 ; CHECK-NEXT:        .byte   0
-; CHECK-NEXT:        .long   32
+; CHECK-NEXT:        .long   40
 ; CHECK-NEXT:        .long   0
 ; CHECK-NEXT:        .long   20
 ; CHECK-NEXT:        .long   20
-; CHECK-NEXT:        .long   {{[0-9]+}}
-; CHECK-NEXT:        .long   {{[0-9]+}}
-; CHECK-NEXT:        .long   28
+; CHECK-NEXT:        .long   76
+; CHECK-NEXT:        .long   96
+; CHECK-NEXT:        .long   24
+; CHECK-NEXT:        .long   120
+; CHECK-NEXT:        .long   0
 ; CHECK-NEXT:        .long   8                       # FuncInfo
 
-; CHECK:             .long   16                      # FieldReloc
-; CHECK-NEXT:        .long   54                      # Field reloc section string offset=54
+; CHECK:             .long   12                      # OffsetReloc
+; CHECK-NEXT:        .long   54                      # Offset reloc section string offset=54
 ; CHECK-NEXT:        .long   1
-; CHECK-NEXT:        .long   .Ltmp{{[0-9]+}}
+; CHECK-NEXT:        .long   .Ltmp2
 ; CHECK-NEXT:        .long   2
 ; CHECK-NEXT:        .long   97
-; CHECK-NEXT:        .long   0
 
 ; Function Attrs: argmemonly nounwind
 declare void @llvm.lifetime.start.p0i8(i64 immarg, i8* nocapture) #1
@@ -165,7 +163,7 @@ declare void @llvm.lifetime.end.p0i8(i64 immarg, i8* nocapture) #1
 ; Function Attrs: nounwind readnone speculatable
 declare void @llvm.dbg.value(metadata, metadata, metadata) #3
 
-attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "frame-pointer"="all" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #1 = { argmemonly nounwind }
 attributes #2 = { nounwind readnone }
 attributes #3 = { nounwind readnone speculatable }

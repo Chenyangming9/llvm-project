@@ -1,4 +1,4 @@
-//===-- StringLexer.h -------------------------------------------*- C++ -*-===//
+//===--------------------- StringLexer.h ------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,14 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_UTILITY_STRINGLEXER_H
-#define LLDB_UTILITY_STRINGLEXER_H
+#ifndef utility_StringLexer_h_
+#define utility_StringLexer_h_
 
 #include <initializer_list>
 #include <string>
 #include <utility>
 
-namespace lldb_private {
+namespace lldb_utility {
 
 class StringLexer {
 public:
@@ -53,4 +53,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_UTILITY_STRINGLEXER_H
+#endif // #ifndef utility_StringLexer_h_

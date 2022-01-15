@@ -6,13 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-// XFAIL: LIBCXX-WINDOWS-FIXME
-
 // <regex>
 
 // template <class charT> struct regex_traits;
 
 // bool isctype(charT c, char_class_type f) const;
+
+// TODO(EricWF): This test takes 40+ minutes to build with Clang 3.8 under ASAN or MSAN.
+// UNSUPPORTED: asan, msan
 
 
 #include <regex>

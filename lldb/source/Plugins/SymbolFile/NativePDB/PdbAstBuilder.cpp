@@ -14,11 +14,11 @@
 #include "llvm/DebugInfo/PDB/Native/TpiStream.h"
 #include "llvm/Demangle/MicrosoftDemangle.h"
 
-#include "Plugins/ExpressionParser/Clang/ClangASTMetadata.h"
-#include "Plugins/ExpressionParser/Clang/ClangUtil.h"
 #include "Plugins/Language/CPlusPlus/MSVCUndecoratedNameParser.h"
-#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/Core/Module.h"
+#include "lldb/Symbol/ClangASTContext.h"
+#include "lldb/Symbol/ClangExternalASTSourceCommon.h"
+#include "lldb/Symbol/ClangUtil.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Utility/LLDBAssert.h"
 
@@ -121,6 +121,13 @@ AnyScopesHaveTemplateParams(llvm::ArrayRef<llvm::ms_demangle::Node *> scopes) {
   return false;
 }
 
+static ClangASTContext &GetClangASTContext(ObjectFile &obj) {
+  TypeSystem *ts =
+      obj.GetModule()->GetTypeSystemForLanguage(lldb::eLanguageTypeC_plus_plus);
+  lldbassert(ts);
+  return static_cast<ClangASTContext &>(*ts);
+}
+
 static llvm::Optional<clang::CallingConv>
 TranslateCallingConvention(llvm::codeview::CallingConvention conv) {
   using CC = llvm::codeview::CallingConvention;
@@ -178,7 +185,7 @@ GetNestedTagDefinition(const NestedTypeRecord &Record,
   // single component of a mangled name.  So we can inject it into the parent's
   // mangled name to see if it matches.
   CVTagRecord child = CVTagRecord::create(cvt);
-  std::string qname = std::string(parent.asTag().getUniqueName());
+  std::string qname = parent.asTag().getUniqueName();
   if (qname.size() < 4 || child.asTag().getUniqueName().size() < 4)
     return llvm::None;
 
@@ -202,8 +209,8 @@ static bool IsAnonymousNamespaceName(llvm::StringRef name) {
   return name == "`anonymous namespace'" || name == "`anonymous-namespace'";
 }
 
-PdbAstBuilder::PdbAstBuilder(ObjectFile &obj, PdbIndex &index, TypeSystemClang &clang)
-    : m_index(index), m_clang(clang) {
+PdbAstBuilder::PdbAstBuilder(ObjectFile &obj, PdbIndex &index)
+    : m_index(index), m_clang(GetClangASTContext(obj)) {
   BuildParentMap();
 }
 
@@ -221,7 +228,7 @@ PdbAstBuilder::CreateDeclInfoForType(const TagRecord &record, TypeIndex ti) {
   StringView sv(record.UniqueName.begin(), record.UniqueName.size());
   llvm::ms_demangle::TagTypeNode *ttn = demangler.parseTagUniqueName(sv);
   if (demangler.Error)
-    return {m_clang.GetTranslationUnitDecl(), std::string(record.UniqueName)};
+    return {m_clang.GetTranslationUnitDecl(), record.UniqueName};
 
   llvm::ms_demangle::IdentifierNode *idn =
       ttn->QualifiedName->getUnqualifiedIdentifier();
@@ -248,7 +255,7 @@ PdbAstBuilder::CreateDeclInfoForType(const TagRecord &record, TypeIndex ti) {
     // a NamespaceDecl and a CXXRecordDecl, so instead we create a class at
     // global scope with the fully qualified name.
     if (AnyScopesHaveTemplateParams(scopes))
-      return {context, std::string(record.Name)};
+      return {context, record.Name};
 
     for (llvm::ms_demangle::Node *scope : scopes) {
       auto *nii = static_cast<llvm::ms_demangle::NamedIdentifierNode *>(scope);
@@ -458,9 +465,9 @@ clang::Decl *PdbAstBuilder::GetOrCreateSymbolForId(PdbCompilandSymId id) {
   }
 }
 
-llvm::Optional<CompilerDecl> PdbAstBuilder::GetOrCreateDeclForUid(PdbSymUid uid) {
+clang::Decl *PdbAstBuilder::GetOrCreateDeclForUid(PdbSymUid uid) {
   if (clang::Decl *result = TryGetDecl(uid))
-    return ToCompilerDecl(*result);
+    return result;
 
   clang::Decl *result = nullptr;
   switch (uid.kind()) {
@@ -473,13 +480,13 @@ llvm::Optional<CompilerDecl> PdbAstBuilder::GetOrCreateDeclForUid(PdbSymUid uid)
       result = tag;
       break;
     }
-    return llvm::None;
+    return nullptr;
   }
   default:
-    return llvm::None;
+    return nullptr;
   }
   m_uid_to_decl[toOpaqueUid(uid)] = result;
-  return ToCompilerDecl(*result);
+  return result;
 }
 
 clang::DeclContext *PdbAstBuilder::GetOrCreateDeclContextForUid(PdbSymUid uid) {
@@ -487,10 +494,8 @@ clang::DeclContext *PdbAstBuilder::GetOrCreateDeclContextForUid(PdbSymUid uid) {
     if (uid.asCompilandSym().offset == 0)
       return FromCompilerDeclContext(GetTranslationUnitDecl());
   }
-  auto option = GetOrCreateDeclForUid(uid);
-  if (!option)
-    return nullptr;
-  clang::Decl *decl = FromCompilerDecl(option.getValue());
+
+  clang::Decl *decl = GetOrCreateDeclForUid(uid);
   if (!decl)
     return nullptr;
 
@@ -507,7 +512,7 @@ PdbAstBuilder::CreateDeclInfoForUndecoratedName(llvm::StringRef name) {
   llvm::StringRef uname = specs.back().GetBaseName();
   specs = specs.drop_back();
   if (specs.empty())
-    return {context, std::string(name)};
+    return {context, name};
 
   llvm::StringRef scope_name = specs.back().GetFullName();
 
@@ -517,7 +522,7 @@ PdbAstBuilder::CreateDeclInfoForUndecoratedName(llvm::StringRef name) {
     clang::QualType qt = GetOrCreateType(types.back());
     clang::TagDecl *tag = qt->getAsTagDecl();
     if (tag)
-      return {clang::TagDecl::castToDeclContext(tag), std::string(uname)};
+      return {clang::TagDecl::castToDeclContext(tag), uname};
     types.pop_back();
   }
 
@@ -526,7 +531,7 @@ PdbAstBuilder::CreateDeclInfoForUndecoratedName(llvm::StringRef name) {
     std::string ns_name = spec.GetBaseName().str();
     context = GetOrCreateNamespaceDecl(ns_name.c_str(), *context);
   }
-  return {context, std::string(uname)};
+  return {context, uname};
 }
 
 clang::DeclContext *
@@ -655,8 +660,8 @@ bool PdbAstBuilder::CompleteTagDecl(clang::TagDecl &tag) {
 
   lldbassert(IsTagRecord(type_id, m_index.tpi()));
 
-  clang::QualType tag_qt = m_clang.getASTContext().getTypeDeclType(&tag);
-  TypeSystemClang::SetHasExternalStorage(tag_qt.getAsOpaquePtr(), false);
+  clang::QualType tag_qt = m_clang.getASTContext()->getTypeDeclType(&tag);
+  ClangASTContext::SetHasExternalStorage(tag_qt.getAsOpaquePtr(), false);
 
   TypeIndex tag_ti = type_id.index;
   CVType cvt = m_index.tpi().getType(tag_ti);
@@ -681,7 +686,7 @@ bool PdbAstBuilder::CompleteTagDecl(clang::TagDecl &tag) {
   // Visit all members of this class, then perform any finalization necessary
   // to complete the class.
   CompilerType ct = ToCompilerType(tag_qt);
-  UdtRecordCompleter completer(best_ti, ct, tag, *this, m_index);
+  UdtRecordCompleter completer(best_ti, ct, tag, *this, m_index.tpi());
   auto error =
       llvm::codeview::visitMemberRecordStream(field_list_cvt.data(), completer);
   completer.complete();
@@ -700,7 +705,7 @@ clang::QualType PdbAstBuilder::CreateSimpleType(TypeIndex ti) {
 
   if (ti.getSimpleMode() != SimpleTypeMode::Direct) {
     clang::QualType direct_type = GetOrCreateType(ti.makeDirect());
-    return m_clang.getASTContext().getPointerType(direct_type);
+    return m_clang.getASTContext()->getPointerType(direct_type);
   }
 
   if (ti.getSimpleKind() == SimpleTypeKind::NotTranslated)
@@ -725,17 +730,19 @@ clang::QualType PdbAstBuilder::CreatePointerType(const PointerRecord &pointer) {
     MemberPointerInfo mpi = pointer.getMemberInfo();
     clang::QualType class_type = GetOrCreateType(mpi.ContainingType);
 
-    return m_clang.getASTContext().getMemberPointerType(
+    return m_clang.getASTContext()->getMemberPointerType(
         pointee_type, class_type.getTypePtr());
   }
 
   clang::QualType pointer_type;
   if (pointer.getMode() == PointerMode::LValueReference)
-    pointer_type = m_clang.getASTContext().getLValueReferenceType(pointee_type);
+    pointer_type =
+        m_clang.getASTContext()->getLValueReferenceType(pointee_type);
   else if (pointer.getMode() == PointerMode::RValueReference)
-    pointer_type = m_clang.getASTContext().getRValueReferenceType(pointee_type);
+    pointer_type =
+        m_clang.getASTContext()->getRValueReferenceType(pointee_type);
   else
-    pointer_type = m_clang.getASTContext().getPointerType(pointee_type);
+    pointer_type = m_clang.getASTContext()->getPointerType(pointee_type);
 
   if ((pointer.getOptions() & PointerOptions::Const) != PointerOptions::None)
     pointer_type.addConst();
@@ -777,12 +784,12 @@ clang::QualType PdbAstBuilder::CreateRecordType(PdbTypeSymId id,
   metadata.SetIsDynamicCXXType(false);
 
   CompilerType ct =
-      m_clang.CreateRecordType(context, OptionalClangModuleID(), access, uname,
-                               ttk, lldb::eLanguageTypeC_plus_plus, &metadata);
+      m_clang.CreateRecordType(context, access, uname.c_str(), ttk,
+                               lldb::eLanguageTypeC_plus_plus, &metadata);
 
   lldbassert(ct.IsValid());
 
-  TypeSystemClang::StartTagDeclarationDefinition(ct);
+  ClangASTContext::StartTagDeclarationDefinition(ct);
 
   // Even if it's possible, don't complete it at this point. Just mark it
   // forward resolved, and if/when LLDB needs the full definition, it can
@@ -790,7 +797,7 @@ clang::QualType PdbAstBuilder::CreateRecordType(PdbTypeSymId id,
   clang::QualType result =
       clang::QualType::getFromOpaquePtr(ct.GetOpaqueQualType());
 
-  TypeSystemClang::SetHasExternalStorage(result.getAsOpaquePtr(), true);
+  ClangASTContext::SetHasExternalStorage(result.getAsOpaquePtr(), true);
   return result;
 }
 
@@ -805,8 +812,7 @@ clang::NamespaceDecl *
 PdbAstBuilder::GetOrCreateNamespaceDecl(const char *name,
                                         clang::DeclContext &context) {
   return m_clang.GetUniqueNamespaceDeclaration(
-      IsAnonymousNamespaceName(name) ? nullptr : name, &context,
-      OptionalClangModuleID());
+      IsAnonymousNamespaceName(name) ? nullptr : name, &context);
 }
 
 clang::BlockDecl *
@@ -816,8 +822,7 @@ PdbAstBuilder::GetOrCreateBlockDecl(PdbCompilandSymId block_id) {
 
   clang::DeclContext *scope = GetParentDeclContext(block_id);
 
-  clang::BlockDecl *block_decl =
-      m_clang.CreateBlockDeclaration(scope, OptionalClangModuleID());
+  clang::BlockDecl *block_decl = m_clang.CreateBlockDeclaration(scope);
   m_uid_to_decl.insert({toOpaqueUid(block_id), block_decl});
 
   DeclStatus status;
@@ -834,7 +839,7 @@ clang::VarDecl *PdbAstBuilder::CreateVariableDecl(PdbSymUid uid, CVSymbol sym,
   clang::QualType qt = GetOrCreateType(var_info.type);
 
   clang::VarDecl *var_decl = m_clang.CreateVariableDeclaration(
-      &scope, OptionalClangModuleID(), var_info.name.str().c_str(), qt);
+      &scope, var_info.name.str().c_str(), qt);
 
   m_uid_to_decl[toOpaqueUid(uid)] = var_decl;
   DeclStatus status;
@@ -879,10 +884,10 @@ PdbAstBuilder::GetOrCreateTypedefDecl(PdbGlobalSymId id) {
   PdbTypeSymId real_type_id{udt.Type, false};
   clang::QualType qt = GetOrCreateType(real_type_id);
 
-  std::string uname = std::string(DropNameScope(udt.Name));
+  std::string uname = DropNameScope(udt.Name);
 
-  CompilerType ct = ToCompilerType(qt).CreateTypedef(
-      uname.c_str(), ToCompilerDeclContext(*scope), 0);
+  CompilerType ct = m_clang.CreateTypedefType(ToCompilerType(qt), uname.c_str(),
+                                              ToCompilerDeclContext(*scope));
   clang::TypedefNameDecl *tnd = m_clang.GetAsTypedefDecl(ct);
   DeclStatus status;
   status.resolved = true;
@@ -1015,7 +1020,7 @@ PdbAstBuilder::GetOrCreateFunctionDecl(PdbCompilandSymId func_id) {
   proc_name.consume_front("::");
 
   clang::FunctionDecl *function_decl = m_clang.CreateFunctionDeclaration(
-      parent, OptionalClangModuleID(), proc_name, func_ct, storage, false);
+      parent, proc_name.str().c_str(), func_ct, storage, false);
 
   lldbassert(m_uid_to_decl.count(toOpaqueUid(func_id)) == 0);
   m_uid_to_decl[toOpaqueUid(func_id)] = function_decl;
@@ -1081,10 +1086,10 @@ void PdbAstBuilder::CreateFunctionParameters(PdbCompilandSymId func_id,
     PdbCompilandSymId param_uid(func_id.modi, record_offset);
     clang::QualType qt = GetOrCreateType(param_type);
 
-    CompilerType param_type_ct = m_clang.GetType(qt);
+    CompilerType param_type_ct(&m_clang, qt.getAsOpaquePtr());
     clang::ParmVarDecl *param = m_clang.CreateParameterDeclaration(
-        &function_decl, OptionalClangModuleID(), param_name.str().c_str(),
-        param_type_ct, clang::SC_None, true);
+        &function_decl, param_name.str().c_str(), param_type_ct,
+        clang::SC_None);
     lldbassert(m_uid_to_decl.count(toOpaqueUid(param_uid)) == 0);
 
     m_uid_to_decl[toOpaqueUid(param_uid)] = param;
@@ -1093,7 +1098,7 @@ void PdbAstBuilder::CreateFunctionParameters(PdbCompilandSymId func_id,
   }
 
   if (!params.empty())
-    m_clang.SetFunctionParameters(&function_decl, params);
+    m_clang.SetFunctionParameters(&function_decl, params.data(), params.size());
 }
 
 clang::QualType PdbAstBuilder::CreateEnumType(PdbTypeSymId id,
@@ -1105,11 +1110,11 @@ clang::QualType PdbAstBuilder::CreateEnumType(PdbTypeSymId id,
 
   Declaration declaration;
   CompilerType enum_ct = m_clang.CreateEnumerationType(
-      uname.c_str(), decl_context, OptionalClangModuleID(), declaration,
-      ToCompilerType(underlying_type), er.isScoped());
+      uname.c_str(), decl_context, declaration, ToCompilerType(underlying_type),
+      er.isScoped());
 
-  TypeSystemClang::StartTagDeclarationDefinition(enum_ct);
-  TypeSystemClang::SetHasExternalStorage(enum_ct.GetOpaqueQualType(), true);
+  ClangASTContext::StartTagDeclarationDefinition(enum_ct);
+  ClangASTContext::SetHasExternalStorage(enum_ct.GetOpaqueQualType(), true);
 
   return clang::QualType::getFromOpaquePtr(enum_ct.GetOpaqueQualType());
 }
@@ -1337,7 +1342,7 @@ void PdbAstBuilder::ParseDeclsForContext(clang::DeclContext &context) {
 }
 
 CompilerDecl PdbAstBuilder::ToCompilerDecl(clang::Decl &decl) {
-  return m_clang.GetCompilerDecl(&decl);
+  return {&m_clang, &decl};
 }
 
 CompilerType PdbAstBuilder::ToCompilerType(clang::QualType qt) {
@@ -1346,11 +1351,11 @@ CompilerType PdbAstBuilder::ToCompilerType(clang::QualType qt) {
 
 CompilerDeclContext
 PdbAstBuilder::ToCompilerDeclContext(clang::DeclContext &context) {
-  return m_clang.CreateDeclContext(&context);
+  return {&m_clang, &context};
 }
 
 clang::Decl * PdbAstBuilder::FromCompilerDecl(CompilerDecl decl) {
-  return ClangUtil::GetDecl(decl);
+  return static_cast<clang::Decl *>(decl.GetOpaqueDecl());
 }
 
 clang::DeclContext *

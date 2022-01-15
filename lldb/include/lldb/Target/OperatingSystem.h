@@ -7,8 +7,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TARGET_OPERATINGSYSTEM_H
-#define LLDB_TARGET_OPERATINGSYSTEM_H
+#ifndef liblldb_OperatingSystem_h_
+#define liblldb_OperatingSystem_h_
+
 
 #include "lldb/Core/PluginInterface.h"
 #include "lldb/lldb-private.h"
@@ -40,7 +41,10 @@ public:
   ///     should be used. If NULL, pick the best plug-in.
   static OperatingSystem *FindPlugin(Process *process, const char *plugin_name);
 
+  // Class Methods
   OperatingSystem(Process *process);
+
+  ~OperatingSystem() override;
 
   // Plug-in Methods
   virtual bool UpdateThreadList(ThreadList &old_thread_list,
@@ -65,8 +69,10 @@ protected:
   // Member variables.
   Process
       *m_process; ///< The process that this dynamic loader plug-in is tracking.
+private:
+  DISALLOW_COPY_AND_ASSIGN(OperatingSystem);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_TARGET_OPERATINGSYSTEM_H
+#endif // liblldb_OperatingSystem_h_

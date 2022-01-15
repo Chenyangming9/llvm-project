@@ -15,8 +15,8 @@ CodeTemplate::CodeTemplate(CodeTemplate &&) = default;
 
 CodeTemplate &CodeTemplate::operator=(CodeTemplate &&) = default;
 
-InstructionTemplate::InstructionTemplate(const Instruction *Instr)
-    : Instr(Instr), VariableValues(Instr->Variables.size()) {}
+InstructionTemplate::InstructionTemplate(const Instruction &Instr)
+    : Instr(Instr), VariableValues(Instr.Variables.size()) {}
 
 InstructionTemplate::InstructionTemplate(InstructionTemplate &&) = default;
 
@@ -29,45 +29,47 @@ InstructionTemplate &InstructionTemplate::
 operator=(const InstructionTemplate &) = default;
 
 unsigned InstructionTemplate::getOpcode() const {
-  return Instr->Description.getOpcode();
+  return Instr.Description->getOpcode();
 }
 
-MCOperand &InstructionTemplate::getValueFor(const Variable &Var) {
+llvm::MCOperand &InstructionTemplate::getValueFor(const Variable &Var) {
   return VariableValues[Var.getIndex()];
 }
 
-const MCOperand &InstructionTemplate::getValueFor(const Variable &Var) const {
+const llvm::MCOperand &
+InstructionTemplate::getValueFor(const Variable &Var) const {
   return VariableValues[Var.getIndex()];
 }
 
-MCOperand &InstructionTemplate::getValueFor(const Operand &Op) {
-  return getValueFor(Instr->Variables[Op.getVariableIndex()]);
+llvm::MCOperand &InstructionTemplate::getValueFor(const Operand &Op) {
+  return getValueFor(Instr.Variables[Op.getVariableIndex()]);
 }
 
-const MCOperand &InstructionTemplate::getValueFor(const Operand &Op) const {
-  return getValueFor(Instr->Variables[Op.getVariableIndex()]);
+const llvm::MCOperand &
+InstructionTemplate::getValueFor(const Operand &Op) const {
+  return getValueFor(Instr.Variables[Op.getVariableIndex()]);
 }
 
 bool InstructionTemplate::hasImmediateVariables() const {
-  return any_of(Instr->Variables, [this](const Variable &Var) {
-    return Instr->getPrimaryOperand(Var).isImmediate();
+  return llvm::any_of(Instr.Variables, [this](const Variable &Var) {
+    return Instr.getPrimaryOperand(Var).isImmediate();
   });
 }
 
-MCInst InstructionTemplate::build() const {
-  MCInst Result;
-  Result.setOpcode(Instr->Description.Opcode);
-  for (const auto &Op : Instr->Operands)
+llvm::MCInst InstructionTemplate::build() const {
+  llvm::MCInst Result;
+  Result.setOpcode(Instr.Description->Opcode);
+  for (const auto &Op : Instr.Operands)
     if (Op.isExplicit())
       Result.addOperand(getValueFor(Op));
   return Result;
 }
 
 bool isEnumValue(ExecutionMode Execution) {
-  return isPowerOf2_32(static_cast<uint32_t>(Execution));
+  return llvm::isPowerOf2_32(static_cast<uint32_t>(Execution));
 }
 
-StringRef getName(ExecutionMode Bit) {
+llvm::StringRef getName(ExecutionMode Bit) {
   assert(isEnumValue(Bit) && "Bit must be a power of two");
   switch (Bit) {
   case ExecutionMode::UNKNOWN:
@@ -90,7 +92,7 @@ StringRef getName(ExecutionMode Bit) {
   llvm_unreachable("Missing enum case");
 }
 
-ArrayRef<ExecutionMode> getAllExecutionBits() {
+llvm::ArrayRef<ExecutionMode> getAllExecutionBits() {
   static const ExecutionMode kAllExecutionModeBits[] = {
       ExecutionMode::ALWAYS_SERIAL_IMPLICIT_REGS_ALIAS,
       ExecutionMode::ALWAYS_SERIAL_TIED_REGS_ALIAS,
@@ -100,11 +102,12 @@ ArrayRef<ExecutionMode> getAllExecutionBits() {
       ExecutionMode::ALWAYS_PARALLEL_MISSING_USE_OR_DEF,
       ExecutionMode::PARALLEL_VIA_EXPLICIT_REGS,
   };
-  return makeArrayRef(kAllExecutionModeBits);
+  return llvm::makeArrayRef(kAllExecutionModeBits);
 }
 
-SmallVector<ExecutionMode, 4> getExecutionModeBits(ExecutionMode Execution) {
-  SmallVector<ExecutionMode, 4> Result;
+llvm::SmallVector<ExecutionMode, 4>
+getExecutionModeBits(ExecutionMode Execution) {
+  llvm::SmallVector<ExecutionMode, 4> Result;
   for (const auto Bit : getAllExecutionBits())
     if ((Execution & Bit) == Bit)
       Result.push_back(Bit);

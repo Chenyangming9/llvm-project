@@ -43,11 +43,11 @@ MSP430Subtarget::initializeSubtargetDependencies(StringRef CPU, StringRef FS) {
   ExtendedInsts = false;
   HWMultMode = NoHWMult;
 
-  StringRef CPUName = CPU;
+  std::string CPUName = CPU;
   if (CPUName.empty())
     CPUName = "msp430";
 
-  ParseSubtargetFeatures(CPUName, /*TuneCPU*/ CPUName, FS);
+  ParseSubtargetFeatures(CPUName, FS);
 
   if (HWMultModeOption != NoHWMult)
     HWMultMode = HWMultModeOption;
@@ -57,5 +57,5 @@ MSP430Subtarget::initializeSubtargetDependencies(StringRef CPU, StringRef FS) {
 
 MSP430Subtarget::MSP430Subtarget(const Triple &TT, const std::string &CPU,
                                  const std::string &FS, const TargetMachine &TM)
-    : MSP430GenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS), FrameLowering(),
+    : MSP430GenSubtargetInfo(TT, CPU, FS), FrameLowering(),
       InstrInfo(initializeSubtargetDependencies(CPU, FS)), TLInfo(TM, *this) {}

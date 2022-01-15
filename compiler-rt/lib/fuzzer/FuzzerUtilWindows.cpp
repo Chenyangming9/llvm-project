@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 // Misc utils implementation for Windows.
 //===----------------------------------------------------------------------===//
-#include "FuzzerPlatform.h"
+#include "FuzzerDefs.h"
 #if LIBFUZZER_WINDOWS
 #include "FuzzerCommand.h"
 #include "FuzzerIO.h"
@@ -16,7 +16,6 @@
 #include <chrono>
 #include <cstring>
 #include <errno.h>
-#include <io.h>
 #include <iomanip>
 #include <signal.h>
 #include <stdio.h>
@@ -60,15 +59,7 @@ static LONG CALLBACK ExceptionHandler(PEXCEPTION_POINTERS ExceptionInfo) {
       if (HandlerOpt->HandleFpe)
         Fuzzer::StaticCrashSignalCallback();
       break;
-    // This is an undocumented exception code corresponding to a Visual C++
-    // Exception.
-    //
-    // See: https://devblogs.microsoft.com/oldnewthing/20100730-00/?p=13273
-    case 0xE06D7363:
-      if (HandlerOpt->HandleWinExcept)
-        Fuzzer::StaticCrashSignalCallback();
-      break;
-      // TODO: Handle (Options.HandleXfsz)
+    // TODO: handle (Options.HandleXfsz)
   }
   return EXCEPTION_CONTINUE_SEARCH;
 }
@@ -120,10 +111,14 @@ static TimerQ Timer;
 
 static void CrashHandler(int) { Fuzzer::StaticCrashSignalCallback(); }
 
+bool Mprotect(void *Ptr, size_t Size, bool AllowReadWrite) {
+  return false;  // UNIMPLEMENTED
+}
+
 void SetSignalHandler(const FuzzingOptions& Options) {
   HandlerOpt = &Options;
 
-  if (Options.HandleAlrm && Options.UnitTimeoutSec > 0)
+  if (Options.UnitTimeoutSec > 0)
     Timer.SetTimer(Options.UnitTimeoutSec / 2 + 1);
 
   if (Options.HandleInt || Options.HandleTerm)
@@ -135,7 +130,7 @@ void SetSignalHandler(const FuzzingOptions& Options) {
     }
 
   if (Options.HandleSegv || Options.HandleBus || Options.HandleIll ||
-      Options.HandleFpe || Options.HandleWinExcept)
+      Options.HandleFpe)
     SetUnhandledExceptionFilter(ExceptionHandler);
 
   if (Options.HandleAbrt)
@@ -160,26 +155,9 @@ FILE *OpenProcessPipe(const char *Command, const char *Mode) {
   return _popen(Command, Mode);
 }
 
-int CloseProcessPipe(FILE *F) {
-  return _pclose(F);
-}
-
 int ExecuteCommand(const Command &Cmd) {
   std::string CmdLine = Cmd.toString();
   return system(CmdLine.c_str());
-}
-
-bool ExecuteCommand(const Command &Cmd, std::string *CmdOutput) {
-  FILE *Pipe = _popen(Cmd.toString().c_str(), "r");
-  if (!Pipe)
-    return false;
-
-  if (CmdOutput) {
-    char TmpBuffer[128];
-    while (fgets(TmpBuffer, sizeof(TmpBuffer), Pipe))
-      CmdOutput->append(TmpBuffer);
-  }
-  return _pclose(Pipe) == 0;
 }
 
 const void *SearchMemory(const void *Data, size_t DataLen, const void *Patt,
@@ -214,14 +192,6 @@ std::string DisassembleCmd(const std::string &FileName) {
 
 std::string SearchRegexCmd(const std::string &Regex) {
   return "findstr /r \"" + Regex + "\"";
-}
-
-void DiscardOutput(int Fd) {
-  FILE* Temp = fopen("nul", "w");
-  if (!Temp)
-    return;
-  _dup2(_fileno(Temp), Fd);
-  fclose(Temp);
 }
 
 } // namespace fuzzer

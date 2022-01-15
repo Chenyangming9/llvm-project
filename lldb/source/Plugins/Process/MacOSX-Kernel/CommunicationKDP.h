@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_MACOSX_KERNEL_COMMUNICATIONKDP_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_MACOSX_KERNEL_COMMUNICATIONKDP_H
+#ifndef liblldb_CommunicationKDP_h_
+#define liblldb_CommunicationKDP_h_
 
 #include <list>
 #include <mutex>
@@ -25,7 +25,7 @@ public:
 
   const static uint32_t kMaxPacketSize = 1200;
   const static uint32_t kMaxDataSize = 1024;
-  typedef lldb_private::StreamBuffer<4096> PacketStreamType;
+  typedef lldb_private::StreamBuffer<1024> PacketStreamType;
   enum CommandType {
     KDP_CONNECT = 0u,
     KDP_DISCONNECT,
@@ -241,8 +241,7 @@ protected:
   lldb::addr_t m_last_read_memory_addr; // Last memory read address for logging
 private:
   // For CommunicationKDP only
-  CommunicationKDP(const CommunicationKDP &) = delete;
-  const CommunicationKDP &operator=(const CommunicationKDP &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(CommunicationKDP);
 };
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_MACOSX_KERNEL_COMMUNICATIONKDP_H
+#endif // liblldb_CommunicationKDP_h_

@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 // <variant>
 
@@ -20,7 +20,7 @@
 #include <string>
 #include <memory>
 
-#include "variant_test_helpers.h"
+#include "variant_test_helpers.hpp"
 
 int main(int, char**)
 {
@@ -40,5 +40,4 @@ int main(int, char**)
   static_assert(!std::is_assignable<std::variant<bool>, std::unique_ptr<char> >::value, "");
   static_assert(!std::is_assignable<std::variant<bool>, decltype(nullptr)>::value, "");
 
-  return 0;
 }

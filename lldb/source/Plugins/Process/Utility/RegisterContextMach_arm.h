@@ -6,8 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERCONTEXTMACH_ARM_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERCONTEXTMACH_ARM_H
+#ifndef liblldb_RegisterContextMach_arm_h_
+#define liblldb_RegisterContextMach_arm_h_
+
 
 #include "RegisterContextDarwin_arm.h"
 
@@ -19,21 +20,21 @@ public:
   virtual ~RegisterContextMach_arm();
 
 protected:
-  int DoReadGPR(lldb::tid_t tid, int flavor, GPR &gpr) override;
+  virtual int DoReadGPR(lldb::tid_t tid, int flavor, GPR &gpr);
 
-  int DoReadFPU(lldb::tid_t tid, int flavor, FPU &fpu) override;
+  int DoReadFPU(lldb::tid_t tid, int flavor, FPU &fpu);
 
-  int DoReadEXC(lldb::tid_t tid, int flavor, EXC &exc) override;
+  int DoReadEXC(lldb::tid_t tid, int flavor, EXC &exc);
 
-  int DoReadDBG(lldb::tid_t tid, int flavor, DBG &dbg) override;
+  int DoReadDBG(lldb::tid_t tid, int flavor, DBG &dbg);
 
-  int DoWriteGPR(lldb::tid_t tid, int flavor, const GPR &gpr) override;
+  int DoWriteGPR(lldb::tid_t tid, int flavor, const GPR &gpr);
 
-  int DoWriteFPU(lldb::tid_t tid, int flavor, const FPU &fpu) override;
+  int DoWriteFPU(lldb::tid_t tid, int flavor, const FPU &fpu);
 
-  int DoWriteEXC(lldb::tid_t tid, int flavor, const EXC &exc) override;
+  int DoWriteEXC(lldb::tid_t tid, int flavor, const EXC &exc);
 
-  int DoWriteDBG(lldb::tid_t tid, int flavor, const DBG &dbg) override;
+  int DoWriteDBG(lldb::tid_t tid, int flavor, const DBG &dbg);
 };
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERCONTEXTMACH_ARM_H
+#endif // liblldb_RegisterContextMach_arm_h_

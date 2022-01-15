@@ -20,55 +20,64 @@ extern "C" void _mm_mfence();
 #pragma intrinsic(_mm_mfence)
 extern "C" void _mm_pause();
 #pragma intrinsic(_mm_pause)
-extern "C" char _InterlockedExchange8(char volatile *Addend, char Value);
+extern "C" char _InterlockedExchange8(   // NOLINT
+    char volatile *Addend, char Value);  // NOLINT
 #pragma intrinsic(_InterlockedExchange8)
-extern "C" short _InterlockedExchange16(short volatile *Addend, short Value);
+extern "C" short _InterlockedExchange16(   // NOLINT
+    short volatile *Addend, short Value);  // NOLINT
 #pragma intrinsic(_InterlockedExchange16)
-extern "C" long _InterlockedExchange(long volatile *Addend, long Value);
+extern "C" long _InterlockedExchange(    // NOLINT
+    long volatile *Addend, long Value);  // NOLINT
 #pragma intrinsic(_InterlockedExchange)
-extern "C" long _InterlockedExchangeAdd(long volatile *Addend, long Value);
+extern "C" long _InterlockedExchangeAdd(  // NOLINT
+    long volatile * Addend, long Value);  // NOLINT
 #pragma intrinsic(_InterlockedExchangeAdd)
-extern "C" char _InterlockedCompareExchange8(char volatile *Destination,
-                                             char Exchange, char Comparand);
+extern "C" char _InterlockedCompareExchange8(  // NOLINT
+    char volatile *Destination,                // NOLINT
+    char Exchange, char Comparand);            // NOLINT
 #pragma intrinsic(_InterlockedCompareExchange8)
-extern "C" short _InterlockedCompareExchange16(short volatile *Destination,
-                                               short Exchange, short Comparand);
+extern "C" short _InterlockedCompareExchange16(  // NOLINT
+    short volatile *Destination,                 // NOLINT
+    short Exchange, short Comparand);            // NOLINT
 #pragma intrinsic(_InterlockedCompareExchange16)
-extern "C" long long _InterlockedCompareExchange64(
-    long long volatile *Destination, long long Exchange, long long Comparand);
+extern "C"
+long long _InterlockedCompareExchange64(  // NOLINT
+    long long volatile *Destination,              // NOLINT
+    long long Exchange, long long Comparand);     // NOLINT
 #pragma intrinsic(_InterlockedCompareExchange64)
 extern "C" void *_InterlockedCompareExchangePointer(
     void *volatile *Destination,
     void *Exchange, void *Comparand);
 #pragma intrinsic(_InterlockedCompareExchangePointer)
-extern "C" long __cdecl _InterlockedCompareExchange(long volatile *Destination,
-                                                    long Exchange,
-                                                    long Comparand);
+extern "C"
+long __cdecl _InterlockedCompareExchange(  // NOLINT
+    long volatile *Destination,            // NOLINT
+    long Exchange, long Comparand);        // NOLINT
 #pragma intrinsic(_InterlockedCompareExchange)
 
 #ifdef _WIN64
-extern "C" long long _InterlockedExchangeAdd64(long long volatile *Addend,
-                                               long long Value);
+extern "C" long long _InterlockedExchangeAdd64(     // NOLINT
+    long long volatile * Addend, long long Value);  // NOLINT
 #pragma intrinsic(_InterlockedExchangeAdd64)
 #endif
 
 namespace __sanitizer {
 
-inline void atomic_signal_fence(memory_order) {
+INLINE void atomic_signal_fence(memory_order) {
   _ReadWriteBarrier();
 }
 
-inline void atomic_thread_fence(memory_order) {
+INLINE void atomic_thread_fence(memory_order) {
   _mm_mfence();
 }
 
-inline void proc_yield(int cnt) {
+INLINE void proc_yield(int cnt) {
   for (int i = 0; i < cnt; i++)
     _mm_pause();
 }
 
 template<typename T>
-inline typename T::Type atomic_load(
+INLINE typename T::Type atomic_load(
     const volatile T *a, memory_order mo) {
   DCHECK(mo & (memory_order_relaxed | memory_order_consume
       | memory_order_acquire | memory_order_seq_cst));
@@ -86,7 +95,7 @@ inline typename T::Type atomic_load(
 }
 
 template<typename T>
-inline void atomic_store(volatile T *a, typename T::Type v, memory_order mo) {
+INLINE void atomic_store(volatile T *a, typename T::Type v, memory_order mo) {
   DCHECK(mo & (memory_order_relaxed | memory_order_release
       | memory_order_seq_cst));
   DCHECK(!((uptr)a % sizeof(*a)));
@@ -102,70 +111,70 @@ inline void atomic_store(volatile T *a, typename T::Type v, memory_order mo) {
     atomic_thread_fence(memory_order_seq_cst);
 }
 
-inline u32 atomic_fetch_add(volatile atomic_uint32_t *a,
+INLINE u32 atomic_fetch_add(volatile atomic_uint32_t *a,
     u32 v, memory_order mo) {
   (void)mo;
   DCHECK(!((uptr)a % sizeof(*a)));
-  return (u32)_InterlockedExchangeAdd((volatile long *)&a->val_dont_use,
-                                      (long)v);
+  return (u32)_InterlockedExchangeAdd(
+      (volatile long*)&a->val_dont_use, (long)v);  // NOLINT
 }
 
-inline uptr atomic_fetch_add(volatile atomic_uintptr_t *a,
+INLINE uptr atomic_fetch_add(volatile atomic_uintptr_t *a,
     uptr v, memory_order mo) {
   (void)mo;
   DCHECK(!((uptr)a % sizeof(*a)));
 #ifdef _WIN64
-  return (uptr)_InterlockedExchangeAdd64((volatile long long *)&a->val_dont_use,
-                                         (long long)v);
+  return (uptr)_InterlockedExchangeAdd64(
+      (volatile long long*)&a->val_dont_use, (long long)v);  // NOLINT
 #else
-  return (uptr)_InterlockedExchangeAdd((volatile long *)&a->val_dont_use,
-                                       (long)v);
+  return (uptr)_InterlockedExchangeAdd(
+      (volatile long*)&a->val_dont_use, (long)v);  // NOLINT
 #endif
 }
 
-inline u32 atomic_fetch_sub(volatile atomic_uint32_t *a,
+INLINE u32 atomic_fetch_sub(volatile atomic_uint32_t *a,
     u32 v, memory_order mo) {
   (void)mo;
   DCHECK(!((uptr)a % sizeof(*a)));
-  return (u32)_InterlockedExchangeAdd((volatile long *)&a->val_dont_use,
-                                      -(long)v);
+  return (u32)_InterlockedExchangeAdd(
+      (volatile long*)&a->val_dont_use, -(long)v);  // NOLINT
 }
 
-inline uptr atomic_fetch_sub(volatile atomic_uintptr_t *a,
+INLINE uptr atomic_fetch_sub(volatile atomic_uintptr_t *a,
     uptr v, memory_order mo) {
   (void)mo;
   DCHECK(!((uptr)a % sizeof(*a)));
 #ifdef _WIN64
-  return (uptr)_InterlockedExchangeAdd64((volatile long long *)&a->val_dont_use,
-                                         -(long long)v);
+  return (uptr)_InterlockedExchangeAdd64(
+      (volatile long long*)&a->val_dont_use, -(long long)v);  // NOLINT
 #else
-  return (uptr)_InterlockedExchangeAdd((volatile long *)&a->val_dont_use,
-                                       -(long)v);
+  return (uptr)_InterlockedExchangeAdd(
+      (volatile long*)&a->val_dont_use, -(long)v);  // NOLINT
 #endif
 }
 
-inline u8 atomic_exchange(volatile atomic_uint8_t *a,
+INLINE u8 atomic_exchange(volatile atomic_uint8_t *a,
     u8 v, memory_order mo) {
   (void)mo;
   DCHECK(!((uptr)a % sizeof(*a)));
   return (u8)_InterlockedExchange8((volatile char*)&a->val_dont_use, v);
 }
 
-inline u16 atomic_exchange(volatile atomic_uint16_t *a,
+INLINE u16 atomic_exchange(volatile atomic_uint16_t *a,
     u16 v, memory_order mo) {
   (void)mo;
   DCHECK(!((uptr)a % sizeof(*a)));
   return (u16)_InterlockedExchange16((volatile short*)&a->val_dont_use, v);
 }
 
-inline u32 atomic_exchange(volatile atomic_uint32_t *a,
+INLINE u32 atomic_exchange(volatile atomic_uint32_t *a,
     u32 v, memory_order mo) {
   (void)mo;
   DCHECK(!((uptr)a % sizeof(*a)));
   return (u32)_InterlockedExchange((volatile long*)&a->val_dont_use, v);
 }
 
-inline bool atomic_compare_exchange_strong(volatile atomic_uint8_t *a,
+INLINE bool atomic_compare_exchange_strong(volatile atomic_uint8_t *a,
                                            u8 *cmp,
                                            u8 xchgv,
                                            memory_order mo) {
@@ -191,7 +200,7 @@ inline bool atomic_compare_exchange_strong(volatile atomic_uint8_t *a,
   return false;
 }
 
-inline bool atomic_compare_exchange_strong(volatile atomic_uintptr_t *a,
+INLINE bool atomic_compare_exchange_strong(volatile atomic_uintptr_t *a,
                                            uptr *cmp,
                                            uptr xchg,
                                            memory_order mo) {
@@ -204,7 +213,7 @@ inline bool atomic_compare_exchange_strong(volatile atomic_uintptr_t *a,
   return false;
 }
 
-inline bool atomic_compare_exchange_strong(volatile atomic_uint16_t *a,
+INLINE bool atomic_compare_exchange_strong(volatile atomic_uint16_t *a,
                                            u16 *cmp,
                                            u16 xchg,
                                            memory_order mo) {
@@ -217,7 +226,7 @@ inline bool atomic_compare_exchange_strong(volatile atomic_uint16_t *a,
   return false;
 }
 
-inline bool atomic_compare_exchange_strong(volatile atomic_uint32_t *a,
+INLINE bool atomic_compare_exchange_strong(volatile atomic_uint32_t *a,
                                            u32 *cmp,
                                            u32 xchg,
                                            memory_order mo) {
@@ -230,7 +239,7 @@ inline bool atomic_compare_exchange_strong(volatile atomic_uint32_t *a,
   return false;
 }
 
-inline bool atomic_compare_exchange_strong(volatile atomic_uint64_t *a,
+INLINE bool atomic_compare_exchange_strong(volatile atomic_uint64_t *a,
                                            u64 *cmp,
                                            u64 xchg,
                                            memory_order mo) {
@@ -244,7 +253,7 @@ inline bool atomic_compare_exchange_strong(volatile atomic_uint64_t *a,
 }
 
 template<typename T>
-inline bool atomic_compare_exchange_weak(volatile T *a,
+INLINE bool atomic_compare_exchange_weak(volatile T *a,
                                          typename T::Type *cmp,
                                          typename T::Type xchg,
                                          memory_order mo) {

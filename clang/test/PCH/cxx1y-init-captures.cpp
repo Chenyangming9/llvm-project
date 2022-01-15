@@ -5,9 +5,6 @@
 // RUN: %clang_cc1 -pedantic -std=c++1y -emit-pch %s -o %t
 // RUN: %clang_cc1 -pedantic -std=c++1y -include-pch %t -verify %s
 
-// RUN: %clang_cc1 -pedantic -std=c++1y -emit-pch -fpch-instantiate-templates %s -o %t
-// RUN: %clang_cc1 -pedantic -std=c++1y -include-pch %t -verify %s
-
 #ifndef HEADER
 #define HEADER
 
@@ -24,7 +21,7 @@ int y = counter();
 
 void g() {
   f(0); // ok
-  // expected-error@18 {{lvalue of type 'const char *const'}}
+  // expected-error@15 {{lvalue of type 'const char *const'}}
   f("foo"); // expected-note {{here}}
 }
 

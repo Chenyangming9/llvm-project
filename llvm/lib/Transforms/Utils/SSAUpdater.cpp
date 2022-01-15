@@ -56,7 +56,7 @@ void SSAUpdater::Initialize(Type *Ty, StringRef Name) {
   else
     getAvailableVals(AV).clear();
   ProtoType = Ty;
-  ProtoName = std::string(Name);
+  ProtoName = Name;
 }
 
 bool SSAUpdater::HasValueForBlock(BasicBlock *BB) const {
@@ -64,7 +64,8 @@ bool SSAUpdater::HasValueForBlock(BasicBlock *BB) const {
 }
 
 Value *SSAUpdater::FindValueForBlock(BasicBlock *BB) const {
-  return getAvailableVals(AV).lookup(BB);
+  AvailableValsTy::iterator AVI = getAvailableVals(AV).find(BB);
+  return (AVI != getAvailableVals(AV).end()) ? AVI->second : nullptr;
 }
 
 void SSAUpdater::AddAvailableValue(BasicBlock *BB, Value *V) {
@@ -123,7 +124,8 @@ Value *SSAUpdater::GetValueInMiddleOfBlock(BasicBlock *BB) {
     }
   } else {
     bool isFirstPred = true;
-    for (BasicBlock *PredBB : predecessors(BB)) {
+    for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI) {
+      BasicBlock *PredBB = *PI;
       Value *PredVal = GetValueAtEndOfBlock(PredBB);
       PredValues.push_back(std::make_pair(PredBB, PredVal));
 
@@ -193,6 +195,11 @@ void SSAUpdater::RewriteUse(Use &U) {
   else
     V = GetValueInMiddleOfBlock(User->getParent());
 
+  // Notify that users of the existing value that it is being replaced.
+  Value *OldVal = U.get();
+  if (OldVal != V && OldVal->hasValueHandle())
+    ValueHandleBase::ValueIsRAUWd(OldVal, V);
+
   U.set(V);
 }
 
@@ -252,10 +259,12 @@ public:
     // We can get our predecessor info by walking the pred_iterator list,
     // but it is relatively slow.  If we already have PHI nodes in this
     // block, walk one of them to get the predecessor list instead.
-    if (PHINode *SomePhi = dyn_cast<PHINode>(BB->begin()))
-      append_range(*Preds, SomePhi->blocks());
-    else
-      append_range(*Preds, predecessors(BB));
+    if (PHINode *SomePhi = dyn_cast<PHINode>(BB->begin())) {
+      Preds->append(SomePhi->block_begin(), SomePhi->block_end());
+    } else {
+      for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI)
+        Preds->push_back(*PI);
+    }
   }
 
   /// GetUndefVal - Get an undefined value of the same type as the value
@@ -277,6 +286,12 @@ public:
   /// the specified predecessor block.
   static void AddPHIOperand(PHINode *PHI, Value *Val, BasicBlock *Pred) {
     PHI->addIncoming(Val, Pred);
+  }
+
+  /// InstrIsPHI - Check if an instruction is a PHI.
+  ///
+  static PHINode *InstrIsPHI(Instruction *I) {
+    return dyn_cast<PHINode>(I);
   }
 
   /// ValueIsPHI - Check if a value is a PHI.

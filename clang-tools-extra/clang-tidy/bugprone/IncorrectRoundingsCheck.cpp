@@ -21,11 +21,11 @@ namespace bugprone {
 
 namespace {
 AST_MATCHER(FloatingLiteral, floatHalf) {
-  const auto &Literal = Node.getValue();
+  const auto &literal = Node.getValue();
   if ((&Node.getSemantics()) == &llvm::APFloat::IEEEsingle())
-    return Literal.convertToFloat() == 0.5f;
+    return literal.convertToFloat() == 0.5f;
   if ((&Node.getSemantics()) == &llvm::APFloat::IEEEdouble())
-    return Literal.convertToDouble() == 0.5;
+    return literal.convertToDouble() == 0.5;
   return false;
 }
 } // namespace
@@ -51,11 +51,10 @@ void IncorrectRoundingsCheck::registerMatchers(MatchFinder *MatchFinder) {
   // Find expressions of cast to int of the sum of a floating point expression
   // and 0.5.
   MatchFinder->addMatcher(
-      traverse(TK_AsIs,
-               implicitCastExpr(hasImplicitDestinationType(isInteger()),
-                                ignoringParenCasts(binaryOperator(
-                                    hasOperatorName("+"), OneSideHalf)))
-                   .bind("CastExpr")),
+      implicitCastExpr(
+          hasImplicitDestinationType(isInteger()),
+          ignoringParenCasts(binaryOperator(hasOperatorName("+"), OneSideHalf)))
+          .bind("CastExpr"),
       this);
 }
 

@@ -14,8 +14,6 @@
 #ifndef LLVM_LIB_CODEGEN_REGISTERCOALESCER_H
 #define LLVM_LIB_CODEGEN_REGISTERCOALESCER_H
 
-#include "llvm/CodeGen/Register.h"
-
 namespace llvm {
 
 class MachineInstr;
@@ -30,10 +28,10 @@ class TargetRegisterInfo;
 
     /// The register that will be left after coalescing. It can be a
     /// virtual or physical register.
-    Register DstReg;
+    unsigned DstReg = 0;
 
     /// The virtual register that will be coalesced into dstReg.
-    Register SrcReg;
+    unsigned SrcReg = 0;
 
     /// The sub-register index of the old DstReg in the new coalesced register.
     unsigned DstIdx = 0;
@@ -61,9 +59,9 @@ class TargetRegisterInfo;
 
     /// Create a CoalescerPair representing a virtreg-to-physreg copy.
     /// No need to call setRegisters().
-    CoalescerPair(Register VirtReg, MCRegister PhysReg,
+    CoalescerPair(unsigned VirtReg, unsigned PhysReg,
                   const TargetRegisterInfo &tri)
-        : TRI(tri), DstReg(PhysReg), SrcReg(VirtReg) {}
+      : TRI(tri), DstReg(PhysReg), SrcReg(VirtReg) {}
 
     /// Set registers to match the copy instruction MI. Return
     /// false if MI is not a coalescable copy instruction.
@@ -94,10 +92,10 @@ class TargetRegisterInfo;
 
     /// Return the register (virtual or physical) that will remain
     /// after coalescing.
-    Register getDstReg() const { return DstReg; }
+    unsigned getDstReg() const { return DstReg; }
 
     /// Return the virtual register that will be coalesced away.
-    Register getSrcReg() const { return SrcReg; }
+    unsigned getSrcReg() const { return SrcReg; }
 
     /// Return the subregister index that DstReg will be coalesced into, or 0.
     unsigned getDstIdx() const { return DstIdx; }

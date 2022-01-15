@@ -10,12 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TOOLS_DEBUGSERVER_SOURCE_DNBREGISTERINFO_H
-#define LLDB_TOOLS_DEBUGSERVER_SOURCE_DNBREGISTERINFO_H
+#ifndef __DNBRegisterInfo_h__
+#define __DNBRegisterInfo_h__
 
 #include "DNBDefs.h"
-#include <cstdint>
-#include <cstdio>
+#include <stdint.h>
+#include <stdio.h>
 
 struct DNBRegisterValueClass : public DNBRegisterValue {
 #ifdef __cplusplus

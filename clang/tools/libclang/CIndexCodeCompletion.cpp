@@ -254,7 +254,7 @@ struct AllocatedCXCodeCompleteResults : public CXCodeCompleteResults {
   SmallVector<StoredDiagnostic, 8> Diagnostics;
 
   /// Allocated API-exposed wrappters for Diagnostics.
-  SmallVector<std::unique_ptr<CXStoredDiagnostic>, 8> DiagnosticsWrappers;
+  SmallVector<CXStoredDiagnostic *, 8> DiagnosticsWrappers;
 
   IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts;
   
@@ -371,6 +371,7 @@ AllocatedCXCodeCompleteResults::AllocatedCXCodeCompleteResults(
 }
   
 AllocatedCXCodeCompleteResults::~AllocatedCXCodeCompleteResults() {
+  llvm::DeleteContainerPointers(DiagnosticsWrappers);
   delete [] Results;
 
   for (unsigned I = 0, N = TemporaryBuffers.size(); I != N; ++I)
@@ -802,8 +803,8 @@ clang_codeCompleteAt_Impl(CXTranslationUnit TU, const char *complete_filename,
           os << arg << ".pth";
         }
         pchName.push_back('\0');
-        llvm::sys::fs::file_status stat_results;
-        if (!llvm::sys::fs::status(pchName, stat_results))
+        struct stat stat_results;
+        if (stat(pchName.str().c_str(), &stat_results) == 0)
           usesPCH = true;
         continue;
       }
@@ -913,12 +914,10 @@ clang_codeCompleteGetDiagnostic(CXCodeCompleteResults *ResultsIn,
   if (!Results || Index >= Results->Diagnostics.size())
     return nullptr;
 
-  CXStoredDiagnostic *Diag = Results->DiagnosticsWrappers[Index].get();
+  CXStoredDiagnostic *Diag = Results->DiagnosticsWrappers[Index];
   if (!Diag)
-    Diag = (Results->DiagnosticsWrappers[Index] =
-                std::make_unique<CXStoredDiagnostic>(
-                    Results->Diagnostics[Index], Results->LangOpts))
-               .get();
+    Results->DiagnosticsWrappers[Index] = Diag =
+        new CXStoredDiagnostic(Results->Diagnostics[Index], Results->LangOpts);
   return Diag;
 }
 
@@ -1026,7 +1025,7 @@ namespace {
       if (XText.empty() || YText.empty())
         return !XText.empty();
             
-      int result = XText.compare_insensitive(YText);
+      int result = XText.compare_lower(YText);
       if (result < 0)
         return true;
       if (result > 0)

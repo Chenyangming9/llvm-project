@@ -1,4 +1,4 @@
-//===-- ThreadPlanCallUserExpression.cpp ----------------------------------===//
+//===-- ThreadPlanCallUserExpression.cpp -------------------------*- C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -43,7 +43,7 @@ ThreadPlanCallUserExpression::ThreadPlanCallUserExpression(
   SetOkayToDiscard(false);
 }
 
-ThreadPlanCallUserExpression::~ThreadPlanCallUserExpression() = default;
+ThreadPlanCallUserExpression::~ThreadPlanCallUserExpression() {}
 
 void ThreadPlanCallUserExpression::GetDescription(
     Stream *s, lldb::DescriptionLevel level) {
@@ -69,8 +69,9 @@ bool ThreadPlanCallUserExpression::MischiefManaged() {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
 
   if (IsPlanComplete()) {
-    LLDB_LOGF(log, "ThreadPlanCallFunction(%p): Completed call function plan.",
-              static_cast<void *>(this));
+    if (log)
+      log->Printf("ThreadPlanCallFunction(%p): Completed call function plan.",
+                  static_cast<void *>(this));
 
     if (m_manage_materialization && PlanSucceeded() && m_user_expression_sp) {
       lldb::addr_t function_stack_top;
@@ -101,7 +102,8 @@ StopInfoSP ThreadPlanCallUserExpression::GetRealStopInfo() {
 
   if (stop_info_sp) {
     lldb::addr_t addr = GetStopAddress();
-    DynamicCheckerFunctions *checkers = m_process.GetDynamicCheckers();
+    DynamicCheckerFunctions *checkers =
+        m_thread.GetProcess()->GetDynamicCheckers();
     StreamString s;
 
     if (checkers && checkers->DoCheckersExplainStop(addr, s))

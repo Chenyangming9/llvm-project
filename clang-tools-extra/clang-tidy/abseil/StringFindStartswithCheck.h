@@ -9,7 +9,7 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_ABSEIL_STRINGFINDSTARTSWITHCHECK_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_ABSEIL_STRINGFINDSTARTSWITHCHECK_H
 
-#include "../ClangTidyCheck.h"
+#include "../ClangTidy.h"
 #include "../utils/IncludeInserter.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 
@@ -35,8 +35,9 @@ public:
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
 
 private:
+  std::unique_ptr<clang::tidy::utils::IncludeInserter> IncludeInserter;
   const std::vector<std::string> StringLikeClasses;
-  utils::IncludeInserter IncludeInserter;
+  const utils::IncludeSorter::IncludeStyle IncludeStyle;
   const std::string AbseilStringsMatchHeader;
 };
 

@@ -6,5 +6,7 @@ unittest("DriverTests") {
     "//lld/lib/Driver",
     "//lld/lib/ReaderWriter/MachO",
   ]
-  sources = [ "DarwinLdDriverTest.cpp" ]
+  sources = [
+    "DarwinLdDriverTest.cpp",
+  ]
 }

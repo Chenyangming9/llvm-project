@@ -7,5 +7,7 @@ executable("verify-uselistorder") {
     "//llvm/lib/IRReader",
     "//llvm/lib/Support",
   ]
-  sources = [ "verify-uselistorder.cpp" ]
+  sources = [
+    "verify-uselistorder.cpp",
+  ]
 }

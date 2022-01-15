@@ -32,8 +32,7 @@ ARMInstrInfo::ARMInstrInfo(const ARMSubtarget &STI)
     : ARMBaseInstrInfo(STI), RI() {}
 
 /// Return the noop instruction to use for a noop.
-MCInst ARMInstrInfo::getNop() const {
-  MCInst NopInst;
+void ARMInstrInfo::getNoop(MCInst &NopInst) const {
   if (hasNOP()) {
     NopInst.setOpcode(ARM::HINT);
     NopInst.addOperand(MCOperand::createImm(0));
@@ -47,7 +46,6 @@ MCInst ARMInstrInfo::getNop() const {
     NopInst.addOperand(MCOperand::createReg(0));
     NopInst.addOperand(MCOperand::createReg(0));
   }
-  return NopInst;
 }
 
 unsigned ARMInstrInfo::getUnindexedOpcode(unsigned Opc) const {
@@ -119,7 +117,7 @@ void ARMInstrInfo::expandLoadStackGuard(MachineBasicBlock::iterator MI) const {
 
   MachineBasicBlock &MBB = *MI->getParent();
   DebugLoc DL = MI->getDebugLoc();
-  Register Reg = MI->getOperand(0).getReg();
+  unsigned Reg = MI->getOperand(0).getReg();
   MachineInstrBuilder MIB;
 
   MIB = BuildMI(MBB, MI, DL, get(ARM::MOV_ga_pcrel_ldr), Reg)
@@ -128,7 +126,7 @@ void ARMInstrInfo::expandLoadStackGuard(MachineBasicBlock::iterator MI) const {
                MachineMemOperand::MODereferenceable |
                MachineMemOperand::MOInvariant;
   MachineMemOperand *MMO = MBB.getParent()->getMachineMemOperand(
-      MachinePointerInfo::getGOT(*MBB.getParent()), Flags, 4, Align(4));
+      MachinePointerInfo::getGOT(*MBB.getParent()), Flags, 4, 4);
   MIB.addMemOperand(MMO);
   BuildMI(MBB, MI, DL, get(ARM::LDRi12), Reg)
       .addReg(Reg, RegState::Kill)

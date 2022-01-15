@@ -42,8 +42,7 @@ class CFLSteensAAResult : public AAResultBase<CFLSteensAAResult> {
   class FunctionInfo;
 
 public:
-  explicit CFLSteensAAResult(
-      std::function<const TargetLibraryInfo &(Function &)> GetTLI);
+  explicit CFLSteensAAResult(const TargetLibraryInfo &TLI);
   CFLSteensAAResult(CFLSteensAAResult &&Arg);
   ~CFLSteensAAResult();
 
@@ -73,7 +72,7 @@ public:
   AliasResult alias(const MemoryLocation &LocA, const MemoryLocation &LocB,
                     AAQueryInfo &AAQI) {
     if (LocA.Ptr == LocB.Ptr)
-      return AliasResult::MustAlias;
+      return MustAlias;
 
     // Comparisons between global variables and other constants should be
     // handled by BasicAA.
@@ -84,14 +83,14 @@ public:
       return AAResultBase::alias(LocA, LocB, AAQI);
 
     AliasResult QueryResult = query(LocA, LocB);
-    if (QueryResult == AliasResult::MayAlias)
+    if (QueryResult == MayAlias)
       return AAResultBase::alias(LocA, LocB, AAQI);
 
     return QueryResult;
   }
 
 private:
-  std::function<const TargetLibraryInfo &(Function &)> GetTLI;
+  const TargetLibraryInfo &TLI;
 
   /// Cached mapping of Functions to their StratifiedSets.
   /// If a function's sets are currently being built, it is marked

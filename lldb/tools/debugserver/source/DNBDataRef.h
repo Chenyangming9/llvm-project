@@ -19,14 +19,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TOOLS_DEBUGSERVER_SOURCE_DNBDATAREF_H
-#define LLDB_TOOLS_DEBUGSERVER_SOURCE_DNBDATAREF_H
+#ifndef __DNBDataRef_h__
+#define __DNBDataRef_h__
 
 #include "DNBDefs.h"
-#include <climits>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
+#include <limits.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 class DNBDataRef {
 public:
@@ -121,4 +121,4 @@ protected:
   addr_t m_addrDATA;
 };
 
-#endif // LLDB_TOOLS_DEBUGSERVER_SOURCE_DNBDATAREF_H
+#endif // #ifndef __DNBDataRef_h__

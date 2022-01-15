@@ -25,6 +25,9 @@ void UseEqualsDeleteCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
 }
 
 void UseEqualsDeleteCheck::registerMatchers(MatchFinder *Finder) {
+  if (!getLangOpts().CPlusPlus)
+    return;
+
   auto PrivateSpecialFn = cxxMethodDecl(
       isPrivate(),
       anyOf(cxxConstructorDecl(anyOf(isDefaultConstructor(),
@@ -36,12 +39,12 @@ void UseEqualsDeleteCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(
       cxxMethodDecl(
           PrivateSpecialFn,
-          unless(anyOf(hasAnyBody(stmt()), isDefaulted(), isDeleted(),
+          unless(anyOf(hasBody(stmt()), isDefaulted(), isDeleted(),
                        ast_matchers::isTemplateInstantiation(),
                        // Ensure that all methods except private special member
                        // functions are defined.
                        hasParent(cxxRecordDecl(hasMethod(unless(
-                           anyOf(PrivateSpecialFn, hasAnyBody(stmt()), isPure(),
+                           anyOf(PrivateSpecialFn, hasBody(stmt()), isPure(),
                                  isDefaulted(), isDeleted()))))))))
           .bind(SpecialFunction),
       this);

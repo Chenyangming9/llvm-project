@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "TestVisitor.h"
-#include "llvm/Support/Host.h"
 #include <stack>
 
 using namespace clang;
@@ -87,8 +86,6 @@ TEST(RecursiveASTVisitor, VisitsLambdaExprAndImplicitClass) {
 }
 
 TEST(RecursiveASTVisitor, VisitsAttributedLambdaExpr) {
-  if (llvm::Triple(llvm::sys::getDefaultTargetTriple()).isPS4())
-    return; // PS4 does not support fastcall.
   LambdaExprVisitor Visitor;
   Visitor.ExpectMatch("", 1, 12);
   EXPECT_TRUE(Visitor.runOver(

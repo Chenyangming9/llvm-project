@@ -22,7 +22,7 @@
 # that clobber the register used in TEST.
 name:            reg-rewrite
 
-alignment:       16
+alignment:       4
 tracksRegLiveness: true
 liveins:
   - { reg: '$rdi' }

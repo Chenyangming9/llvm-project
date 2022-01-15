@@ -13,16 +13,16 @@
 #ifndef LLVM_CLANG_LEX_HEADERMAP_H
 #define LLVM_CLANG_LEX_HEADERMAP_H
 
-#include "clang/Basic/FileManager.h"
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/Optional.h"
-#include "llvm/ADT/StringMap.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include <memory>
 
 namespace clang {
 
+class FileEntry;
+class FileManager;
 struct HMapBucket;
 struct HMapHeader;
 
@@ -30,7 +30,6 @@ struct HMapHeader;
 class HeaderMapImpl {
   std::unique_ptr<const llvm::MemoryBuffer> FileBuffer;
   bool NeedsBSwap;
-  mutable llvm::StringMap<StringRef> ReverseMap;
 
 public:
   HeaderMapImpl(std::unique_ptr<const llvm::MemoryBuffer> File, bool NeedsBSwap)
@@ -49,9 +48,6 @@ public:
 
   /// Print the contents of this headermap to stderr.
   void dump() const;
-
-  /// Return key for specifed path.
-  StringRef reverseLookupFilename(StringRef DestPath) const;
 
 private:
   unsigned getEndianAdjustedWord(unsigned X) const;
@@ -82,12 +78,11 @@ public:
   /// NULL and the file is found, RawPath will be set to the raw path at which
   /// the file was found in the file system. For example, for a search path
   /// ".." and a filename "../file.h" this would be "../../file.h".
-  Optional<FileEntryRef> LookupFile(StringRef Filename, FileManager &FM) const;
+  const FileEntry *LookupFile(StringRef Filename, FileManager &FM) const;
 
-  using HeaderMapImpl::dump;
-  using HeaderMapImpl::getFileName;
   using HeaderMapImpl::lookupFilename;
-  using HeaderMapImpl::reverseLookupFilename;
+  using HeaderMapImpl::getFileName;
+  using HeaderMapImpl::dump;
 };
 
 } // end namespace clang.

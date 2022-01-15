@@ -17,10 +17,9 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/RegionInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
+#include "llvm/Analysis/ScalarEvolutionExpander.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/Transforms/Utils/LoopUtils.h"
-#include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
 
 using namespace llvm;
 using namespace polly;
@@ -222,16 +221,6 @@ void polly::splitEntryBlockForAlloca(BasicBlock *EntryBlock, Pass *P) {
   polly::splitEntryBlockForAlloca(EntryBlock, DT, LI, RI);
 }
 
-void polly::recordAssumption(polly::RecordedAssumptionsTy *RecordedAssumptions,
-                             polly::AssumptionKind Kind, isl::set Set,
-                             DebugLoc Loc, polly::AssumptionSign Sign,
-                             BasicBlock *BB, bool RTC) {
-  assert((Set.is_params() || BB) &&
-         "Assumptions without a basic block must be parameter sets");
-  if (RecordedAssumptions)
-    RecordedAssumptions->push_back({Kind, Sign, Set, Loc, BB, RTC});
-}
-
 /// The SCEVExpander will __not__ generate any code for an existing SDiv/SRem
 /// instruction but just use it, if it is referenced as a SCEVUnknown. We want
 /// however to generate new code if the instruction is in the analyzed region
@@ -244,8 +233,8 @@ struct ScopExpander : SCEVVisitor<ScopExpander, const SCEV *> {
   explicit ScopExpander(const Region &R, ScalarEvolution &SE,
                         const DataLayout &DL, const char *Name, ValueMapT *VMap,
                         BasicBlock *RTCBB)
-      : Expander(SE, DL, Name, /*PreserveLCSSA=*/false), SE(SE), Name(Name),
-        R(R), VMap(VMap), RTCBB(RTCBB) {}
+      : Expander(SCEVExpander(SE, DL, Name)), SE(SE), Name(Name), R(R),
+        VMap(VMap), RTCBB(RTCBB) {}
 
   Value *expandCodeFor(const SCEV *E, Type *Ty, Instruction *I) {
     // If we generate code in the region we will immediately fall back to the
@@ -342,9 +331,6 @@ private:
   ///
   ///{
   const SCEV *visitConstant(const SCEVConstant *E) { return E; }
-  const SCEV *visitPtrToIntExpr(const SCEVPtrToIntExpr *E) {
-    return SE.getPtrToIntExpr(visit(E->getOperand()), E->getType());
-  }
   const SCEV *visitTruncateExpr(const SCEVTruncateExpr *E) {
     return SE.getTruncateExpr(visit(E->getOperand()), E->getType());
   }
@@ -672,6 +658,55 @@ llvm::BasicBlock *polly::getUseBlock(const llvm::Use &U) {
   return UI->getParent();
 }
 
+std::tuple<std::vector<const SCEV *>, std::vector<int>>
+polly::getIndexExpressionsFromGEP(GetElementPtrInst *GEP, ScalarEvolution &SE) {
+  std::vector<const SCEV *> Subscripts;
+  std::vector<int> Sizes;
+
+  Type *Ty = GEP->getPointerOperandType();
+
+  bool DroppedFirstDim = false;
+
+  for (unsigned i = 1; i < GEP->getNumOperands(); i++) {
+
+    const SCEV *Expr = SE.getSCEV(GEP->getOperand(i));
+
+    if (i == 1) {
+      if (auto *PtrTy = dyn_cast<PointerType>(Ty)) {
+        Ty = PtrTy->getElementType();
+      } else if (auto *ArrayTy = dyn_cast<ArrayType>(Ty)) {
+        Ty = ArrayTy->getElementType();
+      } else {
+        Subscripts.clear();
+        Sizes.clear();
+        break;
+      }
+      if (auto *Const = dyn_cast<SCEVConstant>(Expr))
+        if (Const->getValue()->isZero()) {
+          DroppedFirstDim = true;
+          continue;
+        }
+      Subscripts.push_back(Expr);
+      continue;
+    }
+
+    auto *ArrayTy = dyn_cast<ArrayType>(Ty);
+    if (!ArrayTy) {
+      Subscripts.clear();
+      Sizes.clear();
+      break;
+    }
+
+    Subscripts.push_back(Expr);
+    if (!(DroppedFirstDim && i == 2))
+      Sizes.push_back(ArrayTy->getNumElements());
+
+    Ty = ArrayTy->getElementType();
+  }
+
+  return std::make_tuple(Subscripts, Sizes);
+}
+
 llvm::Loop *polly::getFirstNonBoxedLoopFor(llvm::Loop *L, llvm::LoopInfo &LI,
                                            const BoxedLoopsSetTy &BoxedLoops) {
   while (BoxedLoops.count(L))
@@ -726,139 +761,4 @@ bool polly::hasDebugCall(ScopStmt *Stmt) {
   }
 
   return false;
-}
-
-/// Find a property in a LoopID.
-static MDNode *findNamedMetadataNode(MDNode *LoopMD, StringRef Name) {
-  if (!LoopMD)
-    return nullptr;
-  for (const MDOperand &X : drop_begin(LoopMD->operands(), 1)) {
-    auto *OpNode = dyn_cast<MDNode>(X.get());
-    if (!OpNode)
-      continue;
-
-    auto *OpName = dyn_cast<MDString>(OpNode->getOperand(0));
-    if (!OpName)
-      continue;
-    if (OpName->getString() == Name)
-      return OpNode;
-  }
-  return nullptr;
-}
-
-static Optional<const MDOperand *> findNamedMetadataArg(MDNode *LoopID,
-                                                        StringRef Name) {
-  MDNode *MD = findNamedMetadataNode(LoopID, Name);
-  if (!MD)
-    return None;
-  switch (MD->getNumOperands()) {
-  case 1:
-    return nullptr;
-  case 2:
-    return &MD->getOperand(1);
-  default:
-    llvm_unreachable("loop metadata has 0 or 1 operand");
-  }
-}
-
-Optional<Metadata *> polly::findMetadataOperand(MDNode *LoopMD,
-                                                StringRef Name) {
-  MDNode *MD = findNamedMetadataNode(LoopMD, Name);
-  if (!MD)
-    return None;
-  switch (MD->getNumOperands()) {
-  case 1:
-    return nullptr;
-  case 2:
-    return MD->getOperand(1).get();
-  default:
-    llvm_unreachable("loop metadata must have 0 or 1 operands");
-  }
-}
-
-static Optional<bool> getOptionalBoolLoopAttribute(MDNode *LoopID,
-                                                   StringRef Name) {
-  MDNode *MD = findNamedMetadataNode(LoopID, Name);
-  if (!MD)
-    return None;
-  switch (MD->getNumOperands()) {
-  case 1:
-    return true;
-  case 2:
-    if (ConstantInt *IntMD =
-            mdconst::extract_or_null<ConstantInt>(MD->getOperand(1).get()))
-      return IntMD->getZExtValue();
-    return true;
-  }
-  llvm_unreachable("unexpected number of options");
-}
-
-bool polly::getBooleanLoopAttribute(MDNode *LoopID, StringRef Name) {
-  return getOptionalBoolLoopAttribute(LoopID, Name).getValueOr(false);
-}
-
-llvm::Optional<int> polly::getOptionalIntLoopAttribute(MDNode *LoopID,
-                                                       StringRef Name) {
-  const MDOperand *AttrMD =
-      findNamedMetadataArg(LoopID, Name).getValueOr(nullptr);
-  if (!AttrMD)
-    return None;
-
-  ConstantInt *IntMD = mdconst::extract_or_null<ConstantInt>(AttrMD->get());
-  if (!IntMD)
-    return None;
-
-  return IntMD->getSExtValue();
-}
-
-bool polly::hasDisableAllTransformsHint(Loop *L) {
-  return llvm::hasDisableAllTransformsHint(L);
-}
-
-bool polly::hasDisableAllTransformsHint(llvm::MDNode *LoopID) {
-  return getBooleanLoopAttribute(LoopID, "llvm.loop.disable_nonforced");
-}
-
-isl::id polly::getIslLoopAttr(isl::ctx Ctx, BandAttr *Attr) {
-  assert(Attr && "Must be a valid BandAttr");
-
-  // The name "Loop" signals that this id contains a pointer to a BandAttr.
-  // The ScheduleOptimizer also uses the string "Inter iteration alias-free" in
-  // markers, but it's user pointer is an llvm::Value.
-  isl::id Result = isl::id::alloc(Ctx, "Loop with Metadata", Attr);
-  Result = isl::manage(isl_id_set_free_user(Result.release(), [](void *Ptr) {
-    BandAttr *Attr = reinterpret_cast<BandAttr *>(Ptr);
-    delete Attr;
-  }));
-  return Result;
-}
-
-isl::id polly::createIslLoopAttr(isl::ctx Ctx, Loop *L) {
-  if (!L)
-    return {};
-
-  // A loop without metadata does not need to be annotated.
-  MDNode *LoopID = L->getLoopID();
-  if (!LoopID)
-    return {};
-
-  BandAttr *Attr = new BandAttr();
-  Attr->OriginalLoop = L;
-  Attr->Metadata = L->getLoopID();
-
-  return getIslLoopAttr(Ctx, Attr);
-}
-
-bool polly::isLoopAttr(const isl::id &Id) {
-  if (Id.is_null())
-    return false;
-
-  return Id.get_name() == "Loop with Metadata";
-}
-
-BandAttr *polly::getLoopAttr(const isl::id &Id) {
-  if (!isLoopAttr(Id))
-    return nullptr;
-
-  return reinterpret_cast<BandAttr *>(Id.get_user());
 }

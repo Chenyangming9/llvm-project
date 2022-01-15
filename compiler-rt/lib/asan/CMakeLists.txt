@@ -1,50 +1,46 @@
 # Build for the AddressSanitizer runtime support library.
 
 set(ASAN_SOURCES
-  asan_allocator.cpp
-  asan_activation.cpp
-  asan_debugging.cpp
-  asan_descriptions.cpp
-  asan_errors.cpp
-  asan_fake_stack.cpp
-  asan_flags.cpp
-  asan_fuchsia.cpp
-  asan_globals.cpp
-  asan_globals_win.cpp
-  asan_interceptors.cpp
-  asan_interceptors_memintrinsics.cpp
-  asan_linux.cpp
-  asan_mac.cpp
-  asan_malloc_linux.cpp
-  asan_malloc_mac.cpp
-  asan_malloc_win.cpp
-  asan_memory_profile.cpp
-  asan_poisoning.cpp
-  asan_posix.cpp
-  asan_premap_shadow.cpp
-  asan_report.cpp
-  asan_rtl.cpp
-  asan_shadow_setup.cpp
-  asan_stack.cpp
-  asan_stats.cpp
-  asan_suppressions.cpp
-  asan_thread.cpp
-  asan_win.cpp
-  )
+  asan_allocator.cc
+  asan_activation.cc
+  asan_debugging.cc
+  asan_descriptions.cc
+  asan_errors.cc
+  asan_fake_stack.cc
+  asan_flags.cc
+  asan_fuchsia.cc
+  asan_globals.cc
+  asan_globals_win.cc
+  asan_interceptors.cc
+  asan_interceptors_memintrinsics.cc
+  asan_linux.cc
+  asan_mac.cc
+  asan_malloc_linux.cc
+  asan_malloc_mac.cc
+  asan_malloc_win.cc
+  asan_memory_profile.cc
+  asan_poisoning.cc
+  asan_posix.cc
+  asan_premap_shadow.cc
+  asan_report.cc
+  asan_rtems.cc
+  asan_rtl.cc
+  asan_shadow_setup.cc
+  asan_stack.cc
+  asan_stats.cc
+  asan_suppressions.cc
+  asan_thread.cc
+  asan_win.cc)
 
 if (NOT WIN32 AND NOT APPLE)
-  list(APPEND ASAN_SOURCES
-    asan_interceptors_vfork.S
-    )
+  list(APPEND ASAN_SOURCES asan_interceptors_vfork.S)
 endif()
 
 set(ASAN_CXX_SOURCES
-  asan_new_delete.cpp
-  )
+  asan_new_delete.cc)
 
 set(ASAN_PREINIT_SOURCES
-  asan_preinit.cpp
-  )
+  asan_preinit.cc)
 
 SET(ASAN_HEADERS
   asan_activation.h
@@ -62,7 +58,9 @@ SET(ASAN_HEADERS
   asan_interface_internal.h
   asan_internal.h
   asan_lock.h
+  asan_malloc_local.h
   asan_mapping.h
+  asan_mapping_myriad.h
   asan_poisoning.h
   asan_premap_shadow.h
   asan_report.h
@@ -70,8 +68,7 @@ SET(ASAN_HEADERS
   asan_stack.h
   asan_stats.h
   asan_suppressions.h
-  asan_thread.h
-  )
+  asan_thread.h)
 
 include_directories(..)
 
@@ -108,6 +105,10 @@ append_list_if(COMPILER_RT_HAS_LIBPTHREAD pthread ASAN_DYNAMIC_LIBS)
 append_list_if(COMPILER_RT_HAS_LIBLOG log ASAN_DYNAMIC_LIBS)
 append_list_if(MINGW "${MINGW_LIBRARIES}" ASAN_DYNAMIC_LIBS)
 
+if (TARGET cxx-headers OR HAVE_LIBCXX)
+  set(ASAN_DEPS cxx-headers)
+endif()
+
 # Compile ASan sources into an object library.
 
 add_compiler_rt_object_libraries(RTAsan_dynamic
@@ -116,7 +117,8 @@ add_compiler_rt_object_libraries(RTAsan_dynamic
   SOURCES ${ASAN_SOURCES} ${ASAN_CXX_SOURCES}
   ADDITIONAL_HEADERS ${ASAN_HEADERS}
   CFLAGS ${ASAN_DYNAMIC_CFLAGS}
-  DEFS ${ASAN_DYNAMIC_DEFINITIONS})
+  DEFS ${ASAN_DYNAMIC_DEFINITIONS}
+  DEPS ${ASAN_DEPS})
 
 if(NOT APPLE)
   add_compiler_rt_object_libraries(RTAsan
@@ -124,26 +126,30 @@ if(NOT APPLE)
     SOURCES ${ASAN_SOURCES}
     ADDITIONAL_HEADERS ${ASAN_HEADERS}
     CFLAGS ${ASAN_CFLAGS}
-    DEFS ${ASAN_COMMON_DEFINITIONS})
+    DEFS ${ASAN_COMMON_DEFINITIONS}
+    DEPS ${ASAN_DEPS})
   add_compiler_rt_object_libraries(RTAsan_cxx
     ARCHS ${ASAN_SUPPORTED_ARCH}
     SOURCES ${ASAN_CXX_SOURCES}
     ADDITIONAL_HEADERS ${ASAN_HEADERS}
     CFLAGS ${ASAN_CFLAGS}
-    DEFS ${ASAN_COMMON_DEFINITIONS})
+    DEFS ${ASAN_COMMON_DEFINITIONS}
+    DEPS ${ASAN_DEPS})
   add_compiler_rt_object_libraries(RTAsan_preinit
     ARCHS ${ASAN_SUPPORTED_ARCH}
     SOURCES ${ASAN_PREINIT_SOURCES}
     ADDITIONAL_HEADERS ${ASAN_HEADERS}
     CFLAGS ${ASAN_CFLAGS}
-    DEFS ${ASAN_COMMON_DEFINITIONS})
+    DEFS ${ASAN_COMMON_DEFINITIONS}
+    DEPS ${ASAN_DEPS})
 
-  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp "")
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/dummy.cc "")
   add_compiler_rt_object_libraries(RTAsan_dynamic_version_script_dummy
     ARCHS ${ASAN_SUPPORTED_ARCH}
-    SOURCES ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp
+    SOURCES ${CMAKE_CURRENT_BINARY_DIR}/dummy.cc
     CFLAGS ${ASAN_DYNAMIC_CFLAGS}
-    DEFS ${ASAN_DYNAMIC_DEFINITIONS})
+    DEFS ${ASAN_DYNAMIC_DEFINITIONS}
+    DEPS ${ASAN_DEPS})
 endif()
 
 # Build ASan runtimes shipped with Clang.
@@ -212,7 +218,7 @@ else()
     PARENT_TARGET asan)
 
   foreach(arch ${ASAN_SUPPORTED_ARCH})
-    if (COMPILER_RT_HAS_VERSION_SCRIPT)
+    if (UNIX)
       add_sanitizer_rt_version_list(clang_rt.asan-dynamic-${arch}
                                     LIBS clang_rt.asan-${arch} clang_rt.asan_cxx-${arch}
                                     EXTRA asan.syms.extra)
@@ -220,11 +226,11 @@ else()
            -Wl,--version-script,${CMAKE_CURRENT_BINARY_DIR}/clang_rt.asan-dynamic-${arch}.vers)
       # The Solaris 11.4 linker supports a subset of GNU ld version scripts,
       # but requires a special option to enable it.
-      if (COMPILER_RT_HAS_GNU_VERSION_SCRIPT_COMPAT)
+      if (OS_NAME MATCHES "SunOS")
           list(APPEND VERSION_SCRIPT_FLAG -Wl,-z,gnu-version-script-compat)
       endif()
       set_property(SOURCE
-        ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp
+        ${CMAKE_CURRENT_BINARY_DIR}/dummy.cc
         APPEND PROPERTY
         OBJECT_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/clang_rt.asan-dynamic-${arch}.vers)
     else()
@@ -236,9 +242,10 @@ else()
       add_compiler_rt_object_libraries(AsanWeakInterception
         ${SANITIZER_COMMON_SUPPORTED_OS}
         ARCHS ${arch}
-        SOURCES asan_win_weak_interception.cpp
+        SOURCES asan_win_weak_interception.cc
         CFLAGS ${ASAN_CFLAGS} -DSANITIZER_DYNAMIC
-        DEFS ${ASAN_COMMON_DEFINITIONS})
+        DEFS ${ASAN_COMMON_DEFINITIONS}
+        DEPS ${ASAN_DEPS})
       set(ASAN_DYNAMIC_WEAK_INTERCEPTION
           AsanWeakInterception
           UbsanWeakInterception
@@ -280,10 +287,11 @@ else()
       add_compiler_rt_object_libraries(AsanDllThunk
         ${SANITIZER_COMMON_SUPPORTED_OS}
         ARCHS ${arch}
-        SOURCES asan_globals_win.cpp
-                asan_win_dll_thunk.cpp
+        SOURCES asan_globals_win.cc
+                asan_win_dll_thunk.cc
         CFLAGS ${ASAN_CFLAGS} -DSANITIZER_DLL_THUNK
-        DEFS ${ASAN_COMMON_DEFINITIONS})
+        DEFS ${ASAN_COMMON_DEFINITIONS}
+        DEPS ${ASAN_DEPS})
 
       add_compiler_rt_runtime(clang_rt.asan_dll_thunk
         STATIC
@@ -305,10 +313,11 @@ else()
       add_compiler_rt_object_libraries(AsanDynamicRuntimeThunk
         ${SANITIZER_COMMON_SUPPORTED_OS}
         ARCHS ${arch}
-        SOURCES asan_globals_win.cpp
-                asan_win_dynamic_runtime_thunk.cpp
+        SOURCES asan_globals_win.cc
+                asan_win_dynamic_runtime_thunk.cc
         CFLAGS ${ASAN_CFLAGS} ${DYNAMIC_RUNTIME_THUNK_CFLAGS}
-        DEFS ${ASAN_COMMON_DEFINITIONS})
+        DEFS ${ASAN_COMMON_DEFINITIONS}
+        DEPS ${ASAN_DEPS})
 
       add_compiler_rt_runtime(clang_rt.asan_dynamic_runtime_thunk
         STATIC
@@ -324,7 +333,7 @@ else()
   endforeach()
 endif()
 
-add_compiler_rt_resource_file(asan_ignorelist asan_ignorelist.txt asan)
+add_compiler_rt_resource_file(asan_blacklist asan_blacklist.txt asan)
 
 add_subdirectory(scripts)
 

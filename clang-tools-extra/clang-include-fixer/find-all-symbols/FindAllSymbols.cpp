@@ -99,7 +99,7 @@ CreateSymbolInfo(const NamedDecl *ND, const SourceManager &SM,
 
   SourceLocation Loc = SM.getExpansionLoc(ND->getLocation());
   if (!Loc.isValid()) {
-    llvm::errs() << "Declaration " << ND->getDeclName() << "("
+    llvm::errs() << "Declaration " << ND->getNameAsString() << "("
                  << ND->getDeclKindName()
                  << ") has invalid declaration location.";
     return llvm::None;
@@ -128,7 +128,7 @@ void FindAllSymbols::registerMatchers(MatchFinder *MatchFinder) {
   auto HasNSOrTUCtxMatcher =
       hasDeclContext(anyOf(namespaceDecl(), translationUnitDecl()));
 
-  // We need separate rules for C record types and C++ record types since some
+  // We need seperate rules for C record types and C++ record types since some
   // template related matchers are inapplicable on C record declarations.
   //
   // Matchers specific to C++ code.
@@ -251,8 +251,7 @@ void FindAllSymbols::run(const MatchFinder::MatchResult &Result) {
 
   const SourceManager *SM = Result.SourceManager;
   if (auto Symbol = CreateSymbolInfo(ND, *SM, Collector)) {
-    Filename =
-        std::string(SM->getFileEntryForID(SM->getMainFileID())->getName());
+    Filename = SM->getFileEntryForID(SM->getMainFileID())->getName();
     FileSymbols[*Symbol] += Signals;
   }
 }

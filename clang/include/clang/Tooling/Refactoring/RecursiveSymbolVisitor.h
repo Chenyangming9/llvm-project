@@ -98,17 +98,7 @@ public:
                  TypeBeginLoc, TypeEndLoc))
         return false;
     }
-    if (const Type *TP = Loc.getTypePtr()) {
-      if (TP->getTypeClass() == clang::Type::Record)
-        return visit(TP->getAsCXXRecordDecl(), TypeBeginLoc, TypeEndLoc);
-    }
-    return true;
-  }
-
-  bool VisitTypedefTypeLoc(TypedefTypeLoc TL) {
-    const SourceLocation TypeEndLoc =
-        Lexer::getLocForEndOfToken(TL.getBeginLoc(), 0, SM, LangOpts);
-    return visit(TL.getTypedefNameDecl(), TL.getBeginLoc(), TypeEndLoc);
+    return visit(Loc.getType()->getAsCXXRecordDecl(), TypeBeginLoc, TypeEndLoc);
   }
 
   bool TraverseNestedNameSpecifierLoc(NestedNameSpecifierLoc NNS) {
@@ -122,17 +112,6 @@ public:
     return BaseType::TraverseNestedNameSpecifierLoc(NNS);
   }
 
-  bool VisitDesignatedInitExpr(const DesignatedInitExpr *E) {
-    for (const DesignatedInitExpr::Designator &D : E->designators()) {
-      if (D.isFieldDesignator() && D.getField()) {
-        const FieldDecl *Decl = D.getField();
-        if (!visit(Decl, D.getFieldLoc(), D.getFieldLoc()))
-          return false;
-      }
-    }
-    return true;
-  }
-
 private:
   const SourceManager &SM;
   const LangOptions &LangOpts;
@@ -143,7 +122,8 @@ private:
         ND, SourceRange(BeginLoc, EndLoc));
   }
   bool visit(const NamedDecl *ND, SourceLocation Loc) {
-    return visit(ND, Loc, Lexer::getLocForEndOfToken(Loc, 0, SM, LangOpts));
+    return visit(ND, Loc,
+                 Loc.getLocWithOffset(ND->getNameAsString().length() - 1));
   }
 };
 

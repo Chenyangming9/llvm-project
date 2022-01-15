@@ -5,14 +5,27 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// This file implements the GCNRegPressure class.
-///
-//===----------------------------------------------------------------------===//
 
 #include "GCNRegPressure.h"
+#include "AMDGPUSubtarget.h"
+#include "SIRegisterInfo.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/CodeGen/LiveInterval.h"
+#include "llvm/CodeGen/LiveIntervals.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/RegisterPressure.h"
+#include "llvm/CodeGen/SlotIndexes.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/Config/llvm-config.h"
+#include "llvm/MC/LaneBitmask.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
+#include <algorithm>
+#include <cassert>
 
 using namespace llvm;
 
@@ -27,7 +40,7 @@ void llvm::printLivesAt(SlotIndex SI,
          << *LIS.getInstructionFromIndex(SI);
   unsigned Num = 0;
   for (unsigned I = 0, E = MRI.getNumVirtRegs(); I != E; ++I) {
-    const unsigned Reg = Register::index2VirtReg(I);
+    const unsigned Reg = TargetRegisterInfo::index2VirtReg(I);
     if (!LIS.hasInterval(Reg))
       continue;
     const auto &LI = LIS.getInterval(Reg);
@@ -69,9 +82,9 @@ bool llvm::isEqual(const GCNRPTracker::LiveRegSet &S1,
 ///////////////////////////////////////////////////////////////////////////////
 // GCNRegPressure
 
-unsigned GCNRegPressure::getRegKind(Register Reg,
+unsigned GCNRegPressure::getRegKind(unsigned Reg,
                                     const MachineRegisterInfo &MRI) {
-  assert(Reg.isVirtual());
+  assert(TargetRegisterInfo::isVirtualRegister(Reg));
   const auto RC = MRI.getRegClass(Reg);
   auto STI = static_cast<const SIRegisterInfo*>(MRI.getTargetRegisterInfo());
   return STI->isSGPRClass(RC) ?
@@ -85,8 +98,7 @@ void GCNRegPressure::inc(unsigned Reg,
                          LaneBitmask PrevMask,
                          LaneBitmask NewMask,
                          const MachineRegisterInfo &MRI) {
-  if (SIRegisterInfo::getNumCoveredRegs(NewMask) ==
-      SIRegisterInfo::getNumCoveredRegs(PrevMask))
+  if (NewMask == PrevMask)
     return;
 
   int Sign = 1;
@@ -94,21 +106,25 @@ void GCNRegPressure::inc(unsigned Reg,
     std::swap(NewMask, PrevMask);
     Sign = -1;
   }
-
+#ifndef NDEBUG
+  const auto MaxMask = MRI.getMaxLaneMaskForVReg(Reg);
+#endif
   switch (auto Kind = getRegKind(Reg, MRI)) {
   case SGPR32:
   case VGPR32:
   case AGPR32:
+    assert(PrevMask.none() && NewMask == MaxMask);
     Value[Kind] += Sign;
     break;
 
   case SGPR_TUPLE:
   case VGPR_TUPLE:
   case AGPR_TUPLE:
+    assert(NewMask < MaxMask || NewMask == MaxMask);
     assert(PrevMask < NewMask);
 
     Value[Kind == SGPR_TUPLE ? SGPR32 : Kind == AGPR_TUPLE ? AGPR32 : VGPR32] +=
-      Sign * SIRegisterInfo::getNumCoveredRegs(~PrevMask & NewMask);
+      Sign * (~PrevMask & NewMask).getNumLanes();
 
     if (PrevMask.none()) {
       assert(NewMask.any());
@@ -125,14 +141,12 @@ bool GCNRegPressure::less(const GCNSubtarget &ST,
                           unsigned MaxOccupancy) const {
   const auto SGPROcc = std::min(MaxOccupancy,
                                 ST.getOccupancyWithNumSGPRs(getSGPRNum()));
-  const auto VGPROcc =
-    std::min(MaxOccupancy,
-             ST.getOccupancyWithNumVGPRs(getVGPRNum(ST.hasGFX90AInsts())));
+  const auto VGPROcc = std::min(MaxOccupancy,
+                                ST.getOccupancyWithNumVGPRs(getVGPRNum()));
   const auto OtherSGPROcc = std::min(MaxOccupancy,
                                 ST.getOccupancyWithNumSGPRs(O.getSGPRNum()));
-  const auto OtherVGPROcc =
-    std::min(MaxOccupancy,
-             ST.getOccupancyWithNumVGPRs(O.getVGPRNum(ST.hasGFX90AInsts())));
+  const auto OtherVGPROcc = std::min(MaxOccupancy,
+                                ST.getOccupancyWithNumVGPRs(O.getVGPRNum()));
 
   const auto Occ = std::min(SGPROcc, VGPROcc);
   const auto OtherOcc = std::min(OtherSGPROcc, OtherVGPROcc);
@@ -163,18 +177,14 @@ bool GCNRegPressure::less(const GCNSubtarget &ST,
     }
   }
   return SGPRImportant ? (getSGPRNum() < O.getSGPRNum()):
-                         (getVGPRNum(ST.hasGFX90AInsts()) <
-                          O.getVGPRNum(ST.hasGFX90AInsts()));
+                         (getVGPRNum() < O.getVGPRNum());
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 LLVM_DUMP_METHOD
 void GCNRegPressure::print(raw_ostream &OS, const GCNSubtarget *ST) const {
-  OS << "VGPRs: " << Value[VGPR32] << ' ';
-  OS << "AGPRs: " << Value[AGPR32];
-  if (ST) OS << "(O"
-             << ST->getOccupancyWithNumVGPRs(getVGPRNum(ST->hasGFX90AInsts()))
-             << ')';
+  OS << "VGPRs: " << getVGPRNum();
+  if (ST) OS << "(O" << ST->getOccupancyWithNumVGPRs(getVGPRNum()) << ')';
   OS << ", SGPRs: " << getSGPRNum();
   if (ST) OS << "(O" << ST->getOccupancyWithNumSGPRs(getSGPRNum()) << ')';
   OS << ", LVGPR WT: " << getVGPRTuplesWeight()
@@ -186,7 +196,8 @@ void GCNRegPressure::print(raw_ostream &OS, const GCNSubtarget *ST) const {
 
 static LaneBitmask getDefRegMask(const MachineOperand &MO,
                                  const MachineRegisterInfo &MRI) {
-  assert(MO.isDef() && MO.isReg() && MO.getReg().isVirtual());
+  assert(MO.isDef() && MO.isReg() &&
+    TargetRegisterInfo::isVirtualRegister(MO.getReg()));
 
   // We don't rely on read-undef flag because in case of tentative schedule
   // tracking it isn't set correctly yet. This works correctly however since
@@ -199,13 +210,14 @@ static LaneBitmask getDefRegMask(const MachineOperand &MO,
 static LaneBitmask getUsedRegMask(const MachineOperand &MO,
                                   const MachineRegisterInfo &MRI,
                                   const LiveIntervals &LIS) {
-  assert(MO.isUse() && MO.isReg() && MO.getReg().isVirtual());
+  assert(MO.isUse() && MO.isReg() &&
+         TargetRegisterInfo::isVirtualRegister(MO.getReg()));
 
   if (auto SubReg = MO.getSubReg())
     return MRI.getTargetRegisterInfo()->getSubRegIndexLaneMask(SubReg);
 
   auto MaxMask = MRI.getMaxLaneMaskForVReg(MO.getReg());
-  if (SIRegisterInfo::getNumCoveredRegs(MaxMask) > 1) // cannot have subregs
+  if (MaxMask == LaneBitmask::getLane(0)) // cannot have subregs
     return MaxMask;
 
   // For a tentative schedule LIS isn't updated yet but livemask should remain
@@ -220,7 +232,7 @@ collectVirtualRegUses(const MachineInstr &MI, const LiveIntervals &LIS,
                       const MachineRegisterInfo &MRI) {
   SmallVector<RegisterMaskPair, 8> Res;
   for (const auto &MO : MI.operands()) {
-    if (!MO.isReg() || !MO.getReg().isVirtual())
+    if (!MO.isReg() || !TargetRegisterInfo::isVirtualRegister(MO.getReg()))
       continue;
     if (!MO.isUse() || !MO.readsReg())
       continue;
@@ -228,8 +240,9 @@ collectVirtualRegUses(const MachineInstr &MI, const LiveIntervals &LIS,
     auto const UsedMask = getUsedRegMask(MO, MRI, LIS);
 
     auto Reg = MO.getReg();
-    auto I = llvm::find_if(
-        Res, [Reg](const RegisterMaskPair &RM) { return RM.RegUnit == Reg; });
+    auto I = std::find_if(Res.begin(), Res.end(), [Reg](const RegisterMaskPair &RM) {
+      return RM.RegUnit == Reg;
+    });
     if (I != Res.end())
       I->LaneMask |= UsedMask;
     else
@@ -265,7 +278,7 @@ GCNRPTracker::LiveRegSet llvm::getLiveRegs(SlotIndex SI,
                                            const MachineRegisterInfo &MRI) {
   GCNRPTracker::LiveRegSet LiveRegs;
   for (unsigned I = 0, E = MRI.getNumVirtRegs(); I != E; ++I) {
-    auto Reg = Register::index2VirtReg(I);
+    auto Reg = TargetRegisterInfo::index2VirtReg(I);
     if (!LIS.hasInterval(Reg))
       continue;
     auto LiveMask = getLiveLaneMask(Reg, SI, LIS, MRI);
@@ -315,8 +328,9 @@ void GCNUpwardRPTracker::recede(const MachineInstr &MI) {
   // update max pressure
   MaxPressure = max(AtMIPressure, MaxPressure);
 
-  for (const auto &MO : MI.operands()) {
-    if (!MO.isReg() || !MO.isDef() || !MO.getReg().isVirtual() || MO.isDead())
+  for (const auto &MO : MI.defs()) {
+    if (!MO.isReg() || !TargetRegisterInfo::isVirtualRegister(MO.getReg()) ||
+         MO.isDead())
       continue;
 
     auto Reg = MO.getReg();
@@ -389,14 +403,13 @@ bool GCNDownwardRPTracker::advanceBeforeNext() {
 
 void GCNDownwardRPTracker::advanceToNext() {
   LastTrackedMI = &*NextMI++;
-  NextMI = skipDebugInstructionsForward(NextMI, MBBEnd);
 
   // Add new registers or mask bits.
-  for (const auto &MO : LastTrackedMI->operands()) {
-    if (!MO.isReg() || !MO.isDef())
+  for (const auto &MO : LastTrackedMI->defs()) {
+    if (!MO.isReg())
       continue;
-    Register Reg = MO.getReg();
-    if (!Reg.isVirtual())
+    unsigned Reg = MO.getReg();
+    if (!TargetRegisterInfo::isVirtualRegister(Reg))
       continue;
     auto &LiveMask = LiveRegs[Reg];
     auto PrevMask = LiveMask;
@@ -487,7 +500,7 @@ void GCNRPTracker::printLiveRegs(raw_ostream &OS, const LiveRegSet& LiveRegs,
                                  const MachineRegisterInfo &MRI) {
   const TargetRegisterInfo *TRI = MRI.getTargetRegisterInfo();
   for (unsigned I = 0, E = MRI.getNumVirtRegs(); I != E; ++I) {
-    unsigned Reg = Register::index2VirtReg(I);
+    unsigned Reg = TargetRegisterInfo::index2VirtReg(I);
     auto It = LiveRegs.find(Reg);
     if (It != LiveRegs.end() && It->second.any())
       OS << ' ' << printVRegOrUnit(Reg, TRI) << ':'

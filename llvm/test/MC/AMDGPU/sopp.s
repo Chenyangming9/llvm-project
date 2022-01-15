@@ -1,6 +1,6 @@
-// RUN: not llvm-mc -arch=amdgcn -show-encoding %s | FileCheck --check-prefixes=GCN,SI %s
-// RUN: not llvm-mc -arch=amdgcn %s 2>&1 | FileCheck %s --check-prefix=NOSICI --implicit-check-not=error:
-// RUN: llvm-mc -arch=amdgcn -mcpu=fiji -show-encoding %s | FileCheck --check-prefixes=GCN,VI %s
+// RUN: not llvm-mc -arch=amdgcn -show-encoding %s | FileCheck --check-prefix=GCN --check-prefix=SICI %s
+// RUN: not llvm-mc -arch=amdgcn -show-encoding %s 2>&1 | FileCheck %s --check-prefix=NOSICI
+// RUN: llvm-mc -arch=amdgcn -mcpu=fiji -show-encoding %s | FileCheck --check-prefix=GCN --check-prefix=VI %s
 
 //===----------------------------------------------------------------------===//
 // Edge Cases
@@ -228,18 +228,6 @@ s_sendmsg sendmsg(3, 0)
 s_sendmsg sendmsg(MSG_GS_DONE, GS_OP_NOP)
 // GCN: s_sendmsg sendmsg(MSG_GS_DONE, GS_OP_NOP) ; encoding: [0x03,0x00,0x90,0xbf]
 
-s_sendmsg 0x4
-// SI: s_sendmsg sendmsg(4, 0, 0) ; encoding: [0x04,0x00,0x90,0xbf]
-// VI: s_sendmsg sendmsg(MSG_SAVEWAVE) ; encoding: [0x04,0x00,0x90,0xbf]
-
-s_sendmsg sendmsg(4)
-// SI: s_sendmsg sendmsg(4, 0, 0) ; encoding: [0x04,0x00,0x90,0xbf]
-// VI: s_sendmsg sendmsg(MSG_SAVEWAVE) ; encoding: [0x04,0x00,0x90,0xbf]
-
-s_sendmsg sendmsg(MSG_SAVEWAVE)
-// NOSICI: error: invalid message id
-// VI: s_sendmsg sendmsg(MSG_SAVEWAVE) ; encoding: [0x04,0x00,0x90,0xbf]
-
 s_sendmsg 0x1f
 // GCN: s_sendmsg sendmsg(MSG_SYSMSG, SYSMSG_OP_ECC_ERR_INTERRUPT) ; encoding: [0x1f,0x00,0x90,0xbf]
 
@@ -261,6 +249,9 @@ s_sendmsghalt sendmsg(MSG_GS, GS_OP_EMIT, 1)
 
 s_sendmsg 2
 // GCN: s_sendmsg sendmsg(2, 0, 0) ; encoding: [0x02,0x00,0x90,0xbf]
+
+s_sendmsg 0x4
+// GCN: s_sendmsg sendmsg(4, 0, 0) ; encoding: [0x04,0x00,0x90,0xbf]
 
 s_sendmsg 9
 // GCN: s_sendmsg sendmsg(9, 0, 0) ; encoding: [0x09,0x00,0x90,0xbf]
@@ -366,23 +357,23 @@ s_ttracedata
 
 s_set_gpr_idx_off
 // VI: 	s_set_gpr_idx_off ; encoding: [0x00,0x00,0x9c,0xbf]
-// NOSICI: error: instruction not supported on this GPU
+// NOSICI: error:
 
 s_set_gpr_idx_mode 0
 // VI: s_set_gpr_idx_mode gpr_idx() ; encoding: [0x00,0x00,0x9d,0xbf]
-// NOSICI: error: instruction not supported on this GPU
+// NOSICI: error:
 
 s_set_gpr_idx_mode gpr_idx()
 // VI: s_set_gpr_idx_mode gpr_idx() ; encoding: [0x00,0x00,0x9d,0xbf]
-// NOSICI: error: instruction not supported on this GPU
+// NOSICI: error:
 
 s_set_gpr_idx_mode 15
 // VI: s_set_gpr_idx_mode gpr_idx(SRC0,SRC1,SRC2,DST) ; encoding: [0x0f,0x00,0x9d,0xbf]
-// NOSICI: error: instruction not supported on this GPU
+// NOSICI: error:
 
 s_set_gpr_idx_mode gpr_idx(SRC2,SRC1,SRC0,DST)
 // VI: s_set_gpr_idx_mode gpr_idx(SRC0,SRC1,SRC2,DST) ; encoding: [0x0f,0x00,0x9d,0xbf]
-// NOSICI: error: instruction not supported on this GPU
+// NOSICI: error:
 
 s_endpgm_saved
 // VI: s_endpgm_saved ; encoding: [0x00,0x00,0x9b,0xbf]
@@ -391,15 +382,3 @@ s_endpgm_saved
 s_wakeup
 // VI: s_wakeup ; encoding: [0x00,0x00,0x83,0xbf]
 // NOSICI: error: instruction not supported on this GPU
-
-//===----------------------------------------------------------------------===//
-// absolute expressions as branch offsets
-//===----------------------------------------------------------------------===//
-
-offset = 3
-s_branch 1+offset
-// GCN: s_branch 4 ; encoding: [0x04,0x00,0x82,0xbf]
-
-offset = 3
-s_branch offset+1
-// GCN: s_branch 4 ; encoding: [0x04,0x00,0x82,0xbf]

@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "Format.h"
-#include "support/Logger.h"
-#include "clang/Basic/FileManager.h"
+#include "Logger.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Format/Format.h"
 #include "clang/Lex/Lexer.h"
@@ -23,11 +22,10 @@ namespace {
 /// as it isn't sure where the errors are and so can't correct.
 /// When editing, it's reasonable to assume code before the cursor is complete.
 void closeBrackets(std::string &Code, const format::FormatStyle &Style) {
-  SourceManagerForFile FileSM("mock_file.cpp", Code);
+  SourceManagerForFile FileSM("dummy.cpp", Code);
   auto &SM = FileSM.get();
   FileID FID = SM.getMainFileID();
-  Lexer Lex(FID, SM.getBufferOrFake(FID), SM,
-            format::getFormattingLangOpts(Style));
+  Lexer Lex(FID, SM.getBuffer(FID), SM, format::getFormattingLangOpts(Style));
   Token Tok;
   std::vector<char> Brackets;
   while (!Lex.LexFromRawLexer(Tok)) {
@@ -328,7 +326,7 @@ formatIncremental(llvm::StringRef OriginalCode, unsigned OriginalCursor,
   tooling::Replacements Final;
   unsigned FinalCursor = OriginalCursor;
 #ifndef NDEBUG
-  std::string FinalCode = std::string(OriginalCode);
+  std::string FinalCode = OriginalCode;
   dlog("Initial code: {0}", FinalCode);
 #endif
   for (auto Pass :

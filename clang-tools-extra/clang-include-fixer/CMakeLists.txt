@@ -11,14 +11,6 @@ add_clang_library(clangIncludeFixer
   YamlSymbolIndex.cpp
 
   LINK_LIBS
-  findAllSymbols
-
-  DEPENDS
-  omp_gen
-  )
-
-clang_target_link_libraries(clangIncludeFixer
-  PRIVATE
   clangAST
   clangBasic
   clangFormat
@@ -29,6 +21,7 @@ clang_target_link_libraries(clangIncludeFixer
   clangSerialization
   clangTooling
   clangToolingCore
+  findAllSymbols
   )
 
 add_subdirectory(plugin)

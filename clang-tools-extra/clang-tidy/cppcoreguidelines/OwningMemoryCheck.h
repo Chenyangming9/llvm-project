@@ -9,7 +9,7 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_CPPCOREGUIDELINES_OWNING_MEMORY_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_CPPCOREGUIDELINES_OWNING_MEMORY_H
 
-#include "../ClangTidyCheck.h"
+#include "../ClangTidy.h"
 
 namespace clang {
 namespace tidy {
@@ -29,9 +29,6 @@ public:
                                        "::calloc;::fopen;::freopen;::tmpfile")),
         LegacyResourceConsumers(Options.get(
             "LegacyResourceConsumers", "::free;::realloc;::freopen;::fclose")) {
-  }
-  bool isLanguageVersionSupported(const LangOptions &LangOpts) const override {
-    return LangOpts.CPlusPlus11;
   }
 
   /// Make configuration of checker discoverable.

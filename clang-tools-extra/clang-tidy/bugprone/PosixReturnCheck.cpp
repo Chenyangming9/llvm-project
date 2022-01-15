@@ -10,7 +10,6 @@
 #include "../utils/Matchers.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "clang/Lex/Lexer.h"
 
 using namespace clang::ast_matchers;
 
@@ -29,30 +28,26 @@ static StringRef getFunctionSpelling(const MatchFinder::MatchResult &Result,
 }
 
 void PosixReturnCheck::registerMatchers(MatchFinder *Finder) {
+  Finder->addMatcher(binaryOperator(hasOperatorName("<"),
+                                    hasLHS(callExpr(callee(functionDecl(
+                                        matchesName("^::posix_"),
+                                        unless(hasName("::posix_openpt")))))),
+                                    hasRHS(integerLiteral(equals(0))))
+                         .bind("ltzop"),
+                     this);
+  Finder->addMatcher(binaryOperator(hasOperatorName(">="),
+                                    hasLHS(callExpr(callee(functionDecl(
+                                        matchesName("^::posix_"),
+                                        unless(hasName("::posix_openpt")))))),
+                                    hasRHS(integerLiteral(equals(0))))
+                         .bind("atop"),
+                     this);
   Finder->addMatcher(
       binaryOperator(
-          hasOperatorName("<"),
+          anyOf(hasOperatorName("=="), hasOperatorName("!="),
+                hasOperatorName("<="), hasOperatorName("<")),
           hasLHS(callExpr(callee(functionDecl(
-              anyOf(matchesName("^::posix_"), matchesName("^::pthread_")),
-              unless(hasName("::posix_openpt")))))),
-          hasRHS(integerLiteral(equals(0))))
-          .bind("ltzop"),
-      this);
-  Finder->addMatcher(
-      binaryOperator(
-          hasOperatorName(">="),
-          hasLHS(callExpr(callee(functionDecl(
-              anyOf(matchesName("^::posix_"), matchesName("^::pthread_")),
-              unless(hasName("::posix_openpt")))))),
-          hasRHS(integerLiteral(equals(0))))
-          .bind("atop"),
-      this);
-  Finder->addMatcher(
-      binaryOperator(
-          hasAnyOperatorName("==", "!=", "<=", "<"),
-          hasLHS(callExpr(callee(functionDecl(
-              anyOf(matchesName("^::posix_"), matchesName("^::pthread_")),
-              unless(hasName("::posix_openpt")))))),
+              matchesName("^::posix_"), unless(hasName("::posix_openpt")))))),
           hasRHS(unaryOperator(hasOperatorName("-"),
                                hasUnaryOperand(integerLiteral()))))
           .bind("binop"),

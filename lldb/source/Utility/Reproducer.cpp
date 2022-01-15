@@ -1,4 +1,4 @@
-//===-- Reproducer.cpp ----------------------------------------------------===//
+//===-- Reproducer.cpp ------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,8 +8,6 @@
 
 #include "lldb/Utility/Reproducer.h"
 #include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/ReproducerProvider.h"
-#include "lldb/Utility/Timer.h"
 
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Threading.h"
@@ -45,18 +43,12 @@ llvm::Error Reproducer::Initialize(ReproducerMode mode,
     return Instance().SetCapture(root);
   } break;
   case ReproducerMode::Replay:
-    return Instance().SetReplay(root, /*passive*/ false);
-  case ReproducerMode::PassiveReplay:
-    return Instance().SetReplay(root, /*passive*/ true);
+    return Instance().SetReplay(root);
   case ReproducerMode::Off:
     break;
   };
 
   return Error::success();
-}
-
-void Reproducer::Initialize() {
-  llvm::cantFail(Initialize(repro::ReproducerMode::Off, llvm::None));
 }
 
 bool Reproducer::Initialized() { return InstanceImpl().operator bool(); }
@@ -116,7 +108,7 @@ llvm::Error Reproducer::SetCapture(llvm::Optional<FileSpec> root) {
   return Error::success();
 }
 
-llvm::Error Reproducer::SetReplay(llvm::Optional<FileSpec> root, bool passive) {
+llvm::Error Reproducer::SetReplay(llvm::Optional<FileSpec> root) {
   std::lock_guard<std::mutex> guard(m_mutex);
 
   if (root && m_generator)
@@ -129,7 +121,7 @@ llvm::Error Reproducer::SetReplay(llvm::Optional<FileSpec> root, bool passive) {
     return Error::success();
   }
 
-  m_loader.emplace(*root, passive);
+  m_loader.emplace(*root);
   if (auto e = m_loader->LoadIndex())
     return e;
 
@@ -144,28 +136,9 @@ FileSpec Reproducer::GetReproducerPath() const {
   return {};
 }
 
-static FileSpec MakeAbsolute(const FileSpec &file_spec) {
-  SmallString<128> path;
-  file_spec.GetPath(path, false);
-  llvm::sys::fs::make_absolute(path);
-  return FileSpec(path, file_spec.GetPathStyle());
-}
+Generator::Generator(const FileSpec &root) : m_root(root), m_done(false) {}
 
-Generator::Generator(FileSpec root) : m_root(MakeAbsolute(std::move(root))) {
-  GetOrCreate<repro::WorkingDirectoryProvider>();
-  GetOrCreate<repro::HomeDirectoryProvider>();
-}
-
-Generator::~Generator() {
-  if (!m_done) {
-    if (m_auto_generate) {
-      Keep();
-      llvm::cantFail(Finalize(GetRoot()));
-    } else {
-      Discard();
-    }
-  }
-}
+Generator::~Generator() {}
 
 ProviderBase *Generator::Register(std::unique_ptr<ProviderBase> provider) {
   std::lock_guard<std::mutex> lock(m_providers_mutex);
@@ -176,7 +149,6 @@ ProviderBase *Generator::Register(std::unique_ptr<ProviderBase> provider) {
 }
 
 void Generator::Keep() {
-  LLDB_SCOPED_TIMER();
   assert(!m_done);
   m_done = true;
 
@@ -187,7 +159,6 @@ void Generator::Keep() {
 }
 
 void Generator::Discard() {
-  LLDB_SCOPED_TIMER();
   assert(!m_done);
   m_done = true;
 
@@ -197,10 +168,6 @@ void Generator::Discard() {
   llvm::sys::fs::remove_directories(m_root.GetPath());
 }
 
-void Generator::SetAutoGenerate(bool b) { m_auto_generate = b; }
-
-bool Generator::IsAutoGenerate() const { return m_auto_generate; }
-
 const FileSpec &Generator::GetRoot() const { return m_root; }
 
 void Generator::AddProvidersToIndex() {
@@ -208,8 +175,8 @@ void Generator::AddProvidersToIndex() {
   index.AppendPathComponent("index.yaml");
 
   std::error_code EC;
-  auto strm = std::make_unique<raw_fd_ostream>(index.GetPath(), EC,
-                                               sys::fs::OpenFlags::OF_None);
+  auto strm = llvm::make_unique<raw_fd_ostream>(index.GetPath(), EC,
+                                                sys::fs::OpenFlags::F_None);
   yaml::Output yout(*strm);
 
   std::vector<std::string> files;
@@ -221,9 +188,7 @@ void Generator::AddProvidersToIndex() {
   yout << files;
 }
 
-Loader::Loader(FileSpec root, bool passive)
-    : m_root(MakeAbsolute(std::move(root))), m_loaded(false),
-      m_passive_replay(passive) {}
+Loader::Loader(const FileSpec &root) : m_root(root), m_loaded(false) {}
 
 llvm::Error Loader::LoadIndex() {
   if (m_loaded)
@@ -255,148 +220,66 @@ bool Loader::HasFile(StringRef file) {
   return (it != m_files.end()) && (*it == file);
 }
 
-void Verifier::Verify(
-    llvm::function_ref<void(llvm::StringRef)> error_callback,
-    llvm::function_ref<void(llvm::StringRef)> warning_callback,
-    llvm::function_ref<void(llvm::StringRef)> note_callack) const {
-  if (!m_loader) {
-    error_callback("invalid loader");
+llvm::Expected<std::unique_ptr<DataRecorder>>
+DataRecorder::Create(const FileSpec &filename) {
+  std::error_code ec;
+  auto recorder = llvm::make_unique<DataRecorder>(std::move(filename), ec);
+  if (ec)
+    return llvm::errorCodeToError(ec);
+  return std::move(recorder);
+}
+
+DataRecorder *CommandProvider::GetNewDataRecorder() {
+  std::size_t i = m_data_recorders.size() + 1;
+  std::string filename = (llvm::Twine(Info::name) + llvm::Twine("-") +
+                          llvm::Twine(i) + llvm::Twine(".txt"))
+                             .str();
+  auto recorder_or_error =
+      DataRecorder::Create(GetRoot().CopyByAppendingPathComponent(filename));
+  if (!recorder_or_error) {
+    llvm::consumeError(recorder_or_error.takeError());
+    return nullptr;
+  }
+
+  m_data_recorders.push_back(std::move(*recorder_or_error));
+  return m_data_recorders.back().get();
+}
+
+void CommandProvider::Keep() {
+  std::vector<std::string> files;
+  for (auto &recorder : m_data_recorders) {
+    recorder->Stop();
+    files.push_back(recorder->GetFilename().GetPath());
+  }
+
+  FileSpec file = GetRoot().CopyByAppendingPathComponent(Info::file);
+  std::error_code ec;
+  llvm::raw_fd_ostream os(file.GetPath(), ec, llvm::sys::fs::F_Text);
+  if (ec)
     return;
-  }
+  yaml::Output yout(os);
+  yout << files;
+}
 
-  FileSpec vfs_mapping = m_loader->GetFile<FileProvider::Info>();
-  ErrorOr<std::unique_ptr<MemoryBuffer>> buffer =
-      vfs::getRealFileSystem()->getBufferForFile(vfs_mapping.GetPath());
-  if (!buffer) {
-    error_callback("unable to read files: " + buffer.getError().message());
+void CommandProvider::Discard() { m_data_recorders.clear(); }
+
+void VersionProvider::Keep() {
+  FileSpec file = GetRoot().CopyByAppendingPathComponent(Info::file);
+  std::error_code ec;
+  llvm::raw_fd_ostream os(file.GetPath(), ec, llvm::sys::fs::F_Text);
+  if (ec)
     return;
-  }
-
-  IntrusiveRefCntPtr<vfs::FileSystem> vfs = vfs::getVFSFromYAML(
-      std::move(buffer.get()), nullptr, vfs_mapping.GetPath());
-  if (!vfs) {
-    error_callback("unable to initialize the virtual file system");
-    return;
-  }
-
-  auto &redirecting_vfs = static_cast<vfs::RedirectingFileSystem &>(*vfs);
-  redirecting_vfs.setFallthrough(false);
-
-  {
-    llvm::Expected<std::string> working_dir =
-        GetDirectoryFrom<WorkingDirectoryProvider>(m_loader);
-    if (working_dir) {
-      if (!vfs->exists(*working_dir))
-        warning_callback("working directory '" + *working_dir + "' not in VFS");
-      vfs->setCurrentWorkingDirectory(*working_dir);
-    } else {
-      warning_callback("no working directory in reproducer: " +
-                       toString(working_dir.takeError()));
-    }
-  }
-
-  {
-    llvm::Expected<std::string> home_dir =
-        GetDirectoryFrom<HomeDirectoryProvider>(m_loader);
-    if (home_dir) {
-      if (!vfs->exists(*home_dir))
-        warning_callback("home directory '" + *home_dir + "' not in VFS");
-    } else {
-      warning_callback("no home directory in reproducer: " +
-                       toString(home_dir.takeError()));
-    }
-  }
-
-  {
-    Expected<std::string> symbol_files =
-        m_loader->LoadBuffer<SymbolFileProvider>();
-    if (symbol_files) {
-      std::vector<SymbolFileProvider::Entry> entries;
-      llvm::yaml::Input yin(*symbol_files);
-      yin >> entries;
-      for (const auto &entry : entries) {
-        if (!entry.module_path.empty() && !vfs->exists(entry.module_path)) {
-          warning_callback("'" + entry.module_path + "': module path for " +
-                           entry.uuid + " not in VFS");
-        }
-        if (!entry.symbol_path.empty() && !vfs->exists(entry.symbol_path)) {
-          warning_callback("'" + entry.symbol_path + "': symbol path for " +
-                           entry.uuid + " not in VFS");
-        }
-      }
-    } else {
-      llvm::consumeError(symbol_files.takeError());
-    }
-  }
-
-  // Missing files in the VFS are notes rather than warnings. Because the VFS
-  // is a snapshot, temporary files could have been removed between when they
-  // were recorded and when the reproducer was generated.
-  std::vector<llvm::StringRef> roots = redirecting_vfs.getRoots();
-  for (llvm::StringRef root : roots) {
-    std::error_code ec;
-    vfs::recursive_directory_iterator iter(*vfs, root, ec);
-    vfs::recursive_directory_iterator end;
-    for (; iter != end && !ec; iter.increment(ec)) {
-      ErrorOr<vfs::Status> status = vfs->status(iter->path());
-      if (!status)
-        note_callack("'" + iter->path().str() +
-                     "': " + status.getError().message());
-    }
-  }
+  os << m_version << "\n";
 }
 
-static llvm::Error addPaths(StringRef path,
-                            function_ref<void(StringRef)> callback) {
-  auto buffer = llvm::MemoryBuffer::getFile(path);
-  if (!buffer)
-    return errorCodeToError(buffer.getError());
-
-  SmallVector<StringRef, 0> paths;
-  (*buffer)->getBuffer().split(paths, '\0');
-  for (StringRef p : paths) {
-    if (!p.empty() && llvm::sys::fs::exists(p))
-      callback(p);
-  }
-
-  return errorCodeToError(llvm::sys::fs::remove(path));
-}
-
-llvm::Error repro::Finalize(Loader *loader) {
-  if (!loader)
-    return make_error<StringError>("invalid loader",
-                                   llvm::inconvertibleErrorCode());
-
-  FileSpec reproducer_root = loader->GetRoot();
-  std::string files_path =
-      reproducer_root.CopyByAppendingPathComponent("files.txt").GetPath();
-  std::string dirs_path =
-      reproducer_root.CopyByAppendingPathComponent("dirs.txt").GetPath();
-
-  FileCollector collector(
-      reproducer_root.CopyByAppendingPathComponent("root").GetPath(),
-      reproducer_root.GetPath());
-
-  if (Error e =
-          addPaths(files_path, [&](StringRef p) { collector.addFile(p); }))
-    return e;
-
-  if (Error e =
-          addPaths(dirs_path, [&](StringRef p) { collector.addDirectory(p); }))
-    return e;
-
-  FileSpec mapping =
-      reproducer_root.CopyByAppendingPathComponent(FileProvider::Info::file);
-  if (auto ec = collector.copyFiles(/*stop_on_error=*/false))
-    return errorCodeToError(ec);
-  collector.writeMapping(mapping.GetPath());
-
-  return llvm::Error::success();
-}
-
-llvm::Error repro::Finalize(const FileSpec &root) {
-  Loader loader(root);
-  if (Error e = loader.LoadIndex())
-    return e;
-  return Finalize(&loader);
-}
+void ProviderBase::anchor() {}
+char ProviderBase::ID = 0;
+char CommandProvider::ID = 0;
+char FileProvider::ID = 0;
+char VersionProvider::ID = 0;
+const char *CommandProvider::Info::file = "command-interpreter.yaml";
+const char *CommandProvider::Info::name = "command-interpreter";
+const char *FileProvider::Info::file = "files.yaml";
+const char *FileProvider::Info::name = "files";
+const char *VersionProvider::Info::file = "version.txt";
+const char *VersionProvider::Info::name = "version";

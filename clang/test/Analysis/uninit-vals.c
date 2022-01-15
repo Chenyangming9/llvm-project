@@ -149,6 +149,8 @@ int test_radar12278788_FP() {
   RetVoidFuncType f = foo_radar12278788_fp;
   return ((RetIntFuncType)f)(); //expected-warning {{Undefined or garbage value returned to caller}}
                                 //expected-note@-1 {{Undefined or garbage value returned to caller}}
+                                //expected-note@-2 {{Calling 'foo_radar12278788_fp'}}
+                                //expected-note@-3 {{Returning from 'foo_radar12278788_fp'}}
 }
 
 void rdar13665798() {
@@ -162,6 +164,8 @@ void rdar13665798() {
     RetVoidFuncType f = foo_radar12278788_fp;
     return ((RetIntFuncType)f)(); //expected-warning {{Undefined or garbage value returned to caller}}
                                   //expected-note@-1 {{Undefined or garbage value returned to caller}}
+                                  //expected-note@-2 {{Calling 'foo_radar12278788_fp'}}
+                                  //expected-note@-3 {{Returning from 'foo_radar12278788_fp'}}
   }();
 }
 
@@ -178,14 +182,18 @@ struct Point getHalfPoint() {
 void use(struct Point p); 
 
 void testUseHalfPoint() {
-  struct Point p = getHalfPoint(); // expected-note{{'p' initialized here}}
+  struct Point p = getHalfPoint(); // expected-note{{Calling 'getHalfPoint'}}
+                                   // expected-note@-1{{Returning from 'getHalfPoint'}}
+                                   // expected-note@-2{{'p' initialized here}}
   use(p); // expected-warning{{uninitialized}}
           // expected-note@-1{{uninitialized}}
 }
 
 void testUseHalfPoint2() {
   struct Point p;
-  p = getHalfPoint(); // expected-note{{Value assigned to 'p'}}
+  p = getHalfPoint(); // expected-note{{Calling 'getHalfPoint'}}
+                      // expected-note@-1{{Returning from 'getHalfPoint'}}
+                      // expected-note@-2{{Value assigned to 'p'}}
   use(p); // expected-warning{{uninitialized}}
           // expected-note@-1{{uninitialized}}
 }

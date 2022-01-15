@@ -6,26 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 //
 // <functional>
 //
 // result_of<Fn(ArgTypes...)>
 
-// ADDITIONAL_COMPILE_FLAGS: -D_LIBCPP_ENABLE_CXX20_REMOVED_TYPE_TRAITS
-// ADDITIONAL_COMPILE_FLAGS: -D_LIBCPP_DISABLE_DEPRECATION_WARNINGS
-
 #include <type_traits>
-#include <functional>
 #include <memory>
 #include <utility>
 #include "test_macros.h"
-
-// Ignore warnings about volatile in parameters being deprecated.
-// We know it is, but we still have to test it.
-#if defined(__GNUC__) && (__GNUC__ >= 10) && !defined(__clang__)
-#   pragma GCC diagnostic ignored "-Wvolatile"
-#endif
 
 struct wat
 {
@@ -64,9 +54,6 @@ void test_result_of_imp()
     test_invoke_result<T, U>::call();
 #endif
 }
-
-// Do not warn on deprecated uses of 'volatile' below.
-_LIBCPP_SUPPRESS_DEPRECATED_PUSH
 
 int main(int, char**)
 {
@@ -184,5 +171,3 @@ int main(int, char**)
 
   return 0;
 }
-
-_LIBCPP_SUPPRESS_DEPRECATED_POP

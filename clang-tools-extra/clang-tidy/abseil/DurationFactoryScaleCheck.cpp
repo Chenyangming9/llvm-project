@@ -23,19 +23,24 @@ namespace abseil {
 // `FactoryName`, return `None`.
 static llvm::Optional<DurationScale>
 getScaleForFactory(llvm::StringRef FactoryName) {
-  return llvm::StringSwitch<llvm::Optional<DurationScale>>(FactoryName)
-      .Case("Nanoseconds", DurationScale::Nanoseconds)
-      .Case("Microseconds", DurationScale::Microseconds)
-      .Case("Milliseconds", DurationScale::Milliseconds)
-      .Case("Seconds", DurationScale::Seconds)
-      .Case("Minutes", DurationScale::Minutes)
-      .Case("Hours", DurationScale::Hours)
-      .Default(llvm::None);
+  static const std::unordered_map<std::string, DurationScale> ScaleMap(
+      {{"Nanoseconds", DurationScale::Nanoseconds},
+       {"Microseconds", DurationScale::Microseconds},
+       {"Milliseconds", DurationScale::Milliseconds},
+       {"Seconds", DurationScale::Seconds},
+       {"Minutes", DurationScale::Minutes},
+       {"Hours", DurationScale::Hours}});
+
+  auto ScaleIter = ScaleMap.find(FactoryName);
+  if (ScaleIter == ScaleMap.end())
+    return llvm::None;
+
+  return ScaleIter->second;
 }
 
 // Given either an integer or float literal, return its value.
 // One and only one of `IntLit` and `FloatLit` should be provided.
-static double getValue(const IntegerLiteral *IntLit,
+static double GetValue(const IntegerLiteral *IntLit,
                        const FloatingLiteral *FloatLit) {
   if (IntLit)
     return IntLit->getValue().getLimitedValue();
@@ -46,9 +51,9 @@ static double getValue(const IntegerLiteral *IntLit,
 
 // Given the scale of a duration and a `Multiplier`, determine if `Multiplier`
 // would produce a new scale.  If so, return a tuple containing the new scale
-// and a suitable Multiplier for that scale, otherwise `None`.
+// and a suitable Multipler for that scale, otherwise `None`.
 static llvm::Optional<std::tuple<DurationScale, double>>
-getNewScaleSingleStep(DurationScale OldScale, double Multiplier) {
+GetNewScaleSingleStep(DurationScale OldScale, double Multiplier) {
   switch (OldScale) {
   case DurationScale::Hours:
     if (Multiplier <= 1.0 / 60.0)
@@ -94,17 +99,17 @@ getNewScaleSingleStep(DurationScale OldScale, double Multiplier) {
 
 // Given the scale of a duration and a `Multiplier`, determine if `Multiplier`
 // would produce a new scale.  If so, return it, otherwise `None`.
-static llvm::Optional<DurationScale> getNewScale(DurationScale OldScale,
+static llvm::Optional<DurationScale> GetNewScale(DurationScale OldScale,
                                                  double Multiplier) {
   while (Multiplier != 1.0) {
-    llvm::Optional<std::tuple<DurationScale, double>> Result =
-        getNewScaleSingleStep(OldScale, Multiplier);
-    if (!Result)
+    llvm::Optional<std::tuple<DurationScale, double>> result =
+        GetNewScaleSingleStep(OldScale, Multiplier);
+    if (!result)
       break;
-    if (std::get<1>(*Result) == 1.0)
-      return std::get<0>(*Result);
-    Multiplier = std::get<1>(*Result);
-    OldScale = std::get<0>(*Result);
+    if (std::get<1>(*result) == 1.0)
+      return std::get<0>(*result);
+    Multiplier = std::get<1>(*result);
+    OldScale = std::get<0>(*result);
   }
 
   return llvm::None;
@@ -173,7 +178,7 @@ void DurationFactoryScaleCheck::check(const MatchFinder::MatchResult &Result) {
     const auto *IntLit = llvm::dyn_cast<IntegerLiteral>(MultBinOp->getLHS());
     const auto *FloatLit = llvm::dyn_cast<FloatingLiteral>(MultBinOp->getLHS());
     if (IntLit || FloatLit) {
-      NewScale = getNewScale(Scale, getValue(IntLit, FloatLit));
+      NewScale = GetNewScale(Scale, GetValue(IntLit, FloatLit));
       if (NewScale)
         Remainder = MultBinOp->getRHS();
     }
@@ -183,7 +188,7 @@ void DurationFactoryScaleCheck::check(const MatchFinder::MatchResult &Result) {
       IntLit = llvm::dyn_cast<IntegerLiteral>(MultBinOp->getRHS());
       FloatLit = llvm::dyn_cast<FloatingLiteral>(MultBinOp->getRHS());
       if (IntLit || FloatLit) {
-        NewScale = getNewScale(Scale, getValue(IntLit, FloatLit));
+        NewScale = GetNewScale(Scale, GetValue(IntLit, FloatLit));
         if (NewScale)
           Remainder = MultBinOp->getLHS();
       }
@@ -195,7 +200,7 @@ void DurationFactoryScaleCheck::check(const MatchFinder::MatchResult &Result) {
     const auto *FloatLit = llvm::dyn_cast<FloatingLiteral>(DivBinOp->getRHS());
 
     llvm::Optional<DurationScale> NewScale =
-        getNewScale(Scale, 1.0 / FloatLit->getValueAsApproximateDouble());
+        GetNewScale(Scale, 1.0 / FloatLit->getValueAsApproximateDouble());
     if (NewScale) {
       const Expr *Remainder = DivBinOp->getLHS();
 

@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 #include "support/pstl_test_config.h"
 
@@ -156,7 +156,8 @@ struct test_scan_with_binary_op
     template <typename Policy, typename Iterator1, typename Iterator2, typename Iterator3, typename Size, typename T,
               typename BinaryOp>
     typename std::enable_if<TestUtils::isReverse<Iterator1>::value, void>::type
-    operator()(Policy&&, Iterator1, Iterator1, Iterator2, Iterator2, Iterator3, Iterator3, Size, T, BinaryOp, T)
+    operator()(Policy&&, Iterator1, Iterator1, Iterator2, Iterator2,
+               Iterator3, Iterator3, Size, T, BinaryOp, T)
     {
     }
 };
@@ -179,13 +180,13 @@ test_matrix(Out init, BinaryOp binary_op, Out trash)
     }
 }
 
-int
+int32_t
 main()
 {
     for (int32_t mode = 0; mode < 2; ++mode)
     {
         inclusive = mode != 0;
-#if !defined(_PSTL_ICC_19_TEST_SIMD_UDS_WINDOWS_RELEASE_BROKEN)
+#if !_PSTL_ICC_19_TEST_SIMD_UDS_WINDOWS_RELEASE_BROKEN
         // Test with highly restricted type and associative but not commutative operation
         test_matrix<Matrix2x2<int32_t>, Matrix2x2<int32_t>>(Matrix2x2<int32_t>(), multiply_matrix<int32_t>,
                                                             Matrix2x2<int32_t>(-666, 666));

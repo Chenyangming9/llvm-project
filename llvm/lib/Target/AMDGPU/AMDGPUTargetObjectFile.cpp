@@ -7,10 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUTargetObjectFile.h"
+#include "AMDGPU.h"
+#include "AMDGPUTargetMachine.h"
 #include "Utils/AMDGPUBaseInfo.h"
-#include "llvm/IR/GlobalObject.h"
-#include "llvm/MC/SectionKind.h"
-#include "llvm/Target/TargetMachine.h"
+#include "llvm/BinaryFormat/ELF.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCSectionELF.h"
+
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//

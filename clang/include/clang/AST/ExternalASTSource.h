@@ -17,6 +17,7 @@
 #include "clang/AST/CharUnits.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/Basic/LLVM.h"
+#include "clang/Basic/Module.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
@@ -24,19 +25,20 @@
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/Support/PointerLikeTypeTraits.h"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <string>
 #include <utility>
 
 namespace clang {
 
 class ASTConsumer;
 class ASTContext;
-class ASTSourceDescriptor;
 class CXXBaseSpecifier;
 class CXXCtorInitializer;
 class CXXRecordDecl;
@@ -64,8 +66,9 @@ class ExternalASTSource : public RefCountedBase<ExternalASTSource> {
   /// whenever we might have added new redeclarations for existing decls.
   uint32_t CurrentGeneration = 0;
 
-  /// LLVM-style RTTI.
-  static char ID;
+  /// Whether this AST source also provides information for
+  /// semantic analysis.
+  bool SemaSource = false;
 
 public:
   ExternalASTSource() = default;
@@ -158,6 +161,35 @@ public:
 
   /// Retrieve the module that corresponds to the given module ID.
   virtual Module *getModule(unsigned ID) { return nullptr; }
+
+  /// Determine whether D comes from a PCH which was built with a corresponding
+  /// object file.
+  virtual bool DeclIsFromPCHWithObjectFile(const Decl *D) { return false; }
+
+  /// Abstracts clang modules and precompiled header files and holds
+  /// everything needed to generate debug info for an imported module
+  /// or PCH.
+  class ASTSourceDescriptor {
+    StringRef PCHModuleName;
+    StringRef Path;
+    StringRef ASTFile;
+    ASTFileSignature Signature;
+    const Module *ClangModule = nullptr;
+
+  public:
+    ASTSourceDescriptor() = default;
+    ASTSourceDescriptor(StringRef Name, StringRef Path, StringRef ASTFile,
+                        ASTFileSignature Signature)
+        : PCHModuleName(std::move(Name)), Path(std::move(Path)),
+          ASTFile(std::move(ASTFile)), Signature(Signature) {}
+    ASTSourceDescriptor(const Module &M);
+
+    std::string getModuleName() const;
+    StringRef getPath() const { return Path; }
+    StringRef getASTFile() const { return ASTFile; }
+    ASTFileSignature getSignature() const { return Signature; }
+    const Module *getModuleOrNull() const { return ClangModule; }
+  };
 
   /// Return a descriptor for the corresponding module, if one exists.
   virtual llvm::Optional<ASTSourceDescriptor> getSourceDescriptor(unsigned ID);
@@ -292,12 +324,6 @@ public:
   }
 
   virtual void getMemoryBufferSizes(MemoryBufferSizes &sizes) const;
-
-  /// LLVM-style RTTI.
-  /// \{
-  virtual bool isA(const void *ClassID) const { return ClassID == &ID; }
-  static bool classof(const ExternalASTSource *S) { return S->isA(&ID); }
-  /// \}
 
 protected:
   static DeclContextLookupResult
@@ -460,10 +486,10 @@ public:
 
 } // namespace clang
 
-namespace llvm {
-
 /// Specialize PointerLikeTypeTraits to allow LazyGenerationalUpdatePtr to be
 /// placed into a PointerUnion.
+namespace llvm {
+
 template<typename Owner, typename T,
          void (clang::ExternalASTSource::*Update)(Owner)>
 struct PointerLikeTypeTraits<
@@ -473,8 +499,9 @@ struct PointerLikeTypeTraits<
   static void *getAsVoidPointer(Ptr P) { return P.getOpaqueValue(); }
   static Ptr getFromVoidPointer(void *P) { return Ptr::getFromOpaqueValue(P); }
 
-  static constexpr int NumLowBitsAvailable =
-      PointerLikeTypeTraits<T>::NumLowBitsAvailable - 1;
+  enum {
+    NumLowBitsAvailable = PointerLikeTypeTraits<T>::NumLowBitsAvailable - 1
+  };
 };
 
 } // namespace llvm

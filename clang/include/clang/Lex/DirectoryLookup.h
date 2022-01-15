@@ -14,12 +14,13 @@
 #define LLVM_CLANG_LEX_DIRECTORYLOOKUP_H
 
 #include "clang/Basic/LLVM.h"
-#include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/ModuleMap.h"
 
 namespace clang {
 class HeaderMap;
+class DirectoryEntry;
+class FileEntry;
 class HeaderSearch;
 class Module;
 
@@ -35,17 +36,14 @@ public:
     LT_HeaderMap
   };
 private:
-  union DLU { // This union is discriminated by isHeaderMap.
+  union {  // This union is discriminated by isHeaderMap.
     /// Dir - This is the actual directory that we're referring to for a normal
     /// directory or a framework.
-    DirectoryEntryRef Dir;
+    const DirectoryEntry *Dir;
 
     /// Map - This is the HeaderMap if this is a headermap lookup.
     ///
     const HeaderMap *Map;
-
-    DLU(DirectoryEntryRef Dir) : Dir(Dir) {}
-    DLU(const HeaderMap *Map) : Map(Map) {}
   } u;
 
   /// DirCharacteristic - The type of directory this is: this is an instance of
@@ -64,18 +62,24 @@ private:
   unsigned SearchedAllModuleMaps : 1;
 
 public:
-  /// This ctor *does not take ownership* of 'Dir'.
-  DirectoryLookup(DirectoryEntryRef Dir, SrcMgr::CharacteristicKind DT,
+  /// DirectoryLookup ctor - Note that this ctor *does not take ownership* of
+  /// 'dir'.
+  DirectoryLookup(const DirectoryEntry *dir, SrcMgr::CharacteristicKind DT,
                   bool isFramework)
-      : u(Dir), DirCharacteristic(DT),
-        LookupType(isFramework ? LT_Framework : LT_NormalDir),
-        IsIndexHeaderMap(false), SearchedAllModuleMaps(false) {}
+    : DirCharacteristic(DT),
+      LookupType(isFramework ? LT_Framework : LT_NormalDir),
+      IsIndexHeaderMap(false), SearchedAllModuleMaps(false) {
+    u.Dir = dir;
+  }
 
-  /// This ctor *does not take ownership* of 'Map'.
-  DirectoryLookup(const HeaderMap *Map, SrcMgr::CharacteristicKind DT,
+  /// DirectoryLookup ctor - Note that this ctor *does not take ownership* of
+  /// 'map'.
+  DirectoryLookup(const HeaderMap *map, SrcMgr::CharacteristicKind DT,
                   bool isIndexHeaderMap)
-      : u(Map), DirCharacteristic(DT), LookupType(LT_HeaderMap),
-        IsIndexHeaderMap(isIndexHeaderMap), SearchedAllModuleMaps(false) {}
+    : DirCharacteristic(DT), LookupType(LT_HeaderMap),
+      IsIndexHeaderMap(isIndexHeaderMap), SearchedAllModuleMaps(false) {
+    u.Map = map;
+  }
 
   /// getLookupType - Return the kind of directory lookup that this is: either a
   /// normal directory, a framework path, or a HeaderMap.
@@ -88,17 +92,13 @@ public:
   /// getDir - Return the directory that this entry refers to.
   ///
   const DirectoryEntry *getDir() const {
-    return isNormalDir() ? &u.Dir.getDirEntry() : nullptr;
+    return isNormalDir() ? u.Dir : nullptr;
   }
 
   /// getFrameworkDir - Return the directory that this framework refers to.
   ///
   const DirectoryEntry *getFrameworkDir() const {
-    return isFramework() ? &u.Dir.getDirEntry() : nullptr;
-  }
-
-  Optional<DirectoryEntryRef> getFrameworkDirRef() const {
-    return isFramework() ? Optional<DirectoryEntryRef>(u.Dir) : None;
+    return isFramework() ? u.Dir : nullptr;
   }
 
   /// getHeaderMap - Return the directory that this entry refers to.
@@ -176,20 +176,27 @@ public:
   /// \param [out] MappedName if this is a headermap which maps the filename to
   /// a framework include ("Foo.h" -> "Foo/Foo.h"), set the new name to this
   /// vector and point Filename to it.
-  Optional<FileEntryRef>
-  LookupFile(StringRef &Filename, HeaderSearch &HS, SourceLocation IncludeLoc,
-             SmallVectorImpl<char> *SearchPath,
-             SmallVectorImpl<char> *RelativePath, Module *RequestingModule,
-             ModuleMap::KnownHeader *SuggestedModule,
-             bool &InUserSpecifiedSystemFramework, bool &IsFrameworkFound,
-             bool &IsInHeaderMap, SmallVectorImpl<char> &MappedName) const;
+  const FileEntry *LookupFile(StringRef &Filename, HeaderSearch &HS,
+                              SourceLocation IncludeLoc,
+                              SmallVectorImpl<char> *SearchPath,
+                              SmallVectorImpl<char> *RelativePath,
+                              Module *RequestingModule,
+                              ModuleMap::KnownHeader *SuggestedModule,
+                              bool &InUserSpecifiedSystemFramework,
+                              bool &IsFrameworkFound,
+                              bool &HasBeenMapped,
+                              SmallVectorImpl<char> &MappedName) const;
 
 private:
-  Optional<FileEntryRef> DoFrameworkLookup(
-      StringRef Filename, HeaderSearch &HS, SmallVectorImpl<char> *SearchPath,
-      SmallVectorImpl<char> *RelativePath, Module *RequestingModule,
+  const FileEntry *DoFrameworkLookup(
+      StringRef Filename, HeaderSearch &HS,
+      SmallVectorImpl<char> *SearchPath,
+      SmallVectorImpl<char> *RelativePath,
+      Module *RequestingModule,
       ModuleMap::KnownHeader *SuggestedModule,
-      bool &InUserSpecifiedSystemFramework, bool &IsFrameworkFound) const;
+      bool &InUserSpecifiedSystemFramework,
+      bool &IsFrameworkFound) const;
+
 };
 
 }  // end namespace clang

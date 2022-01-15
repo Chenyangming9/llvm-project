@@ -13,14 +13,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/Analysis/CFGStmtMap.h"
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
-#include "llvm/Support/ErrorHandling.h"
 
 using namespace clang;
 using namespace ento;
@@ -28,20 +27,23 @@ using namespace ento;
 namespace {
 
 class AnalysisOrderChecker
-    : public Checker<
-          check::PreStmt<CastExpr>, check::PostStmt<CastExpr>,
-          check::PreStmt<ArraySubscriptExpr>,
-          check::PostStmt<ArraySubscriptExpr>, check::PreStmt<CXXNewExpr>,
-          check::PostStmt<CXXNewExpr>, check::PreStmt<CXXDeleteExpr>,
-          check::PostStmt<CXXDeleteExpr>, check::PreStmt<CXXConstructExpr>,
-          check::PostStmt<CXXConstructExpr>, check::PreStmt<OffsetOfExpr>,
-          check::PostStmt<OffsetOfExpr>, check::PreCall, check::PostCall,
-          check::EndFunction, check::EndAnalysis, check::NewAllocator,
-          check::Bind, check::PointerEscape, check::RegionChanges,
-          check::LiveSymbols, eval::Call> {
+    : public Checker<check::PreStmt<CastExpr>,
+                     check::PostStmt<CastExpr>,
+                     check::PreStmt<ArraySubscriptExpr>,
+                     check::PostStmt<ArraySubscriptExpr>,
+                     check::PreStmt<CXXNewExpr>,
+                     check::PostStmt<CXXNewExpr>,
+                     check::PreStmt<OffsetOfExpr>,
+                     check::PostStmt<OffsetOfExpr>,
+                     check::PreCall,
+                     check::PostCall,
+                     check::EndFunction,
+                     check::NewAllocator,
+                     check::Bind,
+                     check::RegionChanges,
+                     check::LiveSymbols> {
 
-  bool isCallbackEnabled(const AnalyzerOptions &Opts,
-                         StringRef CallbackName) const {
+  bool isCallbackEnabled(AnalyzerOptions &Opts, StringRef CallbackName) const {
     return Opts.getCheckerBooleanOption(this, "*") ||
            Opts.getCheckerBooleanOption(this, CallbackName);
   }
@@ -92,26 +94,6 @@ public:
       llvm::errs() << "PostStmt<CXXNewExpr>\n";
   }
 
-  void checkPreStmt(const CXXDeleteExpr *NE, CheckerContext &C) const {
-    if (isCallbackEnabled(C, "PreStmtCXXDeleteExpr"))
-      llvm::errs() << "PreStmt<CXXDeleteExpr>\n";
-  }
-
-  void checkPostStmt(const CXXDeleteExpr *NE, CheckerContext &C) const {
-    if (isCallbackEnabled(C, "PostStmtCXXDeleteExpr"))
-      llvm::errs() << "PostStmt<CXXDeleteExpr>\n";
-  }
-
-  void checkPreStmt(const CXXConstructExpr *NE, CheckerContext &C) const {
-    if (isCallbackEnabled(C, "PreStmtCXXConstructExpr"))
-      llvm::errs() << "PreStmt<CXXConstructExpr>\n";
-  }
-
-  void checkPostStmt(const CXXConstructExpr *NE, CheckerContext &C) const {
-    if (isCallbackEnabled(C, "PostStmtCXXConstructExpr"))
-      llvm::errs() << "PostStmt<CXXConstructExpr>\n";
-  }
-
   void checkPreStmt(const OffsetOfExpr *OOE, CheckerContext &C) const {
     if (isCallbackEnabled(C, "PreStmtOffsetOfExpr"))
       llvm::errs() << "PreStmt<OffsetOfExpr>\n";
@@ -122,25 +104,11 @@ public:
       llvm::errs() << "PostStmt<OffsetOfExpr>\n";
   }
 
-  bool evalCall(const CallEvent &Call, CheckerContext &C) const {
-    if (isCallbackEnabled(C, "EvalCall")) {
-      llvm::errs() << "EvalCall";
-      if (const NamedDecl *ND = dyn_cast_or_null<NamedDecl>(Call.getDecl()))
-        llvm::errs() << " (" << ND->getQualifiedNameAsString() << ')';
-      llvm::errs() << " {argno: " << Call.getNumArgs() << '}';
-      llvm::errs() << " [" << Call.getKindAsString() << ']';
-      llvm::errs() << '\n';
-      return true;
-    }
-    return false;
-  }
-
   void checkPreCall(const CallEvent &Call, CheckerContext &C) const {
     if (isCallbackEnabled(C, "PreCall")) {
       llvm::errs() << "PreCall";
       if (const NamedDecl *ND = dyn_cast_or_null<NamedDecl>(Call.getDecl()))
         llvm::errs() << " (" << ND->getQualifiedNameAsString() << ')';
-      llvm::errs() << " [" << Call.getKindAsString() << ']';
       llvm::errs() << '\n';
     }
   }
@@ -150,7 +118,6 @@ public:
       llvm::errs() << "PostCall";
       if (const NamedDecl *ND = dyn_cast_or_null<NamedDecl>(Call.getDecl()))
         llvm::errs() << " (" << ND->getQualifiedNameAsString() << ')';
-      llvm::errs() << " [" << Call.getKindAsString() << ']';
       llvm::errs() << '\n';
     }
   }
@@ -172,13 +139,7 @@ public:
     }
   }
 
-  void checkEndAnalysis(ExplodedGraph &G, BugReporter &BR,
-                        ExprEngine &Eng) const {
-    if (isCallbackEnabled(BR.getAnalyzerOptions(), "EndAnalysis"))
-      llvm::errs() << "EndAnalysis\n";
-  }
-
-  void checkNewAllocator(const CXXAllocatorCall &Call,
+  void checkNewAllocator(const CXXNewExpr *CNE, SVal Target,
                          CheckerContext &C) const {
     if (isCallbackEnabled(C, "NewAllocator"))
       llvm::errs() << "NewAllocator\n";
@@ -204,15 +165,6 @@ public:
       llvm::errs() << "RegionChanges\n";
     return State;
   }
-
-  ProgramStateRef checkPointerEscape(ProgramStateRef State,
-                                     const InvalidatedSymbols &Escaped,
-                                     const CallEvent *Call,
-                                     PointerEscapeKind Kind) const {
-    if (isCallbackEnabled(State, "PointerEscape"))
-      llvm::errs() << "PointerEscape\n";
-    return State;
-  }
 };
 } // end anonymous namespace
 
@@ -224,6 +176,6 @@ void ento::registerAnalysisOrderChecker(CheckerManager &mgr) {
   mgr.registerChecker<AnalysisOrderChecker>();
 }
 
-bool ento::shouldRegisterAnalysisOrderChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterAnalysisOrderChecker(const LangOptions &LO) {
   return true;
 }

@@ -29,11 +29,7 @@ struct Flattening : public FunctionPass {
   bool flag;
 
   Flattening() : FunctionPass(ID) {}
-  Flattening(bool flag) : FunctionPass(ID) {
-      errs() << "Flattening(bool flag) : FunctionPass(ID) {\r\n";
-      //int i = 100/0;
-      this->flag = flag;
-  }
+  Flattening(bool flag) : FunctionPass(ID) { this->flag = flag; }
 
   bool runOnFunction(Function &F);
   bool flatten(Function *f);
@@ -128,7 +124,7 @@ bool Flattening::flatten(Function *f) {
   loopEntry = BasicBlock::Create(f->getContext(), "loopEntry", f, insert);
   loopEnd = BasicBlock::Create(f->getContext(), "loopEnd", f, insert);
 
-  load = new LoadInst(switchVar->getAllocatedType(), switchVar, "switchVar", loopEntry);
+  load = new LoadInst(switchVar, "switchVar", loopEntry);
 
   // Move first BB on top
   insert->moveBefore(loopEntry);

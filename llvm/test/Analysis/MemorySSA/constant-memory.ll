@@ -1,5 +1,4 @@
-; RUN: opt -basic-aa -print-memoryssa -verify-memoryssa -enable-new-pm=0 -analyze < %s 2>&1 | FileCheck %s
-; RUN: opt -aa-pipeline=basic-aa -passes='print<memoryssa>' -verify-memoryssa < %s 2>&1 | FileCheck %s
+; RUN: opt -basicaa -print-memoryssa -verify-memoryssa -analyze < %s 2>&1 | FileCheck %s
 ;
 ; Things that BasicAA can prove points to constant memory should be
 ; liveOnEntry, as well.

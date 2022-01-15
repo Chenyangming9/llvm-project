@@ -11,13 +11,12 @@
 // AddressSanitizer pass to use the new PassManager infrastructure.
 //
 //===----------------------------------------------------------------------===//
-#ifndef LLVM_TRANSFORMS_INSTRUMENTATION_ADDRESSSANITIZER_H
-#define LLVM_TRANSFORMS_INSTRUMENTATION_ADDRESSSANITIZER_H
+#ifndef LLVM_TRANSFORMS_INSTRUMENTATION_ADDRESSSANITIZERPASS_H
+#define LLVM_TRANSFORMS_INSTRUMENTATION_ADDRESSSANITIZERPASS_H
 
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
-#include "llvm/Transforms/Instrumentation/AddressSanitizerOptions.h"
 
 namespace llvm {
 
@@ -40,7 +39,7 @@ public:
     LocationMetadata SourceLoc;
     StringRef Name;
     bool IsDynInit = false;
-    bool IsExcluded = false;
+    bool IsBlacklisted = false;
 
     Entry() = default;
   };
@@ -99,19 +98,15 @@ private:
 /// surrounding requested memory to be checked for invalid accesses.
 class AddressSanitizerPass : public PassInfoMixin<AddressSanitizerPass> {
 public:
-  explicit AddressSanitizerPass(
-      bool CompileKernel = false, bool Recover = false,
-      bool UseAfterScope = false,
-      AsanDetectStackUseAfterReturnMode UseAfterReturn =
-          AsanDetectStackUseAfterReturnMode::Runtime);
+  explicit AddressSanitizerPass(bool CompileKernel = false,
+                                bool Recover = false,
+                                bool UseAfterScope = false);
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-  static bool isRequired() { return true; }
 
 private:
   bool CompileKernel;
   bool Recover;
   bool UseAfterScope;
-  AsanDetectStackUseAfterReturnMode UseAfterReturn;
 };
 
 /// Public interface to the address sanitizer module pass for instrumenting code
@@ -122,31 +117,26 @@ private:
 class ModuleAddressSanitizerPass
     : public PassInfoMixin<ModuleAddressSanitizerPass> {
 public:
-  explicit ModuleAddressSanitizerPass(
-      bool CompileKernel = false, bool Recover = false, bool UseGlobalGC = true,
-      bool UseOdrIndicator = false,
-      AsanDtorKind DestructorKind = AsanDtorKind::Global);
+  explicit ModuleAddressSanitizerPass(bool CompileKernel = false,
+                                      bool Recover = false,
+                                      bool UseGlobalGC = true,
+                                      bool UseOdrIndicator = false);
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
-  static bool isRequired() { return true; }
 
 private:
   bool CompileKernel;
   bool Recover;
   bool UseGlobalGC;
   bool UseOdrIndicator;
-  AsanDtorKind DestructorKind;
 };
 
 // Insert AddressSanitizer (address sanity checking) instrumentation
-FunctionPass *createAddressSanitizerFunctionPass(
-    bool CompileKernel = false, bool Recover = false,
-    bool UseAfterScope = false,
-    AsanDetectStackUseAfterReturnMode UseAfterReturn =
-        AsanDetectStackUseAfterReturnMode::Runtime);
+FunctionPass *createAddressSanitizerFunctionPass(bool CompileKernel = false,
+                                                 bool Recover = false,
+                                                 bool UseAfterScope = false);
 ModulePass *createModuleAddressSanitizerLegacyPassPass(
     bool CompileKernel = false, bool Recover = false, bool UseGlobalsGC = true,
-    bool UseOdrIndicator = true,
-    AsanDtorKind DestructorKind = AsanDtorKind::Global);
+    bool UseOdrIndicator = true);
 
 } // namespace llvm
 

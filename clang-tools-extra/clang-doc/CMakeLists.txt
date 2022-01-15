@@ -1,7 +1,6 @@
 set(LLVM_LINK_COMPONENTS
   support
   BitstreamReader
-  FrontendOpenMP
   )
 
 add_clang_library(clangDoc
@@ -16,12 +15,7 @@ add_clang_library(clangDoc
   Serialize.cpp
   YAMLGenerator.cpp
 
-  DEPENDS
-  omp_gen
-)
-
-clang_target_link_libraries(clangDoc
-  PRIVATE
+  LINK_LIBS
   clangAnalysis
   clangAST
   clangASTMatchers

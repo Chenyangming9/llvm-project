@@ -7,7 +7,7 @@
 //===--------------------------------------------------------------------===//
 ///
 /// \file
-/// Macro expansions and preprocessor conditional consistency checker.
+/// \brief Macro expansions and preprocessor conditional consistency checker.
 ///
 //===--------------------------------------------------------------------===//
 
@@ -18,7 +18,7 @@
 
 namespace Modularize {
 
-/// Preprocessor tracker for modularize.
+/// \brief Preprocessor tracker for modularize.
 ///
 /// The PreprocessorTracker class defines an API for
 /// checking macro expansions and preprocessor conditional expressions

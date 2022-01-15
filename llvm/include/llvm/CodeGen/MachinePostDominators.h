@@ -16,78 +16,68 @@
 
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include <memory>
 
 namespace llvm {
 
 ///
-/// MachinePostDominatorTree - an analysis pass wrapper for DominatorTree
-/// used to compute the post-dominator tree for MachineFunctions.
+/// PostDominatorTree Class - Concrete subclass of DominatorTree that is used
+/// to compute the post-dominator tree.
 ///
-class MachinePostDominatorTree : public MachineFunctionPass {
-  using PostDomTreeT = PostDomTreeBase<MachineBasicBlock>;
-  std::unique_ptr<PostDomTreeT> PDT;
+struct MachinePostDominatorTree : public MachineFunctionPass {
+private:
+ PostDomTreeBase<MachineBasicBlock> *DT;
 
 public:
   static char ID;
 
   MachinePostDominatorTree();
 
-  PostDomTreeT &getBase() {
-    if (!PDT)
-      PDT.reset(new PostDomTreeT());
-    return *PDT;
-  }
+  ~MachinePostDominatorTree() override;
 
   FunctionPass *createMachinePostDominatorTreePass();
 
-  MachineDomTreeNode *getRootNode() const { return PDT->getRootNode(); }
+  const SmallVectorImpl<MachineBasicBlock *> &getRoots() const {
+    return DT->getRoots();
+  }
+
+  MachineDomTreeNode *getRootNode() const {
+    return DT->getRootNode();
+  }
 
   MachineDomTreeNode *operator[](MachineBasicBlock *BB) const {
-    return PDT->getNode(BB);
+    return DT->getNode(BB);
   }
 
   MachineDomTreeNode *getNode(MachineBasicBlock *BB) const {
-    return PDT->getNode(BB);
+    return DT->getNode(BB);
   }
 
   bool dominates(const MachineDomTreeNode *A,
                  const MachineDomTreeNode *B) const {
-    return PDT->dominates(A, B);
+    return DT->dominates(A, B);
   }
 
   bool dominates(const MachineBasicBlock *A, const MachineBasicBlock *B) const {
-    return PDT->dominates(A, B);
+    return DT->dominates(A, B);
   }
 
   bool properlyDominates(const MachineDomTreeNode *A,
                          const MachineDomTreeNode *B) const {
-    return PDT->properlyDominates(A, B);
+    return DT->properlyDominates(A, B);
   }
 
   bool properlyDominates(const MachineBasicBlock *A,
                          const MachineBasicBlock *B) const {
-    return PDT->properlyDominates(A, B);
-  }
-
-  bool isVirtualRoot(const MachineDomTreeNode *Node) const {
-    return PDT->isVirtualRoot(Node);
+    return DT->properlyDominates(A, B);
   }
 
   MachineBasicBlock *findNearestCommonDominator(MachineBasicBlock *A,
-                                                MachineBasicBlock *B) const {
-    return PDT->findNearestCommonDominator(A, B);
+                                                MachineBasicBlock *B) {
+    return DT->findNearestCommonDominator(A, B);
   }
-
-  /// Returns the nearest common dominator of the given blocks.
-  /// If that tree node is a virtual root, a nullptr will be returned.
-  MachineBasicBlock *
-  findNearestCommonDominator(ArrayRef<MachineBasicBlock *> Blocks) const;
 
   bool runOnMachineFunction(MachineFunction &MF) override;
   void getAnalysisUsage(AnalysisUsage &AU) const override;
-  void releaseMemory() override { PDT.reset(nullptr); }
-  void verifyAnalysis() const override;
   void print(llvm::raw_ostream &OS, const Module *M = nullptr) const override;
 };
 } //end of namespace llvm

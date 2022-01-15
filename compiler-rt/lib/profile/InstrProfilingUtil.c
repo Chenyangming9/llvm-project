@@ -12,13 +12,11 @@
 #include <windows.h>
 #include "WindowsMMap.h"
 #else
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/file.h>
-#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
 #endif
 
 #ifdef COMPILER_RT_HAS_UNAME
@@ -33,10 +31,6 @@
 #include <sys/prctl.h>
 #endif
 
-#if defined(__Fuchsia__)
-#include <zircon/syscalls.h>
-#endif
-
 #include "InstrProfiling.h"
 #include "InstrProfilingUtil.h"
 
@@ -45,25 +39,8 @@ COMPILER_RT_WEAK unsigned lprofDirMode = 0755;
 COMPILER_RT_VISIBILITY
 void __llvm_profile_recursive_mkdir(char *path) {
   int i;
-  int start = 1;
 
-#if defined(__ANDROID__) && defined(__ANDROID_API__) &&                        \
-    defined(__ANDROID_API_FUTURE__) &&                                         \
-    __ANDROID_API__ == __ANDROID_API_FUTURE__
-  // Avoid spammy selinux denial messages in Android by not attempting to
-  // create directories in GCOV_PREFIX.  These denials occur when creating (or
-  // even attempting to stat()) top-level directories like "/data".
-  //
-  // Do so by ignoring ${GCOV_PREFIX} when invoking mkdir().
-  const char *gcov_prefix = getenv("GCOV_PREFIX");
-  if (gcov_prefix != NULL) {
-    const int gcov_prefix_len = strlen(gcov_prefix);
-    if (strncmp(path, gcov_prefix, gcov_prefix_len) == 0)
-      start = gcov_prefix_len;
-  }
-#endif
-
-  for (i = start; path[i] != '\0'; ++i) {
+  for (i = 1; path[i] != '\0'; ++i) {
     char save = path[i];
     if (!IS_DIR_SEPARATOR(path[i]))
       continue;
@@ -334,22 +311,4 @@ COMPILER_RT_VISIBILITY void lprofRestoreSigKill() {
 #if defined(__linux__)
   prctl(PR_SET_PDEATHSIG, SIGKILL);
 #endif
-}
-
-COMPILER_RT_VISIBILITY int lprofReleaseMemoryPagesToOS(uintptr_t Begin,
-                                                       uintptr_t End) {
-  size_t PageSize = getpagesize();
-  uintptr_t BeginAligned = lprofRoundUpTo((uintptr_t)Begin, PageSize);
-  uintptr_t EndAligned = lprofRoundDownTo((uintptr_t)End, PageSize);
-  if (BeginAligned < EndAligned) {
-#if defined(__Fuchsia__)
-    return _zx_vmar_op_range(_zx_vmar_root_self(), ZX_VMAR_OP_DECOMMIT,
-                             (zx_vaddr_t)BeginAligned,
-                             EndAligned - BeginAligned, NULL, 0);
-#else
-    return madvise((void *)BeginAligned, EndAligned - BeginAligned,
-                   MADV_DONTNEED);
-#endif
-  }
-  return 0;
 }

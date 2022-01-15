@@ -32,22 +32,18 @@ namespace elf {
 // add*() functions, which are called by input files as they are parsed. There
 // is one add* function per symbol type.
 class SymbolTable {
-  struct FilterOutPlaceholder {
-    bool operator()(Symbol *S) const { return !S->isPlaceholder(); }
-  };
-  using iterator = llvm::filter_iterator<std::vector<Symbol *>::const_iterator,
-                                         FilterOutPlaceholder>;
-
 public:
-  llvm::iterator_range<iterator> symbols() const {
-    return llvm::make_filter_range(symVector, FilterOutPlaceholder());
-  }
-
   void wrap(Symbol *sym, Symbol *real, Symbol *wrap);
+
+  void forEachSymbol(llvm::function_ref<void(Symbol *)> fn) {
+    for (Symbol *sym : symVector)
+      if (!sym->isPlaceholder())
+        fn(sym);
+  }
 
   Symbol *insert(StringRef name);
 
-  Symbol *addSymbol(const Symbol &newSym);
+  Symbol *addSymbol(const Symbol &New);
 
   void scanVersionScript();
 
@@ -65,14 +61,12 @@ public:
 
 private:
   std::vector<Symbol *> findByVersion(SymbolVersion ver);
-  std::vector<Symbol *> findAllByVersion(SymbolVersion ver,
-                                         bool includeNonDefault);
+  std::vector<Symbol *> findAllByVersion(SymbolVersion ver);
 
   llvm::StringMap<std::vector<Symbol *>> &getDemangledSyms();
-  bool assignExactVersion(SymbolVersion ver, uint16_t versionId,
-                          StringRef versionName, bool includeNonDefault);
-  void assignWildcardVersion(SymbolVersion ver, uint16_t versionId,
-                             bool includeNonDefault);
+  void assignExactVersion(SymbolVersion ver, uint16_t versionId,
+                          StringRef versionName);
+  void assignWildcardVersion(SymbolVersion ver, uint16_t versionId);
 
   // The order the global symbols are in is not defined. We can use an arbitrary
   // order, but it has to be reproducible. That is true even when cross linking.

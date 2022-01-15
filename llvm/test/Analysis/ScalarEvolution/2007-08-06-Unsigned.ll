@@ -1,5 +1,4 @@
-; RUN: opt < %s -scalar-evolution -analyze -enable-new-pm=0 | FileCheck %s
-; RUN: opt < %s "-passes=print<scalar-evolution>" -disable-output 2>&1 | FileCheck %s
+; RUN: opt < %s -scalar-evolution -analyze | FileCheck %s
 ; PR1597
 
 ; CHECK: Loop %bb: backedge-taken count is (-1 + (-1 * %x) + %y)

@@ -3,8 +3,9 @@
 // invocation.
 //
 // RUN: %clang -fxray-instrument -fxray-instrumentation-bundle=function -### \
-// RUN:   -c -o - %s 2>&1 | FileCheck %s
+// RUN:     -x c++ -std=c++11 -emit-llvm -c -o - %s 2>&1 \
+// RUN:     | FileCheck %s
 // CHECK:  -fxray-instrumentation-bundle=function
 //
-// REQUIRES: linux || freebsd
-// REQUIRES: amd64 || x86_64 || x86_64h || arm || aarch64 || arm64
+// REQUIRES-ANY: linux, freebsd
+// REQUIRES-ANY: amd64, x86_64, x86_64h, arm, aarch64, arm64

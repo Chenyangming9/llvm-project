@@ -177,25 +177,9 @@ bool ModuleLinker::computeResultingSelectionKind(StringRef ComdatName,
     // Go with Dst.
     LinkFromSrc = false;
     break;
-  case Comdat::SelectionKind::NoDeduplicate: {
-    const GlobalVariable *DstGV;
-    const GlobalVariable *SrcGV;
-    if (getComdatLeader(DstM, ComdatName, DstGV) ||
-        getComdatLeader(*SrcM, ComdatName, SrcGV))
-      return true;
-
-    if (SrcGV->isWeakForLinker()) {
-      // Go with Dst.
-      LinkFromSrc = false;
-    } else if (DstGV->isWeakForLinker()) {
-      // Go with Src.
-      LinkFromSrc = true;
-    } else {
-      return emitError("Linking COMDATs named '" + ComdatName +
-                       "': nodeduplicate has been violated!");
-    }
-    break;
-  }
+  case Comdat::SelectionKind::NoDuplicates:
+    return emitError("Linking COMDATs named '" + ComdatName +
+                     "': noduplicates has been violated!");
   case Comdat::SelectionKind::ExactMatch:
   case Comdat::SelectionKind::Largest:
   case Comdat::SelectionKind::SameSize: {
@@ -264,7 +248,7 @@ bool ModuleLinker::shouldLinkFromSource(bool &LinkFromSrc,
   }
 
   // We always have to add Src if it has appending linkage.
-  if (Src.hasAppendingLinkage() || Dest.hasAppendingLinkage()) {
+  if (Src.hasAppendingLinkage()) {
     LinkFromSrc = true;
     return false;
   }
@@ -367,8 +351,7 @@ bool ModuleLinker::linkIfNeeded(GlobalValue &GV) {
         SGVar->setConstant(false);
       }
       if (DGVar->hasCommonLinkage() && SGVar->hasCommonLinkage()) {
-        MaybeAlign Align(
-            std::max(DGVar->getAlignment(), SGVar->getAlignment()));
+        unsigned Align = std::max(DGVar->getAlignment(), SGVar->getAlignment());
         SGVar->setAlignment(Align);
         DGVar->setAlignment(Align);
       }
@@ -454,12 +437,13 @@ void ModuleLinker::dropReplacedComdat(
   } else {
     auto &Alias = cast<GlobalAlias>(GV);
     Module &M = *Alias.getParent();
+    PointerType &Ty = *cast<PointerType>(Alias.getType());
     GlobalValue *Declaration;
     if (auto *FTy = dyn_cast<FunctionType>(Alias.getValueType())) {
       Declaration = Function::Create(FTy, GlobalValue::ExternalLinkage, "", &M);
     } else {
       Declaration =
-          new GlobalVariable(M, Alias.getValueType(), /*isConstant*/ false,
+          new GlobalVariable(M, Ty.getElementType(), /*isConstant*/ false,
                              GlobalValue::ExternalLinkage,
                              /*Initializer*/ nullptr);
     }

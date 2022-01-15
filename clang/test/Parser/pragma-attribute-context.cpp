@@ -31,7 +31,8 @@ int c = my_ns::nested::h(); // expected-warning{{'h' is only available on macOS 
 
 struct InStruct {
   // FIXME: This asserts in Objective-C++!
+  // FIXME: This is a horrible diagnostic!
 #ifndef __OBJC__
-  BEGIN_PRAGMA // expected-error {{this pragma cannot appear in struct declaration}}
+  BEGIN_PRAGMA // expected-error {{expected member name or ';' after declaration specifiers}}
 #endif
 };

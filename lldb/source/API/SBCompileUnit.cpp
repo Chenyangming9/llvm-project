@@ -1,4 +1,4 @@
-//===-- SBCompileUnit.cpp -------------------------------------------------===//
+//===-- SBCompileUnit.cpp ---------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -14,14 +14,13 @@
 #include "lldb/Symbol/CompileUnit.h"
 #include "lldb/Symbol/LineEntry.h"
 #include "lldb/Symbol/LineTable.h"
-#include "lldb/Symbol/SymbolFile.h"
+#include "lldb/Symbol/SymbolVendor.h"
 #include "lldb/Symbol/Type.h"
-#include "lldb/Symbol/TypeList.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
-SBCompileUnit::SBCompileUnit() {
+SBCompileUnit::SBCompileUnit() : m_opaque_ptr(nullptr) {
   LLDB_RECORD_CONSTRUCTOR_NO_ARGS(SBCompileUnit);
 }
 
@@ -50,7 +49,7 @@ SBFileSpec SBCompileUnit::GetFileSpec() const {
 
   SBFileSpec file_spec;
   if (m_opaque_ptr)
-    file_spec.SetFileSpec(m_opaque_ptr->GetPrimaryFile());
+    file_spec.SetFileSpec(*m_opaque_ptr);
   return LLDB_RECORD_RESULT(file_spec);
 }
 
@@ -106,12 +105,11 @@ uint32_t SBCompileUnit::FindLineEntryIndex(uint32_t start_idx, uint32_t line,
     if (inline_file_spec && inline_file_spec->IsValid())
       file_spec = inline_file_spec->ref();
     else
-      file_spec = m_opaque_ptr->GetPrimaryFile();
+      file_spec = *m_opaque_ptr;
 
-    LineEntry line_entry;
     index = m_opaque_ptr->FindLineEntry(
         start_idx, line, inline_file_spec ? inline_file_spec->get() : nullptr,
-        exact, &line_entry);
+        exact, nullptr);
   }
 
   return index;
@@ -139,13 +137,13 @@ lldb::SBTypeList SBCompileUnit::GetTypes(uint32_t type_mask) {
   if (!module_sp)
     return LLDB_RECORD_RESULT(sb_type_list);
 
-  SymbolFile *symfile = module_sp->GetSymbolFile();
-  if (!symfile)
+  SymbolVendor *vendor = module_sp->GetSymbolVendor();
+  if (!vendor)
     return LLDB_RECORD_RESULT(sb_type_list);
 
   TypeClass type_class = static_cast<TypeClass>(type_mask);
   TypeList type_list;
-  symfile->GetTypes(m_opaque_ptr, type_class, type_list);
+  vendor->GetTypes(m_opaque_ptr, type_class, type_list);
   sb_type_list.m_opaque_up->Append(type_list);
   return LLDB_RECORD_RESULT(sb_type_list);
 }

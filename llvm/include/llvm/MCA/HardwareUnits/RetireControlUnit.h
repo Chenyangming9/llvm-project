@@ -11,8 +11,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_MCA_HARDWAREUNITS_RETIRECONTROLUNIT_H
-#define LLVM_MCA_HARDWAREUNITS_RETIRECONTROLUNIT_H
+#ifndef LLVM_MCA_RETIRE_CONTROL_UNIT_H
+#define LLVM_MCA_RETIRE_CONTROL_UNIT_H
 
 #include "llvm/MC/MCSchedule.h"
 #include "llvm/MCA/HardwareUnits/HardwareUnit.h"
@@ -57,43 +57,34 @@ struct RetireControlUnit : public HardwareUnit {
 private:
   unsigned NextAvailableSlotIdx;
   unsigned CurrentInstructionSlotIdx;
-  unsigned NumROBEntries;
-  unsigned AvailableEntries;
+  unsigned AvailableSlots;
   unsigned MaxRetirePerCycle; // 0 means no limit.
   std::vector<RUToken> Queue;
-
-  unsigned normalizeQuantity(unsigned Quantity) const {
-    // Some instructions may declare a number of uOps which exceeds the size
-    // of the reorder buffer. To avoid problems, cap the amount of slots to
-    // the size of the reorder buffer.
-    Quantity = std::min(Quantity, NumROBEntries);
-
-    // Further normalize the number of micro opcodes for instructions that
-    // declare zero opcodes. This should match the behavior of method
-    // reserveSlot().
-    return std::max(Quantity, 1U);
-  }
-
-  unsigned computeNextSlotIdx() const;
 
 public:
   RetireControlUnit(const MCSchedModel &SM);
 
-  bool isEmpty() const { return AvailableEntries == NumROBEntries; }
-
+  bool isEmpty() const { return AvailableSlots == Queue.size(); }
   bool isAvailable(unsigned Quantity = 1) const {
-    return AvailableEntries >= normalizeQuantity(Quantity);
+    // Some instructions may declare a number of uOps which exceeds the size
+    // of the reorder buffer. To avoid problems, cap the amount of slots to
+    // the size of the reorder buffer.
+    Quantity = std::min(Quantity, static_cast<unsigned>(Queue.size()));
+
+    // Further normalize the number of micro opcodes for instructions that
+    // declare zero opcodes. This should match the behavior of method
+    // reserveSlot().
+    Quantity = std::max(Quantity, 1U);
+    return AvailableSlots >= Quantity;
   }
 
   unsigned getMaxRetirePerCycle() const { return MaxRetirePerCycle; }
 
-  // Reserves a number of slots, and returns a new token reference.
-  unsigned dispatch(const InstRef &IS);
+  // Reserves a number of slots, and returns a new token.
+  unsigned reserveSlot(const InstRef &IS, unsigned NumMicroOps);
 
   // Return the current token from the RCU's circular token queue.
-  const RUToken &getCurrentToken() const;
-
-  const RUToken &peekNextToken() const;
+  const RUToken &peekCurrentToken() const;
 
   // Advance the pointer to the next token in the circular token queue.
   void consumeCurrentToken();
@@ -104,12 +95,9 @@ public:
 #ifndef NDEBUG
   void dump() const;
 #endif
-
-  // Assigned to instructions that are not handled by the RCU.
-  static const unsigned UnhandledTokenID = ~0U;
 };
 
 } // namespace mca
 } // namespace llvm
 
-#endif // LLVM_MCA_HARDWAREUNITS_RETIRECONTROLUNIT_H
+#endif // LLVM_MCA_RETIRE_CONTROL_UNIT_H

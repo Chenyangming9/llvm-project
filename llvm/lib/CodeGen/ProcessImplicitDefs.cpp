@@ -14,7 +14,6 @@
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -74,9 +73,9 @@ bool ProcessImplicitDefs::canTurnIntoImplicitDef(MachineInstr *MI) {
 
 void ProcessImplicitDefs::processImplicitDef(MachineInstr *MI) {
   LLVM_DEBUG(dbgs() << "Processing " << *MI);
-  Register Reg = MI->getOperand(0).getReg();
+  unsigned Reg = MI->getOperand(0).getReg();
 
-  if (Register::isVirtualRegister(Reg)) {
+  if (TargetRegisterInfo::isVirtualRegister(Reg)) {
     // For virtual registers, mark all uses as <undef>, and convert users to
     // implicit-def when possible.
     for (MachineOperand &MO : MRI->use_nodbg_operands(Reg)) {
@@ -101,8 +100,8 @@ void ProcessImplicitDefs::processImplicitDef(MachineInstr *MI) {
     for (MachineOperand &MO : UserMI->operands()) {
       if (!MO.isReg())
         continue;
-      Register UserReg = MO.getReg();
-      if (!Register::isPhysicalRegister(UserReg) ||
+      unsigned UserReg = MO.getReg();
+      if (!TargetRegisterInfo::isPhysicalRegister(UserReg) ||
           !TRI->regsOverlap(Reg, UserReg))
         continue;
       // UserMI uses or redefines Reg. Set <undef> flags on all uses.
@@ -143,16 +142,18 @@ bool ProcessImplicitDefs::runOnMachineFunction(MachineFunction &MF) {
   assert(MRI->isSSA() && "ProcessImplicitDefs only works on SSA form.");
   assert(WorkList.empty() && "Inconsistent worklist state");
 
-  for (MachineBasicBlock &MBB : MF) {
+  for (MachineFunction::iterator MFI = MF.begin(), MFE = MF.end();
+       MFI != MFE; ++MFI) {
     // Scan the basic block for implicit defs.
-    for (MachineInstr &MI : MBB)
-      if (MI.isImplicitDef())
-        WorkList.insert(&MI);
+    for (MachineBasicBlock::instr_iterator MBBI = MFI->instr_begin(),
+         MBBE = MFI->instr_end(); MBBI != MBBE; ++MBBI)
+      if (MBBI->isImplicitDef())
+        WorkList.insert(&*MBBI);
 
     if (WorkList.empty())
       continue;
 
-    LLVM_DEBUG(dbgs() << printMBBReference(MBB) << " has " << WorkList.size()
+    LLVM_DEBUG(dbgs() << printMBBReference(*MFI) << " has " << WorkList.size()
                       << " implicit defs.\n");
     Changed = true;
 

@@ -1,5 +1,15 @@
 // RUN: %clang_builtins %s %librt -o %t && %run %t
-// REQUIRES: librt_has_floatuntitf
+//===-- floatuntitf.c - Test __floatuntitf --------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file tests __floatuntitf for the compiler_rt library.
+//
+//===----------------------------------------------------------------------===//
 
 #define QUAD_PRECISION
 #include "fp_lib.h"

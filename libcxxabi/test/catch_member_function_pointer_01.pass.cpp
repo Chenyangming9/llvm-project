@@ -9,7 +9,7 @@
 // GCC incorrectly allows PMF type "void (T::*)()" to be caught as "void (T::*)() const"
 // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=69375
 // XFAIL: gcc
-// UNSUPPORTED: no-exceptions
+// UNSUPPORTED: libcxxabi-no-exceptions
 #include <cassert>
 
 struct A
@@ -161,12 +161,10 @@ void test_void()
     }
 }
 
-int main(int, char**)
+int main()
 {
     test1();
     test2();
     test_derived();
     test_void();
-
-    return 0;
 }

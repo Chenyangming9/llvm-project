@@ -1,1 +1,1 @@
-int included_line2;
+included_line2

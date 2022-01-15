@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TOOLS_DEBUGSERVER_SOURCE_RNBREMOTE_H
-#define LLDB_TOOLS_DEBUGSERVER_SOURCE_RNBREMOTE_H
+#ifndef __RNBRemote_h__
+#define __RNBRemote_h__
 
 #include "DNB.h"
 #include "PThreadMutex.h"
@@ -135,6 +135,8 @@ public:
     speed_test,                         // 'qSpeedTest:'
     set_detach_on_error,                // 'QSetDetachOnError:'
     query_transfer,                     // 'qXfer:'
+    query_supported_async_json_packets, // 'QSupportedAsyncJSONPackets'
+    configure_darwin_log,               // 'ConfigureDarwinLog:'
     unknown_type
   };
 
@@ -244,6 +246,9 @@ public:
   rnb_err_t HandlePacket_qXfer(const char *p);
   rnb_err_t HandlePacket_stop_process(const char *p);
   rnb_err_t HandlePacket_QSetDetachOnError(const char *p);
+  rnb_err_t HandlePacket_qStructuredDataPlugins(const char *p);
+  rnb_err_t HandlePacket_QConfigureDarwinLog(const char *p);
+
   rnb_err_t SendStopReplyPacketForThread(nub_thread_t tid);
   rnb_err_t SendHexEncodedBytePacket(const char *header, const void *buf,
                                      size_t buf_len, const char *footer);
@@ -252,6 +257,7 @@ public:
   void FlushSTDIO();
   void SendAsyncProfileData();
   rnb_err_t SendAsyncProfileDataPacket(char *buf, nub_size_t buf_size);
+  void SendAsyncDarwinLogData();
   rnb_err_t SendAsyncJSONPacket(const JSONGenerator::Dictionary &dictionary);
 
   RNBContext &Context() { return m_ctx; }
@@ -422,4 +428,4 @@ protected:
    about how many bytes gdb might try to send in a single packet.  */
 #define DEFAULT_GDB_REMOTE_PROTOCOL_BUFSIZE 399
 
-#endif // LLDB_TOOLS_DEBUGSERVER_SOURCE_RNBREMOTE_H
+#endif // #ifndef __RNBRemote_h__

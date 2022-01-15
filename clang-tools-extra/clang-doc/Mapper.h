@@ -44,9 +44,7 @@ private:
   template <typename T> bool mapDecl(const T *D);
 
   int getLine(const NamedDecl *D, const ASTContext &Context) const;
-  llvm::SmallString<128> getFile(const NamedDecl *D, const ASTContext &Context,
-                                 StringRef RootDir,
-                                 bool &IsFileInRootDir) const;
+  StringRef getFile(const NamedDecl *D, const ASTContext &Context) const;
   comments::FullComment *getComment(const NamedDecl *D,
                                     const ASTContext &Context) const;
 

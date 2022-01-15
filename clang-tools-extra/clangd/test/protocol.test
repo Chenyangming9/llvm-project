@@ -39,7 +39,6 @@ Content-Length: 146
 # CHECK-NEXT:        "insertTextFormat": 1,
 # CHECK-NEXT:        "kind": 5,
 # CHECK-NEXT:        "label": " a",
-# CHECK-NEXT:        "score": {{[0-9]+.[0-9]+}},
 # CHECK-NEXT:        "sortText": "{{.*}}"
 #      CHECK:    ]
 # CHECK-NEXT:  }
@@ -69,7 +68,6 @@ Content-Length: 146
 # CHECK-NEXT:        "insertTextFormat": 1,
 # CHECK-NEXT:        "kind": 5,
 # CHECK-NEXT:        "label": " a",
-# CHECK-NEXT:        "score": {{[0-9]+.[0-9]+}},
 # CHECK-NEXT:        "sortText": "{{.*}}"
 #      CHECK:    ]
 # CHECK-NEXT:  }
@@ -99,7 +97,6 @@ Content-Length: 146
 # CHECK-NEXT:        "insertTextFormat": 1,
 # CHECK-NEXT:        "kind": 5,
 # CHECK-NEXT:        "label": " a",
-# CHECK-NEXT:        "score": {{[0-9]+.[0-9]+}},
 # CHECK-NEXT:        "sortText": "{{.*}}"
 #      CHECK:    ]
 # CHECK-NEXT:  }

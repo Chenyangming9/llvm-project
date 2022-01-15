@@ -82,25 +82,23 @@ bool RegisterBankInfo::verify(const TargetRegisterInfo &TRI) const {
 const RegisterBank *
 RegisterBankInfo::getRegBank(Register Reg, const MachineRegisterInfo &MRI,
                              const TargetRegisterInfo &TRI) const {
-  if (Register::isPhysicalRegister(Reg)) {
-    // FIXME: This was probably a copy to a virtual register that does have a
-    // type we could use.
-    return &getRegBankFromRegClass(getMinimalPhysRegClass(Reg, TRI), LLT());
-  }
+  if (TargetRegisterInfo::isPhysicalRegister(Reg))
+    return &getRegBankFromRegClass(getMinimalPhysRegClass(Reg, TRI));
 
   assert(Reg && "NoRegister does not have a register bank");
   const RegClassOrRegBank &RegClassOrBank = MRI.getRegClassOrRegBank(Reg);
   if (auto *RB = RegClassOrBank.dyn_cast<const RegisterBank *>())
     return RB;
   if (auto *RC = RegClassOrBank.dyn_cast<const TargetRegisterClass *>())
-    return &getRegBankFromRegClass(*RC, MRI.getType(Reg));
+    return &getRegBankFromRegClass(*RC);
   return nullptr;
 }
 
 const TargetRegisterClass &
 RegisterBankInfo::getMinimalPhysRegClass(Register Reg,
                                          const TargetRegisterInfo &TRI) const {
-  assert(Register::isPhysicalRegister(Reg) && "Reg must be a physreg");
+  assert(TargetRegisterInfo::isPhysicalRegister(Reg) &&
+         "Reg must be a physreg");
   const auto &RegRCIt = PhysRegMinimalRCs.find(Reg);
   if (RegRCIt != PhysRegMinimalRCs.end())
     return *RegRCIt->second;
@@ -111,18 +109,15 @@ RegisterBankInfo::getMinimalPhysRegClass(Register Reg,
 
 const RegisterBank *RegisterBankInfo::getRegBankFromConstraints(
     const MachineInstr &MI, unsigned OpIdx, const TargetInstrInfo &TII,
-    const MachineRegisterInfo &MRI) const {
-  const TargetRegisterInfo *TRI = MRI.getTargetRegisterInfo();
-
+    const TargetRegisterInfo &TRI) const {
   // The mapping of the registers may be available via the
   // register class constraints.
-  const TargetRegisterClass *RC = MI.getRegClassConstraint(OpIdx, &TII, TRI);
+  const TargetRegisterClass *RC = MI.getRegClassConstraint(OpIdx, &TII, &TRI);
 
   if (!RC)
     return nullptr;
 
-  Register Reg = MI.getOperand(OpIdx).getReg();
-  const RegisterBank &RegBank = getRegBankFromRegClass(*RC, MRI.getType(Reg));
+  const RegisterBank &RegBank = getRegBankFromRegClass(*RC);
   // Sanity check that the target properly implemented getRegBankFromRegClass.
   assert(RegBank.covers(*RC) &&
          "The mapping of the register bank does not make sense");
@@ -201,7 +196,7 @@ RegisterBankInfo::getInstrMappingImpl(const MachineInstr &MI) const {
     if (!CurRegBank) {
       // If this is a target specific instruction, we can deduce
       // the register bank from the encoding constraints.
-      CurRegBank = getRegBankFromConstraints(MI, OpIdx, TII, MRI);
+      CurRegBank = getRegBankFromConstraints(MI, OpIdx, TII, TRI);
       if (!CurRegBank) {
         // All our attempts failed, give up.
         CompleteMapping = false;
@@ -289,7 +284,7 @@ RegisterBankInfo::getPartialMapping(unsigned StartIdx, unsigned Length,
   ++NumPartialMappingsCreated;
 
   auto &PartMapping = MapOfPartialMappings[Hash];
-  PartMapping = std::make_unique<PartialMapping>(StartIdx, Length, RegBank);
+  PartMapping = llvm::make_unique<PartialMapping>(StartIdx, Length, RegBank);
   return *PartMapping;
 }
 
@@ -323,7 +318,7 @@ RegisterBankInfo::getValueMapping(const PartialMapping *BreakDown,
   ++NumValueMappingsCreated;
 
   auto &ValMapping = MapOfValueMappings[Hash];
-  ValMapping = std::make_unique<ValueMapping>(BreakDown, NumBreakDowns);
+  ValMapping = llvm::make_unique<ValueMapping>(BreakDown, NumBreakDowns);
   return *ValMapping;
 }
 
@@ -347,7 +342,7 @@ RegisterBankInfo::getOperandsMapping(Iterator Begin, Iterator End) const {
   // mapping, because we use the pointer of the ValueMapping
   // to hash and we expect them to uniquely identify an instance
   // of value mapping.
-  Res = std::make_unique<ValueMapping[]>(std::distance(Begin, End));
+  Res = llvm::make_unique<ValueMapping[]>(std::distance(Begin, End));
   unsigned Idx = 0;
   for (Iterator It = Begin; It != End; ++It, ++Idx) {
     const ValueMapping *ValMap = *It;
@@ -397,7 +392,7 @@ RegisterBankInfo::getInstructionMappingImpl(
   ++NumInstructionMappingsCreated;
 
   auto &InstrMapping = MapOfInstructionMappings[Hash];
-  InstrMapping = std::make_unique<InstructionMapping>(
+  InstrMapping = llvm::make_unique<InstructionMapping>(
       ID, Cost, OperandsMapping, NumOperands);
   return *InstrMapping;
 }
@@ -421,7 +416,8 @@ RegisterBankInfo::getInstrPossibleMappings(const MachineInstr &MI) const {
 
   // Then the alternative mapping, if any.
   InstructionMappings AltMappings = getInstrAlternativeMappings(MI);
-  append_range(PossibleMappings, AltMappings);
+  for (const InstructionMapping *AltMapping : AltMappings)
+    PossibleMappings.push_back(AltMapping);
 #ifndef NDEBUG
   for (const InstructionMapping *Mapping : PossibleMappings)
     assert(Mapping->verify(MI) && "Mapping is invalid");
@@ -449,7 +445,7 @@ void RegisterBankInfo::applyDefaultMapping(const OperandsMapper &OpdMapper) {
       continue;
     }
     if (!MO.getReg()) {
-      LLVM_DEBUG(dbgs() << " is $noreg, nothing to be done\n");
+      LLVM_DEBUG(dbgs() << " is %%noreg, nothing to be done\n");
       continue;
     }
     assert(OpdMapper.getInstrMapping().getOperandMapping(OpIdx).NumBreakDowns !=
@@ -460,7 +456,7 @@ void RegisterBankInfo::applyDefaultMapping(const OperandsMapper &OpdMapper) {
            "This mapping is too complex for this function");
     iterator_range<SmallVectorImpl<Register>::const_iterator> NewRegs =
         OpdMapper.getVRegs(OpIdx);
-    if (NewRegs.empty()) {
+    if (empty(NewRegs)) {
       LLVM_DEBUG(dbgs() << " has not been repaired, nothing to be done\n");
       continue;
     }
@@ -493,7 +489,7 @@ void RegisterBankInfo::applyDefaultMapping(const OperandsMapper &OpdMapper) {
 unsigned RegisterBankInfo::getSizeInBits(Register Reg,
                                          const MachineRegisterInfo &MRI,
                                          const TargetRegisterInfo &TRI) const {
-  if (Register::isPhysicalRegister(Reg)) {
+  if (TargetRegisterInfo::isPhysicalRegister(Reg)) {
     // The size is not directly available for physical registers.
     // Instead, we need to access a register class that contains Reg and
     // get the size of that register class.

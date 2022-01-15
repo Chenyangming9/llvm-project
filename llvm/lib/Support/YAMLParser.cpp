@@ -178,10 +178,10 @@ namespace {
 /// others) before the SimpleKey's Tok.
 struct SimpleKey {
   TokenQueueT::iterator Tok;
-  unsigned Column = 0;
-  unsigned Line = 0;
-  unsigned FlowLevel = 0;
-  bool IsRequired = false;
+  unsigned Column;
+  unsigned Line;
+  unsigned FlowLevel;
+  bool IsRequired;
 
   bool operator ==(const SimpleKey &Other) {
     return Tok == Other.Tok;
@@ -200,12 +200,13 @@ static UTF8Decoded decodeUTF8(StringRef Range) {
   StringRef::iterator End = Range.end();
   // 1 byte: [0x00, 0x7f]
   // Bit pattern: 0xxxxxxx
-  if (Position < End && (*Position & 0x80) == 0) {
-    return std::make_pair(*Position, 1);
+  if ((*Position & 0x80) == 0) {
+     return std::make_pair(*Position, 1);
   }
   // 2 bytes: [0x80, 0x7ff]
   // Bit pattern: 110xxxxx 10xxxxxx
-  if (Position + 1 < End && ((*Position & 0xE0) == 0xC0) &&
+  if (Position + 1 != End &&
+      ((*Position & 0xE0) == 0xC0) &&
       ((*(Position + 1) & 0xC0) == 0x80)) {
     uint32_t codepoint = ((*Position & 0x1F) << 6) |
                           (*(Position + 1) & 0x3F);
@@ -214,7 +215,8 @@ static UTF8Decoded decodeUTF8(StringRef Range) {
   }
   // 3 bytes: [0x8000, 0xffff]
   // Bit pattern: 1110xxxx 10xxxxxx 10xxxxxx
-  if (Position + 2 < End && ((*Position & 0xF0) == 0xE0) &&
+  if (Position + 2 != End &&
+      ((*Position & 0xF0) == 0xE0) &&
       ((*(Position + 1) & 0xC0) == 0x80) &&
       ((*(Position + 2) & 0xC0) == 0x80)) {
     uint32_t codepoint = ((*Position & 0x0F) << 12) |
@@ -228,7 +230,8 @@ static UTF8Decoded decodeUTF8(StringRef Range) {
   }
   // 4 bytes: [0x10000, 0x10FFFF]
   // Bit pattern: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-  if (Position + 3 < End && ((*Position & 0xF8) == 0xF0) &&
+  if (Position + 3 != End &&
+      ((*Position & 0xF8) == 0xF0) &&
       ((*(Position + 1) & 0xC0) == 0x80) &&
       ((*(Position + 2) & 0xC0) == 0x80) &&
       ((*(Position + 3) & 0xC0) == 0x80)) {
@@ -265,8 +268,8 @@ public:
   }
 
   void setError(const Twine &Message, StringRef::iterator Position) {
-    if (Position >= End)
-      Position = End - 1;
+    if (Current >= End)
+      Current = End - 1;
 
     // propagate the error if possible
     if (EC)
@@ -275,8 +278,12 @@ public:
     // Don't print out more errors after the first one we encounter. The rest
     // are just the result of the first, and have no meaning.
     if (!Failed)
-      printError(SMLoc::getFromPointer(Position), SourceMgr::DK_Error, Message);
+      printError(SMLoc::getFromPointer(Current), SourceMgr::DK_Error, Message);
     Failed = true;
+  }
+
+  void setError(const Twine &Message) {
+    setError(Message, Current);
   }
 
   /// Returns true if an error occurred while parsing.
@@ -715,7 +722,7 @@ std::string yaml::escape(StringRef Input, bool EscapePrintable) {
         // Found invalid char.
         SmallString<4> Val;
         encodeUTF8(0xFFFD, Val);
-        llvm::append_range(EscapedInput, Val);
+        EscapedInput.insert(EscapedInput.end(), Val.begin(), Val.end());
         // FIXME: Error reporting.
         return EscapedInput;
       }
@@ -746,92 +753,6 @@ std::string yaml::escape(StringRef Input, bool EscapePrintable) {
   return EscapedInput;
 }
 
-llvm::Optional<bool> yaml::parseBool(StringRef S) {
-  switch (S.size()) {
-  case 1:
-    switch (S.front()) {
-    case 'y':
-    case 'Y':
-      return true;
-    case 'n':
-    case 'N':
-      return false;
-    default:
-      return None;
-    }
-  case 2:
-    switch (S.front()) {
-    case 'O':
-      if (S[1] == 'N') // ON
-        return true;
-      LLVM_FALLTHROUGH;
-    case 'o':
-      if (S[1] == 'n') //[Oo]n
-        return true;
-      return None;
-    case 'N':
-      if (S[1] == 'O') // NO
-        return false;
-      LLVM_FALLTHROUGH;
-    case 'n':
-      if (S[1] == 'o') //[Nn]o
-        return false;
-      return None;
-    default:
-      return None;
-    }
-  case 3:
-    switch (S.front()) {
-    case 'O':
-      if (S.drop_front() == "FF") // OFF
-        return false;
-      LLVM_FALLTHROUGH;
-    case 'o':
-      if (S.drop_front() == "ff") //[Oo]ff
-        return false;
-      return None;
-    case 'Y':
-      if (S.drop_front() == "ES") // YES
-        return true;
-      LLVM_FALLTHROUGH;
-    case 'y':
-      if (S.drop_front() == "es") //[Yy]es
-        return true;
-      return None;
-    default:
-      return None;
-    }
-  case 4:
-    switch (S.front()) {
-    case 'T':
-      if (S.drop_front() == "RUE") // TRUE
-        return true;
-      LLVM_FALLTHROUGH;
-    case 't':
-      if (S.drop_front() == "rue") //[Tt]rue
-        return true;
-      return None;
-    default:
-      return None;
-    }
-  case 5:
-    switch (S.front()) {
-    case 'F':
-      if (S.drop_front() == "ALSE") // FALSE
-        return false;
-      LLVM_FALLTHROUGH;
-    case 'f':
-      if (S.drop_front() == "alse") //[Ff]alse
-        return false;
-      return None;
-    default:
-      return None;
-    }
-  default:
-    return None;
-  }
-}
-
 Scanner::Scanner(StringRef Input, SourceMgr &sm, bool ShowColors,
                  std::error_code *EC)
     : SM(sm), ShowColors(ShowColors), EC(EC) {
@@ -856,7 +777,7 @@ void Scanner::init(MemoryBufferRef Buffer) {
   IsSimpleKeyAllowed = true;
   Failed = false;
   std::unique_ptr<MemoryBuffer> InputBufferOwner =
-      MemoryBuffer::getMemBuffer(Buffer, /*RequiresNullTerminator=*/false);
+      MemoryBuffer::getMemBuffer(Buffer);
   SM.AddNewSourceBuffer(std::move(InputBufferOwner), SMLoc());
 }
 
@@ -868,7 +789,6 @@ Token &Scanner::peekNext() {
     if (TokenQueue.empty() || NeedMore) {
       if (!fetchMoreTokens()) {
         TokenQueue.clear();
-        SimpleKeys.clear();
         TokenQueue.push_back(Token());
         return TokenQueue.front();
       }
@@ -981,9 +901,17 @@ void Scanner::advanceWhile(SkipWhileFunc Func) {
   Current = Final;
 }
 
-static bool is_ns_hex_digit(const char C) { return isAlnum(C); }
+static bool is_ns_hex_digit(const char C) {
+  return    (C >= '0' && C <= '9')
+         || (C >= 'a' && C <= 'z')
+         || (C >= 'A' && C <= 'Z');
+}
 
-static bool is_ns_word_char(const char C) { return C == '-' || isAlpha(C); }
+static bool is_ns_word_char(const char C) {
+  return    C == '-'
+         || (C >= 'a' && C <= 'z')
+         || (C >= 'A' && C <= 'Z');
+}
 
 void Scanner::scan_ns_uri_char() {
   while (true) {
@@ -1004,16 +932,12 @@ void Scanner::scan_ns_uri_char() {
 }
 
 bool Scanner::consume(uint32_t Expected) {
-  if (Expected >= 0x80) {
-    setError("Cannot consume non-ascii characters", Current);
-    return false;
-  }
+  if (Expected >= 0x80)
+    report_fatal_error("Not dealing with this yet");
   if (Current == End)
     return false;
-  if (uint8_t(*Current) >= 0x80) {
-    setError("Cannot consume non-ascii characters", Current);
-    return false;
-  }
+  if (uint8_t(*Current) >= 0x80)
+    report_fatal_error("Not dealing with this yet");
   if (uint8_t(*Current) == Expected) {
     ++Current;
     ++Column;
@@ -1111,7 +1035,7 @@ bool Scanner::rollIndent( int ToColumn
 }
 
 void Scanner::skipComment() {
-  if (Current == End || *Current != '#')
+  if (*Current != '#')
     return;
   while (true) {
     // This may skip more than one byte, thus Column is only incremented
@@ -1126,7 +1050,7 @@ void Scanner::skipComment() {
 
 void Scanner::scanToNextToken() {
   while (true) {
-    while (Current != End && (*Current == ' ' || *Current == '\t')) {
+    while (*Current == ' ' || *Current == '\t') {
       skip(1);
     }
 
@@ -1303,10 +1227,7 @@ bool Scanner::scanValue() {
       if (i == SK.Tok)
         break;
     }
-    if (i == e) {
-      Failed = true;
-      return false;
-    }
+    assert(i != e && "SimpleKey not in token queue!");
     i = TokenQueue.insert(i, T);
 
     // We may also need to add a Block-Mapping-Start token.
@@ -1361,7 +1282,7 @@ bool Scanner::scanFlowScalar(bool IsDoubleQuoted) {
              && wasEscaped(Start + 1, Current));
   } else {
     skip(1);
-    while (Current != End) {
+    while (true) {
       // Skip a ' followed by another '.
       if (Current + 1 < End && *Current == '\'' && *(Current + 1) == '\'') {
         skip(2);
@@ -1409,14 +1330,13 @@ bool Scanner::scanPlainScalar() {
   unsigned LeadingBlanks = 0;
   assert(Indent >= -1 && "Indent must be >= -1 !");
   unsigned indent = static_cast<unsigned>(Indent + 1);
-  while (Current != End) {
+  while (true) {
     if (*Current == '#')
       break;
 
-    while (Current != End && !isBlankOrBreak(Current)) {
-      if (FlowLevel && *Current == ':' &&
-          (Current + 1 == End ||
-           !(isBlankOrBreak(Current + 1) || *(Current + 1) == ','))) {
+    while (!isBlankOrBreak(Current)) {
+      if (  FlowLevel && *Current == ':'
+          && !(isBlankOrBreak(Current + 1) || *(Current + 1) == ',')) {
         setError("Found unexpected ':' while scanning a plain scalar", Current);
         return false;
       }
@@ -1486,7 +1406,7 @@ bool Scanner::scanAliasOrAnchor(bool IsAlias) {
   StringRef::iterator Start = Current;
   unsigned ColStart = Column;
   skip(1);
-  while (Current != End) {
+  while(true) {
     if (   *Current == '[' || *Current == ']'
         || *Current == '{' || *Current == '}'
         || *Current == ','
@@ -1499,7 +1419,7 @@ bool Scanner::scanAliasOrAnchor(bool IsAlias) {
     ++Column;
   }
 
-  if (Start + 1 == Current) {
+  if (Start == Current) {
     setError("Got empty alias or anchor", Start);
     return false;
   }
@@ -1714,7 +1634,7 @@ bool Scanner::scanBlockScalar(bool IsLiteral) {
   Token T;
   T.Kind = Token::TK_BlockScalar;
   T.Range = StringRef(Start, Current - Start);
-  T.Value = std::string(Str);
+  T.Value = Str.str().str();
   TokenQueue.push_back(T);
   return true;
 }
@@ -1835,7 +1755,7 @@ bool Scanner::fetchMoreTokens() {
                       && !isBlankOrBreak(Current + 2)))
     return scanPlainScalar();
 
-  setError("Unrecognized character while tokenizing.", Current);
+  setError("Unrecognized character while tokenizing.");
   return false;
 }
 
@@ -1851,13 +1771,11 @@ Stream::~Stream() = default;
 
 bool Stream::failed() { return scanner->failed(); }
 
-void Stream::printError(Node *N, const Twine &Msg, SourceMgr::DiagKind Kind) {
-  printError(N ? N->getSourceRange() : SMRange(), Msg, Kind);
-}
-
-void Stream::printError(const SMRange &Range, const Twine &Msg,
-                        SourceMgr::DiagKind Kind) {
-  scanner->printError(Range.Start, Kind, Msg, Range);
+void Stream::printError(Node *N, const Twine &Msg) {
+  scanner->printError( N->getSourceRange().Start
+                     , SourceMgr::DK_Error
+                     , Msg
+                     , N->getSourceRange());
 }
 
 document_iterator Stream::begin() {
@@ -1892,11 +1810,11 @@ std::string Node::getVerbatimTag() const {
   if (!Raw.empty() && Raw != "!") {
     std::string Ret;
     if (Raw.find_last_of('!') == 0) {
-      Ret = std::string(Doc->getTagMap().find("!")->second);
+      Ret = Doc->getTagMap().find("!")->second;
       Ret += Raw.substr(1);
       return Ret;
     } else if (Raw.startswith("!!")) {
-      Ret = std::string(Doc->getTagMap().find("!!")->second);
+      Ret = Doc->getTagMap().find("!!")->second;
       Ret += Raw.substr(2);
       return Ret;
     } else {
@@ -1904,7 +1822,7 @@ std::string Node::getVerbatimTag() const {
       std::map<StringRef, StringRef>::const_iterator It =
           Doc->getTagMap().find(TagHandle);
       if (It != Doc->getTagMap().end())
-        Ret = std::string(It->second);
+        Ret = It->second;
       else {
         Token T;
         T.Kind = Token::TK_Tag;
@@ -1976,11 +1894,11 @@ StringRef ScalarNode::getValue(SmallVectorImpl<char> &Storage) const {
       Storage.reserve(UnquotedValue.size());
       for (; i != StringRef::npos; i = UnquotedValue.find('\'')) {
         StringRef Valid(UnquotedValue.begin(), i);
-        llvm::append_range(Storage, Valid);
+        Storage.insert(Storage.end(), Valid.begin(), Valid.end());
         Storage.push_back('\'');
         UnquotedValue = UnquotedValue.substr(i + 2);
       }
-      llvm::append_range(Storage, UnquotedValue);
+      Storage.insert(Storage.end(), UnquotedValue.begin(), UnquotedValue.end());
       return StringRef(Storage.begin(), Storage.size());
     }
     return UnquotedValue;
@@ -1999,7 +1917,7 @@ StringRef ScalarNode::unescapeDoubleQuoted( StringRef UnquotedValue
   for (; i != StringRef::npos; i = UnquotedValue.find_first_of("\\\r\n")) {
     // Insert all previous chars into Storage.
     StringRef Valid(UnquotedValue.begin(), i);
-    llvm::append_range(Storage, Valid);
+    Storage.insert(Storage.end(), Valid.begin(), Valid.end());
     // Chop off inserted chars.
     UnquotedValue = UnquotedValue.substr(i);
 
@@ -2016,18 +1934,15 @@ StringRef ScalarNode::unescapeDoubleQuoted( StringRef UnquotedValue
       UnquotedValue = UnquotedValue.substr(1);
       break;
     default:
-      if (UnquotedValue.size() == 1) {
-        Token T;
-        T.Range = StringRef(UnquotedValue.begin(), 1);
-        setError("Unrecognized escape code", T);
-        return "";
-      }
+      if (UnquotedValue.size() == 1)
+        // TODO: Report error.
+        break;
       UnquotedValue = UnquotedValue.substr(1);
       switch (UnquotedValue[0]) {
       default: {
           Token T;
           T.Range = StringRef(UnquotedValue.begin(), 1);
-          setError("Unrecognized escape code", T);
+          setError("Unrecognized escape code!", T);
           return "";
         }
       case '\r':
@@ -2131,7 +2046,7 @@ StringRef ScalarNode::unescapeDoubleQuoted( StringRef UnquotedValue
       UnquotedValue = UnquotedValue.substr(1);
     }
   }
-  llvm::append_range(Storage, UnquotedValue);
+  Storage.insert(Storage.end(), UnquotedValue.begin(), UnquotedValue.end());
   return StringRef(Storage.begin(), Storage.size());
 }
 
@@ -2163,14 +2078,7 @@ Node *KeyValueNode::getKey() {
 Node *KeyValueNode::getValue() {
   if (Value)
     return Value;
-
-  if (Node* Key = getKey())
-    Key->skip();
-  else {
-    setError("Null key in Key Value.", peekNext());
-    return Value = new (getAllocator()) NullNode(Doc);
-  }
-
+  getKey()->skip();
   if (failed())
     return Value = new (getAllocator()) NullNode(Doc);
 
@@ -2361,8 +2269,8 @@ Document::Document(Stream &S) : stream(S), Root(nullptr) {
 bool Document::skip()  {
   if (stream.scanner->failed())
     return false;
-  if (!Root && !getRoot())
-    return false;
+  if (!Root)
+    getRoot();
   Root->skip();
   Token &T = peekNext();
   if (T.Kind == Token::TK_StreamEnd)
@@ -2486,15 +2394,6 @@ parse_property:
     // TODO: Properly handle tags. "[!!str ]" should resolve to !!str "", not
     //       !!null null.
     return new (NodeAllocator) NullNode(stream.CurrentDoc);
-  case Token::TK_FlowMappingEnd:
-  case Token::TK_FlowSequenceEnd:
-  case Token::TK_FlowEntry: {
-    if (Root && (isa<MappingNode>(Root) || isa<SequenceNode>(Root)))
-      return new (NodeAllocator) NullNode(stream.CurrentDoc);
-
-    setError("Unexpected token", T);
-    return nullptr;
-  }
   case Token::TK_Error:
     return nullptr;
   }

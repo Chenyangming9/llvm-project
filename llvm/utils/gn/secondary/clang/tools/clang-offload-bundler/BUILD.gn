@@ -7,5 +7,7 @@ executable("clang-offload-bundler") {
     "//llvm/lib/Object",
     "//llvm/lib/Support",
   ]
-  sources = [ "ClangOffloadBundler.cpp" ]
+  sources = [
+    "ClangOffloadBundler.cpp",
+  ]
 }

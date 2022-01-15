@@ -1,4 +1,5 @@
-//===-- SBTypeSummary.cpp -------------------------------------------------===//
+//===-- SBTypeSummary.cpp -----------------------------------------*- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -21,7 +22,7 @@ using namespace lldb_private;
 SBTypeSummaryOptions::SBTypeSummaryOptions() {
   LLDB_RECORD_CONSTRUCTOR_NO_ARGS(SBTypeSummaryOptions);
 
-  m_opaque_up = std::make_unique<TypeSummaryOptions>();
+  m_opaque_up.reset(new TypeSummaryOptions());
 }
 
 SBTypeSummaryOptions::SBTypeSummaryOptions(
@@ -32,7 +33,7 @@ SBTypeSummaryOptions::SBTypeSummaryOptions(
   m_opaque_up = clone(rhs.m_opaque_up);
 }
 
-SBTypeSummaryOptions::~SBTypeSummaryOptions() = default;
+SBTypeSummaryOptions::~SBTypeSummaryOptions() {}
 
 bool SBTypeSummaryOptions::IsValid() {
   LLDB_RECORD_METHOD_NO_ARGS(bool, SBTypeSummaryOptions, IsValid);
@@ -111,9 +112,9 @@ SBTypeSummaryOptions::SBTypeSummaryOptions(
 void SBTypeSummaryOptions::SetOptions(
     const lldb_private::TypeSummaryOptions *lldb_object_ptr) {
   if (lldb_object_ptr)
-    m_opaque_up = std::make_unique<TypeSummaryOptions>(*lldb_object_ptr);
+    m_opaque_up.reset(new TypeSummaryOptions(*lldb_object_ptr));
   else
-    m_opaque_up = std::make_unique<TypeSummaryOptions>();
+    m_opaque_up.reset(new TypeSummaryOptions());
 }
 
 SBTypeSummary::SBTypeSummary() : m_opaque_sp() {
@@ -192,7 +193,7 @@ SBTypeSummary::SBTypeSummary(const lldb::SBTypeSummary &rhs)
   LLDB_RECORD_CONSTRUCTOR(SBTypeSummary, (const lldb::SBTypeSummary &), rhs);
 }
 
-SBTypeSummary::~SBTypeSummary() = default;
+SBTypeSummary::~SBTypeSummary() {}
 
 bool SBTypeSummary::IsValid() const {
   LLDB_RECORD_METHOD_CONST_NO_ARGS(bool, SBTypeSummary, IsValid);

@@ -190,6 +190,7 @@ public:
 template <typename DataT>
 class Dwarf5AccelTableWriter : public AccelTableWriter {
   struct Header {
+    uint32_t UnitLength = 0;
     uint16_t Version = 5;
     uint16_t Padding = 0;
     uint32_t CompUnitCount;
@@ -205,7 +206,7 @@ class Dwarf5AccelTableWriter : public AccelTableWriter {
         : CompUnitCount(CompUnitCount), BucketCount(BucketCount),
           NameCount(NameCount) {}
 
-    void emit(Dwarf5AccelTableWriter &Ctx);
+    void emit(const Dwarf5AccelTableWriter &Ctx) const;
   };
   struct AttributeEncoding {
     dwarf::Index Index;
@@ -216,7 +217,8 @@ class Dwarf5AccelTableWriter : public AccelTableWriter {
   DenseMap<uint32_t, SmallVector<AttributeEncoding, 2>> Abbreviations;
   ArrayRef<MCSymbol *> CompUnits;
   llvm::function_ref<unsigned(const DataT &)> getCUIndexForEntry;
-  MCSymbol *ContributionEnd = nullptr;
+  MCSymbol *ContributionStart = Asm->createTempSymbol("names_start");
+  MCSymbol *ContributionEnd = Asm->createTempSymbol("names_end");
   MCSymbol *AbbrevStart = Asm->createTempSymbol("names_abbrev_start");
   MCSymbol *AbbrevEnd = Asm->createTempSymbol("names_abbrev_end");
   MCSymbol *EntryPool = Asm->createTempSymbol("names_entries");
@@ -239,7 +241,7 @@ public:
       ArrayRef<MCSymbol *> CompUnits,
       llvm::function_ref<unsigned(const DataT &)> GetCUIndexForEntry);
 
-  void emit();
+  void emit() const;
 };
 } // namespace
 
@@ -269,7 +271,7 @@ void AccelTableWriter::emitOffsets(const MCSymbol *Base) const {
         continue;
       PrevHash = HashValue;
       Asm->OutStreamer->AddComment("Offset in Bucket " + Twine(i));
-      Asm->emitLabelDifference(Hash->Sym, Base, Asm->getDwarfOffsetByteSize());
+      Asm->EmitLabelDifference(Hash->Sym, Base, sizeof(uint32_t));
     }
   }
 }
@@ -326,16 +328,16 @@ void AppleAccelTableWriter::emitBuckets() const {
 
 void AppleAccelTableWriter::emitData() const {
   const auto &Buckets = Contents.getBuckets();
-  for (const AccelTableBase::HashList &Bucket : Buckets) {
+  for (size_t i = 0, e = Buckets.size(); i < e; ++i) {
     uint64_t PrevHash = std::numeric_limits<uint64_t>::max();
-    for (auto &Hash : Bucket) {
+    for (auto &Hash : Buckets[i]) {
       // Terminate the previous entry if there is no hash collision with the
       // current one.
       if (PrevHash != std::numeric_limits<uint64_t>::max() &&
           PrevHash != Hash->HashValue)
         Asm->emitInt32(0);
       // Remember to emit the label for our offset.
-      Asm->OutStreamer->emitLabel(Hash->Sym);
+      Asm->OutStreamer->EmitLabel(Hash->Sym);
       Asm->OutStreamer->AddComment(Hash->Name.getString());
       Asm->emitDwarfStringOffset(Hash->Name);
       Asm->OutStreamer->AddComment("Num DIEs");
@@ -345,7 +347,7 @@ void AppleAccelTableWriter::emitData() const {
       PrevHash = Hash->HashValue;
     }
     // Emit the final end marker for the bucket.
-    if (!Bucket.empty())
+    if (!Buckets[i].empty())
       Asm->emitInt32(0);
   }
 }
@@ -360,12 +362,15 @@ void AppleAccelTableWriter::emit() const {
 }
 
 template <typename DataT>
-void Dwarf5AccelTableWriter<DataT>::Header::emit(Dwarf5AccelTableWriter &Ctx) {
+void Dwarf5AccelTableWriter<DataT>::Header::emit(
+    const Dwarf5AccelTableWriter &Ctx) const {
   assert(CompUnitCount > 0 && "Index must have at least one CU.");
 
   AsmPrinter *Asm = Ctx.Asm;
-  Ctx.ContributionEnd =
-      Asm->emitDwarfUnitLength("names", "Header: unit length");
+  Asm->OutStreamer->AddComment("Header: unit length");
+  Asm->EmitLabelDifference(Ctx.ContributionEnd, Ctx.ContributionStart,
+                           sizeof(uint32_t));
+  Asm->OutStreamer->EmitLabel(Ctx.ContributionStart);
   Asm->OutStreamer->AddComment("Header: version");
   Asm->emitInt16(Version);
   Asm->OutStreamer->AddComment("Header: padding");
@@ -381,12 +386,12 @@ void Dwarf5AccelTableWriter<DataT>::Header::emit(Dwarf5AccelTableWriter &Ctx) {
   Asm->OutStreamer->AddComment("Header: name count");
   Asm->emitInt32(NameCount);
   Asm->OutStreamer->AddComment("Header: abbreviation table size");
-  Asm->emitLabelDifference(Ctx.AbbrevEnd, Ctx.AbbrevStart, sizeof(uint32_t));
+  Asm->EmitLabelDifference(Ctx.AbbrevEnd, Ctx.AbbrevStart, sizeof(uint32_t));
   Asm->OutStreamer->AddComment("Header: augmentation string size");
   assert(AugmentationStringSize % 4 == 0);
   Asm->emitInt32(AugmentationStringSize);
   Asm->OutStreamer->AddComment("Header: augmentation string");
-  Asm->OutStreamer->emitBytes({AugmentationString, AugmentationStringSize});
+  Asm->OutStreamer->EmitBytes({AugmentationString, AugmentationStringSize});
 }
 
 template <typename DataT>
@@ -448,23 +453,23 @@ void Dwarf5AccelTableWriter<DataT>::emitStringOffsets() const {
 
 template <typename DataT>
 void Dwarf5AccelTableWriter<DataT>::emitAbbrevs() const {
-  Asm->OutStreamer->emitLabel(AbbrevStart);
+  Asm->OutStreamer->EmitLabel(AbbrevStart);
   for (const auto &Abbrev : Abbreviations) {
     Asm->OutStreamer->AddComment("Abbrev code");
     assert(Abbrev.first != 0);
-    Asm->emitULEB128(Abbrev.first);
+    Asm->EmitULEB128(Abbrev.first);
     Asm->OutStreamer->AddComment(dwarf::TagString(Abbrev.first));
-    Asm->emitULEB128(Abbrev.first);
+    Asm->EmitULEB128(Abbrev.first);
     for (const auto &AttrEnc : Abbrev.second) {
-      Asm->emitULEB128(AttrEnc.Index, dwarf::IndexString(AttrEnc.Index).data());
-      Asm->emitULEB128(AttrEnc.Form,
+      Asm->EmitULEB128(AttrEnc.Index, dwarf::IndexString(AttrEnc.Index).data());
+      Asm->EmitULEB128(AttrEnc.Form,
                        dwarf::FormEncodingString(AttrEnc.Form).data());
     }
-    Asm->emitULEB128(0, "End of abbrev");
-    Asm->emitULEB128(0, "End of abbrev");
+    Asm->EmitULEB128(0, "End of abbrev");
+    Asm->EmitULEB128(0, "End of abbrev");
   }
-  Asm->emitULEB128(0, "End of abbrev list");
-  Asm->OutStreamer->emitLabel(AbbrevEnd);
+  Asm->EmitULEB128(0, "End of abbrev list");
+  Asm->OutStreamer->EmitLabel(AbbrevEnd);
 }
 
 template <typename DataT>
@@ -473,13 +478,13 @@ void Dwarf5AccelTableWriter<DataT>::emitEntry(const DataT &Entry) const {
   assert(AbbrevIt != Abbreviations.end() &&
          "Why wasn't this abbrev generated?");
 
-  Asm->emitULEB128(AbbrevIt->first, "Abbreviation code");
+  Asm->EmitULEB128(AbbrevIt->first, "Abbreviation code");
   for (const auto &AttrEnc : AbbrevIt->second) {
     Asm->OutStreamer->AddComment(dwarf::IndexString(AttrEnc.Index));
     switch (AttrEnc.Index) {
     case dwarf::DW_IDX_compile_unit: {
       DIEInteger ID(getCUIndexForEntry(Entry));
-      ID.emitValue(Asm, AttrEnc.Form);
+      ID.EmitValue(Asm, AttrEnc.Form);
       break;
     }
     case dwarf::DW_IDX_die_offset:
@@ -493,15 +498,15 @@ void Dwarf5AccelTableWriter<DataT>::emitEntry(const DataT &Entry) const {
 }
 
 template <typename DataT> void Dwarf5AccelTableWriter<DataT>::emitData() const {
-  Asm->OutStreamer->emitLabel(EntryPool);
+  Asm->OutStreamer->EmitLabel(EntryPool);
   for (auto &Bucket : Contents.getBuckets()) {
     for (auto *Hash : Bucket) {
       // Remember to emit the label for our offset.
-      Asm->OutStreamer->emitLabel(Hash->Sym);
+      Asm->OutStreamer->EmitLabel(Hash->Sym);
       for (const auto *Value : Hash->Values)
         emitEntry(*static_cast<const DataT *>(Value));
       Asm->OutStreamer->AddComment("End of list: " + Hash->Name.getString());
-      Asm->emitInt8(0);
+      Asm->emitInt32(0);
     }
   }
 }
@@ -523,7 +528,7 @@ Dwarf5AccelTableWriter<DataT>::Dwarf5AccelTableWriter(
     Abbreviations.try_emplace(Tag, UniformAttributes);
 }
 
-template <typename DataT> void Dwarf5AccelTableWriter<DataT>::emit() {
+template <typename DataT> void Dwarf5AccelTableWriter<DataT>::emit() const {
   Header.emit(*this);
   emitCUList();
   emitBuckets();
@@ -532,8 +537,8 @@ template <typename DataT> void Dwarf5AccelTableWriter<DataT>::emit() {
   emitOffsets(EntryPool);
   emitAbbrevs();
   emitData();
-  Asm->OutStreamer->emitValueToAlignment(4, 0);
-  Asm->OutStreamer->emitLabel(ContributionEnd);
+  Asm->OutStreamer->EmitValueToAlignment(4, 0);
+  Asm->OutStreamer->EmitLabel(ContributionEnd);
 }
 
 void llvm::emitAppleAccelTableImpl(AsmPrinter *Asm, AccelTableBase &Contents,
@@ -588,14 +593,10 @@ void llvm::emitDWARF5AccelTable(
 }
 
 void AppleAccelTableOffsetData::emit(AsmPrinter *Asm) const {
-  assert(Die.getDebugSectionOffset() <= UINT32_MAX &&
-         "The section offset exceeds the limit.");
   Asm->emitInt32(Die.getDebugSectionOffset());
 }
 
 void AppleAccelTableTypeData::emit(AsmPrinter *Asm) const {
-  assert(Die.getDebugSectionOffset() <= UINT32_MAX &&
-         "The section offset exceeds the limit.");
   Asm->emitInt32(Die.getDebugSectionOffset());
   Asm->emitInt16(Die.getTag());
   Asm->emitInt8(0);

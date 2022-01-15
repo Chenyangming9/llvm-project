@@ -11,5 +11,7 @@ unittest("CrossTUTests") {
     "//llvm/lib/Support",
     "//llvm/lib/Target:TargetsToBuild",
   ]
-  sources = [ "CrossTranslationUnitTest.cpp" ]
+  sources = [
+    "CrossTranslationUnitTest.cpp",
+  ]
 }

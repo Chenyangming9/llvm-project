@@ -33,11 +33,11 @@
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Mutex.h"
+#include "llvm/Support/UniqueLock.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <iterator>
-#include <mutex>
 #include <type_traits>
 #include <utility>
 
@@ -93,6 +93,7 @@ class ValueMap {
   MapT Map;
   Optional<MDMapT> MDMap;
   ExtraData Data;
+  bool MayMapMetadata = true;
 
 public:
   using key_type = KeyT;
@@ -118,6 +119,10 @@ public:
     return *MDMap;
   }
   Optional<MDMapT> &getMDMap() { return MDMap; }
+
+  bool mayMapMetadata() const { return MayMapMetadata; }
+  void enableMapMetadata() { MayMapMetadata = true; }
+  void disableMapMetadata() { MayMapMetadata = false; }
 
   /// Get the mapped metadata, if it's in the map.
   Optional<Metadata *> getMappedMD(const Metadata *MD) const {
@@ -243,7 +248,7 @@ class ValueMapCallbackVH final : public CallbackVH {
   friend struct DenseMapInfo<ValueMapCallbackVH>;
 
   using ValueMapT = ValueMap<KeyT, ValueT, Config>;
-  using KeySansPointerT = std::remove_pointer_t<KeyT>;
+  using KeySansPointerT = typename std::remove_pointer<KeyT>::type;
 
   ValueMapT *Map;
 
@@ -261,9 +266,9 @@ public:
     // Make a copy that won't get changed even when *this is destroyed.
     ValueMapCallbackVH Copy(*this);
     typename Config::mutex_type *M = Config::getMutex(Copy.Map->Data);
-    std::unique_lock<typename Config::mutex_type> Guard;
+    unique_lock<typename Config::mutex_type> Guard;
     if (M)
-      Guard = std::unique_lock<typename Config::mutex_type>(*M);
+      Guard = unique_lock<typename Config::mutex_type>(*M);
     Config::onDelete(Copy.Map->Data, Copy.Unwrap());  // May destroy *this.
     Copy.Map->Map.erase(Copy);  // Definitely destroys *this.
   }
@@ -274,9 +279,9 @@ public:
     // Make a copy that won't get changed even when *this is destroyed.
     ValueMapCallbackVH Copy(*this);
     typename Config::mutex_type *M = Config::getMutex(Copy.Map->Data);
-    std::unique_lock<typename Config::mutex_type> Guard;
+    unique_lock<typename Config::mutex_type> Guard;
     if (M)
-      Guard = std::unique_lock<typename Config::mutex_type>(*M);
+      Guard = unique_lock<typename Config::mutex_type>(*M);
 
     KeyT typed_new_key = cast<KeySansPointerT>(new_key);
     // Can destroy *this:
@@ -323,19 +328,17 @@ struct DenseMapInfo<ValueMapCallbackVH<KeyT, ValueT, Config>> {
   }
 };
 
-template <typename DenseMapT, typename KeyT> class ValueMapIterator {
+template<typename DenseMapT, typename KeyT>
+class ValueMapIterator :
+    public std::iterator<std::forward_iterator_tag,
+                         std::pair<KeyT, typename DenseMapT::mapped_type>,
+                         ptrdiff_t> {
   using BaseT = typename DenseMapT::iterator;
   using ValueT = typename DenseMapT::mapped_type;
 
   BaseT I;
 
 public:
-  using iterator_category = std::forward_iterator_tag;
-  using value_type = std::pair<KeyT, typename DenseMapT::mapped_type>;
-  using difference_type = std::ptrdiff_t;
-  using pointer = value_type *;
-  using reference = value_type &;
-
   ValueMapIterator() : I() {}
   ValueMapIterator(BaseT I) : I(I) {}
 
@@ -377,19 +380,17 @@ public:
   }
 };
 
-template <typename DenseMapT, typename KeyT> class ValueMapConstIterator {
+template<typename DenseMapT, typename KeyT>
+class ValueMapConstIterator :
+    public std::iterator<std::forward_iterator_tag,
+                         std::pair<KeyT, typename DenseMapT::mapped_type>,
+                         ptrdiff_t> {
   using BaseT = typename DenseMapT::const_iterator;
   using ValueT = typename DenseMapT::mapped_type;
 
   BaseT I;
 
 public:
-  using iterator_category = std::forward_iterator_tag;
-  using value_type = std::pair<KeyT, typename DenseMapT::mapped_type>;
-  using difference_type = std::ptrdiff_t;
-  using pointer = value_type *;
-  using reference = value_type &;
-
   ValueMapConstIterator() : I() {}
   ValueMapConstIterator(BaseT I) : I(I) {}
   ValueMapConstIterator(ValueMapIterator<DenseMapT, KeyT> Other)

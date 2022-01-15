@@ -13,7 +13,7 @@
 
 set -e
 
-projects="llvm clang compiler-rt libcxx libcxxabi libclc clang-tools-extra polly lldb lld openmp libunwind flang"
+projects="llvm clang test-suite compiler-rt libcxx libcxxabi clang-tools-extra polly lldb lld openmp libunwind"
 
 release=""
 rc=""
@@ -37,34 +37,26 @@ export_sources() {
         tag="$tag-$rc"
     fi
 
-    llvm_src_dir=$(readlink -f $(dirname "$(readlink -f "$0")")/../../..)
-    [ -d $llvm_src_dir/.git ] || ( echo "No git repository at $llvm_src_dir" ; exit 1 )
+    llvm_src_dir=llvm-project-$release$rc
+    mkdir -p $llvm_src_dir
 
     echo $tag
-    target_dir=$(pwd)
+    echo "Fetching LLVM project source ..."
+    curl -L https://github.com/llvm/llvm-project/archive/$tag.tar.gz | \
+        tar -C $llvm_src_dir --strip-components=1 -xzf -
 
     echo "Creating tarball for llvm-project ..."
-    pushd $llvm_src_dir/
-    git archive --prefix=llvm-project-$release$rc.src/ $tag . | xz >$target_dir/llvm-project-$release$rc.src.tar.xz
-    popd
+    tar -cJf llvm-project-$release$rc.tar.xz $llvm_src_dir
 
-    if [ ! -d test-suite-$release$rc.src ]
-    then
-      echo "Fetching LLVM test-suite source ..."
-      mkdir -p test-suite-$release$rc.src
-      curl -L https://github.com/llvm/test-suite/archive/$tag.tar.gz | \
-          tar -C test-suite-$release$rc.src --strip-components=1 -xzf -
-    fi
-    echo "Creating tarball for test-suite ..."
-    tar --sort=name --owner=0 --group=0 \
-        --pax-option=exthdr.name=%d/PaxHeaders/%f,delete=atime,delete=ctime \
-        -cJf test-suite-$release$rc.src.tar.xz test-suite-$release$rc.src
+    echo "Fetching LLVM test-suite source ..."
+    mkdir -p $llvm_src_dir/test-suite
+    curl -L https://github.com/llvm/test-suite/archive/$tag.tar.gz | \
+        tar -C $llvm_src_dir/test-suite --strip-components=1 -xzf -
 
     for proj in $projects; do
         echo "Creating tarball for $proj ..."
-        pushd $llvm_src_dir/$proj
-        git archive --prefix=$proj-$release$rc.src/ $tag . | xz >$target_dir/$proj-$release$rc.src.tar.xz
-        popd
+        mv $llvm_src_dir/$proj $llvm_src_dir/$proj-$release$rc.src
+        tar -C $llvm_src_dir -cJf $proj-$release$rc.src.tar.xz $proj-$release$rc.src
     done
 }
 

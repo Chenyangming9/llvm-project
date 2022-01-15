@@ -9,12 +9,11 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_CPPCOREGUIDELINES_MACROUSAGECHECK_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_CPPCOREGUIDELINES_MACROUSAGECHECK_H
 
-#include "../ClangTidyCheck.h"
-#include "clang/Lex/MacroInfo.h"
+#include "../ClangTidy.h"
+#include "clang/Lex/Preprocessor.h"
 #include <string>
 
 namespace clang {
-class MacroDirective;
 namespace tidy {
 namespace cppcoreguidelines {
 
@@ -28,11 +27,8 @@ public:
   MacroUsageCheck(StringRef Name, ClangTidyContext *Context)
       : ClangTidyCheck(Name, Context),
         AllowedRegexp(Options.get("AllowedRegexp", "^DEBUG_*")),
-        CheckCapsOnly(Options.get("CheckCapsOnly", false)),
-        IgnoreCommandLineMacros(Options.get("IgnoreCommandLineMacros", true)) {}
-  bool isLanguageVersionSupported(const LangOptions &LangOpts) const override {
-    return LangOpts.CPlusPlus11;
-  }
+        CheckCapsOnly(Options.get("CheckCapsOnly", 0)),
+        IgnoreCommandLineMacros(Options.get("IgnoreCommandLineMacros", 1)) {}
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
   void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
                            Preprocessor *ModuleExpanderPP) override;

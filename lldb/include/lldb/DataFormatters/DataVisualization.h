@@ -6,8 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_DATAFORMATTERS_DATAVISUALIZATION_H
-#define LLDB_DATAFORMATTERS_DATAVISUALIZATION_H
+#ifndef lldb_DataVisualization_h_
+#define lldb_DataVisualization_h_
+
 
 #include "lldb/DataFormatters/FormatClasses.h"
 #include "lldb/DataFormatters/FormatManager.h"
@@ -50,6 +51,12 @@ public:
   static lldb::SyntheticChildrenSP
   GetSyntheticChildren(ValueObject &valobj, lldb::DynamicValueType use_dynamic);
 
+  static lldb::TypeValidatorImplSP
+  GetValidator(ValueObject &valobj, lldb::DynamicValueType use_dynamic);
+
+  static lldb::TypeValidatorImplSP
+  GetValidatorForType(lldb::TypeNameSpecifierImplSP type_sp);
+
   static bool
   AnyMatches(ConstString type_name,
              TypeCategoryImpl::FormatCategoryItems items =
@@ -69,9 +76,9 @@ public:
 
     static void Clear();
 
-    static void ForEach(std::function<bool(const TypeMatcher &,
-                                           const lldb::TypeSummaryImplSP &)>
-                            callback);
+    static void
+    ForEach(std::function<bool(ConstString, const lldb::TypeSummaryImplSP &)>
+                callback);
 
     static uint32_t GetCount();
   };
@@ -121,4 +128,4 @@ public:
 
 } // namespace lldb_private
 
-#endif // LLDB_DATAFORMATTERS_DATAVISUALIZATION_H
+#endif // lldb_DataVisualization_h_

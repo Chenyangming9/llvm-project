@@ -1,4 +1,4 @@
-# RUN: yaml2obj %s -o %t
+# RUN: yaml2obj %s > %t
 # RUN: llvm-objcopy %t %t2
 # RUN: llvm-readobj --symbols %t2 | FileCheck %s
 
@@ -33,7 +33,7 @@ Symbols:
     Section:  .text
     Value:    0x1001
     Size:     4
-    Other:    [ STV_HIDDEN ]
+    Visibility: STV_HIDDEN
     Binding:  STB_GLOBAL
   - Name:     foo
     Type:     STT_FUNC
@@ -45,7 +45,7 @@ Symbols:
     Section:  .data
     Value:    0x2002
     Size:     2
-    Other:    [ STV_INTERNAL ]
+    Visibility: STV_INTERNAL
     Binding:  STB_GLOBAL
   - Name:     bar
     Type:     STT_OBJECT

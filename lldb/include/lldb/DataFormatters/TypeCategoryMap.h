@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_DATAFORMATTERS_TYPECATEGORYMAP_H
-#define LLDB_DATAFORMATTERS_TYPECATEGORYMAP_H
+#ifndef lldb_TypeCategoryMap_h_
+#define lldb_TypeCategoryMap_h_
 
 #include <functional>
 #include <list>
@@ -77,15 +77,21 @@ public:
 
   uint32_t GetCount() { return m_map.size(); }
 
-  template <typename ImplSP> void Get(FormattersMatchData &, ImplSP &);
+  lldb::TypeFormatImplSP GetFormat(FormattersMatchData &match_data);
+
+  lldb::TypeSummaryImplSP GetSummaryFormat(FormattersMatchData &match_data);
+
+  lldb::SyntheticChildrenSP
+  GetSyntheticChildren(FormattersMatchData &match_data);
+
+  lldb::TypeValidatorImplSP GetValidator(FormattersMatchData &match_data);
 
 private:
   class delete_matching_categories {
     lldb::TypeCategoryImplSP ptr;
 
   public:
-    delete_matching_categories(lldb::TypeCategoryImplSP p)
-        : ptr(std::move(p)) {}
+    delete_matching_categories(lldb::TypeCategoryImplSP p) : ptr(p) {}
 
     bool operator()(const lldb::TypeCategoryImplSP &other) {
       return ptr.get() == other.get();
@@ -104,9 +110,9 @@ private:
 
   std::recursive_mutex &mutex() { return m_map_mutex; }
 
-  friend class FormattersContainer<ValueType>;
+  friend class FormattersContainer<KeyType, ValueType>;
   friend class FormatManager;
 };
 } // namespace lldb_private
 
-#endif // LLDB_DATAFORMATTERS_TYPECATEGORYMAP_H
+#endif // lldb_TypeCategoryMap_h_

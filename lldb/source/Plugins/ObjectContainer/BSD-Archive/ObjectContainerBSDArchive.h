@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_OBJECTCONTAINER_BSD_ARCHIVE_OBJECTCONTAINERBSDARCHIVE_H
-#define LLDB_SOURCE_PLUGINS_OBJECTCONTAINER_BSD_ARCHIVE_OBJECTCONTAINERBSDARCHIVE_H
+#ifndef liblldb_ObjectContainerBSDArchive_h_
+#define liblldb_ObjectContainerBSDArchive_h_
 
 #include "lldb/Core/UniqueCStringMap.h"
 #include "lldb/Symbol/ObjectContainer.h"
@@ -84,25 +84,25 @@ protected:
     lldb_private::ConstString ar_name;
 
     /// Object modification time in the archive.
-    uint32_t modification_time = 0;
+    uint32_t modification_time;
 
     /// Object user id in the archive.
-    uint16_t uid = 0;
+    uint16_t uid;
 
     /// Object group id in the archive.
-    uint16_t gid = 0;
+    uint16_t gid;
 
     /// Object octal file permissions in the archive.
-    uint16_t mode = 0;
+    uint16_t mode;
 
     /// Object size in bytes in the archive.
-    uint32_t size = 0;
+    uint32_t size;
 
     /// File offset in bytes from the beginning of the file of the object data.
-    lldb::offset_t file_offset = 0;
+    lldb::offset_t file_offset;
 
     /// Length of the object data.
-    lldb::offset_t file_size = 0;
+    lldb::offset_t file_size;
   };
 
   class Archive {
@@ -174,4 +174,4 @@ protected:
   Archive::shared_ptr m_archive_sp;
 };
 
-#endif // LLDB_SOURCE_PLUGINS_OBJECTCONTAINER_BSD_ARCHIVE_OBJECTCONTAINERBSDARCHIVE_H
+#endif // liblldb_ObjectContainerBSDArchive_h_

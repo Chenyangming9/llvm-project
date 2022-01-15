@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -fsyntax-only -Wno-pointer-to-int-cast -verify %s
+// RUN: %clang_cc1 -fsyntax-only -verify %s
+// expected-no-diagnostics
 typedef long unsigned int __darwin_size_t;
 typedef long __darwin_ssize_t;
 typedef __darwin_size_t size_t;
@@ -17,7 +18,6 @@ i386/_param.h:#define __DARWIN_ALIGN(p) ((__darwin_size_t)((char *)(p)
 
 ssize_t sendFileDescriptor(int fd, void *data, size_t nbytes, int sendfd) {
   union {
-    // expected-warning@+1 {{folded to constant array}}
     char control[(((__darwin_size_t)((char *)(sizeof(struct cmsghdr)) + (sizeof(__darwin_size_t) - 1)) &~ (sizeof(__darwin_size_t) - 1)) + ((__darwin_size_t)((char *)(sizeof(int)) + (sizeof(__darwin_size_t) - 1)) &~ (sizeof(__darwin_size_t) - 1)))];
   } control_un;
   return 0;

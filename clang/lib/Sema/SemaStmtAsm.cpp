@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/ExprCXX.h"
-#include "clang/AST/GlobalDecl.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/TargetInfo.h"
@@ -228,7 +227,7 @@ getClobberConflictLocation(MultiExprArg Exprs, StringLiteral **Constraints,
     StringRef Clobber = Clobbers[i]->getString();
     // We only check registers, therefore we don't check cc and memory
     // clobbers
-    if (Clobber == "cc" || Clobber == "memory" || Clobber == "unwind")
+    if (Clobber == "cc" || Clobber == "memory")
       continue;
     Clobber = Target.getNormalizedGCCRegisterName(Clobber, true);
     // Go over the output's registers we collected
@@ -255,10 +254,6 @@ StmtResult Sema::ActOnGCCAsmStmt(SourceLocation AsmLoc, bool IsSimple,
 
   // The parser verifies that there is a string literal here.
   assert(AsmString->isAscii());
-
-  FunctionDecl *FD = dyn_cast<FunctionDecl>(getCurLexicalContext());
-  llvm::StringMap<bool> FeatureMap;
-  Context.getFunctionFeatureMap(FeatureMap, FD);
 
   for (unsigned i = 0; i != NumOutputs; i++) {
     StringLiteral *Literal = Constraints[i];
@@ -296,14 +291,6 @@ StmtResult Sema::ActOnGCCAsmStmt(SourceLocation AsmLoc, bool IsSimple,
         checkExprMemoryConstraintCompat(*this, OutputExpr, Info, false))
       return StmtError();
 
-    // Disallow _ExtInt, since the backends tend to have difficulties with
-    // non-normal sizes.
-    if (OutputExpr->getType()->isExtIntType())
-      return StmtError(
-          Diag(OutputExpr->getBeginLoc(), diag::err_asm_invalid_type)
-          << OutputExpr->getType() << 0 /*Input*/
-          << OutputExpr->getSourceRange());
-
     OutputConstraintInfos.push_back(Info);
 
     // If this is dependent, just continue.
@@ -338,8 +325,8 @@ StmtResult Sema::ActOnGCCAsmStmt(SourceLocation AsmLoc, bool IsSimple,
     }
 
     unsigned Size = Context.getTypeSize(OutputExpr->getType());
-    if (!Context.getTargetInfo().validateOutputSize(
-            FeatureMap, Literal->getString(), Size)) {
+    if (!Context.getTargetInfo().validateOutputSize(Literal->getString(),
+                                                    Size)) {
       targetDiag(OutputExpr->getBeginLoc(), diag::err_asm_invalid_output_size)
           << Info.getConstraintStr();
       return new (Context)
@@ -405,7 +392,7 @@ StmtResult Sema::ActOnGCCAsmStmt(SourceLocation AsmLoc, bool IsSimple,
             if (!Info.isValidAsmImmediate(IntResult))
               return StmtError(Diag(InputExpr->getBeginLoc(),
                                     diag::err_invalid_asm_value_for_constraint)
-                               << toString(IntResult, 10)
+                               << IntResult.toString(10)
                                << Info.getConstraintStr()
                                << InputExpr->getSourceRange());
         }
@@ -428,12 +415,6 @@ StmtResult Sema::ActOnGCCAsmStmt(SourceLocation AsmLoc, bool IsSimple,
       }
     }
 
-    if (InputExpr->getType()->isExtIntType())
-      return StmtError(
-          Diag(InputExpr->getBeginLoc(), diag::err_asm_invalid_type)
-          << InputExpr->getType() << 1 /*Output*/
-          << InputExpr->getSourceRange());
-
     InputConstraintInfos.push_back(Info);
 
     const Type *Ty = Exprs[i]->getType().getTypePtr();
@@ -446,14 +427,12 @@ StmtResult Sema::ActOnGCCAsmStmt(SourceLocation AsmLoc, bool IsSimple,
         return StmtError();
 
     unsigned Size = Context.getTypeSize(Ty);
-    if (!Context.getTargetInfo().validateInputSize(FeatureMap,
-                                                   Literal->getString(), Size))
-      return targetDiag(InputExpr->getBeginLoc(),
-                        diag::err_asm_invalid_input_size)
-             << Info.getConstraintStr();
+    if (!Context.getTargetInfo().validateInputSize(Literal->getString(),
+                                                   Size))
+      return StmtResult(
+          targetDiag(InputExpr->getBeginLoc(), diag::err_asm_invalid_input_size)
+          << Info.getConstraintStr());
   }
-
-  Optional<SourceLocation> UnwindClobberLoc;
 
   // Check that the clobbers are valid.
   for (unsigned i = 0; i != NumClobbers; i++) {
@@ -470,19 +449,6 @@ StmtResult Sema::ActOnGCCAsmStmt(SourceLocation AsmLoc, bool IsSimple,
                      NumInputs, Names, Constraints, Exprs.data(), AsmString,
                      NumClobbers, Clobbers, NumLabels, RParenLoc);
     }
-
-    if (Clobber == "unwind") {
-      UnwindClobberLoc = Literal->getBeginLoc();
-    }
-  }
-
-  // Using unwind clobber and asm-goto together is not supported right now.
-  if (UnwindClobberLoc && NumLabels > 0) {
-    targetDiag(*UnwindClobberLoc, diag::err_asm_unwind_and_goto);
-    return new (Context)
-        GCCAsmStmt(Context, AsmLoc, IsSimple, IsVolatile, NumOutputs, NumInputs,
-                   Names, Constraints, Exprs.data(), AsmString, NumClobbers,
-                   Clobbers, NumLabels, RParenLoc);
   }
 
   GCCAsmStmt *NS =
@@ -507,10 +473,10 @@ StmtResult Sema::ActOnGCCAsmStmt(SourceLocation AsmLoc, bool IsSimple,
 
     // Look for the correct constraint index.
     unsigned ConstraintIdx = Piece.getOperandNo();
-    unsigned NumOperands = NS->getNumOutputs() + NS->getNumInputs();
     // Labels are the last in the Exprs list.
-    if (NS->isAsmGoto() && ConstraintIdx >= NumOperands)
+    if (NS->isAsmGoto() && ConstraintIdx >= NS->getNumInputs())
       continue;
+    unsigned NumOperands = NS->getNumOutputs() + NS->getNumInputs();
     // Look for the (ConstraintIdx - NumOperands + 1)th constraint with
     // modifier '+'.
     if (ConstraintIdx >= NumOperands) {
@@ -735,14 +701,9 @@ void Sema::FillInlineAsmIdentifierInfo(Expr *Res,
   Expr::EvalResult Eval;
   if (T->isFunctionType() || T->isDependentType())
     return Info.setLabel(Res);
-  if (Res->isPRValue()) {
-    bool IsEnum = isa<clang::EnumType>(T);
-    if (DeclRefExpr *DRE = dyn_cast<clang::DeclRefExpr>(Res))
-      if (DRE->getDecl()->getKind() == Decl::EnumConstant)
-        IsEnum = true;
-    if (IsEnum && Res->EvaluateAsRValue(Eval, Context))
+  if (Res->isRValue()) {
+    if (isa<clang::EnumType>(T) && Res->EvaluateAsRValue(Eval, Context))
       return Info.setEnum(Eval.Val.getInt().getSExtValue());
-
     return Info.setLabel(Res);
   }
   unsigned Size = Context.getTypeSizeInChars(T).getQuantity();
@@ -921,15 +882,6 @@ StmtResult Sema::ActOnMSAsmStmt(SourceLocation AsmLoc, SourceLocation LBraceLoc,
                                 SourceLocation EndLoc) {
   bool IsSimple = (NumOutputs != 0 || NumInputs != 0);
   setFunctionHasBranchProtectedScope();
-
-  for (uint64_t I = 0; I < NumOutputs + NumInputs; ++I) {
-    if (Exprs[I]->getType()->isExtIntType())
-      return StmtError(
-          Diag(Exprs[I]->getBeginLoc(), diag::err_asm_invalid_type)
-          << Exprs[I]->getType() << (I < NumOutputs)
-          << Exprs[I]->getSourceRange());
-  }
-
   MSAsmStmt *NS =
     new (Context) MSAsmStmt(Context, AsmLoc, LBraceLoc, IsSimple,
                             /*IsVolatile*/ true, AsmToks, NumOutputs, NumInputs,

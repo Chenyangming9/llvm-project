@@ -23,11 +23,11 @@
 using namespace llvm;
 
 void LanaiSubtarget::initSubtargetFeatures(StringRef CPU, StringRef FS) {
-  std::string CPUName = std::string(CPU);
+  std::string CPUName = CPU;
   if (CPUName.empty())
     CPUName = "generic";
 
-  ParseSubtargetFeatures(CPUName, /*TuneCPU*/ CPUName, FS);
+  ParseSubtargetFeatures(CPUName, FS);
 }
 
 LanaiSubtarget &LanaiSubtarget::initializeSubtargetDependencies(StringRef CPU,
@@ -41,6 +41,6 @@ LanaiSubtarget::LanaiSubtarget(const Triple &TargetTriple, StringRef Cpu,
                                const TargetOptions & /*Options*/,
                                CodeModel::Model /*CodeModel*/,
                                CodeGenOpt::Level /*OptLevel*/)
-    : LanaiGenSubtargetInfo(TargetTriple, Cpu, /*TuneCPU*/ Cpu, FeatureString),
+    : LanaiGenSubtargetInfo(TargetTriple, Cpu, FeatureString),
       FrameLowering(initializeSubtargetDependencies(Cpu, FeatureString)),
       InstrInfo(), TLInfo(TM, *this), TSInfo() {}

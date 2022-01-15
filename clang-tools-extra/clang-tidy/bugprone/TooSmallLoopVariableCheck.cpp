@@ -30,14 +30,15 @@ static constexpr llvm::StringLiteral LoopIncrementName =
 TooSmallLoopVariableCheck::TooSmallLoopVariableCheck(StringRef Name,
                                                      ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      MagnitudeBitsUpperLimit(Options.get("MagnitudeBitsUpperLimit", 16U)) {}
+      MagnitudeBitsUpperLimit(Options.get<unsigned>(
+          "MagnitudeBitsUpperLimit", 16)) {}
 
 void TooSmallLoopVariableCheck::storeOptions(
     ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "MagnitudeBitsUpperLimit", MagnitudeBitsUpperLimit);
 }
 
-/// The matcher for loops with suspicious integer loop variable.
+/// \brief The matcher for loops with suspicious integer loop variable.
 ///
 /// In this general example, assuming 'j' and 'k' are of integral type:
 /// \code
@@ -57,10 +58,10 @@ void TooSmallLoopVariableCheck::registerMatchers(MatchFinder *Finder) {
           .bind(LoopVarName);
 
   // We need to catch only those comparisons which contain any integer cast.
-  StatementMatcher LoopVarConversionMatcher = traverse(
-      TK_AsIs, implicitCastExpr(hasImplicitDestinationType(isInteger()),
-                                has(ignoringParenImpCasts(LoopVarMatcher)))
-                   .bind(LoopVarCastName));
+  StatementMatcher LoopVarConversionMatcher =
+      implicitCastExpr(hasImplicitDestinationType(isInteger()),
+                       has(ignoringParenImpCasts(LoopVarMatcher)))
+          .bind(LoopVarCastName);
 
   // We are interested in only those cases when the loop bound is a variable
   // value (not const, enum, etc.).
@@ -104,7 +105,7 @@ static unsigned calcMagnitudeBits(const ASTContext &Context,
              : Context.getIntWidth(IntExprType) - 1;
 }
 
-/// Calculate the upper bound expression's magnitude bits, but ignore
+/// \brief Calculate the upper bound expression's magnitude bits, but ignore
 /// constant like values to reduce false positives.
 static unsigned calcUpperBoundMagnitudeBits(const ASTContext &Context,
                                             const Expr *UpperBound,

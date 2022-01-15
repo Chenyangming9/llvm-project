@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "Internals.h"
-#include "clang/ARCMigrate/ARCMT.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/Basic/DiagnosticCategories.h"
 #include "clang/Frontend/ASTUnit.h"
@@ -140,7 +139,7 @@ public:
     }
 
     // Non-ARC warnings are ignored.
-    Diags.setLastDiagnosticIgnored(true);
+    Diags.setLastDiagnosticIgnored();
   }
 };
 
@@ -190,7 +189,7 @@ createInvocationForMigration(CompilerInvocation &origCI,
       PPOpts.Includes.insert(PPOpts.Includes.begin(), OriginalFile);
     PPOpts.ImplicitPCHInclude.clear();
   }
-  std::string define = std::string(getARCMTMacroName());
+  std::string define = getARCMTMacroName();
   define += '=';
   CInvok->getPreprocessorOpts().addMacroDef(define);
   CInvok->getLangOpts()->ObjCAutoRefCount = true;
@@ -297,7 +296,7 @@ bool arcmt::checkForManualIssues(
     for (CapturedDiagList::iterator
            I = capturedDiags.begin(), E = capturedDiags.end(); I != E; ++I)
       arcDiags.push_back(*I);
-    writeARCDiagsToPlist(std::string(plistOut), arcDiags,
+    writeARCDiagsToPlist(plistOut, arcDiags,
                          Ctx.getSourceManager(), Ctx.getLangOpts());
   }
 
@@ -416,11 +415,9 @@ bool arcmt::getFileRemappings(std::vector<std::pair<std::string,std::string> > &
   if (err)
     return true;
 
-  remapper.forEachMapping(
-      [&](StringRef From, StringRef To) {
-        remap.push_back(std::make_pair(From.str(), To.str()));
-      },
-      [](StringRef, const llvm::MemoryBufferRef &) {});
+  PreprocessorOptions PPOpts;
+  remapper.applyMappings(PPOpts);
+  remap = PPOpts.RemappedFiles;
 
   return false;
 }
@@ -456,8 +453,8 @@ public:
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
                                                  StringRef InFile) override {
     CI.getPreprocessor().addPPCallbacks(
-               std::make_unique<ARCMTMacroTrackerPPCallbacks>(ARCMTMacroLocs));
-    return std::make_unique<ASTConsumer>();
+               llvm::make_unique<ARCMTMacroTrackerPPCallbacks>(ARCMTMacroLocs));
+    return llvm::make_unique<ASTConsumer>();
   }
 };
 
@@ -601,7 +598,7 @@ bool MigrationProcess::applyTransform(TransformFn trans,
     RewriteBuffer &buf = I->second;
     const FileEntry *file = Ctx.getSourceManager().getFileEntryForID(FID);
     assert(file);
-    std::string newFname = std::string(file->getName());
+    std::string newFname = file->getName();
     newFname += "-trans";
     SmallString<512> newText;
     llvm::raw_svector_ostream vecOS(newText);

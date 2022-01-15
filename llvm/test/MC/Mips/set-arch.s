@@ -38,8 +38,6 @@
     mod         $2, $4, $6
     .set arch=octeon
     baddu $9, $6, $7
-    .set arch=octeon+
-    saa         $2, ($5)
     .set arch=r4000
     dadd        $2, $2, $2
 
@@ -67,7 +65,5 @@
 # CHECK: mod         $2, $4, $6
 # CHECK: .set arch=octeon
 # CHECK: baddu $9, $6, $7
-# CHECK: .set arch=octeon+
-# CHECK: saa         $2, ($5)
 # CHECK: .set arch=r4000
 # CHECK: dadd        $2, $2, $2

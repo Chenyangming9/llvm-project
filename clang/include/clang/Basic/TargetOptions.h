@@ -35,9 +35,6 @@ public:
   /// If given, the name of the target CPU to generate code for.
   std::string CPU;
 
-  /// If given, the name of the target CPU to tune code for.
-  std::string TuneCPU;
-
   /// If given, the unit to use for floating point math.
   std::string FPMath;
 
@@ -57,12 +54,8 @@ public:
   /// be a list of strings starting with by '+' or '-'.
   std::vector<std::string> Features;
 
-  /// The map of which features have been enabled disabled based on the command
-  /// line.
-  llvm::StringMap<bool> FeatureMap;
-
   /// Supported OpenCL extensions and optional core features.
-  llvm::StringMap<bool> OpenCLFeaturesMap;
+  OpenCLOptions SupportedOpenCLOptions;
 
   /// The list of OpenCL extensions to enable or disable, as written on
   /// the command line.
@@ -74,9 +67,6 @@ public:
   /// \brief If enabled, use 32-bit pointers for accessing const/local/shared
   /// address space.
   bool NVPTXUseShortPointers = false;
-
-  /// \brief If enabled, allow AMDGPU unsafe floating point atomics.
-  bool AllowAMDGPUUnsafeFPAtomics = false;
 
   // The code model to be used as specified by the user. Corresponds to
   // CodeModel::Model enum defined in include/llvm/Support/CodeGen.h, plus

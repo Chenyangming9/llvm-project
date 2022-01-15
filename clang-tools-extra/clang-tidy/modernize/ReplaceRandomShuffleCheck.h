@@ -26,15 +26,13 @@ public:
   ReplaceRandomShuffleCheck(StringRef Name, ClangTidyContext *Context);
   void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
                            Preprocessor *ModuleExpanderPP) override;
-  bool isLanguageVersionSupported(const LangOptions &LangOpts) const override {
-    return LangOpts.CPlusPlus11;
-  }
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 
 private:
-  utils::IncludeInserter IncludeInserter;
+  std::unique_ptr<utils::IncludeInserter> IncludeInserter;
+  const utils::IncludeSorter::IncludeStyle IncludeStyle;
 };
 
 } // namespace modernize

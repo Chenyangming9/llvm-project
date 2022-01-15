@@ -6,34 +6,31 @@
 bar:
   jmp bar
 
-; CHECK: R_AVR_LDI SYMBOL+0x3
+; CHECK: R_AVR_LDI SYMBOL+3
 ldi r21, SYMBOL+3
-
-; CHECK: R_AVR_6 SYMBOL+0x4
-ldd r8, Y+SYMBOL+4
 
 ; CHECK-NEXT: R_AVR_6_ADIW FOO
 adiw r24, FOO
 
-; CHECK-NEXT: R_AVR_16 BAR+0x2
+; CHECK-NEXT: R_AVR_16 BAR+2
 lds r8, BAR+2
 
 ; CHECK-NEXT: R_AVR_PORT5 foo
 sbic foo, 1
 
-; CHECK-NEXT: R_AVR_PORT6 Bar+0x2
+; CHECK-NEXT: R_AVR_PORT6 Bar+2
 in r30, Bar+2
 
-; CHECK-NEXT: R_AVR_CALL foo+0x3
+; CHECK-NEXT: R_AVR_CALL foo+3
 call foo+3
 
-; CHECK-NEXT: R_AVR_13_PCREL foo-0xa
+; CHECK-NEXT: R_AVR_13_PCREL foo-10
 rjmp foo-10
 
-; CHECK-NEXT: R_AVR_7_PCREL foo+0x2
+; CHECK-NEXT: R_AVR_7_PCREL foo+2
 brcs foo+2
 
-; CHECK-NEXT: R_AVR_LO8_LDI bar+0x3
+; CHECK-NEXT: R_AVR_LO8_LDI bar+3
 ; CHECK-NEXT: R_AVR_LO8_LDI abc
 ; CHECK-NEXT: R_AVR_LO8_LDI abc
 ldi r24, lo8(bar+3)
@@ -135,14 +132,11 @@ ldi r17, lo8(gs(foo))
 ; CHECK-NEXT: R_AVR_HI8_LDI_GS foo
 ldi r18, hi8(gs(foo))
 
-; CHECK-NEXT: R_AVR_16 foo
+; CHECK-NEXT: R_AVR_16
 .short foo
 
-; CHECK-NEXT: R_AVR_16_PM foo
+; CHECK-NEXT: R_AVR_16_PM
 .short gs(foo)
-
-; CHECK-NEXT: R_AVR_16_PM foo
-.short pm(foo)
 
 ; CHECK-NEXT: R_AVR_8
 .byte foo

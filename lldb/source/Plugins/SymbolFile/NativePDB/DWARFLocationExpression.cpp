@@ -1,4 +1,4 @@
-//===-- DWARFLocationExpression.cpp ---------------------------------------===//
+//===-- DWARFLocationExpression.cpp -----------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -122,7 +122,7 @@ static DWARFExpression MakeLocationExpressionInternal(lldb::ModuleSP module,
   DataBufferSP buffer =
       std::make_shared<DataBufferHeap>(stream.GetData(), stream.GetSize());
   DataExtractor extractor(buffer, byte_order, address_size, byte_size);
-  DWARFExpression result(module, extractor, nullptr);
+  DWARFExpression result(module, extractor, nullptr, 0, buffer->GetByteSize());
   result.SetRegisterKind(register_kind);
 
   return result;
@@ -247,6 +247,6 @@ DWARFExpression lldb_private::npdb::MakeConstantLocationExpression(
               .take_front(size);
   buffer->CopyData(bytes.data(), size);
   DataExtractor extractor(buffer, lldb::eByteOrderLittle, address_size);
-  DWARFExpression result(nullptr, extractor, nullptr);
+  DWARFExpression result(nullptr, extractor, nullptr, 0, size);
   return result;
 }

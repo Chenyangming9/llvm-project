@@ -30,7 +30,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/IR/SafepointIRVerifier.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SetOperations.h"
@@ -39,15 +38,14 @@
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/Statepoint.h"
 #include "llvm/IR/Value.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Support/Allocator.h"
-#include "llvm/Support/CommandLine.h"
+#include "llvm/IR/SafepointIRVerifier.h"
+#include "llvm/IR/Statepoint.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
 #define DEBUG_TYPE "safepoint-ir-verifier"
@@ -104,11 +102,11 @@ public:
   }
 
   bool isDeadEdge(const Use *U) const {
-    assert(cast<Instruction>(U->getUser())->isTerminator() &&
+    assert(dyn_cast<Instruction>(U->getUser())->isTerminator() &&
            "edge must be operand of terminator");
     assert(cast_or_null<BasicBlock>(U->get()) &&
            "edge must refer to basic block");
-    assert(!isDeadBlock(cast<Instruction>(U->getUser())->getParent()) &&
+    assert(!isDeadBlock(dyn_cast<Instruction>(U->getUser())->getParent()) &&
            "isDeadEdge() must be applied to edge from live block");
     return DeadEdges.count(U);
   }
@@ -208,7 +206,7 @@ PreservedAnalyses SafepointIRVerifierPass::run(Function &F,
   Verify(F, DT, CD);
   return PreservedAnalyses::all();
 }
-} // namespace llvm
+}
 
 namespace {
 
@@ -350,7 +348,8 @@ static enum BaseType getBaseType(const Value *Val) {
     // Push all the incoming values of phi node into the worklist for
     // processing.
     if (const auto *PN = dyn_cast<PHINode>(V)) {
-      append_range(Worklist, PN->incoming_values());
+      for (Value *InV: PN->incoming_values())
+        Worklist.push_back(InV);
       continue;
     }
     if (const auto *SI = dyn_cast<SelectInst>(V)) {
@@ -560,7 +559,8 @@ GCPtrTracker::GCPtrTracker(const Function &F, const DominatorTree &DT,
 }
 
 BasicBlockState *GCPtrTracker::getBasicBlockState(const BasicBlock *BB) {
-  return BlockMap.lookup(BB);
+  auto it = BlockMap.find(BB);
+  return it != BlockMap.end() ? it->second : nullptr;
 }
 
 const BasicBlockState *GCPtrTracker::getBasicBlockState(
@@ -781,7 +781,7 @@ void GCPtrTracker::transferBlock(const BasicBlock *BB, BasicBlockState &BBS,
 
 void GCPtrTracker::transferInstruction(const Instruction &I, bool &Cleared,
                                        AvailableValueSet &Available) {
-  if (isa<GCStatepointInst>(I)) {
+  if (isStatepoint(I)) {
     Cleared = true;
     Available.clear();
   } else if (containsGCPtrType(I.getType()))

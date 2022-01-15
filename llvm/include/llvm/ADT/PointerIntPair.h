@@ -13,7 +13,6 @@
 #ifndef LLVM_ADT_POINTERINTPAIR_H
 #define LLVM_ADT_POINTERINTPAIR_H
 
-#include "llvm/Support/Compiler.h"
 #include "llvm/Support/PointerLikeTypeTraits.h"
 #include "llvm/Support/type_traits.h"
 #include <cassert>
@@ -60,19 +59,19 @@ public:
 
   IntType getInt() const { return (IntType)Info::getInt(Value); }
 
-  void setPointer(PointerTy PtrVal) LLVM_LVALUE_FUNCTION {
+  void setPointer(PointerTy PtrVal) {
     Value = Info::updatePointer(Value, PtrVal);
   }
 
-  void setInt(IntType IntVal) LLVM_LVALUE_FUNCTION {
+  void setInt(IntType IntVal) {
     Value = Info::updateInt(Value, static_cast<intptr_t>(IntVal));
   }
 
-  void initWithPointer(PointerTy PtrVal) LLVM_LVALUE_FUNCTION {
+  void initWithPointer(PointerTy PtrVal) {
     Value = Info::updatePointer(0, PtrVal);
   }
 
-  void setPointerAndInt(PointerTy PtrVal, IntType IntVal) LLVM_LVALUE_FUNCTION {
+  void setPointerAndInt(PointerTy PtrVal, IntType IntVal) {
     Value = Info::updateInt(Info::updatePointer(0, PtrVal),
                             static_cast<intptr_t>(IntVal));
   }
@@ -90,7 +89,7 @@ public:
 
   void *getOpaqueValue() const { return reinterpret_cast<void *>(Value); }
 
-  void setFromOpaqueValue(void *Val) LLVM_LVALUE_FUNCTION {
+  void setFromOpaqueValue(void *Val) {
     Value = reinterpret_cast<intptr_t>(Val);
   }
 
@@ -147,7 +146,7 @@ struct PointerIntPairInfo {
                 "cannot use a pointer type that has all bits free");
   static_assert(IntBits <= PtrTraits::NumLowBitsAvailable,
                 "PointerIntPair with integer size too large for pointer");
-  enum MaskAndShiftConstants : uintptr_t {
+  enum : uintptr_t {
     /// PointerBitMask - The bits that come from the pointer.
     PointerBitMask =
         ~(uintptr_t)(((intptr_t)1 << PtrTraits::NumLowBitsAvailable) - 1),
@@ -235,8 +234,7 @@ struct PointerLikeTypeTraits<
     return PointerIntPair<PointerTy, IntBits, IntType>::getFromOpaqueValue(P);
   }
 
-  static constexpr int NumLowBitsAvailable =
-      PtrTraits::NumLowBitsAvailable - IntBits;
+  enum { NumLowBitsAvailable = PtrTraits::NumLowBitsAvailable - IntBits };
 };
 
 } // end namespace llvm

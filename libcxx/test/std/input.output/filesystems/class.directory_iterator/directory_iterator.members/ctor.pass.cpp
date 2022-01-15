@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 // <filesystem>
 
@@ -17,14 +17,14 @@
 // directory_iterator(const path& p, error_code& ec);
 // directory_iterator(const path& p, directory_options options, error_code& ec);
 
-#include "filesystem_include.h"
+#include "filesystem_include.hpp"
 #include <type_traits>
 #include <set>
 #include <cassert>
 
 #include "test_macros.h"
-#include "rapid-cxx-test.h"
-#include "filesystem_test_helper.h"
+#include "rapid-cxx-test.hpp"
+#include "filesystem_test_helper.hpp"
 
 using namespace fs;
 
@@ -59,12 +59,11 @@ TEST_CASE(test_constructor_signatures)
 
 TEST_CASE(test_construction_from_bad_path)
 {
-    static_test_env static_env;
     std::error_code ec;
     directory_options opts = directory_options::none;
     const directory_iterator endIt;
 
-    const path testPaths[] = { static_env.DNE, static_env.BadSymlink };
+    const path testPaths[] = { StaticEnv::DNE, StaticEnv::BadSymlink };
     for (path const& testPath : testPaths)
     {
         {
@@ -87,14 +86,6 @@ TEST_CASE(test_construction_from_bad_path)
 TEST_CASE(access_denied_test_case)
 {
     using namespace fs;
-#ifdef _WIN32
-    // Windows doesn't support setting perms::none to trigger failures
-    // reading directories; test using a special inaccessible directory
-    // instead.
-    const path testDir = GetWindowsInaccessibleDir();
-    if (testDir.empty())
-        TEST_UNSUPPORTED();
-#else
     scoped_test_env env;
     path const testDir = env.make_env_path("dir1");
     path const testFile = testDir / "testFile";
@@ -108,7 +99,6 @@ TEST_CASE(access_denied_test_case)
     }
     // Change the permissions so we can no longer iterate
     permissions(testDir, perms::none);
-#endif
 
     // Check that the construction fails when skip_permissions_denied is
     // not given.
@@ -178,10 +168,9 @@ TEST_CASE(test_open_on_empty_directory_equals_end)
 
 TEST_CASE(test_open_on_directory_succeeds)
 {
-    static_test_env static_env;
-    const path testDir = static_env.Dir;
-    std::set<path> dir_contents(static_env.DirIterationList.begin(),
-                                static_env.DirIterationList.end());
+    const path testDir = StaticEnv::Dir;
+    std::set<path> dir_contents(std::begin(StaticEnv::DirIterationList),
+                                std::end(  StaticEnv::DirIterationList));
     const directory_iterator endIt{};
 
     {
@@ -200,8 +189,7 @@ TEST_CASE(test_open_on_directory_succeeds)
 
 TEST_CASE(test_open_on_file_fails)
 {
-    static_test_env static_env;
-    const path testFile = static_env.File;
+    const path testFile = StaticEnv::File;
     const directory_iterator endIt{};
     {
         std::error_code ec;
@@ -236,10 +224,9 @@ TEST_CASE(test_open_on_dot_dir)
 
 TEST_CASE(test_open_on_symlink)
 {
-    static_test_env static_env;
-    const path symlinkToDir = static_env.SymlinkToDir;
+    const path symlinkToDir = StaticEnv::SymlinkToDir;
     std::set<path> dir_contents;
-    for (path const& p : static_env.DirIterationList) {
+    for (path const& p : StaticEnv::DirIterationList) {
         dir_contents.insert(p.filename());
     }
     const directory_iterator endIt{};

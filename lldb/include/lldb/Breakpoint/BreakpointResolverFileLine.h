@@ -6,11 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_BREAKPOINT_BREAKPOINTRESOLVERFILELINE_H
-#define LLDB_BREAKPOINT_BREAKPOINTRESOLVERFILELINE_H
+#ifndef liblldb_BreakpointResolverFileLine_h_
+#define liblldb_BreakpointResolverFileLine_h_
 
 #include "lldb/Breakpoint/BreakpointResolver.h"
-#include "lldb/Core/SourceLocationSpec.h"
 
 namespace lldb_private {
 
@@ -21,22 +20,23 @@ namespace lldb_private {
 
 class BreakpointResolverFileLine : public BreakpointResolver {
 public:
-  BreakpointResolverFileLine(const lldb::BreakpointSP &bkpt,
-                             lldb::addr_t offset, bool skip_prologue,
-                             const SourceLocationSpec &location_spec);
+  BreakpointResolverFileLine(Breakpoint *bkpt, const FileSpec &resolver,
+                             uint32_t line_no, uint32_t column,
+                             lldb::addr_t m_offset, bool check_inlines,
+                             bool skip_prologue, bool exact_match);
 
   static BreakpointResolver *
-  CreateFromStructuredData(const lldb::BreakpointSP &bkpt,
+  CreateFromStructuredData(Breakpoint *bkpt,
                            const StructuredData::Dictionary &data_dict,
                            Status &error);
 
   StructuredData::ObjectSP SerializeToStructuredData() override;
 
-  ~BreakpointResolverFileLine() override = default;
+  ~BreakpointResolverFileLine() override;
 
   Searcher::CallbackReturn SearchCallback(SearchFilter &filter,
-                                          SymbolContext &context,
-                                          Address *addr) override;
+                                          SymbolContext &context, Address *addr,
+                                          bool containing) override;
 
   lldb::SearchDepth GetDepth() override;
 
@@ -52,22 +52,24 @@ public:
     return V->getResolverID() == BreakpointResolver::FileLineResolver;
   }
 
-  lldb::BreakpointResolverSP
-  CopyForBreakpoint(lldb::BreakpointSP &breakpoint) override;
+  lldb::BreakpointResolverSP CopyForBreakpoint(Breakpoint &breakpoint) override;
 
 protected:
   void FilterContexts(SymbolContextList &sc_list, bool is_relative);
 
   friend class Breakpoint;
-  SourceLocationSpec m_location_spec;
+  FileSpec m_file_spec;   ///< This is the file spec we are looking for.
+  uint32_t m_line_number; ///< This is the line number that we are looking for.
+  uint32_t m_column;      ///< This is the column that we are looking for.
+  bool m_inlines; ///< This determines whether the resolver looks for inlined
+                  ///< functions or not.
   bool m_skip_prologue;
+  bool m_exact_match;
 
 private:
-  BreakpointResolverFileLine(const BreakpointResolverFileLine &) = delete;
-  const BreakpointResolverFileLine &
-  operator=(const BreakpointResolverFileLine &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(BreakpointResolverFileLine);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_BREAKPOINT_BREAKPOINTRESOLVERFILELINE_H
+#endif // liblldb_BreakpointResolverFileLine_h_

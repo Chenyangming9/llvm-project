@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_BITCODE_BITCODEANALYZER_H
-#define LLVM_BITCODE_BITCODEANALYZER_H
+#ifndef LLVM_BITCODE_BITCODE_ANALYZER_H
+#define LLVM_BITCODE_BITCODE_ANALYZER_H
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Optional.h"
@@ -30,7 +30,6 @@ enum CurStreamTypeType {
   LLVMIRBitstream,
   ClangSerializedASTBitstream,
   ClangSerializedDiagnosticsBitstream,
-  LLVMBitstreamRemarks
 };
 
 struct BCDumpOptions {
@@ -101,4 +100,4 @@ private:
 
 } // end namespace llvm
 
-#endif // LLVM_BITCODE_BITCODEANALYZER_H
+#endif // LLVM_BITCODE_BITCODE_ANALYZER_H

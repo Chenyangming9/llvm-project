@@ -10,17 +10,22 @@
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
 #include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
+#include "llvm/ExecutionEngine/Orc/LambdaResolver.h"
+#include "llvm/ExecutionEngine/Orc/Legacy.h"
+#include "llvm/ExecutionEngine/Orc/NullResolver.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/LLVMContext.h"
 #include "gtest/gtest.h"
-#include <string>
 
 using namespace llvm;
 using namespace llvm::orc;
 
 namespace {
+
+class RTDyldObjectLinkingLayerExecutionTest : public testing::Test,
+                                               public OrcExecutionTest {};
 
 // Adds an object with a debug section to RuntimeDyld and then returns whether
 // the debug section was passed to the memory manager.
@@ -44,12 +49,12 @@ static bool testSetProcessAllSections(std::unique_ptr<MemoryBuffer> Obj,
 
   bool DebugSectionSeen = false;
 
-  ExecutionSession ES(std::make_unique<UnsupportedExecutorProcessControl>());
-  auto &JD = ES.createBareJITDylib("main");
+  ExecutionSession ES;
+  auto &JD = ES.createJITDylib("main");
   auto Foo = ES.intern("foo");
 
   RTDyldObjectLinkingLayer ObjLayer(ES, [&DebugSectionSeen]() {
-    return std::make_unique<MemoryManagerWrapper>(DebugSectionSeen);
+    return llvm::make_unique<MemoryManagerWrapper>(DebugSectionSeen);
   });
 
   auto OnResolveDoNothing = [](Expected<SymbolMap> R) {
@@ -57,27 +62,21 @@ static bool testSetProcessAllSections(std::unique_ptr<MemoryBuffer> Obj,
   };
 
   ObjLayer.setProcessAllSections(ProcessAllSections);
-  cantFail(ObjLayer.add(JD, std::move(Obj)));
-  ES.lookup(LookupKind::Static, makeJITDylibSearchOrder(&JD),
-            SymbolLookupSet(Foo), SymbolState::Resolved, OnResolveDoNothing,
-            NoDependenciesToRegister);
-
-  if (auto Err = ES.endSession())
-    ES.reportError(std::move(Err));
+  cantFail(ObjLayer.add(JD, std::move(Obj), ES.allocateVModule()));
+  ES.lookup(JITDylibSearchList({{&JD, false}}), {Foo}, SymbolState::Resolved,
+            OnResolveDoNothing, NoDependenciesToRegister);
 
   return DebugSectionSeen;
 }
 
 TEST(RTDyldObjectLinkingLayerTest, TestSetProcessAllSections) {
   LLVMContext Context;
-  auto M = std::make_unique<Module>("", Context);
+  auto M = llvm::make_unique<Module>("", Context);
   M->setTargetTriple("x86_64-unknown-linux-gnu");
-  Constant *StrConstant = ConstantDataArray::getString(Context, "forty-two");
-  auto *GV =
-      new GlobalVariable(*M, StrConstant->getType(), true,
-                         GlobalValue::ExternalLinkage, StrConstant, "foo");
-  GV->setUnnamedAddr(GlobalValue::UnnamedAddr::Global);
-  GV->setAlignment(Align(1));
+  Type *Int32Ty = IntegerType::get(Context, 32);
+  GlobalVariable *GV =
+      new GlobalVariable(*M, Int32Ty, false, GlobalValue::ExternalLinkage,
+                         ConstantInt::get(Int32Ty, 42), "foo");
 
   GV->setSection(".debug_str");
 
@@ -89,7 +88,7 @@ TEST(RTDyldObjectLinkingLayerTest, TestSetProcessAllSections) {
   if (!TM)
     return;
 
-  auto Obj = cantFail(SimpleCompiler(*TM)(*M));
+  auto Obj = SimpleCompiler(*TM)(*M);
 
   EXPECT_FALSE(testSetProcessAllSections(
       MemoryBuffer::getMemBufferCopy(Obj->getBuffer()), false))
@@ -115,7 +114,7 @@ TEST(RTDyldObjectLinkingLayerTest, TestOverrideObjectFlags) {
   public:
     FunkySimpleCompiler(TargetMachine &TM) : SimpleCompiler(TM) {}
 
-    Expected<CompileResult> operator()(Module &M) override {
+    CompileResult operator()(Module &M) {
       auto *Foo = M.getFunction("foo");
       assert(Foo && "Expected function Foo not found");
       Foo->setVisibility(GlobalValue::HiddenVisibility);
@@ -124,7 +123,7 @@ TEST(RTDyldObjectLinkingLayerTest, TestOverrideObjectFlags) {
   };
 
   // Create a module with two void() functions: foo and bar.
-  ThreadSafeContext TSCtx(std::make_unique<LLVMContext>());
+  ThreadSafeContext TSCtx(llvm::make_unique<LLVMContext>());
   ThreadSafeModule M;
   {
     ModuleBuilder MB(*TSCtx.getContext(), TM->getTargetTriple().str(), "dummy");
@@ -150,25 +149,20 @@ TEST(RTDyldObjectLinkingLayerTest, TestOverrideObjectFlags) {
   }
 
   // Create a simple stack and set the override flags option.
-  ExecutionSession ES{std::make_unique<UnsupportedExecutorProcessControl>()};
-  auto &JD = ES.createBareJITDylib("main");
+  ExecutionSession ES;
+  auto &JD = ES.createJITDylib("main");
   auto Foo = ES.intern("foo");
   RTDyldObjectLinkingLayer ObjLayer(
-      ES, []() { return std::make_unique<SectionMemoryManager>(); });
-  IRCompileLayer CompileLayer(ES, ObjLayer,
-                              std::make_unique<FunkySimpleCompiler>(*TM));
+      ES, []() { return llvm::make_unique<SectionMemoryManager>(); });
+  IRCompileLayer CompileLayer(ES, ObjLayer, FunkySimpleCompiler(*TM));
 
   ObjLayer.setOverrideObjectFlagsWithResponsibilityFlags(true);
 
-  cantFail(CompileLayer.add(JD, std::move(M)));
+  cantFail(CompileLayer.add(JD, std::move(M), ES.allocateVModule()));
   ES.lookup(
-      LookupKind::Static, makeJITDylibSearchOrder(&JD), SymbolLookupSet(Foo),
-      SymbolState::Resolved,
+      JITDylibSearchList({{&JD, false}}), {Foo}, SymbolState::Resolved,
       [](Expected<SymbolMap> R) { cantFail(std::move(R)); },
       NoDependenciesToRegister);
-
-  if (auto Err = ES.endSession())
-    ES.reportError(std::move(Err));
 }
 
 TEST(RTDyldObjectLinkingLayerTest, TestAutoClaimResponsibilityForSymbols) {
@@ -188,7 +182,7 @@ TEST(RTDyldObjectLinkingLayerTest, TestAutoClaimResponsibilityForSymbols) {
   public:
     FunkySimpleCompiler(TargetMachine &TM) : SimpleCompiler(TM) {}
 
-    Expected<CompileResult> operator()(Module &M) override {
+    CompileResult operator()(Module &M) {
       Function *BarImpl = Function::Create(
           FunctionType::get(Type::getVoidTy(M.getContext()), {}, false),
           GlobalValue::ExternalLinkage, "bar", &M);
@@ -202,7 +196,7 @@ TEST(RTDyldObjectLinkingLayerTest, TestAutoClaimResponsibilityForSymbols) {
   };
 
   // Create a module with two void() functions: foo and bar.
-  ThreadSafeContext TSCtx(std::make_unique<LLVMContext>());
+  ThreadSafeContext TSCtx(llvm::make_unique<LLVMContext>());
   ThreadSafeModule M;
   {
     ModuleBuilder MB(*TSCtx.getContext(), TM->getTargetTriple().str(), "dummy");
@@ -220,25 +214,20 @@ TEST(RTDyldObjectLinkingLayerTest, TestAutoClaimResponsibilityForSymbols) {
   }
 
   // Create a simple stack and set the override flags option.
-  ExecutionSession ES{std::make_unique<UnsupportedExecutorProcessControl>()};
-  auto &JD = ES.createBareJITDylib("main");
+  ExecutionSession ES;
+  auto &JD = ES.createJITDylib("main");
   auto Foo = ES.intern("foo");
   RTDyldObjectLinkingLayer ObjLayer(
-      ES, []() { return std::make_unique<SectionMemoryManager>(); });
-  IRCompileLayer CompileLayer(ES, ObjLayer,
-                              std::make_unique<FunkySimpleCompiler>(*TM));
+      ES, []() { return llvm::make_unique<SectionMemoryManager>(); });
+  IRCompileLayer CompileLayer(ES, ObjLayer, FunkySimpleCompiler(*TM));
 
   ObjLayer.setAutoClaimResponsibilityForObjectSymbols(true);
 
-  cantFail(CompileLayer.add(JD, std::move(M)));
+  cantFail(CompileLayer.add(JD, std::move(M), ES.allocateVModule()));
   ES.lookup(
-      LookupKind::Static, makeJITDylibSearchOrder(&JD), SymbolLookupSet(Foo),
-      SymbolState::Resolved,
+      JITDylibSearchList({{&JD, false}}), {Foo}, SymbolState::Resolved,
       [](Expected<SymbolMap> R) { cantFail(std::move(R)); },
       NoDependenciesToRegister);
-
-  if (auto Err = ES.endSession())
-    ES.reportError(std::move(Err));
 }
 
 } // end anonymous namespace

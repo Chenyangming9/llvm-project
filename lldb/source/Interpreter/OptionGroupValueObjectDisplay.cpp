@@ -1,4 +1,4 @@
-//===-- OptionGroupValueObjectDisplay.cpp ---------------------------------===//
+//===-- OptionGroupValueObjectDisplay.cpp -----------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -19,6 +19,10 @@
 using namespace lldb;
 using namespace lldb_private;
 
+OptionGroupValueObjectDisplay::OptionGroupValueObjectDisplay() {}
+
+OptionGroupValueObjectDisplay::~OptionGroupValueObjectDisplay() {}
+
 static const OptionDefinition g_option_table[] = {
     {LLDB_OPT_SET_1, false, "dynamic-type", 'd',
      OptionParser::eRequiredArgument, nullptr, GetDynamicValueTypes(), 0,
@@ -37,7 +41,7 @@ static const OptionDefinition g_option_table[] = {
      {}, 0, eArgTypeNone, "Show variable location information."},
     {LLDB_OPT_SET_1, false, "object-description", 'O',
      OptionParser::eNoArgument, nullptr, {}, 0, eArgTypeNone,
-     "Display using a language-specific description API, if possible."},
+     "Print as an Objective-C object."},
     {LLDB_OPT_SET_1, false, "ptr-depth", 'P', OptionParser::eRequiredArgument,
      nullptr, {}, 0, eArgTypeCount, "The number of pointers to be traversed "
                                     "when dumping values (default is zero)."},
@@ -148,7 +152,8 @@ Status OptionGroupValueObjectDisplay::SetOptionValue(
     break;
 
   default:
-    llvm_unreachable("Unimplemented option");
+    error.SetErrorStringWithFormat("unrecognized option '%c'", short_option);
+    break;
   }
 
   return error;

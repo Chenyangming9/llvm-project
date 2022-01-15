@@ -7,11 +7,11 @@
 //===----------------------------------------------------------------------===//
 
 // Can you have a catch clause of array type that catches anything?
-// UNSUPPORTED: no-exceptions
+// UNSUPPORTED: libcxxabi-no-exceptions
 
 #include <cassert>
 
-int main(int, char**)
+int main()
 {
     typedef char Array[4];
     Array a = {'H', 'i', '!', 0};
@@ -27,6 +27,4 @@ int main(int, char**)
     {
         assert(false);
     }
-
-    return 0;
 }

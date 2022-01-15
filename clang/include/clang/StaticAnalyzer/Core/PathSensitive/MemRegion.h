@@ -112,7 +112,7 @@ public:
 
   virtual void Profile(llvm::FoldingSetNodeID& ID) const = 0;
 
-  virtual MemRegionManager &getMemRegionManager() const = 0;
+  virtual MemRegionManager* getMemRegionManager() const = 0;
 
   const MemSpaceRegion *getMemorySpace() const;
 
@@ -169,7 +169,6 @@ public:
   Kind getKind() const { return kind; }
 
   template<typename RegionTy> const RegionTy* getAs() const;
-  template<typename RegionTy> const RegionTy* castAs() const;
 
   virtual bool isBoundable() const { return false; }
 
@@ -198,13 +197,14 @@ public:
 ///  for example, the set of global variables, the stack frame, etc.
 class MemSpaceRegion : public MemRegion {
 protected:
-  MemRegionManager &Mgr;
+  MemRegionManager *Mgr;
 
-  MemSpaceRegion(MemRegionManager &mgr, Kind k) : MemRegion(k), Mgr(mgr) {
+  MemSpaceRegion(MemRegionManager *mgr, Kind k) : MemRegion(k), Mgr(mgr) {
     assert(classof(this));
+    assert(mgr);
   }
 
-  MemRegionManager &getMemRegionManager() const override { return Mgr; }
+  MemRegionManager* getMemRegionManager() const override { return Mgr; }
 
 public:
   bool isBoundable() const override { return false; }
@@ -222,7 +222,7 @@ public:
 class CodeSpaceRegion : public MemSpaceRegion {
   friend class MemRegionManager;
 
-  CodeSpaceRegion(MemRegionManager &mgr)
+  CodeSpaceRegion(MemRegionManager *mgr)
       : MemSpaceRegion(mgr, CodeSpaceRegionKind) {}
 
 public:
@@ -237,7 +237,7 @@ class GlobalsSpaceRegion : public MemSpaceRegion {
   virtual void anchor();
 
 protected:
-  GlobalsSpaceRegion(MemRegionManager &mgr, Kind k) : MemSpaceRegion(mgr, k) {
+  GlobalsSpaceRegion(MemRegionManager *mgr, Kind k) : MemSpaceRegion(mgr, k) {
     assert(classof(this));
   }
 
@@ -258,7 +258,7 @@ class StaticGlobalSpaceRegion : public GlobalsSpaceRegion {
 
   const CodeTextRegion *CR;
 
-  StaticGlobalSpaceRegion(MemRegionManager &mgr, const CodeTextRegion *cr)
+  StaticGlobalSpaceRegion(MemRegionManager *mgr, const CodeTextRegion *cr)
       : GlobalsSpaceRegion(mgr, StaticGlobalSpaceRegionKind), CR(cr) {
     assert(cr);
   }
@@ -285,7 +285,7 @@ class NonStaticGlobalSpaceRegion : public GlobalsSpaceRegion {
   void anchor() override;
 
 protected:
-  NonStaticGlobalSpaceRegion(MemRegionManager &mgr, Kind k)
+  NonStaticGlobalSpaceRegion(MemRegionManager *mgr, Kind k)
       : GlobalsSpaceRegion(mgr, k) {
     assert(classof(this));
   }
@@ -303,7 +303,7 @@ public:
 class GlobalSystemSpaceRegion : public NonStaticGlobalSpaceRegion {
   friend class MemRegionManager;
 
-  GlobalSystemSpaceRegion(MemRegionManager &mgr)
+  GlobalSystemSpaceRegion(MemRegionManager *mgr)
       : NonStaticGlobalSpaceRegion(mgr, GlobalSystemSpaceRegionKind) {}
 
 public:
@@ -322,7 +322,7 @@ public:
 class GlobalImmutableSpaceRegion : public NonStaticGlobalSpaceRegion {
   friend class MemRegionManager;
 
-  GlobalImmutableSpaceRegion(MemRegionManager &mgr)
+  GlobalImmutableSpaceRegion(MemRegionManager *mgr)
       : NonStaticGlobalSpaceRegion(mgr, GlobalImmutableSpaceRegionKind) {}
 
 public:
@@ -339,7 +339,7 @@ public:
 class GlobalInternalSpaceRegion : public NonStaticGlobalSpaceRegion {
   friend class MemRegionManager;
 
-  GlobalInternalSpaceRegion(MemRegionManager &mgr)
+  GlobalInternalSpaceRegion(MemRegionManager *mgr)
       : NonStaticGlobalSpaceRegion(mgr, GlobalInternalSpaceRegionKind) {}
 
 public:
@@ -353,7 +353,7 @@ public:
 class HeapSpaceRegion : public MemSpaceRegion {
   friend class MemRegionManager;
 
-  HeapSpaceRegion(MemRegionManager &mgr)
+  HeapSpaceRegion(MemRegionManager *mgr)
       : MemSpaceRegion(mgr, HeapSpaceRegionKind) {}
 
 public:
@@ -367,7 +367,7 @@ public:
 class UnknownSpaceRegion : public MemSpaceRegion {
   friend class MemRegionManager;
 
-  UnknownSpaceRegion(MemRegionManager &mgr)
+  UnknownSpaceRegion(MemRegionManager *mgr)
       : MemSpaceRegion(mgr, UnknownSpaceRegionKind) {}
 
 public:
@@ -384,7 +384,7 @@ class StackSpaceRegion : public MemSpaceRegion {
   const StackFrameContext *SFC;
 
 protected:
-  StackSpaceRegion(MemRegionManager &mgr, Kind k, const StackFrameContext *sfc)
+  StackSpaceRegion(MemRegionManager *mgr, Kind k, const StackFrameContext *sfc)
       : MemSpaceRegion(mgr, k), SFC(sfc) {
     assert(classof(this));
     assert(sfc);
@@ -404,7 +404,7 @@ public:
 class StackLocalsSpaceRegion : public StackSpaceRegion {
   friend class MemRegionManager;
 
-  StackLocalsSpaceRegion(MemRegionManager &mgr, const StackFrameContext *sfc)
+  StackLocalsSpaceRegion(MemRegionManager *mgr, const StackFrameContext *sfc)
       : StackSpaceRegion(mgr, StackLocalsSpaceRegionKind, sfc) {}
 
 public:
@@ -419,7 +419,7 @@ class StackArgumentsSpaceRegion : public StackSpaceRegion {
 private:
   friend class MemRegionManager;
 
-  StackArgumentsSpaceRegion(MemRegionManager &mgr, const StackFrameContext *sfc)
+  StackArgumentsSpaceRegion(MemRegionManager *mgr, const StackFrameContext *sfc)
       : StackSpaceRegion(mgr, StackArgumentsSpaceRegionKind, sfc) {}
 
 public:
@@ -448,7 +448,12 @@ public:
     return superRegion;
   }
 
-  MemRegionManager &getMemRegionManager() const override;
+  /// getExtent - Returns the size of the region in bytes.
+  virtual DefinedOrUnknownSVal getExtent(SValBuilder &svalBuilder) const {
+    return UnknownVal();
+  }
+
+  MemRegionManager* getMemRegionManager() const override;
 
   bool isSubRegionOf(const MemRegion* R) const override;
 
@@ -484,6 +489,8 @@ public:
   const Expr *getExpr() const { return Ex; }
 
   bool isBoundable() const override { return true; }
+
+  DefinedOrUnknownSVal getExtent(SValBuilder &svalBuilder) const override;
 
   void Profile(llvm::FoldingSetNodeID& ID) const override;
 
@@ -543,6 +550,8 @@ public:
     QualType T = getValueType();
     return T.getTypePtrOrNull() ? T.getDesugaredType(Context) : T;
   }
+
+  DefinedOrUnknownSVal getExtent(SValBuilder &svalBuilder) const override;
 
   static bool classof(const MemRegion* R) {
     unsigned k = R->getKind();
@@ -772,6 +781,8 @@ public:
 
   bool isBoundable() const override { return true; }
 
+  DefinedOrUnknownSVal getExtent(SValBuilder &svalBuilder) const override;
+
   void Profile(llvm::FoldingSetNodeID& ID) const override;
 
   static void ProfileRegion(llvm::FoldingSetNodeID& ID,
@@ -804,6 +815,8 @@ public:
   const StringLiteral *getStringLiteral() const { return Str; }
 
   QualType getValueType() const override { return Str->getType(); }
+
+  DefinedOrUnknownSVal getExtent(SValBuilder &svalBuilder) const override;
 
   bool isBoundable() const override { return false; }
 
@@ -890,12 +903,20 @@ public:
 
 class DeclRegion : public TypedValueRegion {
 protected:
-  DeclRegion(const MemRegion *sReg, Kind k) : TypedValueRegion(sReg, k) {
+  const ValueDecl *D;
+
+  DeclRegion(const ValueDecl *d, const MemRegion *sReg, Kind k)
+      : TypedValueRegion(sReg, k), D(d) {
     assert(classof(this));
+    assert(d && d->isCanonicalDecl());
   }
 
+  static void ProfileRegion(llvm::FoldingSetNodeID& ID, const Decl *D,
+                      const MemRegion* superRegion, Kind k);
+
 public:
-  virtual const ValueDecl *getDecl() const = 0;
+  const ValueDecl *getDecl() const { return D; }
+  void Profile(llvm::FoldingSetNodeID& ID) const override;
 
   static bool classof(const MemRegion* R) {
     unsigned k = R->getKind();
@@ -906,9 +927,9 @@ public:
 class VarRegion : public DeclRegion {
   friend class MemRegionManager;
 
-protected:
-  // Constructors and protected methods.
-  VarRegion(const MemRegion *sReg, Kind k) : DeclRegion(sReg, k) {
+  // Constructors and private methods.
+  VarRegion(const VarDecl *vd, const MemRegion *sReg)
+      : DeclRegion(vd, sReg, VarRegionKind) {
     // VarRegion appears in unknown space when it's a block variable as seen
     // from a block using it, when this block is analyzed at top-level.
     // Other block variables appear within block data regions,
@@ -917,45 +938,17 @@ protected:
            isa<BlockDataRegion>(sReg) || isa<UnknownSpaceRegion>(sReg));
   }
 
+  static void ProfileRegion(llvm::FoldingSetNodeID& ID, const VarDecl *VD,
+                            const MemRegion *superRegion) {
+    DeclRegion::ProfileRegion(ID, VD, superRegion, VarRegionKind);
+  }
+
 public:
-  const VarDecl *getDecl() const override = 0;
+  void Profile(llvm::FoldingSetNodeID& ID) const override;
+
+  const VarDecl *getDecl() const { return cast<VarDecl>(D); }
 
   const StackFrameContext *getStackFrame() const;
-
-  QualType getValueType() const override {
-    // FIXME: We can cache this if needed.
-    return getDecl()->getType();
-  }
-
-  static bool classof(const MemRegion *R) {
-    unsigned k = R->getKind();
-    return k >= BEGIN_VAR_REGIONS && k <= END_VAR_REGIONS;
-  }
-};
-
-class NonParamVarRegion : public VarRegion {
-  friend class MemRegionManager;
-
-  const VarDecl *VD;
-
-  // Constructors and private methods.
-  NonParamVarRegion(const VarDecl *vd, const MemRegion *sReg)
-      : VarRegion(sReg, NonParamVarRegionKind), VD(vd) {
-    // VarRegion appears in unknown space when it's a block variable as seen
-    // from a block using it, when this block is analyzed at top-level.
-    // Other block variables appear within block data regions,
-    // which, unlike everything else on this list, are not memory spaces.
-    assert(isa<GlobalsSpaceRegion>(sReg) || isa<StackSpaceRegion>(sReg) ||
-           isa<BlockDataRegion>(sReg) || isa<UnknownSpaceRegion>(sReg));
-  }
-
-  static void ProfileRegion(llvm::FoldingSetNodeID &ID, const VarDecl *VD,
-                            const MemRegion *superRegion);
-
-public:
-  void Profile(llvm::FoldingSetNodeID &ID) const override;
-
-  const VarDecl *getDecl() const override { return VD; }
 
   QualType getValueType() const override {
     // FIXME: We can cache this if needed.
@@ -969,50 +962,7 @@ public:
   void printPrettyAsExpr(raw_ostream &os) const override;
 
   static bool classof(const MemRegion* R) {
-    return R->getKind() == NonParamVarRegionKind;
-  }
-};
-
-/// ParamVarRegion - Represents a region for paremters. Only parameters of the
-/// function in the current stack frame are represented as `ParamVarRegion`s.
-/// Parameters of top-level analyzed functions as well as captured paremeters
-/// by lambdas and blocks are repesented as `VarRegion`s.
-
-// FIXME: `ParamVarRegion` only supports parameters of functions, C++
-// constructors, blocks and Objective-C methods with existing `Decl`. Upon
-// implementing stack frame creations for functions without decl (functions
-// passed by unknown function pointer) methods of `ParamVarRegion` must be
-// updated.
-class ParamVarRegion : public VarRegion {
-  friend class MemRegionManager;
-
-  const Expr *OriginExpr;
-  unsigned Index;
-
-  ParamVarRegion(const Expr *OE, unsigned Idx, const MemRegion *SReg)
-      : VarRegion(SReg, ParamVarRegionKind), OriginExpr(OE), Index(Idx) {
-    assert(!cast<StackSpaceRegion>(SReg)->getStackFrame()->inTopFrame());
-  }
-
-  static void ProfileRegion(llvm::FoldingSetNodeID &ID, const Expr *OE,
-                            unsigned Idx, const MemRegion *SReg);
-
-public:
-  const Expr *getOriginExpr() const { return OriginExpr; }
-  unsigned getIndex() const { return Index; }
-
-  void Profile(llvm::FoldingSetNodeID& ID) const override;
-
-  void dumpToStream(raw_ostream &os) const override;
-
-  QualType getValueType() const override;
-  const ParmVarDecl *getDecl() const override;
-
-  bool canPrintPrettyAsExpr() const override;
-  void printPrettyAsExpr(raw_ostream &os) const override;
-
-  static bool classof(const MemRegion *R) {
-    return R->getKind() == ParamVarRegionKind;
+    return R->getKind() == VarRegionKind;
   }
 };
 
@@ -1054,27 +1004,23 @@ private:
 class FieldRegion : public DeclRegion {
   friend class MemRegionManager;
 
-  const FieldDecl *FD;
+  FieldRegion(const FieldDecl *fd, const SubRegion* sReg)
+      : DeclRegion(fd, sReg, FieldRegionKind) {}
 
-  FieldRegion(const FieldDecl *fd, const SubRegion *sReg)
-      : DeclRegion(sReg, FieldRegionKind), FD(fd) {}
-
-  static void ProfileRegion(llvm::FoldingSetNodeID &ID, const FieldDecl *FD,
+  static void ProfileRegion(llvm::FoldingSetNodeID& ID, const FieldDecl *FD,
                             const MemRegion* superRegion) {
-    ID.AddInteger(static_cast<unsigned>(FieldRegionKind));
-    ID.AddPointer(FD);
-    ID.AddPointer(superRegion);
+    DeclRegion::ProfileRegion(ID, FD, superRegion, FieldRegionKind);
   }
 
 public:
-  const FieldDecl *getDecl() const override { return FD; }
-
-  void Profile(llvm::FoldingSetNodeID &ID) const override;
+  const FieldDecl *getDecl() const { return cast<FieldDecl>(D); }
 
   QualType getValueType() const override {
     // FIXME: We can cache this if needed.
     return getDecl()->getType();
   }
+
+  DefinedOrUnknownSVal getExtent(SValBuilder &svalBuilder) const override;
 
   void dumpToStream(raw_ostream &os) const override;
 
@@ -1091,18 +1037,13 @@ public:
 class ObjCIvarRegion : public DeclRegion {
   friend class MemRegionManager;
 
-  const ObjCIvarDecl *IVD;
-
   ObjCIvarRegion(const ObjCIvarDecl *ivd, const SubRegion *sReg);
 
   static void ProfileRegion(llvm::FoldingSetNodeID& ID, const ObjCIvarDecl *ivd,
                             const MemRegion* superRegion);
 
 public:
-  const ObjCIvarDecl *getDecl() const override;
-
-  void Profile(llvm::FoldingSetNodeID& ID) const override;
-
+  const ObjCIvarDecl *getDecl() const;
   QualType getValueType() const override;
 
   bool canPrintPrettyAsExpr() const override;
@@ -1290,19 +1231,13 @@ const RegionTy* MemRegion::getAs() const {
   return nullptr;
 }
 
-template<typename RegionTy>
-const RegionTy* MemRegion::castAs() const {
-  return cast<RegionTy>(this);
-}
-
 //===----------------------------------------------------------------------===//
 // MemRegionManager - Factory object for creating regions.
 //===----------------------------------------------------------------------===//
 
 class MemRegionManager {
-  ASTContext &Ctx;
+  ASTContext &C;
   llvm::BumpPtrAllocator& A;
-
   llvm::FoldingSet<MemRegion> Regions;
 
   GlobalInternalSpaceRegion *InternalGlobals = nullptr;
@@ -1321,17 +1256,12 @@ class MemRegionManager {
   CodeSpaceRegion *code = nullptr;
 
 public:
-  MemRegionManager(ASTContext &c, llvm::BumpPtrAllocator &a) : Ctx(c), A(a) {}
+  MemRegionManager(ASTContext &c, llvm::BumpPtrAllocator &a) : C(c), A(a) {}
   ~MemRegionManager();
 
-  ASTContext &getContext() { return Ctx; }
+  ASTContext &getContext() { return C; }
 
   llvm::BumpPtrAllocator &getAllocator() { return A; }
-
-  /// \returns The static size in bytes of the region \p MR.
-  /// \note The region \p MR must be a 'SubRegion'.
-  DefinedOrUnknownSVal getStaticSize(const MemRegion *MR,
-                                     SValBuilder &SVB) const;
 
   /// getStackLocalsRegion - Retrieve the memory region associated with the
   ///  specified stack frame.
@@ -1386,18 +1316,11 @@ public:
 
   /// getVarRegion - Retrieve or create the memory region associated with
   ///  a specified VarDecl and LocationContext.
-  const VarRegion *getVarRegion(const VarDecl *VD, const LocationContext *LC);
+  const VarRegion* getVarRegion(const VarDecl *D, const LocationContext *LC);
 
   /// getVarRegion - Retrieve or create the memory region associated with
-  ///  a specified VarDecl and LocationContext.
-  const NonParamVarRegion *getNonParamVarRegion(const VarDecl *VD,
-                                                const MemRegion *superR);
-
-  /// getParamVarRegion - Retrieve or create the memory region
-  /// associated with a specified CallExpr, Index and LocationContext.
-  const ParamVarRegion *getParamVarRegion(const Expr *OriginExpr,
-                                          unsigned Index,
-                                          const LocationContext *LC);
+  ///  a specified VarDecl and super region.
+  const VarRegion *getVarRegion(const VarDecl *D, const MemRegion *superR);
 
   /// getElementRegion - Retrieve the memory region associated with the
   ///  associated element type, index, and super region.
@@ -1505,7 +1428,7 @@ private:
 //===----------------------------------------------------------------------===//
 
 inline ASTContext &MemRegion::getContext() const {
-  return getMemRegionManager().getContext();
+  return getMemRegionManager()->getContext();
 }
 
 //===----------------------------------------------------------------------===//

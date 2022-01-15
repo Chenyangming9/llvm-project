@@ -61,12 +61,6 @@ private:
   /// protection when -fstack-protection is used.
   unsigned SSPBufferSize = 0;
 
-  /// VisitedPHIs - The set of PHI nodes visited when determining
-  /// if a variable's reference has been taken.  This set
-  /// is maintained to ensure we don't visit the same PHI node multiple
-  /// times.
-  SmallPtrSet<const PHINode *, 16> VisitedPHIs;
-
   // A prologue is generated.
   bool HasPrologue = false;
 
@@ -95,7 +89,8 @@ private:
                                 bool InStruct = false) const;
 
   /// Check whether a stack allocation has its address taken.
-  bool HasAddressTaken(const Instruction *AI, uint64_t AllocSize);
+  bool HasAddressTaken(const Instruction *AI,
+                       SmallPtrSetImpl<const PHINode *> &VisitedPHIs);
 
   /// RequiresStackProtector - Check whether or not this function needs a
   /// stack protector based upon the stack protector level.
@@ -104,7 +99,9 @@ private:
 public:
   static char ID; // Pass identification, replacement for typeid.
 
-  StackProtector();
+  StackProtector() : FunctionPass(ID), SSPBufferSize(8) {
+    initializeStackProtectorPass(*PassRegistry::getPassRegistry());
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 

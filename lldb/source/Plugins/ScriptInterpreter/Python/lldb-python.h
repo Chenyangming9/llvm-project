@@ -9,12 +9,12 @@
 #ifndef LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_LLDB_PYTHON_H
 #define LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_LLDB_PYTHON_H
 
-#include "lldb/Host/Config.h"
-
 // Python.h needs to be included before any system headers in order to avoid
 // redefinition of macros
 
-#if LLDB_ENABLE_PYTHON
+#ifdef LLDB_DISABLE_PYTHON
+// Python is disabled in this build
+#else
 #include "llvm/Support/Compiler.h"
 #if defined(_WIN32)
 // If anyone #includes Host/PosixApi.h later, it will try to typedef pid_t.  We
@@ -40,6 +40,6 @@
 
 // Include python for non windows machines
 #include <Python.h>
-#endif
+#endif // LLDB_DISABLE_PYTHON
 
 #endif // LLDB_PLUGINS_SCRIPTINTERPRETER_PYTHON_LLDB_PYTHON_H

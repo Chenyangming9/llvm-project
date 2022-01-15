@@ -1,7 +1,4 @@
-set(LLVM_LINK_COMPONENTS
-  FrontendOpenMP
-  Support
-  )
+set(LLVM_LINK_COMPONENTS support)
 
 add_clang_library(clangTidyReadabilityModule
   AvoidConstParamsInDecls.cpp
@@ -10,23 +7,20 @@ add_clang_library(clangTidyReadabilityModule
   ContainerSizeEmptyCheck.cpp
   ConvertMemberFunctionsToStatic.cpp
   DeleteNullPointerCheck.cpp
+  DeletedDefaultCheck.cpp
   ElseAfterReturnCheck.cpp
-  FunctionCognitiveComplexityCheck.cpp
   FunctionSizeCheck.cpp
   IdentifierNamingCheck.cpp
   ImplicitBoolConversionCheck.cpp
   InconsistentDeclarationParameterNameCheck.cpp
   IsolateDeclarationCheck.cpp
   MagicNumbersCheck.cpp
-  MakeMemberFunctionConstCheck.cpp
   MisleadingIndentationCheck.cpp
   MisplacedArrayIndexCheck.cpp
   NamedParameterCheck.cpp
   NamespaceCommentCheck.cpp
   NonConstParameterCheck.cpp
-  QualifiedAutoCheck.cpp
   ReadabilityTidyModule.cpp
-  RedundantAccessSpecifiersCheck.cpp
   RedundantControlFlowCheck.cpp
   RedundantDeclarationCheck.cpp
   RedundantFunctionPtrDereferenceCheck.cpp
@@ -40,25 +34,15 @@ add_clang_library(clangTidyReadabilityModule
   StaticAccessedThroughInstanceCheck.cpp
   StaticDefinitionInAnonymousNamespaceCheck.cpp
   StringCompareCheck.cpp
-  SuspiciousCallArgumentCheck.cpp
   UniqueptrDeleteReleaseCheck.cpp
   UppercaseLiteralSuffixCheck.cpp
-  UseAnyOfAllOfCheck.cpp
 
   LINK_LIBS
-  clangTidy
-  clangTidyUtils
-
-  DEPENDS
-  omp_gen
-  )
-
-clang_target_link_libraries(clangTidyReadabilityModule
-  PRIVATE
-  clangAnalysis
   clangAST
   clangASTMatchers
   clangBasic
   clangLex
+  clangTidy
+  clangTidyUtils
   clangTooling
   )

@@ -8,40 +8,48 @@ Testing libc++
 Getting Started
 ===============
 
-libc++ uses LIT to configure and run its tests.
-
-The primary way to run the libc++ tests is by using ``make check-cxx``.
-
-However since libc++ can be used in any number of possible
-configurations it is important to customize the way LIT builds and runs
-the tests. This guide provides information on how to use LIT directly to
-test libc++.
+libc++ uses LIT to configure and run its tests. The primary way to run the
+libc++ tests is by using make check-libcxx. However since libc++ can be used
+in any number of possible configurations it is important to customize the way
+LIT builds and runs the tests. This guide provides information on how to use
+LIT directly to test libc++.
 
 Please see the `Lit Command Guide`_ for more information about LIT.
 
-.. _LIT Command Guide: https://llvm.org/docs/CommandGuide/lit.html
+.. _LIT Command Guide: http://llvm.org/docs/CommandGuide/lit.html
 
-Usage
------
+Setting up the Environment
+--------------------------
 
-After building libc++, you can run parts of the libc++ test suite by simply
-running ``llvm-lit`` on a specified test or directory. If you're unsure
-whether the required libraries have been built, you can use the
-`cxx-test-depends` target. For example:
+After building libc++ you must setup your environment to test libc++ using
+LIT.
+
+#. Create a shortcut to the actual lit executable so that you can invoke it
+   easily from the command line.
+
+   .. code-block:: bash
+
+     $ alias lit='python path/to/llvm/utils/lit/lit.py'
+
+#. Tell LIT where to find your build configuration.
+
+   .. code-block:: bash
+
+     $ export LIBCXX_SITE_CONFIG=path/to/build-libcxx/test/lit.site.cfg
+
+Example Usage
+-------------
+
+Once you have your environment set up and you have built libc++ you can run
+parts of the libc++ test suite by simply running `lit` on a specified test or
+directory. For example:
 
 .. code-block:: bash
 
-  $ cd <monorepo-root>
-  $ make -C <build> cxx-test-depends # If you want to make sure the targets get rebuilt
-  $ <build>/bin/llvm-lit -sv libcxx/test/std/re # Run all of the std::regex tests
-  $ <build>/bin/llvm-lit -sv libcxx/test/std/depr/depr.c.headers/stdlib_h.pass.cpp # Run a single test
-  $ <build>/bin/llvm-lit -sv libcxx/test/std/atomics libcxx/test/std/threads # Test std::thread and std::atomic
-
-In the default configuration, the tests are built against headers that form a
-fake installation root of libc++. This installation root has to be updated when
-changes are made to the headers, so you should re-run the `cxx-test-depends`
-target before running the tests manually with `lit` when you make any sort of
-change, including to the headers.
+  $ cd path/to/src/libcxx
+  $ lit -sv test/std/re # Run all of the std::regex tests
+  $ lit -sv test/std/depr/depr.c.headers/stdlib_h.pass.cpp # Run a single test
+  $ lit -sv test/std/atomics test/std/threads # Test std::thread and std::atomic
 
 Sometimes you'll want to change the way LIT is running the tests. Custom options
 can be specified using the `--param=<name>=<val>` flag. The most common option
@@ -51,50 +59,29 @@ that. However if you want to manually specify the option like so:
 
 .. code-block:: bash
 
-  $ <build>/bin/llvm-lit -sv libcxx/test/std/containers # Run the tests with the newest -std
-  $ <build>/bin/llvm-lit -sv libcxx/test/std/containers --param=std=c++03 # Run the tests in C++03
+  $ lit -sv test/std/containers # Run the tests with the newest -std
+  $ lit -sv --param=std=c++03 test/std/containers # Run the tests in C++03
 
 Occasionally you'll want to add extra compile or link flags when testing.
 You can do this as follows:
 
 .. code-block:: bash
 
-  $ <build>/bin/llvm-lit -sv libcxx/test --param=compile_flags='-Wcustom-warning'
-  $ <build>/bin/llvm-lit -sv libcxx/test --param=link_flags='-L/custom/library/path'
+  $ lit -sv --param=compile_flags='-Wcustom-warning'
+  $ lit -sv --param=link_flags='-L/custom/library/path'
 
 Some other common examples include:
 
 .. code-block:: bash
 
   # Specify a custom compiler.
-  $ <build>/bin/llvm-lit -sv libcxx/test/std --param=cxx_under_test=/opt/bin/g++
+  $ lit -sv --param=cxx_under_test=/opt/bin/g++ test/std
 
-  # Disable warnings in the test suite
-  $ <build>/bin/llvm-lit -sv libcxx/test --param=enable_warnings=False
+  # Enable warnings in the test suite
+  $ lit -sv --param=enable_warnings=true test/std
 
   # Use UBSAN when running the tests.
-  $ <build>/bin/llvm-lit -sv libcxx/test --param=use_sanitizer=Undefined
-
-Using a custom site configuration
----------------------------------
-
-By default, the libc++ test suite will use a site configuration that matches
-the current CMake configuration. It does so by generating a ``lit.site.cfg``
-file in the build directory from one of the configuration file templates in
-``libcxx/test/configs/``, and pointing ``llvm-lit`` (which is a wrapper around
-``llvm/utils/lit/lit.py``) to that file. So when you're running
-``<build>/bin/llvm-lit``, the generated ``lit.site.cfg`` file is always loaded
-instead of ``libcxx/test/lit.cfg.py``. If you want to use a custom site
-configuration, simply point the CMake build to it using
-``-DLIBCXX_TEST_CONFIG=<path-to-site-config>``, and that site configuration
-will be used instead. That file can use CMake variables inside it to make
-configuration easier.
-
-   .. code-block:: bash
-
-     $ cmake <options> -DLIBCXX_TEST_CONFIG=<path-to-site-config>
-     $ make -C <build> cxx-test-depends
-     $ <build>/bin/llvm-lit -sv libcxx/test # will use your custom config file
+  $ lit -sv --param=use_sanitizer=Undefined
 
 
 LIT Options
@@ -105,10 +92,9 @@ LIT Options
 Command Line Options
 --------------------
 
-To use these options you pass them on the LIT command line as ``--param NAME``
-or ``--param NAME=VALUE``. Some options have default values specified during
-CMake's configuration. Passing the option on the command line will override the
-default.
+To use these options you pass them on the LIT command line as --param NAME or
+--param NAME=VALUE. Some options have default values specified during CMake's
+configuration. Passing the option on the command line will override the default.
 
 .. program:: lit
 
@@ -116,19 +102,24 @@ default.
 
   Specify the compiler used to build the tests.
 
-.. option:: stdlib=<stdlib name>
+.. option:: cxx_stdlib_under_test=<stdlib name>
 
-  **Values**: libc++, libstdc++, msvc
+  **Values**: libc++, libstdc++
 
-  Specify the C++ standard library being tested. The default is libc++ if this
-  option is not provided. This option is intended to allow running the libc++
-  test suite against other standard library implementations.
+  Specify the C++ standard library being tested. Unless otherwise specified
+  libc++ is used. This option is intended to allow running the libc++ test
+  suite against other standard library implementations.
 
 .. option:: std=<standard version>
 
-  **Values**: c++03, c++11, c++14, c++17, c++20, c++2b
+  **Values**: c++98, c++03, c++11, c++14, c++17, c++2a
 
   Change the standard version used when building the tests.
+
+.. option:: libcxx_site_config=<path/to/lit.site.cfg>
+
+  Specify the site configuration to use when running the tests.  This option
+  overrides the environment variable LIBCXX_SITE_CONFIG.
 
 .. option:: cxx_headers=<path/to/headers>
 
@@ -138,7 +129,8 @@ default.
 .. option:: cxx_library_root=<path/to/lib/>
 
   Specify the directory of the libc++ library to be tested. By default the
-  library folder of the build directory is used.
+  library folder of the build directory is used. This option cannot be used
+  when use_system_cxx_lib is provided.
 
 
 .. option:: cxx_runtime_root=<path/to/lib/>
@@ -153,10 +145,23 @@ default.
   **Default**: False
 
   Enable or disable testing against the installed version of libc++ library.
-  This impacts whether the ``use_system_cxx_lib`` Lit feature is defined or
-  not. The ``cxx_library_root`` and ``cxx_runtime_root`` parameters should
-  still be used to specify the path of the library to link to and run against,
-  respectively.
+  Note: This does not use the installed headers.
+
+.. option:: use_lit_shell=<bool>
+
+  Enable or disable the use of LIT's internal shell in ShTests. If the
+  environment variable LIT_USE_INTERNAL_SHELL is present then that is used as
+  the default value. Otherwise the default value is True on Windows and False
+  on every other platform.
+
+.. option:: compile_flags="<list-of-args>"
+
+  Specify additional compile flags as a space delimited string.
+  Note: This options should not be used to change the standard version used.
+
+.. option:: link_flags="<list-of-args>"
+
+  Specify additional link flags as a space delimited string.
 
 .. option:: debug_level=<level>
 
@@ -172,6 +177,12 @@ default.
   Run the tests using the given sanitizer. If LLVM_USE_SANITIZER was given when
   building libc++ then that sanitizer will be used by default.
 
+.. option:: color_diagnostics
+
+  Enable the use of colorized compile diagnostics. If the color_diagnostics
+  option is specified or the environment variable LIBCXX_COLOR_DIAGNOSTICS is
+  present then color diagnostics will be enabled.
+
 .. option:: llvm_unwinder
 
   Enable the use of LLVM unwinder instead of libgcc.
@@ -181,28 +192,19 @@ default.
   Path to the builtins library to use instead of libgcc.
 
 
-Writing Tests
--------------
+Environment Variables
+---------------------
 
-When writing tests for the libc++ test suite, you should follow a few guidelines.
-This will ensure that your tests can run on a wide variety of hardware and under
-a wide variety of configurations. We have several unusual configurations such as
-building the tests on one host but running them on a different host, which add a
-few requirements to the test suite. Here's some stuff you should know:
+.. envvar:: LIBCXX_SITE_CONFIG=<path/to/lit.site.cfg>
 
-- All tests are run in a temporary directory that is unique to that test and
-  cleaned up after the test is done.
-- When a test needs data files as inputs, these data files can be saved in the
-  repository (when reasonable) and referenced by the test as
-  ``// FILE_DEPENDENCIES: <path-to-dependencies>``. Copies of these files or
-  directories will be made available to the test in the temporary directory
-  where it is run.
-- You should never hardcode a path from the build-host in a test, because that
-  path will not necessarily be available on the host where the tests are run.
-- You should try to reduce the runtime dependencies of each test to the minimum.
-  For example, requiring Python to run a test is bad, since Python is not
-  necessarily available on all devices we may want to run the tests on (even
-  though supporting Python is probably trivial for the build-host).
+  Specify the site configuration to use when running the tests.
+  Also see `libcxx_site_config`.
+
+.. envvar:: LIBCXX_COLOR_DIAGNOSTICS
+
+  If ``LIBCXX_COLOR_DIAGNOSTICS`` is defined then the test suite will attempt
+  to use color diagnostic outputs from the compiler.
+  Also see `color_diagnostics`.
 
 Benchmarks
 ==========

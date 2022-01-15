@@ -223,11 +223,10 @@ Atom::Scope atomScope(uint8_t scope) {
   llvm_unreachable("unknown scope value!");
 }
 
-void appendSymbolsInSection(
-    const std::vector<lld::mach_o::normalized::Symbol> &inSymbols,
-    uint32_t sectionIndex,
-    SmallVector<const lld::mach_o::normalized::Symbol *, 64> &outSyms) {
-  for (const lld::mach_o::normalized::Symbol &sym : inSymbols) {
+void appendSymbolsInSection(const std::vector<Symbol> &inSymbols,
+                            uint32_t sectionIndex,
+                            SmallVector<const Symbol *, 64> &outSyms) {
+  for (const Symbol &sym : inSymbols) {
     // Only look at definition symbols.
     if ((sym.type & N_TYPE) != N_SECT)
       continue;
@@ -254,7 +253,7 @@ void atomFromSymbol(DefinedAtom::ContentType atomType, const Section &section,
                               ? DefinedAtom::mergeAsWeak : DefinedAtom::mergeNo;
     bool thumb = (symbolDescFlags & N_ARM_THUMB_DEF);
     if (atomType == DefinedAtom::typeUnknown) {
-      // Mach-O needs a segment and section name.  Concatenate those two
+      // Mach-O needs a segment and section name.  Concatentate those two
       // with a / separator (e.g. "seg/sect") to fit into the lld model
       // of just a section name.
       std::string segSectName = section.segmentName.str()
@@ -287,14 +286,13 @@ llvm::Error processSymboledSection(DefinedAtom::ContentType atomType,
   }
 
   // Find all symbols in this section.
-  SmallVector<const lld::mach_o::normalized::Symbol *, 64> symbols;
+  SmallVector<const Symbol *, 64> symbols;
   appendSymbolsInSection(normalizedFile.globalSymbols, sectIndex, symbols);
   appendSymbolsInSection(normalizedFile.localSymbols,  sectIndex, symbols);
 
   // Sort symbols.
   std::sort(symbols.begin(), symbols.end(),
-            [](const lld::mach_o::normalized::Symbol *lhs,
-               const lld::mach_o::normalized::Symbol *rhs) -> bool {
+            [](const Symbol *lhs, const Symbol *rhs) -> bool {
               if (lhs == rhs)
                 return false;
               // First by address.
@@ -302,7 +300,7 @@ llvm::Error processSymboledSection(DefinedAtom::ContentType atomType,
               uint64_t rhsAddr = rhs->value;
               if (lhsAddr != rhsAddr)
                 return lhsAddr < rhsAddr;
-              // If same address, one is an alias so sort by scope.
+               // If same address, one is an alias so sort by scope.
               Atom::Scope lScope = atomScope(lhs->scope);
               Atom::Scope rScope = atomScope(rhs->scope);
               if (lScope != rScope)
@@ -318,7 +316,7 @@ llvm::Error processSymboledSection(DefinedAtom::ContentType atomType,
             });
 
   // Debug logging of symbols.
-  // for (const Symbol *sym : symbols)
+  //for (const Symbol *sym : symbols)
   //  llvm::errs() << "  sym: "
   //    << llvm::format("0x%08llx ", (uint64_t)sym->value)
   //    << ", " << sym->name << "\n";
@@ -328,7 +326,7 @@ llvm::Error processSymboledSection(DefinedAtom::ContentType atomType,
     return llvm::Error::success();
 
   if (symbols.empty()) {
-    // Section has no symbols, put all content in one anonymous atom.
+    // Section has no symbols, put all content in one anoymous atom.
     atomFromSymbol(atomType, section, file, section.address, StringRef(),
                   0, Atom::scopeTranslationUnit,
                   section.address + section.content.size(),
@@ -341,8 +339,8 @@ llvm::Error processSymboledSection(DefinedAtom::ContentType atomType,
                    scatterable, copyRefs);
   }
 
-  const lld::mach_o::normalized::Symbol *lastSym = nullptr;
-  for (const lld::mach_o::normalized::Symbol *sym : symbols) {
+  const Symbol *lastSym = nullptr;
+  for (const Symbol *sym : symbols) {
     if (lastSym != nullptr) {
       // Ignore any assembler added "ltmpNNN" symbol at start of section
       // if there is another symbol at the start.
@@ -473,7 +471,7 @@ llvm::Error processSection(DefinedAtom::ContentType atomType,
                                               "is not zero terminated.");
       }
       if (customSectionName) {
-        // Mach-O needs a segment and section name.  Concatenate those two
+        // Mach-O needs a segment and section name.  Concatentate those two
         // with a / separator (e.g. "seg/sect") to fit into the lld model
         // of just a section name.
         std::string segSectName = section.segmentName.str()
@@ -552,7 +550,7 @@ llvm::Error convertRelocs(const Section &section,
   auto atomBySymbol = [&] (uint32_t symbolIndex, const lld::Atom **result)
                            -> llvm::Error {
     // Find symbol from index.
-    const lld::mach_o::normalized::Symbol *sym = nullptr;
+    const Symbol *sym = nullptr;
     uint32_t numStabs  = normalizedFile.stabsSymbols.size();
     uint32_t numLocal  = normalizedFile.localSymbols.size();
     uint32_t numGlobal = normalizedFile.globalSymbols.size();
@@ -719,7 +717,7 @@ llvm::Error parseStabs(MachOFile &file,
   // FIXME: Kill this off when we can move to sane yaml parsing.
   std::unique_ptr<BumpPtrAllocator> allocator;
   if (copyRefs)
-    allocator = std::make_unique<BumpPtrAllocator>();
+    allocator = llvm::make_unique<BumpPtrAllocator>();
 
   enum { start, inBeginEnd } state = start;
 
@@ -814,7 +812,7 @@ llvm::Error parseStabs(MachOFile &file,
     stabsList.push_back(stab);
   }
 
-  file.setDebugInfo(std::make_unique<StabsDebugInfo>(std::move(stabsList)));
+  file.setDebugInfo(llvm::make_unique<StabsDebugInfo>(std::move(stabsList)));
 
   // FIXME: Kill this off when we fix YAML memory ownership.
   file.debugInfo()->setAllocator(std::move(allocator));
@@ -834,10 +832,11 @@ dataExtractorFromSection(const NormalizedFile &normalizedFile,
 
 // FIXME: Cribbed from llvm-dwp -- should share "lightweight CU DIE
 //        inspection" code if possible.
-static uint64_t getCUAbbrevOffset(llvm::DataExtractor abbrevData,
+static uint32_t getCUAbbrevOffset(llvm::DataExtractor abbrevData,
                                   uint64_t abbrCode) {
-  uint64_t offset = 0;
-  while (abbrevData.getULEB128(&offset) != abbrCode) {
+  uint64_t curCode;
+  uint32_t offset = 0;
+  while ((curCode = abbrevData.getULEB128(&offset)) != abbrCode) {
     // Tag
     abbrevData.getULEB128(&offset);
     // DW_CHILDREN
@@ -854,13 +853,13 @@ static uint64_t getCUAbbrevOffset(llvm::DataExtractor abbrevData,
 static Expected<const char *>
 getIndexedString(const NormalizedFile &normalizedFile,
                  llvm::dwarf::Form form, llvm::DataExtractor infoData,
-                 uint64_t &infoOffset, const Section &stringsSection) {
+                 uint32_t &infoOffset, const Section &stringsSection) {
   if (form == llvm::dwarf::DW_FORM_string)
    return infoData.getCStr(&infoOffset);
   if (form != llvm::dwarf::DW_FORM_strp)
     return llvm::make_error<GenericError>(
         "string field encoded without DW_FORM_strp");
-  uint64_t stringOffset = infoData.getU32(&infoOffset);
+  uint32_t stringOffset = infoData.getU32(&infoOffset);
   llvm::DataExtractor stringsData =
     dataExtractorFromSection(normalizedFile, stringsSection);
   return stringsData.getCStr(&stringOffset);
@@ -876,15 +875,15 @@ readCompUnit(const NormalizedFile &normalizedFile,
              StringRef path) {
   // FIXME: Cribbed from llvm-dwp -- should share "lightweight CU DIE
   //        inspection" code if possible.
-  uint64_t offset = 0;
+  uint32_t offset = 0;
   llvm::dwarf::DwarfFormat Format = llvm::dwarf::DwarfFormat::DWARF32;
   auto infoData = dataExtractorFromSection(normalizedFile, info);
   uint32_t length = infoData.getU32(&offset);
-  if (length == llvm::dwarf::DW_LENGTH_DWARF64) {
+  if (length == 0xffffffff) {
     Format = llvm::dwarf::DwarfFormat::DWARF64;
     infoData.getU64(&offset);
   }
-  else if (length >= llvm::dwarf::DW_LENGTH_lo_reserved)
+  else if (length > 0xffffff00)
     return llvm::make_error<GenericError>("Malformed DWARF in " + path);
 
   uint16_t version = infoData.getU16(&offset);
@@ -898,7 +897,7 @@ readCompUnit(const NormalizedFile &normalizedFile,
 
   uint32_t abbrCode = infoData.getULEB128(&offset);
   auto abbrevData = dataExtractorFromSection(normalizedFile, abbrev);
-  uint64_t abbrevOffset = getCUAbbrevOffset(abbrevData, abbrCode);
+  uint32_t abbrevOffset = getCUAbbrevOffset(abbrevData, abbrCode);
   uint64_t tag = abbrevData.getULEB128(&abbrevOffset);
   if (tag != llvm::dwarf::DW_TAG_compile_unit)
     return llvm::make_error<GenericError>("top level DIE is not a compile unit");
@@ -975,11 +974,11 @@ llvm::Error parseDebugInfo(MachOFile &file,
     //        memory ownership.
     std::unique_ptr<BumpPtrAllocator> allocator;
     if (copyRefs) {
-      allocator = std::make_unique<BumpPtrAllocator>();
+      allocator = llvm::make_unique<BumpPtrAllocator>();
       tuOrErr->name = copyDebugString(tuOrErr->name, *allocator);
       tuOrErr->path = copyDebugString(tuOrErr->path, *allocator);
     }
-    file.setDebugInfo(std::make_unique<DwarfDebugInfo>(std::move(*tuOrErr)));
+    file.setDebugInfo(llvm::make_unique<DwarfDebugInfo>(std::move(*tuOrErr)));
     if (copyRefs)
       file.debugInfo()->setAllocator(std::move(allocator));
   } else
@@ -1402,7 +1401,7 @@ llvm::Error parseObjCImageInfo(const Section &sect,
 llvm::Expected<std::unique_ptr<lld::File>>
 objectToAtoms(const NormalizedFile &normalizedFile, StringRef path,
               bool copyRefs) {
-  auto file = std::make_unique<MachOFile>(path);
+  std::unique_ptr<MachOFile> file(new MachOFile(path));
   if (auto ec = normalizedObjectToAtoms(file.get(), normalizedFile, copyRefs))
     return std::move(ec);
   return std::unique_ptr<File>(std::move(file));
@@ -1412,7 +1411,7 @@ llvm::Expected<std::unique_ptr<lld::File>>
 dylibToAtoms(const NormalizedFile &normalizedFile, StringRef path,
              bool copyRefs) {
   // Instantiate SharedLibraryFile object.
-  auto file = std::make_unique<MachODylibFile>(path);
+  std::unique_ptr<MachODylibFile> file(new MachODylibFile(path));
   if (auto ec = normalizedDylibToAtoms(file.get(), normalizedFile, copyRefs))
     return std::move(ec);
   return std::unique_ptr<File>(std::move(file));
@@ -1461,7 +1460,7 @@ normalizedObjectToAtoms(MachOFile *file,
   }
   // Create atoms from undefined symbols.
   for (auto &sym : normalizedFile.undefinedSymbols) {
-    // Undefined symbols with n_value != 0 are actually tentative definitions.
+    // Undefinded symbols with n_value != 0 are actually tentative definitions.
     if (sym.value == Hex64(0)) {
       file->addUndefinedAtom(sym.name, copyRefs);
     } else {

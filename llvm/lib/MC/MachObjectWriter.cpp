@@ -25,7 +25,6 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCSymbolMachO.h"
 #include "llvm/MC/MCValue.h"
-#include "llvm/Support/Alignment.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -127,7 +126,7 @@ uint64_t MachObjectWriter::getPaddingSize(const MCSection *Sec,
   const MCSection &NextSec = *Layout.getSectionOrder()[Next];
   if (NextSec.isVirtualSection())
     return 0;
-  return offsetToAlignment(EndAddr, Align(NextSec.getAlignment()));
+  return OffsetToAlignment(EndAddr, NextSec.getAlignment());
 }
 
 void MachObjectWriter::writeHeader(MachO::HeaderFileType Type,
@@ -231,7 +230,7 @@ void MachObjectWriter::writeSection(const MCAsmLayout &Layout,
   uint64_t Start = W.OS.tell();
   (void) Start;
 
-  writeWithPadding(Section.getName(), 16);
+  writeWithPadding(Section.getSectionName(), 16);
   writeWithPadding(Section.getSegmentName(), 16);
   if (is64Bit()) {
     W.write<uint64_t>(VMAddr);      // address
@@ -445,8 +444,7 @@ void MachObjectWriter::writeLinkerOptionsLoadCommand(
   }
 
   // Pad to a multiple of the pointer size.
-  W.OS.write_zeros(
-      offsetToAlignment(BytesWritten, is64Bit() ? Align(8) : Align(4)));
+  W.OS.write_zeros(OffsetToAlignment(BytesWritten, is64Bit() ? 8 : 4));
 
   assert(W.OS.tell() - Start == Size);
 }
@@ -831,11 +829,10 @@ uint64_t MachObjectWriter::writeObject(MCAssembler &Asm,
     SectionDataFileSize = std::max(SectionDataFileSize, Address + FileSize);
   }
 
-  // The section data is padded to pointer size bytes.
+  // The section data is padded to 4 bytes.
   //
   // FIXME: Is this machine dependent?
-  unsigned SectionDataPadding =
-      offsetToAlignment(SectionDataFileSize, is64Bit() ? Align(8) : Align(4));
+  unsigned SectionDataPadding = OffsetToAlignment(SectionDataFileSize, 4);
   SectionDataFileSize += SectionDataPadding;
 
   // Write the prolog, starting with the header and load command...
@@ -1000,8 +997,7 @@ uint64_t MachObjectWriter::writeObject(MCAssembler &Asm,
 #endif
     Asm.getLOHContainer().emit(*this, Layout);
     // Pad to a multiple of the pointer size.
-    W.OS.write_zeros(
-        offsetToAlignment(LOHRawSize, is64Bit() ? Align(8) : Align(4)));
+    W.OS.write_zeros(OffsetToAlignment(LOHRawSize, is64Bit() ? 8 : 4));
     assert(W.OS.tell() - Start == LOHSize);
   }
 
@@ -1047,6 +1043,6 @@ uint64_t MachObjectWriter::writeObject(MCAssembler &Asm,
 std::unique_ptr<MCObjectWriter>
 llvm::createMachObjectWriter(std::unique_ptr<MCMachObjectTargetWriter> MOTW,
                              raw_pwrite_stream &OS, bool IsLittleEndian) {
-  return std::make_unique<MachObjectWriter>(std::move(MOTW), OS,
+  return llvm::make_unique<MachObjectWriter>(std::move(MOTW), OS,
                                              IsLittleEndian);
 }

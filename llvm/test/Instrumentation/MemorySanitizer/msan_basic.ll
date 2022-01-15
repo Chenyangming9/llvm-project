@@ -1,16 +1,14 @@
-; RUN: opt < %s -msan-check-access-address=0 -S -passes='module(msan-module),function(msan)' 2>&1 | FileCheck -allow-deprecated-dag-overlap %s
-; RUN: opt < %s --passes='module(msan-module),function(msan)' -msan-check-access-address=0 -S | FileCheck -allow-deprecated-dag-overlap %s
-; RUN: opt < %s -msan-check-access-address=0 -msan-track-origins=1 -S -passes='module(msan-module),function(msan)' 2>&1 | \
-; RUN:   FileCheck -allow-deprecated-dag-overlap -check-prefixes=CHECK,CHECK-ORIGINS %s
-; RUN: opt < %s -passes='module(msan-module),function(msan)' -msan-check-access-address=0 -msan-track-origins=1 -S | \
-; RUN:   FileCheck -allow-deprecated-dag-overlap -check-prefixes=CHECK,CHECK-ORIGINS %s
-; RUN: opt < %s -passes='module(msan-module),function(msan)' -msan-instrumentation-with-call-threshold=0 -msan-track-origins=1 -S | \
-; RUN:   FileCheck -allow-deprecated-dag-overlap -check-prefixes=CHECK-CALLS %s
+; RUN: opt < %s -msan-check-access-address=0 -S -passes=msan 2>&1 | FileCheck  \
+; RUN: -allow-deprecated-dag-overlap %s
+; RUN: opt < %s -msan -msan-check-access-address=0 -S | FileCheck -allow-deprecated-dag-overlap %s
+; RUN: opt < %s -msan-check-access-address=0 -msan-track-origins=1 -S          \
+; RUN: -passes=msan 2>&1 | FileCheck -allow-deprecated-dag-overlap             \
+; RUN: -check-prefix=CHECK -check-prefix=CHECK-ORIGINS %s
+; RUN: opt < %s -msan -msan-check-access-address=0 -msan-track-origins=1 -S | FileCheck -allow-deprecated-dag-overlap -check-prefix=CHECK -check-prefix=CHECK-ORIGINS %s
 
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
-; CHECK: @llvm.used = appending global [1 x i8*] [i8* bitcast (void ()* @msan.module_ctor to i8*)]
 ; CHECK: @llvm.global_ctors {{.*}} { i32 0, void ()* @msan.module_ctor, i8* null }
 
 ; Check the presence and the linkage type of __msan_track_origins and
@@ -24,6 +22,7 @@ target triple = "x86_64-unknown-linux-gnu"
 ; CHECK: @__msan_param_origin_tls = external thread_local(initialexec) global [{{.*}}]
 ; CHECK: @__msan_va_arg_tls = external thread_local(initialexec) global [{{.*}}]
 ; CHECK: @__msan_va_arg_overflow_size_tls = external thread_local(initialexec) global i64
+; CHECK: @__msan_origin_tls = external thread_local(initialexec) global i32
 
 
 ; Check instrumentation of stores
@@ -72,7 +71,7 @@ entry:
 ; CHECK: ret void
 
 
-; load followed by cmp: check that we load the shadow and call __msan_warning_with_origin.
+; load followed by cmp: check that we load the shadow and call __msan_warning.
 define void @LoadAndCmp(i32* nocapture %a) nounwind uwtable sanitize_memory {
 entry:
   %0 = load i32, i32* %a, align 4
@@ -90,14 +89,11 @@ if.end:                                           ; preds = %entry, %if.then
 declare void @foo(...)
 
 ; CHECK-LABEL: @LoadAndCmp
-; CHECK: %0 = load i32,
 ; CHECK: = load
-; CHECK-ORIGINS: %[[ORIGIN:.*]] = load
-; CHECK: call void @__msan_warning_with_origin_noreturn(i32
-; CHECK-ORIGINS-SAME %[[ORIGIN]])
-; CHECK-CONT:
+; CHECK: = load
+; CHECK: call void @__msan_warning_noreturn()
+; CHECK-NEXT: call void asm sideeffect
 ; CHECK-NEXT: unreachable
-; CHECK: br i1 %tobool
 ; CHECK: ret void
 
 ; Check that we store the shadow for the retval.
@@ -258,7 +254,6 @@ declare void @llvm.memcpy.element.unordered.atomic.p0i8.p0i8.i64(i8* nocapture w
 
 define void @atomic_memcpy(i8* nocapture %x, i8* nocapture %y) nounwind {
   ; CHECK-LABEL: atomic_memcpy
-  ; CHECK-NEXT: call void @llvm.donothing
   ; CHECK-NEXT: call void @llvm.memcpy.element.unordered.atomic.p0i8.p0i8.i64(i8* align 1 %x, i8* align 2 %y, i64 16, i32 1)
   ; CHECK-NEXT: ret void
   call void @llvm.memcpy.element.unordered.atomic.p0i8.p0i8.i64(i8* align 1 %x, i8* align 2 %y, i64 16, i32 1)
@@ -267,7 +262,6 @@ define void @atomic_memcpy(i8* nocapture %x, i8* nocapture %y) nounwind {
 
 define void @atomic_memmove(i8* nocapture %x, i8* nocapture %y) nounwind {
   ; CHECK-LABEL: atomic_memmove
-  ; CHECK-NEXT: call void @llvm.donothing
   ; CHECK-NEXT: call void @llvm.memmove.element.unordered.atomic.p0i8.p0i8.i64(i8* align 1 %x, i8* align 2 %y, i64 16, i32 1)
   ; CHECK-NEXT: ret void
   call void @llvm.memmove.element.unordered.atomic.p0i8.p0i8.i64(i8* align 1 %x, i8* align 2 %y, i64 16, i32 1)
@@ -276,7 +270,6 @@ define void @atomic_memmove(i8* nocapture %x, i8* nocapture %y) nounwind {
 
 define void @atomic_memset(i8* nocapture %x) nounwind {
   ; CHECK-LABEL: atomic_memset
-  ; CHECK-NEXT: call void @llvm.donothing
   ; CHECK-NEXT: call void @llvm.memset.element.unordered.atomic.p0i8.i64(i8* align 1 %x, i8 88, i64 16, i32 1)
   ; CHECK-NEXT: ret void
   call void @llvm.memset.element.unordered.atomic.p0i8.i64(i8* align 1 %x, i8 88, i64 16, i32 1)
@@ -393,7 +386,6 @@ entry:
 ; CHECK-LABEL: @IntToPtr
 ; CHECK: load i64, i64*{{.*}}__msan_param_tls
 ; CHECK-ORIGINS-NEXT: load i32, i32*{{.*}}__msan_param_origin_tls
-; CHECK-NEXT: call void @llvm.donothing
 ; CHECK-NEXT: inttoptr
 ; CHECK-NEXT: store i64{{.*}}__msan_retval_tls
 ; CHECK: ret i8*
@@ -424,7 +416,7 @@ entry:
 
 ; CHECK-LABEL: @Div
 ; CHECK: icmp
-; CHECK: call void @__msan_warning_with_origin
+; CHECK: call void @__msan_warning
 ; CHECK-NOT: icmp
 ; CHECK: udiv
 ; CHECK-NOT: icmp
@@ -441,7 +433,7 @@ entry:
 ; CHECK-LABEL: @FDiv
 ; CHECK: %[[SA:.*]] = load i32,{{.*}}@__msan_param_tls
 ; CHECK: %[[SB:.*]] = load i32,{{.*}}@__msan_param_tls
-; CHECK: %[[SC:.*]] = or i32 %[[SA]], %[[SB]]
+; CHECK: %[[SC:.*]] = or i32 %[[SB]], %[[SA]]
 ; CHECK: = fdiv float
 ; CHECK: store i32 %[[SC]], i32* {{.*}}@__msan_retval_tls
 ; CHECK: ret float
@@ -471,9 +463,9 @@ define zeroext i1 @ICmpSLTZero(i32 %x) nounwind uwtable readnone sanitize_memory
 
 ; CHECK-LABEL: @ICmpSLTZero
 ; CHECK: icmp slt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp slt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret i1
 
 define zeroext i1 @ICmpSGEZero(i32 %x) nounwind uwtable readnone sanitize_memory {
@@ -483,9 +475,9 @@ define zeroext i1 @ICmpSGEZero(i32 %x) nounwind uwtable readnone sanitize_memory
 
 ; CHECK-LABEL: @ICmpSGEZero
 ; CHECK: icmp slt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp sge
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret i1
 
 define zeroext i1 @ICmpSGTZero(i32 %x) nounwind uwtable readnone sanitize_memory {
@@ -495,9 +487,9 @@ define zeroext i1 @ICmpSGTZero(i32 %x) nounwind uwtable readnone sanitize_memory
 
 ; CHECK-LABEL: @ICmpSGTZero
 ; CHECK: icmp slt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp sgt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret i1
 
 define zeroext i1 @ICmpSLEZero(i32 %x) nounwind uwtable readnone sanitize_memory {
@@ -507,9 +499,9 @@ define zeroext i1 @ICmpSLEZero(i32 %x) nounwind uwtable readnone sanitize_memory
 
 ; CHECK-LABEL: @ICmpSLEZero
 ; CHECK: icmp slt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp sle
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret i1
 
 
@@ -522,9 +514,9 @@ define zeroext i1 @ICmpSLTAllOnes(i32 %x) nounwind uwtable readnone sanitize_mem
 
 ; CHECK-LABEL: @ICmpSLTAllOnes
 ; CHECK: icmp slt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp slt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret i1
 
 define zeroext i1 @ICmpSGEAllOnes(i32 %x) nounwind uwtable readnone sanitize_memory {
@@ -534,9 +526,9 @@ define zeroext i1 @ICmpSGEAllOnes(i32 %x) nounwind uwtable readnone sanitize_mem
 
 ; CHECK-LABEL: @ICmpSGEAllOnes
 ; CHECK: icmp slt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp sge
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret i1
 
 define zeroext i1 @ICmpSGTAllOnes(i32 %x) nounwind uwtable readnone sanitize_memory {
@@ -546,9 +538,9 @@ define zeroext i1 @ICmpSGTAllOnes(i32 %x) nounwind uwtable readnone sanitize_mem
 
 ; CHECK-LABEL: @ICmpSGTAllOnes
 ; CHECK: icmp slt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp sgt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret i1
 
 define zeroext i1 @ICmpSLEAllOnes(i32 %x) nounwind uwtable readnone sanitize_memory {
@@ -558,9 +550,9 @@ define zeroext i1 @ICmpSLEAllOnes(i32 %x) nounwind uwtable readnone sanitize_mem
 
 ; CHECK-LABEL: @ICmpSLEAllOnes
 ; CHECK: icmp slt
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp sle
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret i1
 
 
@@ -574,9 +566,9 @@ define <2 x i1> @ICmpSLT_vector_Zero(<2 x i32*> %x) nounwind uwtable readnone sa
 
 ; CHECK-LABEL: @ICmpSLT_vector_Zero
 ; CHECK: icmp slt <2 x i64>
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp slt <2 x i32*>
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret <2 x i1>
 
 ; Check that we propagate shadow for x<=-1, x>0, etc (i.e. sign bit tests)
@@ -589,9 +581,9 @@ define <2 x i1> @ICmpSLT_vector_AllOnes(<2 x i32> %x) nounwind uwtable readnone 
 
 ; CHECK-LABEL: @ICmpSLT_vector_AllOnes
 ; CHECK: icmp slt <2 x i32>
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp slt <2 x i32>
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret <2 x i1>
 
 
@@ -606,11 +598,11 @@ entry:
 
 ; CHECK-LABEL: @ICmpUGTConst
 ; CHECK: icmp ugt i32
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp ugt i32
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: icmp ugt i32
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret i1
 
 
@@ -652,7 +644,7 @@ define i32 @ExtractElement(<4 x i32> %vec, i32 %idx) sanitize_memory {
 
 ; CHECK-LABEL: @ExtractElement
 ; CHECK: extractelement
-; CHECK: call void @__msan_warning_with_origin
+; CHECK: call void @__msan_warning
 ; CHECK: extractelement
 ; CHECK: ret i32
 
@@ -663,7 +655,7 @@ define <4 x i32> @InsertElement(<4 x i32> %vec, i32 %idx, i32 %x) sanitize_memor
 
 ; CHECK-LABEL: @InsertElement
 ; CHECK: insertelement
-; CHECK: call void @__msan_warning_with_origin
+; CHECK: call void @__msan_warning
 ; CHECK: insertelement
 ; CHECK: ret <4 x i32>
 
@@ -675,7 +667,7 @@ define <4 x i32> @ShuffleVector(<4 x i32> %vec, <4 x i32> %vec1) sanitize_memory
 
 ; CHECK-LABEL: @ShuffleVector
 ; CHECK: shufflevector
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: shufflevector
 ; CHECK: ret <4 x i32>
 
@@ -689,11 +681,11 @@ define i32 @BSwap(i32 %x) nounwind uwtable readnone sanitize_memory {
 declare i32 @llvm.bswap.i32(i32) nounwind readnone
 
 ; CHECK-LABEL: @BSwap
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: @llvm.bswap.i32
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: @llvm.bswap.i32
-; CHECK-NOT: call void @__msan_warning_with_origin
+; CHECK-NOT: call void @__msan_warning
 ; CHECK: ret i32
 
 ; Test handling of vectors of pointers.
@@ -759,7 +751,7 @@ entry:
 }
 
 ; CHECK-LABEL: @VolatileStore
-; CHECK-NOT: @__msan_warning_with_origin
+; CHECK-NOT: @__msan_warning
 ; CHECK: ret void
 
 
@@ -782,9 +774,9 @@ if.end:                                           ; preds = %entry, %if.then
 declare void @bar()
 
 ; CHECK-LABEL: @NoSanitizeMemory
-; CHECK-NOT: @__msan_warning_with_origin
+; CHECK-NOT: @__msan_warning
 ; CHECK: store i32 0, {{.*}} @__msan_retval_tls
-; CHECK-NOT: @__msan_warning_with_origin
+; CHECK-NOT: @__msan_warning
 ; CHECK: ret i32
 
 
@@ -921,7 +913,7 @@ entry:
   %agg.tmp.sroa.2.0.copyload = load i64, i64* %agg.tmp.sroa.2.0..sroa_cast, align 4
   %1 = bitcast %struct.StructByVal* %agg.tmp2 to i8*
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %1, i8* align 4 %0, i64 16, i1 false)
-  call void (i32, ...) @VAArgStructFn(i32 undef, i64 %agg.tmp.sroa.0.0.copyload, i64 %agg.tmp.sroa.2.0.copyload, i64 %agg.tmp.sroa.0.0.copyload, i64 %agg.tmp.sroa.2.0.copyload, %struct.StructByVal* byval(%struct.StructByVal) align 8 %agg.tmp2)
+  call void (i32, ...) @VAArgStructFn(i32 undef, i64 %agg.tmp.sroa.0.0.copyload, i64 %agg.tmp.sroa.2.0.copyload, i64 %agg.tmp.sroa.0.0.copyload, i64 %agg.tmp.sroa.2.0.copyload, %struct.StructByVal* byval align 8 %agg.tmp2)
   ret void
 }
 
@@ -938,7 +930,8 @@ entry:
 ; CHECK: store i64 {{.*}}, i64* {{.*}}@__msan_va_arg_tls{{.*}}, i64 32){{.*}}, align 8
 ; third struct through the overflow area byval
 ; CHECK: ptrtoint %struct.StructByVal* {{.*}} to i64
-; CHECK: call void @llvm.memcpy.p0i8.p0i8.i64{{.*}}@__msan_va_arg_tls {{.*}}, i64 176
+; CHECK: bitcast { i32, i32, i32, i32 }* {{.*}}@__msan_va_arg_tls {{.*}}, i64 176
+; CHECK: call void @llvm.memcpy.p0i8.p0i8.i64
 ; CHECK: store i64 16, i64* @__msan_va_arg_overflow_size_tls
 ; CHECK: call void (i32, ...) @VAArgStructFn
 ; CHECK: ret void
@@ -956,13 +949,13 @@ entry:
   %agg.tmp.sroa.2.0.copyload = load i64, i64* %agg.tmp.sroa.2.0..sroa_cast, align 4
   %1 = bitcast %struct.StructByVal* %agg.tmp2 to i8*
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %1, i8* align 4 %0, i64 16, i1 false)
-  call void (i32, ...) @VAArgStructFn(i32 undef, i64 %agg.tmp.sroa.0.0.copyload, i64 %agg.tmp.sroa.2.0.copyload, i64 %agg.tmp.sroa.0.0.copyload, i64 %agg.tmp.sroa.2.0.copyload, %struct.StructByVal* byval(%struct.StructByVal) align 8 %agg.tmp2)
+  call void (i32, ...) @VAArgStructFn(i32 undef, i64 %agg.tmp.sroa.0.0.copyload, i64 %agg.tmp.sroa.2.0.copyload, i64 %agg.tmp.sroa.0.0.copyload, i64 %agg.tmp.sroa.2.0.copyload, %struct.StructByVal* byval align 8 %agg.tmp2)
   ret void
 }
 
 attributes #0 = { "target-features"="+fxsr,+x87,-sse" }
 
-; CHECK: call void @llvm.memcpy.p0i8.p0i8.i64{{.*}}@__msan_va_arg_tls {{.*}}, i64 48
+; CHECK: bitcast { i32, i32, i32, i32 }* {{.*}}@__msan_va_arg_tls {{.*}}, i64 48
 
 declare i32 @InnerTailCall(i32 %a)
 
@@ -1014,16 +1007,5 @@ define i8* @MismatchingCallMustTailCall(i32 %a) sanitize_memory {
 ; CHECK-NEXT: ret i8*
 
 
-; CHECK-LABEL: define internal void @msan.module_ctor() #[[#ATTR:]] {
+; CHECK-LABEL: define internal void @msan.module_ctor() {
 ; CHECK: call void @__msan_init()
-
-; CHECK-CALLS: declare void @__msan_maybe_warning_1(i8 zeroext, i32 zeroext)
-; CHECK-CALLS: declare void @__msan_maybe_store_origin_1(i8 zeroext, i8*, i32 zeroext)
-; CHECK-CALLS: declare void @__msan_maybe_warning_2(i16 zeroext, i32 zeroext)
-; CHECK-CALLS: declare void @__msan_maybe_store_origin_2(i16 zeroext, i8*, i32 zeroext)
-; CHECK-CALLS: declare void @__msan_maybe_warning_4(i32 zeroext, i32 zeroext)
-; CHECK-CALLS: declare void @__msan_maybe_store_origin_4(i32 zeroext, i8*, i32 zeroext)
-; CHECK-CALLS: declare void @__msan_maybe_warning_8(i64 zeroext, i32 zeroext)
-; CHECK-CALLS: declare void @__msan_maybe_store_origin_8(i64 zeroext, i8*, i32 zeroext)
-
-; CHECK:       attributes #[[#ATTR]] = { nounwind }

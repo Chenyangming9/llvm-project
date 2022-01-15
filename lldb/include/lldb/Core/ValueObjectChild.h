@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_VALUEOBJECTCHILD_H
-#define LLDB_CORE_VALUEOBJECTCHILD_H
+#ifndef liblldb_ValueObjectChild_h_
+#define liblldb_ValueObjectChild_h_
 
 #include "lldb/Core/ValueObject.h"
 
@@ -20,17 +20,17 @@
 
 #include "llvm/ADT/Optional.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace lldb_private {
 
-/// A child of another ValueObject.
+// A child of another ValueObject.
 class ValueObjectChild : public ValueObject {
 public:
   ~ValueObjectChild() override;
 
-  llvm::Optional<uint64_t> GetByteSize() override { return m_byte_size; }
+  uint64_t GetByteSize() override { return m_byte_size; }
 
   lldb::offset_t GetByteOffset() override { return m_byte_offset; }
 
@@ -71,6 +71,11 @@ protected:
   bool m_is_deref_of_parent;
   llvm::Optional<LazyBool> m_can_update_with_invalid_exe_ctx;
 
+  //
+  //  void
+  //  ReadValueFromMemory (ValueObject* parent, lldb::addr_t address);
+
+protected:
   friend class ValueObject;
   friend class ValueObjectConstResult;
   friend class ValueObjectConstResultImpl;
@@ -83,10 +88,9 @@ protected:
                    AddressType child_ptr_or_ref_addr_type,
                    uint64_t language_flags);
 
-  ValueObjectChild(const ValueObjectChild &) = delete;
-  const ValueObjectChild &operator=(const ValueObjectChild &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(ValueObjectChild);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_VALUEOBJECTCHILD_H
+#endif // liblldb_ValueObjectChild_h_

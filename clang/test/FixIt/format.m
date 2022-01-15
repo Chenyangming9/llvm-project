@@ -169,12 +169,6 @@ void test_char(char c, signed char s, unsigned char u, uint8_t n) {
 
   NSLog(@"%@", 'abcd'); // expected-warning{{format specifies type 'id' but the argument has type 'int'}}
   // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:11-[[@LINE-1]]:13}:"%d"
-
-  NSLog(@"%hhd", 'a'); // expected-warning{{format specifies type 'char' but the argument has type 'int'}}
-  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:11-[[@LINE-1]]:15}:"%d"
-
-  NSLog(@"%hhu", 'a'); // expected-warning{{format specifies type 'unsigned char' but the argument has type 'int'}}
-  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:11-[[@LINE-1]]:15}:"%d"
 }
 
 void multichar_constants_false_negative() {
@@ -211,7 +205,9 @@ void test_percent_C() {
   // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:11-[[@LINE-1]]:13}:"%f"
   // CHECK-NOT: fix-it:"{{.*}}":{[[@LINE-2]]:16-[[@LINE-2]]:16}:"(unichar)"
 
-  NSLog(@"%C", (char)0x260300);
+  NSLog(@"%C", (char)0x260300); // expected-warning{{format specifies type 'unichar' (aka 'unsigned short') but the argument has type 'char'}}
+  // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:11-[[@LINE-1]]:13}:"%c"
+  // CHECK-NOT: fix-it:"{{.*}}":{[[@LINE-2]]:16-[[@LINE-2]]:22}:"(unichar)"
 
   NSLog(@"%C", 'a'); // expected-warning{{format specifies type 'unichar' (aka 'unsigned short') but the argument has type 'char'}}
   // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:11-[[@LINE-1]]:13}:"%c"

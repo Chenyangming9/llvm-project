@@ -16,5 +16,7 @@ static_library("AsmParser") {
     "//llvm/lib/Target/Hexagon/MCTargetDesc",
   ]
   include_dirs = [ ".." ]
-  sources = [ "HexagonAsmParser.cpp" ]
+  sources = [
+    "HexagonAsmParser.cpp",
+  ]
 }

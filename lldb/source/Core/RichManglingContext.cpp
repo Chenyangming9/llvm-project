@@ -1,4 +1,4 @@
-//===-- RichManglingContext.cpp -------------------------------------------===//
+//===-- RichManglingContext.cpp ---------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -19,12 +19,7 @@ using namespace lldb;
 using namespace lldb_private;
 
 // RichManglingContext
-RichManglingContext::~RichManglingContext() {
-  std::free(m_ipd_buf);
-  ResetCxxMethodParser();
-}
-
-void RichManglingContext::ResetCxxMethodParser() {
+void RichManglingContext::ResetProvider(InfoProvider new_provider) {
   // If we want to support parsers for other languages some day, we need a
   // switch here to delete the correct parser type.
   if (m_cxx_method_parser.hasValue()) {
@@ -32,10 +27,6 @@ void RichManglingContext::ResetCxxMethodParser() {
     delete get<CPlusPlusLanguage::MethodName>(m_cxx_method_parser);
     m_cxx_method_parser.reset();
   }
-}
-
-void RichManglingContext::ResetProvider(InfoProvider new_provider) {
-  ResetCxxMethodParser();
 
   assert(new_provider != None && "Only reset to a valid provider");
   m_provider = new_provider;

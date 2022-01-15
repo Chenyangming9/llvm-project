@@ -39,16 +39,18 @@ class TypeLocBuilder {
 
   /// The inline buffer.
   enum { BufferMaxAlignment = alignof(void *) };
-  alignas(BufferMaxAlignment) char InlineBuffer[InlineCapacity];
+  llvm::AlignedCharArray<BufferMaxAlignment, InlineCapacity> InlineBuffer;
   unsigned NumBytesAtAlign4, NumBytesAtAlign8;
 
-public:
+ public:
   TypeLocBuilder()
-      : Buffer(InlineBuffer), Capacity(InlineCapacity), Index(InlineCapacity),
-        NumBytesAtAlign4(0), NumBytesAtAlign8(0) {}
+    : Buffer(InlineBuffer.buffer), Capacity(InlineCapacity),
+      Index(InlineCapacity), NumBytesAtAlign4(0), NumBytesAtAlign8(0)
+  {
+  }
 
   ~TypeLocBuilder() {
-    if (Buffer != InlineBuffer)
+    if (Buffer != InlineBuffer.buffer)
       delete[] Buffer;
   }
 

@@ -15,9 +15,8 @@
 #define LLVM_EXECUTIONENGINE_ORC_ORCREMOTETARGETSERVER_H
 
 #include "llvm/ExecutionEngine/JITSymbol.h"
-#include "llvm/ExecutionEngine/Orc/IndirectionUtils.h"
+#include "llvm/ExecutionEngine/Orc/OrcError.h"
 #include "llvm/ExecutionEngine/Orc/OrcRemoteTargetRPCAPI.h"
-#include "llvm/ExecutionEngine/Orc/Shared/OrcError.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/Format.h"
@@ -46,7 +45,7 @@ namespace remote {
 
 template <typename ChannelT, typename TargetT>
 class OrcRemoteTargetServer
-    : public shared::SingleThreadedRPCEndpoint<shared::RawByteChannel> {
+    : public rpc::SingleThreadedRPCEndpoint<rpc::RawByteChannel> {
 public:
   using SymbolLookupFtor =
       std::function<JITTargetAddress(const std::string &Name)>;
@@ -57,14 +56,12 @@ public:
   OrcRemoteTargetServer(ChannelT &Channel, SymbolLookupFtor SymbolLookup,
                         EHFrameRegistrationFtor EHFramesRegister,
                         EHFrameRegistrationFtor EHFramesDeregister)
-      : shared::SingleThreadedRPCEndpoint<shared::RawByteChannel>(Channel,
-                                                                  true),
+      : rpc::SingleThreadedRPCEndpoint<rpc::RawByteChannel>(Channel, true),
         SymbolLookup(std::move(SymbolLookup)),
         EHFramesRegister(std::move(EHFramesRegister)),
         EHFramesDeregister(std::move(EHFramesDeregister)) {
-    using ThisT = std::remove_reference_t<decltype(*this)>;
+    using ThisT = typename std::remove_reference<decltype(*this)>::type;
     addHandler<exec::CallIntVoid>(*this, &ThisT::handleCallIntVoid);
-    addHandler<exec::CallIntInt>(*this, &ThisT::handleCallIntInt);
     addHandler<exec::CallMain>(*this, &ThisT::handleCallMain);
     addHandler<exec::CallVoidVoid>(*this, &ThisT::handleCallVoidVoid);
     addHandler<mem::CreateRemoteAllocator>(*this,
@@ -170,19 +167,6 @@ private:
     return Result;
   }
 
-  Expected<int32_t> handleCallIntInt(JITTargetAddress Addr, int Arg) {
-    using IntIntFnTy = int (*)(int);
-
-    IntIntFnTy Fn = reinterpret_cast<IntIntFnTy>(static_cast<uintptr_t>(Addr));
-
-    LLVM_DEBUG(dbgs() << "  Calling " << format("0x%016x", Addr)
-                      << " with argument " << Arg << "\n");
-    int Result = Fn(Arg);
-    LLVM_DEBUG(dbgs() << "  Result = " << Result << "\n");
-
-    return Result;
-  }
-
   Expected<int32_t> handleCallMain(JITTargetAddress Addr,
                                    std::vector<std::string> Args) {
     using MainFnTy = int (*)(int, const char *[]);
@@ -278,17 +262,19 @@ private:
       return errorCodeToError(
                orcError(OrcErrorCode::RemoteIndirectStubsOwnerDoesNotExist));
 
-    auto IS = LocalIndirectStubsInfo<TargetT>::create(
-        NumStubsRequired, sys::Process::getPageSizeEstimate());
-    if (!IS)
-      return IS.takeError();
+    typename TargetT::IndirectStubsInfo IS;
+    if (auto Err =
+            TargetT::emitIndirectStubsBlock(IS, NumStubsRequired, nullptr))
+      return std::move(Err);
 
-    JITTargetAddress StubsBase = pointerToJITTargetAddress(IS->getStub(0));
-    JITTargetAddress PtrsBase = pointerToJITTargetAddress(IS->getPtr(0));
-    uint32_t NumStubsEmitted = IS->getNumStubs();
+    JITTargetAddress StubsBase = static_cast<JITTargetAddress>(
+        reinterpret_cast<uintptr_t>(IS.getStub(0)));
+    JITTargetAddress PtrsBase = static_cast<JITTargetAddress>(
+        reinterpret_cast<uintptr_t>(IS.getPtr(0)));
+    uint32_t NumStubsEmitted = IS.getNumStubs();
 
     auto &BlockList = StubOwnerItr->second;
-    BlockList.push_back(std::move(*IS));
+    BlockList.push_back(std::move(IS));
 
     return std::make_tuple(StubsBase, PtrsBase, NumStubsEmitted);
   }
@@ -301,10 +287,8 @@ private:
     if (EC)
       return errorCodeToError(EC);
 
-    TargetT::writeResolverCode(static_cast<char *>(ResolverBlock.base()),
-                               pointerToJITTargetAddress(ResolverBlock.base()),
-                               pointerToJITTargetAddress(&reenter),
-                               pointerToJITTargetAddress(this));
+    TargetT::writeResolverCode(static_cast<uint8_t *>(ResolverBlock.base()),
+                               &reenter, this);
 
     return errorCodeToError(sys::Memory::protectMappedMemory(
         ResolverBlock.getMemoryBlock(),
@@ -324,10 +308,9 @@ private:
         (sys::Process::getPageSizeEstimate() - TargetT::PointerSize) /
         TargetT::TrampolineSize;
 
-    char *TrampolineMem = static_cast<char *>(TrampolineBlock.base());
-    TargetT::writeTrampolines(
-        TrampolineMem, pointerToJITTargetAddress(TrampolineMem),
-        pointerToJITTargetAddress(ResolverBlock.base()), NumTrampolines);
+    uint8_t *TrampolineMem = static_cast<uint8_t *>(TrampolineBlock.base());
+    TargetT::writeTrampolines(TrampolineMem, ResolverBlock.base(),
+                              NumTrampolines);
 
     EC = sys::Memory::protectMappedMemory(TrampolineBlock.getMemoryBlock(),
                                           sys::Memory::MF_READ |
@@ -335,8 +318,10 @@ private:
 
     TrampolineBlocks.push_back(std::move(TrampolineBlock));
 
-    return std::make_tuple(pointerToJITTargetAddress(TrampolineMem),
-                           NumTrampolines);
+    auto TrampolineBaseAddr = static_cast<JITTargetAddress>(
+        reinterpret_cast<uintptr_t>(TrampolineMem));
+
+    return std::make_tuple(TrampolineBaseAddr, NumTrampolines);
   }
 
   Expected<JITTargetAddress> handleGetSymbolAddress(const std::string &Name) {
@@ -352,7 +337,7 @@ private:
     uint32_t PointerSize = TargetT::PointerSize;
     uint32_t PageSize = sys::Process::getPageSizeEstimate();
     uint32_t TrampolineSize = TargetT::TrampolineSize;
-    uint32_t IndirectStubSize = TargetT::StubSize;
+    uint32_t IndirectStubSize = TargetT::IndirectStubsInfo::StubSize;
     LLVM_DEBUG(dbgs() << "  Remote info:\n"
                       << "    triple             = '" << ProcessTriple << "'\n"
                       << "    pointer size       = " << PointerSize << "\n"
@@ -448,7 +433,7 @@ private:
   SymbolLookupFtor SymbolLookup;
   EHFrameRegistrationFtor EHFramesRegister, EHFramesDeregister;
   std::map<ResourceIdMgr::ResourceId, Allocator> Allocators;
-  using ISBlockOwnerList = std::vector<LocalIndirectStubsInfo<TargetT>>;
+  using ISBlockOwnerList = std::vector<typename TargetT::IndirectStubsInfo>;
   std::map<ResourceIdMgr::ResourceId, ISBlockOwnerList> IndirectStubsOwners;
   sys::OwningMemoryBlock ResolverBlock;
   std::vector<sys::OwningMemoryBlock> TrampolineBlocks;

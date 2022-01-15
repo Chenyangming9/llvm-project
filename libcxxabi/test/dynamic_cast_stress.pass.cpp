@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 #include <cassert>
 #include <tuple>
-#include "support/timer.h"
+#include "support/timer.hpp"
 
 template <std::size_t Indx, std::size_t Depth>
 struct C
@@ -63,11 +63,9 @@ void test()
     assert(b != 0);
 }
 
-int main(int, char**)
+int main()
 {
     test();
-
-    return 0;
 }
 
 /*

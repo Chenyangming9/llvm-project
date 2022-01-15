@@ -1,4 +1,4 @@
-//===-- CommandObjectHelp.cpp ---------------------------------------------===//
+//===-- CommandObjectHelp.cpp -----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,7 +8,9 @@
 
 #include "CommandObjectHelp.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
+#include "lldb/Interpreter/CommandObjectMultiword.h"
 #include "lldb/Interpreter/CommandReturnObject.h"
+#include "lldb/Interpreter/Options.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -25,27 +27,25 @@ void CommandObjectHelp::GenerateAdditionalHelpAvenuesMessage(
   std::string command_str = command.str();
   std::string prefix_str = prefix.str();
   std::string subcommand_str = subcommand.str();
-  const std::string &lookup_str =
-      !subcommand_str.empty() ? subcommand_str : command_str;
+  const std::string &lookup_str = !subcommand_str.empty() ? subcommand_str : command_str;
   s->Printf("'%s' is not a known command.\n", command_str.c_str());
   s->Printf("Try '%shelp' to see a current list of commands.\n",
             prefix.str().c_str());
   if (include_upropos) {
     s->Printf("Try '%sapropos %s' for a list of related commands.\n",
-              prefix_str.c_str(), lookup_str.c_str());
+      prefix_str.c_str(), lookup_str.c_str());
   }
   if (include_type_lookup) {
     s->Printf("Try '%stype lookup %s' for information on types, methods, "
               "functions, modules, etc.",
-              prefix_str.c_str(), lookup_str.c_str());
+      prefix_str.c_str(), lookup_str.c_str());
   }
 }
 
 CommandObjectHelp::CommandObjectHelp(CommandInterpreter &interpreter)
-    : CommandObjectParsed(interpreter, "help",
-                          "Show a list of all debugger "
-                          "commands, or give details "
-                          "about a specific command.",
+    : CommandObjectParsed(interpreter, "help", "Show a list of all debugger "
+                                               "commands, or give details "
+                                               "about a specific command.",
                           "help [<cmd-name>]"),
       m_options() {
   CommandArgumentEntry arg;
@@ -65,8 +65,10 @@ CommandObjectHelp::CommandObjectHelp(CommandInterpreter &interpreter)
 
 CommandObjectHelp::~CommandObjectHelp() = default;
 
+static constexpr OptionDefinition g_help_options[] = {
 #define LLDB_OPTIONS_help
 #include "CommandOptions.inc"
+};
 
 llvm::ArrayRef<OptionDefinition>
 CommandObjectHelp::CommandOptions::GetDefinitions() {
@@ -96,7 +98,7 @@ bool CommandObjectHelp::DoExecute(Args &command, CommandReturnObject &result) {
     // Get command object for the first command argument. Only search built-in
     // command dictionary.
     StringList matches;
-    auto command_name = command[0].ref();
+    auto command_name = command[0].ref;
     cmd_obj = m_interpreter.GetCommandObject(command_name, &matches);
 
     if (cmd_obj != nullptr) {
@@ -107,7 +109,7 @@ bool CommandObjectHelp::DoExecute(Args &command, CommandReturnObject &result) {
       // object that corresponds to the help command entered.
       std::string sub_command;
       for (auto &entry : command.entries().drop_front()) {
-        sub_command = std::string(entry.ref());
+        sub_command = entry.ref;
         matches.Clear();
         if (sub_cmd_obj->IsAlias())
           sub_cmd_obj =
@@ -139,6 +141,7 @@ bool CommandObjectHelp::DoExecute(Args &command, CommandReturnObject &result) {
           }
           s.Printf("\n");
           result.AppendError(s.GetString());
+          result.SetStatus(eReturnStatusFailed);
           return false;
         } else if (!sub_cmd_obj) {
           StreamString error_msg_stream;
@@ -146,6 +149,7 @@ bool CommandObjectHelp::DoExecute(Args &command, CommandReturnObject &result) {
               &error_msg_stream, cmd_string.c_str(),
               m_interpreter.GetCommandPrefix(), sub_command.c_str());
           result.AppendError(error_msg_stream.GetString());
+          result.SetStatus(eReturnStatusFailed);
           return false;
         } else {
           GenerateAdditionalHelpAvenuesMessage(
@@ -191,6 +195,7 @@ bool CommandObjectHelp::DoExecute(Args &command, CommandReturnObject &result) {
                                              m_interpreter.GetCommandPrefix(),
                                              "");
         result.AppendError(error_msg_stream.GetString());
+        result.SetStatus(eReturnStatusFailed);
       }
     }
   }
@@ -198,23 +203,24 @@ bool CommandObjectHelp::DoExecute(Args &command, CommandReturnObject &result) {
   return result.Succeeded();
 }
 
-void CommandObjectHelp::HandleCompletion(CompletionRequest &request) {
+int CommandObjectHelp::HandleCompletion(CompletionRequest &request) {
   // Return the completions of the commands in the help system:
   if (request.GetCursorIndex() == 0) {
-    m_interpreter.HandleCompletionMatches(request);
-    return;
-  }
-  CommandObject *cmd_obj =
-      m_interpreter.GetCommandObject(request.GetParsedLine()[0].ref());
+    return m_interpreter.HandleCompletionMatches(request);
+  } else {
+    CommandObject *cmd_obj =
+        m_interpreter.GetCommandObject(request.GetParsedLine()[0].ref);
 
-  // The command that they are getting help on might be ambiguous, in which
-  // case we should complete that, otherwise complete with the command the
-  // user is getting help on...
+    // The command that they are getting help on might be ambiguous, in which
+    // case we should complete that, otherwise complete with the command the
+    // user is getting help on...
 
-  if (cmd_obj) {
-    request.ShiftArguments();
-    cmd_obj->HandleCompletion(request);
-    return;
+    if (cmd_obj) {
+      request.GetParsedLine().Shift();
+      request.SetCursorIndex(request.GetCursorIndex() - 1);
+      return cmd_obj->HandleCompletion(request);
+    } else {
+      return m_interpreter.HandleCompletionMatches(request);
+    }
   }
-  m_interpreter.HandleCompletionMatches(request);
 }

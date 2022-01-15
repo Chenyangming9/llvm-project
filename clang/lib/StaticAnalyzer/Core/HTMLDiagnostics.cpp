@@ -13,9 +13,6 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/Stmt.h"
-#include "clang/Analysis/IssueHash.h"
-#include "clang/Analysis/MacroExpansionContext.h"
-#include "clang/Analysis/PathDiagnostic.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
@@ -25,6 +22,9 @@
 #include "clang/Lex/Token.h"
 #include "clang/Rewrite/Core/HTMLRewrite.h"
 #include "clang/Rewrite/Core/Rewriter.h"
+#include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/PathDiagnostic.h"
+#include "clang/StaticAnalyzer/Core/IssueHash.h"
 #include "clang/StaticAnalyzer/Core/PathDiagnosticConsumers.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallString.h"
@@ -58,18 +58,19 @@ using namespace ento;
 namespace {
 
 class HTMLDiagnostics : public PathDiagnosticConsumer {
-  PathDiagnosticConsumerOptions DiagOpts;
   std::string Directory;
   bool createdDir = false;
   bool noDir = false;
   const Preprocessor &PP;
+  AnalyzerOptions &AnalyzerOpts;
   const bool SupportsCrossFileDiagnostics;
 
 public:
-  HTMLDiagnostics(PathDiagnosticConsumerOptions DiagOpts,
-                  const std::string &OutputDir, const Preprocessor &pp,
+  HTMLDiagnostics(AnalyzerOptions &AnalyzerOpts,
+                  const std::string& prefix,
+                  const Preprocessor &pp,
                   bool supportsMultipleFiles)
-      : DiagOpts(std::move(DiagOpts)), Directory(OutputDir), PP(pp),
+      : Directory(prefix), PP(pp), AnalyzerOpts(AnalyzerOpts),
         SupportsCrossFileDiagnostics(supportsMultipleFiles) {}
 
   ~HTMLDiagnostics() override { FlushDiagnostics(nullptr); }
@@ -133,68 +134,18 @@ private:
 
 } // namespace
 
-void ento::createHTMLDiagnosticConsumer(
-    PathDiagnosticConsumerOptions DiagOpts, PathDiagnosticConsumers &C,
-    const std::string &OutputDir, const Preprocessor &PP,
-    const cross_tu::CrossTranslationUnitContext &CTU,
-    const MacroExpansionContext &MacroExpansions) {
-
-  // FIXME: HTML is currently our default output type, but if the output
-  // directory isn't specified, it acts like if it was in the minimal text
-  // output mode. This doesn't make much sense, we should have the minimal text
-  // as our default. In the case of backward compatibility concerns, this could
-  // be preserved with -analyzer-config-compatibility-mode=true.
-  createTextMinimalPathDiagnosticConsumer(DiagOpts, C, OutputDir, PP, CTU,
-                                          MacroExpansions);
-
-  // TODO: Emit an error here.
-  if (OutputDir.empty())
-    return;
-
-  C.push_back(new HTMLDiagnostics(std::move(DiagOpts), OutputDir, PP, true));
+void ento::createHTMLDiagnosticConsumer(AnalyzerOptions &AnalyzerOpts,
+                                        PathDiagnosticConsumers &C,
+                                        const std::string& prefix,
+                                        const Preprocessor &PP) {
+  C.push_back(new HTMLDiagnostics(AnalyzerOpts, prefix, PP, true));
 }
 
-void ento::createHTMLSingleFileDiagnosticConsumer(
-    PathDiagnosticConsumerOptions DiagOpts, PathDiagnosticConsumers &C,
-    const std::string &OutputDir, const Preprocessor &PP,
-    const cross_tu::CrossTranslationUnitContext &CTU,
-    const clang::MacroExpansionContext &MacroExpansions) {
-  createTextMinimalPathDiagnosticConsumer(DiagOpts, C, OutputDir, PP, CTU,
-                                          MacroExpansions);
-
-  // TODO: Emit an error here.
-  if (OutputDir.empty())
-    return;
-
-  C.push_back(new HTMLDiagnostics(std::move(DiagOpts), OutputDir, PP, false));
-}
-
-void ento::createPlistHTMLDiagnosticConsumer(
-    PathDiagnosticConsumerOptions DiagOpts, PathDiagnosticConsumers &C,
-    const std::string &prefix, const Preprocessor &PP,
-    const cross_tu::CrossTranslationUnitContext &CTU,
-    const MacroExpansionContext &MacroExpansions) {
-  createHTMLDiagnosticConsumer(
-      DiagOpts, C, std::string(llvm::sys::path::parent_path(prefix)), PP, CTU,
-      MacroExpansions);
-  createPlistMultiFileDiagnosticConsumer(DiagOpts, C, prefix, PP, CTU,
-                                         MacroExpansions);
-  createTextMinimalPathDiagnosticConsumer(std::move(DiagOpts), C, prefix, PP,
-                                          CTU, MacroExpansions);
-}
-
-void ento::createSarifHTMLDiagnosticConsumer(
-    PathDiagnosticConsumerOptions DiagOpts, PathDiagnosticConsumers &C,
-    const std::string &sarif_file, const Preprocessor &PP,
-    const cross_tu::CrossTranslationUnitContext &CTU,
-    const MacroExpansionContext &MacroExpansions) {
-  createHTMLDiagnosticConsumer(
-      DiagOpts, C, std::string(llvm::sys::path::parent_path(sarif_file)), PP,
-      CTU, MacroExpansions);
-  createSarifDiagnosticConsumer(DiagOpts, C, sarif_file, PP, CTU,
-                                MacroExpansions);
-  createTextMinimalPathDiagnosticConsumer(std::move(DiagOpts), C, sarif_file,
-                                          PP, CTU, MacroExpansions);
+void ento::createHTMLSingleFileDiagnosticConsumer(AnalyzerOptions &AnalyzerOpts,
+                                                  PathDiagnosticConsumers &C,
+                                                  const std::string& prefix,
+                                                  const Preprocessor &PP) {
+  C.push_back(new HTMLDiagnostics(AnalyzerOpts, prefix, PP, false));
 }
 
 //===----------------------------------------------------------------------===//
@@ -267,7 +218,7 @@ void HTMLDiagnostics::ReportDiag(const PathDiagnostic& D,
   int FD;
   SmallString<128> Model, ResultPath;
 
-  if (!DiagOpts.ShouldWriteStableReportFilename) {
+  if (!AnalyzerOpts.ShouldWriteStableReportFilename) {
       llvm::sys::path::append(Model, Directory, "report-%%%%%%.html");
       if (std::error_code EC =
           llvm::sys::fs::make_absolute(Model)) {
@@ -275,11 +226,11 @@ void HTMLDiagnostics::ReportDiag(const PathDiagnostic& D,
                        << "' absolute: " << EC.message() << '\n';
         return;
       }
-      if (std::error_code EC = llvm::sys::fs::createUniqueFile(
-              Model, FD, ResultPath, llvm::sys::fs::OF_Text)) {
-        llvm::errs() << "warning: could not create file in '" << Directory
-                     << "': " << EC.message() << '\n';
-        return;
+      if (std::error_code EC =
+          llvm::sys::fs::createUniqueFile(Model, FD, ResultPath)) {
+          llvm::errs() << "warning: could not create file in '" << Directory
+                       << "': " << EC.message() << '\n';
+          return;
       }
   } else {
       int i = 1;
@@ -557,7 +508,7 @@ void HTMLDiagnostics::FinalizeHTML(const PathDiagnostic& D, Rewriter &R,
 <input type="checkbox" class="spoilerhider" id="showinvocation" />
 <label for="showinvocation" >Show analyzer invocation</label>
 <div class="spoiler">clang -cc1 )<<<";
-    os << html::EscapeText(DiagOpts.ToolInvocation);
+    os << html::EscapeText(AnalyzerOpts.FullCompilerInvocation);
     os << R"<<<(
 </div>
 <div id='tooltiphint' hidden="true">
@@ -604,9 +555,8 @@ void HTMLDiagnostics::FinalizeHTML(const PathDiagnostic& D, Rewriter &R,
     os  << "\n<!-- FUNCTIONNAME " <<  declName << " -->\n";
 
     os << "\n<!-- ISSUEHASHCONTENTOFLINEINCONTEXT "
-       << getIssueHash(L, D.getCheckerName(), D.getBugType(), DeclWithIssue,
-                       PP.getLangOpts())
-       << " -->\n";
+       << GetIssueHash(SMgr, L, D.getCheckName(), D.getBugType(), DeclWithIssue,
+                       PP.getLangOpts()) << " -->\n";
 
     os << "\n<!-- BUGLINE "
        << LineNumber
@@ -656,20 +606,13 @@ window.addEventListener("keydown", function (event) {
 )<<<";
 }
 
-static bool shouldDisplayPopUpRange(const SourceRange &Range) {
-  return !(Range.getBegin().isMacroID() || Range.getEnd().isMacroID());
-}
-
 static void
 HandlePopUpPieceStartTag(Rewriter &R,
                          const std::vector<SourceRange> &PopUpRanges) {
   for (const auto &Range : PopUpRanges) {
-    if (!shouldDisplayPopUpRange(Range))
-      continue;
-
     html::HighlightRange(R, Range.getBegin(), Range.getEnd(), "",
                          "<table class='variable_popup'><tbody>",
-                         /*IsTokenRange=*/true);
+                         /*IsTokenRange=*/false);
   }
 }
 
@@ -682,8 +625,6 @@ static void HandlePopUpPieceEndTag(Rewriter &R,
   llvm::raw_svector_ostream Out(Buf);
 
   SourceRange Range(Piece.getLocation().asRange());
-  if (!shouldDisplayPopUpRange(Range))
-    return;
 
   // Write out the path indices with a right arrow and the message as a row.
   Out << "<tr><td valign='top'><div class='PathIndex PathIndexPopUp'>"
@@ -703,11 +644,12 @@ static void HandlePopUpPieceEndTag(Rewriter &R,
     Out << "</tbody></table></span>";
     html::HighlightRange(R, Range.getBegin(), Range.getEnd(),
                          "<span class='variable'>", Buf.c_str(),
-                         /*IsTokenRange=*/true);
+                         /*IsTokenRange=*/false);
+
+  // Otherwise inject just the new row at the end of the range.
   } else {
-    // Otherwise inject just the new row at the end of the range.
     html::HighlightRange(R, Range.getBegin(), Range.getEnd(), "", Buf.c_str(),
-                         /*IsTokenRange=*/true);
+                         /*IsTokenRange=*/false);
   }
 }
 
@@ -716,14 +658,16 @@ void HTMLDiagnostics::RewriteFile(Rewriter &R,
   // Process the path.
   // Maintain the counts of extra note pieces separately.
   unsigned TotalPieces = path.size();
-  unsigned TotalNotePieces = std::count_if(
-      path.begin(), path.end(), [](const PathDiagnosticPieceRef &p) {
-        return isa<PathDiagnosticNotePiece>(*p);
-      });
-  unsigned PopUpPieceCount = std::count_if(
-      path.begin(), path.end(), [](const PathDiagnosticPieceRef &p) {
-        return isa<PathDiagnosticPopUpPiece>(*p);
-      });
+  unsigned TotalNotePieces =
+      std::count_if(path.begin(), path.end(),
+                    [](const std::shared_ptr<PathDiagnosticPiece> &p) {
+                      return isa<PathDiagnosticNotePiece>(*p);
+                    });
+  unsigned PopUpPieceCount =
+      std::count_if(path.begin(), path.end(),
+                    [](const std::shared_ptr<PathDiagnosticPiece> &p) {
+                      return isa<PathDiagnosticPopUpPiece>(*p);
+                    });
 
   unsigned TotalRegularPieces = TotalPieces - TotalNotePieces - PopUpPieceCount;
   unsigned NumRegularPieces = TotalRegularPieces;
@@ -808,8 +752,8 @@ void HTMLDiagnostics::HandlePiece(Rewriter &R, FileID BugFileID,
   if (LPosInfo.first != BugFileID)
     return;
 
-  llvm::MemoryBufferRef Buf = SM.getBufferOrFake(LPosInfo.first);
-  const char *FileStart = Buf.getBufferStart();
+  const llvm::MemoryBuffer *Buf = SM.getBuffer(LPosInfo.first);
+  const char* FileStart = Buf->getBufferStart();
 
   // Compute the column number.  Rewind from the current position to the start
   // of the line.
@@ -819,7 +763,7 @@ void HTMLDiagnostics::HandlePiece(Rewriter &R, FileID BugFileID,
 
   // Compute LineEnd.
   const char *LineEnd = TokInstantiationPtr;
-  const char *FileEnd = Buf.getBufferEnd();
+  const char* FileEnd = Buf->getBufferEnd();
   while (*LineEnd != '\n' && LineEnd != FileEnd)
     ++LineEnd;
 
@@ -928,7 +872,7 @@ void HTMLDiagnostics::HandlePiece(Rewriter &R, FileID BugFileID,
          << (num - 1)
          << "\" title=\"Previous event ("
          << (num - 1)
-         << ")\">&#x2190;</a></div>";
+         << ")\">&#x2190;</a></div></td>";
     }
 
     os << "</td><td>";
@@ -1092,13 +1036,8 @@ StringRef HTMLDiagnostics::generateKeyboardNavigationJavascript() {
 <script type='text/javascript'>
 var digitMatcher = new RegExp("[0-9]+");
 
-var querySelectorAllArray = function(selector) {
-  return Array.prototype.slice.call(
-    document.querySelectorAll(selector));
-}
-
 document.addEventListener("DOMContentLoaded", function() {
-    querySelectorAllArray(".PathNav > a").forEach(
+    document.querySelectorAll(".PathNav > a").forEach(
         function(currentValue, currentIndex) {
             var hrefValue = currentValue.getAttribute("href");
             currentValue.onclick = function() {
@@ -1118,7 +1057,7 @@ var findNum = function() {
 };
 
 var scrollTo = function(el) {
-    querySelectorAllArray(".selected").forEach(function(s) {
+    document.querySelectorAll(".selected").forEach(function(s) {
         s.classList.remove("selected");
     });
     el.classList.add("selected");

@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TARGET_LANGUAGERUNTIME_H
-#define LLDB_TARGET_LANGUAGERUNTIME_H
+#ifndef liblldb_LanguageRuntime_h_
+#define liblldb_LanguageRuntime_h_
 
 #include "lldb/Breakpoint/BreakpointResolver.h"
 #include "lldb/Breakpoint/BreakpointResolverName.h"
@@ -18,9 +18,10 @@
 #include "lldb/Expression/LLVMUserExpression.h"
 #include "lldb/Symbol/DeclVendor.h"
 #include "lldb/Target/ExecutionContextScope.h"
-#include "lldb/Target/Runtime.h"
 #include "lldb/lldb-private.h"
 #include "lldb/lldb-public.h"
+
+#include "clang/Basic/TargetOptions.h"
 
 namespace lldb_private {
 
@@ -52,13 +53,15 @@ protected:
   LanguageRuntime *m_language_runtime;
   lldb::SearchFilterSP m_filter_sp;
 
-  lldb::SearchFilterSP DoCreateCopy() override;
+  lldb::SearchFilterSP DoCopyForBreakpoint(Breakpoint &breakpoint) override;
 
   void UpdateModuleListIfNeeded();
 };
 
-class LanguageRuntime : public Runtime, public PluginInterface {
+class LanguageRuntime : public PluginInterface {
 public:
+  ~LanguageRuntime() override;
+
   static LanguageRuntime *FindPlugin(Process *process,
                                      lldb::LanguageType language);
 
@@ -126,11 +129,14 @@ public:
     return lldb::ThreadSP();
   }
 
+  Process *GetProcess() { return m_process; }
+
+  Target &GetTargetRef() { return m_process->GetTarget(); }
+
   virtual DeclVendor *GetDeclVendor() { return nullptr; }
 
   virtual lldb::BreakpointResolverSP
-  CreateExceptionResolver(const lldb::BreakpointSP &bkpt,
-                          bool catch_bp, bool throw_bp) = 0;
+  CreateExceptionResolver(Breakpoint *bkpt, bool catch_bp, bool throw_bp) = 0;
 
   virtual lldb::SearchFilterSP CreateExceptionSearchFilter() {
     return m_process->GetTarget().GetSearchFilterForModule(nullptr);
@@ -148,13 +154,20 @@ public:
 
   /// Identify whether a name is a runtime value that should not be hidden by
   /// from the user interface.
-  virtual bool IsAllowedRuntimeValue(ConstString name) { return false; }
+  virtual bool IsWhitelistedRuntimeValue(ConstString name) { return false; }
 
   virtual llvm::Optional<CompilerType> GetRuntimeType(CompilerType base_type) {
     return llvm::None;
   }
 
-  virtual void ModulesDidLoad(const ModuleList &module_list) override {}
+  virtual void ModulesDidLoad(const ModuleList &module_list) {}
+
+  // Called by the Clang expression evaluation engine to allow runtimes to
+  // alter the set of target options provided to the compiler. If the options
+  // prototype is modified, runtimes must return true, false otherwise.
+  virtual bool GetOverrideExprOptions(clang::TargetOptions &prototype) {
+    return false;
+  }
 
   // Called by ClangExpressionParser::PrepareForExecution to query for any
   // custom LLVM IR passes that need to be run before an expression is
@@ -173,54 +186,16 @@ public:
   virtual bool isA(const void *ClassID) const { return ClassID == &ID; }
   static char ID;
 
-  /// A language runtime may be able to provide a special UnwindPlan for
-  /// the frame represented by the register contents \a regctx when that
-  /// frame is not following the normal ABI conventions.
-  /// Instead of using the normal UnwindPlan for the function, we will use
-  /// this special UnwindPlan for this one backtrace.
-  /// One example of this would be a language that has asynchronous functions,
-  /// functions that may not be currently-executing, while waiting on other
-  /// asynchronous calls they made, but are part of a logical backtrace that
-  /// we want to show the developer because that's how they think of the
-  /// program flow.
-  ///
-  /// \param[in] thread
-  ///     The thread that the unwind is happening on.
-  ///
-  /// \param[in] regctx
-  ///     The RegisterContext for the frame we need to create an UnwindPlan.
-  ///     We don't yet have a StackFrame when we're selecting the UnwindPlan.
-  ///
-  /// \param[out] behaves_like_zeroth_frame
-  ///     With normal ABI calls, all stack frames except the zeroth frame need
-  ///     to have the return-pc value backed up by 1 for symbolication purposes.
-  ///     For these LanguageRuntime unwind plans, they may not follow normal ABI
-  ///     calling conventions and the return pc may need to be symbolicated
-  ///     as-is.
-  ///
-  /// \return
-  ///     Returns an UnwindPlan to find the caller frame if it should be used,
-  ///     instead of the UnwindPlan that would normally be used for this
-  ///     function.
-  static lldb::UnwindPlanSP
-  GetRuntimeUnwindPlan(lldb_private::Thread &thread,
-                       lldb_private::RegisterContext *regctx,
-                       bool &behaves_like_zeroth_frame);
-
 protected:
-  // The static GetRuntimeUnwindPlan method above is only implemented in the
-  // base class; subclasses may override this protected member if they can
-  // provide one of these UnwindPlans.
-  virtual lldb::UnwindPlanSP
-  GetRuntimeUnwindPlan(lldb::ProcessSP process_sp,
-                       lldb_private::RegisterContext *regctx,
-                       bool &behaves_like_zeroth_frame) {
-    return lldb::UnwindPlanSP();
-  }
+  // Classes that inherit from LanguageRuntime can see and modify these
 
   LanguageRuntime(Process *process);
+  Process *m_process;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(LanguageRuntime);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_TARGET_LANGUAGERUNTIME_H
+#endif // liblldb_LanguageRuntime_h_

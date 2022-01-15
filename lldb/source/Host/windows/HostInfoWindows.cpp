@@ -1,4 +1,4 @@
-//===-- HostInfoWindows.cpp -----------------------------------------------===//
+//===-- HostInfoWindows.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -39,9 +39,9 @@ protected:
 
 FileSpec HostInfoWindows::m_program_filespec;
 
-void HostInfoWindows::Initialize(SharedLibraryDirectoryHelper *helper) {
+void HostInfoWindows::Initialize() {
   ::CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  HostInfoBase::Initialize(helper);
+  HostInfoBase::Initialize();
 }
 
 void HostInfoWindows::Terminate() {

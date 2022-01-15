@@ -26,38 +26,36 @@ using namespace llvm;
 
 static void codegen(Module *M, llvm::raw_pwrite_stream &OS,
                     function_ref<std::unique_ptr<TargetMachine>()> TMFactory,
-                    CodeGenFileType FileType) {
+                    TargetMachine::CodeGenFileType FileType) {
   std::unique_ptr<TargetMachine> TM = TMFactory();
-  assert(TM && "Failed to create target machine!");
-
   legacy::PassManager CodeGenPasses;
   if (TM->addPassesToEmitFile(CodeGenPasses, OS, nullptr, FileType))
     report_fatal_error("Failed to setup codegen");
   CodeGenPasses.run(*M);
 }
 
-void llvm::splitCodeGen(
-    Module &M, ArrayRef<llvm::raw_pwrite_stream *> OSs,
+std::unique_ptr<Module> llvm::splitCodeGen(
+    std::unique_ptr<Module> M, ArrayRef<llvm::raw_pwrite_stream *> OSs,
     ArrayRef<llvm::raw_pwrite_stream *> BCOSs,
     const std::function<std::unique_ptr<TargetMachine>()> &TMFactory,
-    CodeGenFileType FileType, bool PreserveLocals) {
+    TargetMachine::CodeGenFileType FileType, bool PreserveLocals) {
   assert(BCOSs.empty() || BCOSs.size() == OSs.size());
 
   if (OSs.size() == 1) {
     if (!BCOSs.empty())
-      WriteBitcodeToFile(M, *BCOSs[0]);
-    codegen(&M, *OSs[0], TMFactory, FileType);
-    return;
+      WriteBitcodeToFile(*M, *BCOSs[0]);
+    codegen(M.get(), *OSs[0], TMFactory, FileType);
+    return M;
   }
 
   // Create ThreadPool in nested scope so that threads will be joined
   // on destruction.
   {
-    ThreadPool CodegenThreadPool(hardware_concurrency(OSs.size()));
+    ThreadPool CodegenThreadPool(OSs.size());
     int ThreadCount = 0;
 
     SplitModule(
-        M, OSs.size(),
+        std::move(M), OSs.size(),
         [&](std::unique_ptr<Module> MPart) {
           // We want to clone the module in a new context to multi-thread the
           // codegen. We do it by serializing partition modules to bitcode
@@ -95,4 +93,6 @@ void llvm::splitCodeGen(
         },
         PreserveLocals);
   }
+
+  return {};
 }

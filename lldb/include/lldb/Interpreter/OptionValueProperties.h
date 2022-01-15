@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONVALUEPROPERTIES_H
-#define LLDB_INTERPRETER_OPTIONVALUEPROPERTIES_H
+#ifndef liblldb_OptionValueProperties_h_
+#define liblldb_OptionValueProperties_h_
 
 #include <vector>
 
@@ -18,27 +18,25 @@
 #include "lldb/Utility/ConstString.h"
 
 namespace lldb_private {
-class Properties;
 
 class OptionValueProperties
-    : public Cloneable<OptionValueProperties, OptionValue>,
+    : public OptionValue,
       public std::enable_shared_from_this<OptionValueProperties> {
 public:
-  OptionValueProperties() = default;
+  OptionValueProperties()
+      : OptionValue(), m_name(), m_properties(), m_name_to_index() {}
 
   OptionValueProperties(ConstString name);
+
+  OptionValueProperties(const OptionValueProperties &global_properties);
 
   ~OptionValueProperties() override = default;
 
   Type GetType() const override { return eTypeProperties; }
 
-  void Clear() override;
+  bool Clear() override;
 
-  static lldb::OptionValuePropertiesSP
-  CreateLocalCopy(const Properties &global_properties);
-
-  lldb::OptionValueSP
-  DeepCopy(const lldb::OptionValueSP &new_parent) const override;
+  lldb::OptionValueSP DeepCopy() const override;
 
   Status
   SetValueFromString(llvm::StringRef value,
@@ -105,6 +103,11 @@ public:
 
   Status SetSubValue(const ExecutionContext *exe_ctx, VarSetOperationType op,
                      llvm::StringRef path, llvm::StringRef value) override;
+
+  virtual bool PredicateMatches(const ExecutionContext *exe_ctx,
+    llvm::StringRef predicate) const {
+    return false;
+  }
 
   OptionValueArch *
   GetPropertyAtIndexAsOptionValueArch(const ExecutionContext *exe_ctx,
@@ -195,7 +198,8 @@ public:
                                                ConstString name);
 
   void SetValueChangedCallback(uint32_t property_idx,
-                               std::function<void()> callback);
+                               OptionValueChangedCallback callback,
+                               void *baton);
 
 protected:
   Property *ProtectedGetPropertyAtIndex(uint32_t idx) {
@@ -215,4 +219,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONVALUEPROPERTIES_H
+#endif // liblldb_OptionValueProperties_h_

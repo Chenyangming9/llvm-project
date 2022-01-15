@@ -1,4 +1,4 @@
-//===-- StringLexerTest.cpp -----------------------------------------------===//
+//===-- StringLexerTest.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,7 +9,7 @@
 #include "lldb/Utility/StringLexer.h"
 #include "gtest/gtest.h"
 
-using namespace lldb_private;
+using namespace lldb_utility;
 
 TEST(StringLexerTest, GetUnlexed) {
   StringLexer l("foo");

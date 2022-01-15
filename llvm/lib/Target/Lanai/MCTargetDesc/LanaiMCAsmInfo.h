@@ -22,8 +22,7 @@ class LanaiMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;
 
 public:
-  explicit LanaiMCAsmInfo(const Triple &TheTriple,
-                          const MCTargetOptions &Options);
+  explicit LanaiMCAsmInfo(const Triple &TheTriple);
 };
 
 } // namespace llvm

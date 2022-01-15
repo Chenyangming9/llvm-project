@@ -10,5 +10,6 @@ entry:
 ; CHECK-NEXT: foo_ifunc:
 
 @foo = ifunc i32 (i32), i64 ()* @foo_ifunc
-; CHECK:      .type foo,@gnu_indirect_function
+; CHECK: .type foo,@function
+; CHECK-NEXT: .type foo,@gnu_indirect_function
 ; CHECK-NEXT: .set foo, foo_ifunc

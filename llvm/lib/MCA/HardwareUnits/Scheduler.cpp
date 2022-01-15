@@ -21,7 +21,7 @@ namespace mca {
 
 void Scheduler::initializeStrategy(std::unique_ptr<SchedulerStrategy> S) {
   // Ensure we have a valid (non-null) strategy object.
-  Strategy = S ? std::move(S) : std::make_unique<DefaultSchedulerStrategy>();
+  Strategy = S ? std::move(S) : llvm::make_unique<DefaultSchedulerStrategy>();
 }
 
 // Anchor the vtable of SchedulerStrategy and DefaultSchedulerStrategy.
@@ -38,8 +38,9 @@ void Scheduler::dump() const {
 #endif
 
 Scheduler::Status Scheduler::isAvailable(const InstRef &IR) {
-  ResourceStateEvent RSE =
-      Resources->canBeDispatched(IR.getInstruction()->getUsedBuffers());
+  const InstrDesc &Desc = IR.getInstruction()->getDesc();
+
+  ResourceStateEvent RSE = Resources->canBeDispatched(Desc.Buffers);
   HadTokenStall = RSE != RS_BUFFER_AVAILABLE;
 
   switch (RSE) {
@@ -105,7 +106,7 @@ void Scheduler::issueInstruction(
   bool HasDependentUsers = Inst.hasDependentUsers();
   HasDependentUsers |= Inst.isMemOp() && LSU.hasDependentUsers(IR);
 
-  Resources->releaseBuffers(Inst.getUsedBuffers());
+  Resources->releaseBuffers(Inst.getDesc().Buffers);
   issueInstructionImpl(IR, UsedResources);
   // Instructions that have been issued during this cycle might have unblocked
   // other dependent instructions. Dependent instructions may be issued during
@@ -241,7 +242,7 @@ void Scheduler::updateIssuedSet(SmallVectorImpl<InstRef> &Executed) {
 }
 
 uint64_t Scheduler::analyzeResourcePressure(SmallVectorImpl<InstRef> &Insts) {
-  llvm::append_range(Insts, ReadySet);
+  Insts.insert(Insts.end(), ReadySet.begin(), ReadySet.end());
   return BusyResourceUnits;
 }
 
@@ -299,7 +300,8 @@ bool Scheduler::mustIssueImmediately(const InstRef &IR) const {
 
 bool Scheduler::dispatch(InstRef &IR) {
   Instruction &IS = *IR.getInstruction();
-  Resources->reserveBuffers(IS.getUsedBuffers());
+  const InstrDesc &Desc = IS.getDesc();
+  Resources->reserveBuffers(Desc.Buffers);
 
   // If necessary, reserve queue entries in the load-store unit (LSU).
   if (IS.isMemOp())

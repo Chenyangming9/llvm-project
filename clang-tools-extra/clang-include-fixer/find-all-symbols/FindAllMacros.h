@@ -20,7 +20,7 @@ namespace find_all_symbols {
 
 class HeaderMapCollector;
 
-/// A preprocessor that collects all macro symbols.
+/// \brief A preprocessor that collects all macro symbols.
 /// The contexts of a macro will be ignored since they are not available during
 /// preprocessing period.
 class FindAllMacros : public clang::PPCallbacks {

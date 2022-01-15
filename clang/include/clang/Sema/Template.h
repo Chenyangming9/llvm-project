@@ -42,17 +42,6 @@ class TypedefNameDecl;
 class TypeSourceInfo;
 class VarDecl;
 
-/// The kind of template substitution being performed.
-enum class TemplateSubstitutionKind : char {
-  /// We are substituting template parameters for template arguments in order
-  /// to form a template specialization.
-  Specialization,
-  /// We are substituting template parameters for (typically) other template
-  /// parameters in order to rewrite a declaration as a different declaration
-  /// (for example, when forming a deduction guide from a constructor).
-  Rewrite,
-};
-
   /// Data structure that captures multiple levels of template argument
   /// lists for use in template instantiation.
   ///
@@ -84,9 +73,6 @@ enum class TemplateSubstitutionKind : char {
     /// being substituted.
     unsigned NumRetainedOuterLevels = 0;
 
-    /// The kind of substitution described by this argument list.
-    TemplateSubstitutionKind Kind = TemplateSubstitutionKind::Specialization;
-
   public:
     /// Construct an empty set of template argument lists.
     MultiLevelTemplateArgumentList() = default;
@@ -95,18 +81,6 @@ enum class TemplateSubstitutionKind : char {
     explicit
     MultiLevelTemplateArgumentList(const TemplateArgumentList &TemplateArgs) {
       addOuterTemplateArguments(&TemplateArgs);
-    }
-
-    void setKind(TemplateSubstitutionKind K) { Kind = K; }
-
-    /// Determine the kind of template substitution being performed.
-    TemplateSubstitutionKind getKind() const { return Kind; }
-
-    /// Determine whether we are rewriting template parameters rather than
-    /// substituting for them. If so, we should not leave references to the
-    /// original template parameters behind.
-    bool isRewrite() const {
-      return Kind == TemplateSubstitutionKind::Rewrite;
     }
 
     /// Determine the number of levels in this template argument
@@ -119,20 +93,6 @@ enum class TemplateSubstitutionKind : char {
     /// argument list.
     unsigned getNumSubstitutedLevels() const {
       return TemplateArgumentLists.size();
-    }
-
-    unsigned getNumRetainedOuterLevels() const {
-      return NumRetainedOuterLevels;
-    }
-
-    /// Determine how many of the \p OldDepth outermost template parameter
-    /// lists would be removed by substituting these arguments.
-    unsigned getNewDepth(unsigned OldDepth) const {
-      if (OldDepth < NumRetainedOuterLevels)
-        return OldDepth;
-      if (OldDepth < getNumLevels())
-        return NumRetainedOuterLevels;
-      return OldDepth - TemplateArgumentLists.size();
     }
 
     /// Retrieve the template argument at a given depth and index.
@@ -188,9 +148,6 @@ enum class TemplateSubstitutionKind : char {
     /// template parameters that we instantiate.
     void addOuterRetainedLevel() {
       ++NumRetainedOuterLevels;
-    }
-    void addOuterRetainedLevels(unsigned Num) {
-      NumRetainedOuterLevels += Num;
     }
 
     /// Retrieve the innermost template argument list.
@@ -455,9 +412,6 @@ enum class TemplateSubstitutionKind : char {
     NamedDecl *
     getPartiallySubstitutedPack(const TemplateArgument **ExplicitArgs = nullptr,
                                 unsigned *NumExplicitArgs = nullptr) const;
-
-    /// Determine whether D is a pack expansion created in this scope.
-    bool isLocalPackExpansion(const Decl *D);
   };
 
   class TemplateDeclInstantiator
@@ -510,35 +464,24 @@ enum class TemplateSubstitutionKind : char {
 #define OBJCPROPERTY(DERIVED, BASE)
 #define OBJCPROPERTYIMPL(DERIVED, BASE)
 #define EMPTY(DERIVED, BASE)
-#define LIFETIMEEXTENDEDTEMPORARY(DERIVED, BASE)
 
-    // Decls which use special-case instantiation code.
+// Decls which use special-case instantiation code.
 #define BLOCK(DERIVED, BASE)
 #define CAPTURED(DERIVED, BASE)
 #define IMPLICITPARAM(DERIVED, BASE)
 
 #include "clang/AST/DeclNodes.inc"
 
-    enum class RewriteKind { None, RewriteSpaceshipAsEqualEqual };
-
-    void adjustForRewrite(RewriteKind RK, FunctionDecl *Orig, QualType &T,
-                          TypeSourceInfo *&TInfo,
-                          DeclarationNameInfo &NameInfo);
-
     // A few supplemental visitor functions.
     Decl *VisitCXXMethodDecl(CXXMethodDecl *D,
                              TemplateParameterList *TemplateParams,
                              Optional<const ASTTemplateArgumentListInfo *>
-                                 ClassScopeSpecializationArgs = llvm::None,
-                             RewriteKind RK = RewriteKind::None);
+                                 ClassScopeSpecializationArgs = llvm::None);
     Decl *VisitFunctionDecl(FunctionDecl *D,
-                            TemplateParameterList *TemplateParams,
-                            RewriteKind RK = RewriteKind::None);
+                            TemplateParameterList *TemplateParams);
     Decl *VisitDecl(Decl *D);
     Decl *VisitVarDecl(VarDecl *D, bool InstantiatingVarTemplate,
                        ArrayRef<BindingDecl *> *Bindings = nullptr);
-    Decl *VisitBaseUsingDecls(BaseUsingDecl *D, BaseUsingDecl *Inst,
-                              LookupResult *Lookup);
 
     // Enable late instantiation of attributes.  Late instantiated attributes
     // will be stored in LA.
@@ -591,8 +534,6 @@ enum class TemplateSubstitutionKind : char {
     bool InitFunctionInstantiation(FunctionDecl *New, FunctionDecl *Tmpl);
     bool InitMethodInstantiation(CXXMethodDecl *New, CXXMethodDecl *Tmpl);
 
-    bool SubstDefaultedFunction(FunctionDecl *New, FunctionDecl *Tmpl);
-
     TemplateParameterList *
       SubstTemplateParams(TemplateParameterList *List);
 
@@ -602,7 +543,7 @@ enum class TemplateSubstitutionKind : char {
                         TagDecl *NewDecl);
 
     Decl *VisitVarTemplateSpecializationDecl(
-        VarTemplateDecl *VarTemplate, VarDecl *FromVar,
+        VarTemplateDecl *VarTemplate, VarDecl *FromVar, void *InsertPos,
         const TemplateArgumentListInfo &TemplateArgsInfo,
         ArrayRef<TemplateArgument> Converted,
         VarTemplateSpecializationDecl *PrevDecl = nullptr);

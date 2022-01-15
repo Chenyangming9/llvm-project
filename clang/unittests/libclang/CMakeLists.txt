@@ -6,5 +6,3 @@ target_link_libraries(libclangTests
   PRIVATE
   libclang
   )
-
-add_subdirectory(CrashTests)

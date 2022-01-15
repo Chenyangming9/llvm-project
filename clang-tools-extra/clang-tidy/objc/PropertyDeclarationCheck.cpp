@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PropertyDeclarationCheck.h"
+#include <algorithm>
 #include "../utils/OptionsUtils.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
@@ -14,7 +15,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Regex.h"
-#include <algorithm>
 
 using namespace clang::ast_matchers;
 
@@ -98,6 +98,9 @@ bool prefixedPropertyNameValid(llvm::StringRef PropertyName) {
 }  // namespace
 
 void PropertyDeclarationCheck::registerMatchers(MatchFinder *Finder) {
+  // this check should only be applied to ObjC sources.
+  if (!getLangOpts().ObjC) return;
+
   Finder->addMatcher(objcPropertyDecl(
                          // the property name should be in Lower Camel Case like
                          // 'lowerCamelCase'

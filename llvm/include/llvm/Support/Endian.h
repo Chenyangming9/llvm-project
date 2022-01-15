@@ -13,7 +13,9 @@
 #ifndef LLVM_SUPPORT_ENDIAN_H
 #define LLVM_SUPPORT_ENDIAN_H
 
+#include "llvm/Support/AlignOf.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/Host.h"
 #include "llvm/Support/SwapByteOrder.h"
 #include <cassert>
 #include <cstddef>
@@ -109,7 +111,7 @@ inline void write(void *memory, value_type value) {
 }
 
 template <typename value_type>
-using make_unsigned_t = std::make_unsigned_t<value_type>;
+using make_unsigned_t = typename std::make_unsigned<value_type>::type;
 
 /// Read a value of a particular endianness from memory, for a location
 /// that starts at the given bit offset within the first byte.
@@ -201,8 +203,9 @@ inline void writeAtBitAlignment(void *memory, value_type value,
 
 namespace detail {
 
-template <typename ValueType, endianness Endian, std::size_t Alignment,
-          std::size_t ALIGN = PickAlignment<ValueType, Alignment>::value>
+template<typename ValueType,
+         endianness Endian,
+         std::size_t Alignment>
 struct packed_endian_specific_integral {
   using value_type = ValueType;
   static constexpr endianness endian = Endian;
@@ -243,9 +246,8 @@ struct packed_endian_specific_integral {
   }
 
 private:
-  struct {
-    alignas(ALIGN) char buffer[sizeof(value_type)];
-  } Value;
+  AlignedCharArray<PickAlignment<value_type, alignment>::value,
+                   sizeof(value_type)> Value;
 
 public:
   struct ref {

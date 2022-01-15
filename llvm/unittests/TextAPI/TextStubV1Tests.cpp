@@ -6,16 +6,32 @@
 //
 //===-----------------------------------------------------------------------===/
 
-#include "TextStubHelpers.h"
-#include "llvm/TextAPI/InterfaceFile.h"
-#include "llvm/TextAPI/TextAPIReader.h"
-#include "llvm/TextAPI/TextAPIWriter.h"
+#include "llvm/TextAPI/MachO/InterfaceFile.h"
+#include "llvm/TextAPI/MachO/TextAPIReader.h"
+#include "llvm/TextAPI/MachO/TextAPIWriter.h"
 #include "gtest/gtest.h"
 #include <string>
 #include <vector>
 
 using namespace llvm;
 using namespace llvm::MachO;
+
+struct ExportedSymbol {
+  SymbolKind Kind;
+  std::string Name;
+  bool WeakDefined;
+  bool ThreadLocalValue;
+};
+using ExportedSymbolSeq = std::vector<ExportedSymbol>;
+
+inline bool operator<(const ExportedSymbol &lhs, const ExportedSymbol &rhs) {
+  return std::tie(lhs.Kind, lhs.Name) < std::tie(rhs.Kind, rhs.Name);
+}
+
+inline bool operator==(const ExportedSymbol &lhs, const ExportedSymbol &rhs) {
+  return std::tie(lhs.Kind, lhs.Name, lhs.WeakDefined, lhs.ThreadLocalValue) ==
+         std::tie(rhs.Kind, rhs.Name, rhs.WeakDefined, rhs.ThreadLocalValue);
+}
 
 static ExportedSymbol TBDv1Symbols[] = {
     {SymbolKind::GlobalSymbol, "$ld$hide$os9.0$_sym1", false, false},
@@ -41,7 +57,7 @@ static ExportedSymbol TBDv1Symbols[] = {
 namespace TBDv1 {
 
 TEST(TBDv1, ReadFile) {
-  static const char TBDv1File1[] =
+  static const char tbd_v1_file1[] =
       "---\n"
       "archs: [ armv7, armv7s, armv7k, arm64 ]\n"
       "platform: ios\n"
@@ -66,19 +82,14 @@ TEST(TBDv1, ReadFile) {
       "    thread-local-symbols: [ _tlv3 ]\n"
       "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1File1, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_file1, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   auto Archs = AK_armv7 | AK_armv7s | AK_armv7k | AK_arm64;
-  auto Platform = PlatformKind::iOS;
-  TargetList Targets;
-  for (auto &&arch : Archs)
-    Targets.emplace_back(Target(arch, Platform));
   EXPECT_EQ(Archs, File->getArchitectures());
-  EXPECT_EQ(File->getPlatforms().size(), 1U);
-  EXPECT_EQ(Platform, *File->getPlatforms().begin());
+  EXPECT_EQ(PlatformKind::iOS, File->getPlatform());
   EXPECT_EQ(std::string("Test.dylib"), File->getInstallName());
   EXPECT_EQ(PackedVersion(2, 3, 4), File->getCurrentVersion());
   EXPECT_EQ(PackedVersion(1, 0, 0), File->getCompatibilityVersion());
@@ -87,8 +98,8 @@ TEST(TBDv1, ReadFile) {
   EXPECT_TRUE(File->isTwoLevelNamespace());
   EXPECT_TRUE(File->isApplicationExtensionSafe());
   EXPECT_FALSE(File->isInstallAPI());
-  InterfaceFileRef client("clientA", Targets);
-  InterfaceFileRef reexport("/usr/lib/libfoo.dylib", Targets);
+  InterfaceFileRef client("clientA", Archs);
+  InterfaceFileRef reexport("/usr/lib/libfoo.dylib", Archs);
   EXPECT_EQ(1U, File->allowableClients().size());
   EXPECT_EQ(client, File->allowableClients().front());
   EXPECT_EQ(1U, File->reexportedLibraries().size());
@@ -98,41 +109,32 @@ TEST(TBDv1, ReadFile) {
   for (const auto *Sym : File->symbols()) {
     EXPECT_FALSE(Sym->isWeakReferenced());
     EXPECT_FALSE(Sym->isUndefined());
-    Exports.emplace_back(
-        ExportedSymbol{Sym->getKind(), std::string(Sym->getName()),
-                       Sym->isWeakDefined(), Sym->isThreadLocalValue()});
+    Exports.emplace_back(ExportedSymbol{Sym->getKind(), Sym->getName(),
+                                        Sym->isWeakDefined(),
+                                        Sym->isThreadLocalValue()});
   }
   llvm::sort(Exports.begin(), Exports.end());
 
   EXPECT_EQ(sizeof(TBDv1Symbols) / sizeof(ExportedSymbol), Exports.size());
   EXPECT_TRUE(
       std::equal(Exports.begin(), Exports.end(), std::begin(TBDv1Symbols)));
-
-  File->addSymbol(SymbolKind::ObjectiveCClassEHType, "Class1", {Targets[1]});
-  File->addSymbol(SymbolKind::ObjectiveCInstanceVariable, "Class1._ivar1",
-                  {Targets[1]});
 }
 
 TEST(TBDv1, ReadFile2) {
-  static const char TBDv1File2[] = "--- !tapi-tbd-v1\n"
-                                   "archs: [ armv7, armv7s, armv7k, arm64 ]\n"
-                                   "platform: ios\n"
-                                   "install-name: Test.dylib\n"
-                                   "...\n";
+  static const char tbd_v1_file2[] = "--- !tapi-tbd-v1\n"
+                                     "archs: [ armv7, armv7s, armv7k, arm64 ]\n"
+                                     "platform: ios\n"
+                                     "install-name: Test.dylib\n"
+                                     "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1File2, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_file2, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   auto Archs = AK_armv7 | AK_armv7s | AK_armv7k | AK_arm64;
-  auto Platform = PlatformKind::iOS;
-  TargetList Targets;
-  for (auto &&arch : Archs)
-    Targets.emplace_back(Target(arch, Platform));
   EXPECT_EQ(Archs, File->getArchitectures());
-  EXPECT_EQ(File->getPlatforms().size(), 1U);
-  EXPECT_EQ(Platform, *File->getPlatforms().begin());
+  EXPECT_EQ(PlatformKind::iOS, File->getPlatform());
   EXPECT_EQ(std::string("Test.dylib"), File->getInstallName());
   EXPECT_EQ(PackedVersion(1, 0, 0), File->getCurrentVersion());
   EXPECT_EQ(PackedVersion(1, 0, 0), File->getCompatibilityVersion());
@@ -145,8 +147,10 @@ TEST(TBDv1, ReadFile2) {
   EXPECT_EQ(0U, File->reexportedLibraries().size());
 }
 
+// Disable test for windows.
+#ifndef _WIN32
 TEST(TBDv1, WriteFile) {
-  static const char TBDv1File3[] =
+  static const char tbd_v1_file3[] =
       "---\n"
       "archs:           [ i386, x86_64 ]\n"
       "platform:        macosx\n"
@@ -169,291 +173,284 @@ TEST(TBDv1, WriteFile) {
       "...\n";
 
   InterfaceFile File;
-  TargetList Targets;
-  for (auto &&arch : AK_i386 | AK_x86_64)
-    Targets.emplace_back(Target(arch, PlatformKind::macOS));
   File.setPath("libfoo.dylib");
   File.setInstallName("/usr/lib/libfoo.dylib");
   File.setFileType(FileType::TBD_V1);
-  File.addTargets(Targets);
+  File.setArchitectures(AK_i386 | AK_x86_64);
+  File.setPlatform(PlatformKind::macOS);
   File.setCurrentVersion(PackedVersion(1, 2, 3));
   File.setSwiftABIVersion(5);
   File.setObjCConstraint(ObjCConstraintType::Retain_Release);
-  File.addAllowableClient("clientA", Targets[1]);
-  File.addReexportedLibrary("/usr/lib/libfoo.dylib", Targets[1]);
-  File.addSymbol(SymbolKind::GlobalSymbol, "_sym1", {Targets[0]});
-  File.addSymbol(SymbolKind::GlobalSymbol, "_sym2", {Targets[0]},
+  File.addAllowableClient("clientA", AK_x86_64);
+  File.addReexportedLibrary("/usr/lib/libfoo.dylib", AK_x86_64);
+  File.addSymbol(SymbolKind::GlobalSymbol, "_sym1", AK_i386);
+  File.addSymbol(SymbolKind::GlobalSymbol, "_sym2", AK_i386,
                  SymbolFlags::WeakDefined);
-  File.addSymbol(SymbolKind::GlobalSymbol, "_sym3", {Targets[0]},
+  File.addSymbol(SymbolKind::GlobalSymbol, "_sym3", AK_i386,
                  SymbolFlags::ThreadLocalValue);
-  File.addSymbol(SymbolKind::ObjectiveCClass, "Class1", {Targets[1]});
-  File.addSymbol(SymbolKind::ObjectiveCClassEHType, "Class1", {Targets[1]});
+  File.addSymbol(SymbolKind::ObjectiveCClass, "Class1", AK_x86_64);
+  File.addSymbol(SymbolKind::ObjectiveCClassEHType, "Class1", AK_x86_64);
   File.addSymbol(SymbolKind::ObjectiveCInstanceVariable, "Class1._ivar1",
-                 {Targets[1]});
+                 AK_x86_64);
 
   SmallString<4096> Buffer;
   raw_svector_ostream OS(Buffer);
-  Error Result = TextAPIWriter::writeToStream(OS, File);
+  auto Result = TextAPIWriter::writeToStream(OS, File);
   EXPECT_FALSE(Result);
-  EXPECT_STREQ(TBDv1File3, Buffer.c_str());
+  EXPECT_STREQ(tbd_v1_file3, Buffer.c_str());
 }
 
 TEST(TBDv1, Platform_macOS) {
-  static const char TBDv1PlatformMacOS[] = "---\n"
-                                           "archs: [ x86_64 ]\n"
-                                           "platform: macosx\n"
-                                           "install-name: Test.dylib\n"
-                                           "...\n";
+  static const char tbd_v1_platform_macos[] = "---\n"
+                                              "archs: [ x86_64 ]\n"
+                                              "platform: macosx\n"
+                                              "install-name: Test.dylib\n"
+                                              "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1PlatformMacOS, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_platform_macos, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  auto Platform = PlatformKind::macOS;
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
-  EXPECT_EQ(File->getPlatforms().size(), 1U);
-  EXPECT_EQ(Platform, *File->getPlatforms().begin());
+  EXPECT_EQ(PlatformKind::macOS, File->getPlatform());
 }
+#endif // _WIN32
 
 TEST(TBDv1, Platform_iOS) {
-  static const char TBDv1PlatformiOS[] = "---\n"
-                                         "archs: [ arm64 ]\n"
-                                         "platform: ios\n"
-                                         "install-name: Test.dylib\n"
-                                         "...\n";
+  static const char tbd_v1_platform_ios[] = "---\n"
+                                            "archs: [ arm64 ]\n"
+                                            "platform: ios\n"
+                                            "install-name: Test.dylib\n"
+                                            "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1PlatformiOS, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_platform_ios, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  auto Platform = PlatformKind::iOS;
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
-  EXPECT_EQ(File->getPlatforms().size(), 1U);
-  EXPECT_EQ(Platform, *File->getPlatforms().begin());
+  EXPECT_EQ(PlatformKind::iOS, File->getPlatform());
 }
 
 TEST(TBDv1, Platform_watchOS) {
-  static const char TBDv1PlatformWatchOS[] = "---\n"
-                                             "archs: [ armv7k ]\n"
-                                             "platform: watchos\n"
-                                             "install-name: Test.dylib\n"
-                                             "...\n";
+  static const char tbd_v1_platform_watchos[] = "---\n"
+                                                "archs: [ armv7k ]\n"
+                                                "platform: watchos\n"
+                                                "install-name: Test.dylib\n"
+                                                "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1PlatformWatchOS, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_platform_watchos, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  auto Platform = PlatformKind::watchOS;
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
-  EXPECT_EQ(File->getPlatforms().size(), 1U);
-  EXPECT_EQ(Platform, *File->getPlatforms().begin());
+  EXPECT_EQ(PlatformKind::watchOS, File->getPlatform());
 }
 
 TEST(TBDv1, Platform_tvOS) {
-  static const char TBDv1PlatformtvOS[] = "---\n"
-                                          "archs: [ arm64 ]\n"
-                                          "platform: tvos\n"
-                                          "install-name: Test.dylib\n"
-                                          "...\n";
+  static const char tbd_v1_platform_tvos[] = "---\n"
+                                             "archs: [ arm64 ]\n"
+                                             "platform: tvos\n"
+                                             "install-name: Test.dylib\n"
+                                             "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1PlatformtvOS, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_platform_tvos, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  auto Platform = PlatformKind::tvOS;
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
-  EXPECT_EQ(File->getPlatforms().size(), 1U);
-  EXPECT_EQ(Platform, *File->getPlatforms().begin());
+  EXPECT_EQ(PlatformKind::tvOS, File->getPlatform());
 }
 
 TEST(TBDv1, Platform_bridgeOS) {
-  static const char TBDv1BridgeOS[] = "---\n"
-                                      "archs: [ armv7k ]\n"
-                                      "platform: bridgeos\n"
-                                      "install-name: Test.dylib\n"
-                                      "...\n";
+  static const char tbd_v1_platform_bridgeos[] = "---\n"
+                                                 "archs: [ armv7k ]\n"
+                                                 "platform: bridgeos\n"
+                                                 "install-name: Test.dylib\n"
+                                                 "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1BridgeOS, "Test.tbd"));
+  auto Buffer =
+      MemoryBuffer::getMemBuffer(tbd_v1_platform_bridgeos, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  auto Platform = PlatformKind::bridgeOS;
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
-  EXPECT_EQ(File->getPlatforms().size(), 1U);
-  EXPECT_EQ(Platform, *File->getPlatforms().begin());
+  EXPECT_EQ(PlatformKind::bridgeOS, File->getPlatform());
 }
 
 TEST(TBDv1, Swift_1_0) {
-  static const char TBDv1Swift1[] = "---\n"
-                                    "archs: [ arm64 ]\n"
-                                    "platform: ios\n"
-                                    "install-name: Test.dylib\n"
-                                    "swift-version: 1.0\n"
-                                    "...\n";
+  static const char tbd_v1_swift_1_0[] = "---\n"
+                                         "archs: [ arm64 ]\n"
+                                         "platform: ios\n"
+                                         "install-name: Test.dylib\n"
+                                         "swift-version: 1.0\n"
+                                         "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1Swift1, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_swift_1_0, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   EXPECT_EQ(1U, File->getSwiftABIVersion());
 }
 
 TEST(TBDv1, Swift_1_1) {
-  static const char TBDv1Swift1dot[] = "---\n"
-                                       "archs: [ arm64 ]\n"
-                                       "platform: ios\n"
-                                       "install-name: Test.dylib\n"
-                                       "swift-version: 1.1\n"
-                                       "...\n";
+  static const char tbd_v1_swift_1_1[] = "---\n"
+                                         "archs: [ arm64 ]\n"
+                                         "platform: ios\n"
+                                         "install-name: Test.dylib\n"
+                                         "swift-version: 1.1\n"
+                                         "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1Swift1dot, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_swift_1_1, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   EXPECT_EQ(2U, File->getSwiftABIVersion());
 }
 
 TEST(TBDv1, Swift_2_0) {
-  static const char TBDv1Swift2[] = "---\n"
-                                    "archs: [ arm64 ]\n"
-                                    "platform: ios\n"
-                                    "install-name: Test.dylib\n"
-                                    "swift-version: 2.0\n"
-                                    "...\n";
+  static const char tbd_v1_swift_2_0[] = "---\n"
+                                         "archs: [ arm64 ]\n"
+                                         "platform: ios\n"
+                                         "install-name: Test.dylib\n"
+                                         "swift-version: 2.0\n"
+                                         "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1Swift2, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_swift_2_0, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   EXPECT_EQ(3U, File->getSwiftABIVersion());
 }
 
 TEST(TBDv1, Swift_3_0) {
-  static const char TBDv1Swift3[] = "---\n"
-                                    "archs: [ arm64 ]\n"
-                                    "platform: ios\n"
-                                    "install-name: Test.dylib\n"
-                                    "swift-version: 3.0\n"
-                                    "...\n";
+  static const char tbd_v1_swift_3_0[] = "---\n"
+                                         "archs: [ arm64 ]\n"
+                                         "platform: ios\n"
+                                         "install-name: Test.dylib\n"
+                                         "swift-version: 3.0\n"
+                                         "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1Swift3, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_swift_3_0, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   EXPECT_EQ(4U, File->getSwiftABIVersion());
 }
 
 TEST(TBDv1, Swift_4_0) {
-  static const char TBDv1Swift4[] = "---\n"
-                                    "archs: [ arm64 ]\n"
-                                    "platform: ios\n"
-                                    "install-name: Test.dylib\n"
-                                    "swift-version: 4.0\n"
-                                    "...\n";
+  static const char tbd_v1_swift_4_0[] = "---\n"
+                                         "archs: [ arm64 ]\n"
+                                         "platform: ios\n"
+                                         "install-name: Test.dylib\n"
+                                         "swift-version: 4.0\n"
+                                         "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1Swift4, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_swift_4_0, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_FALSE(!!Result);
-  std::string ErrorMessage = toString(Result.takeError());
+  auto errorMessage = toString(Result.takeError());
   EXPECT_EQ("malformed file\nTest.tbd:5:16: error: invalid Swift ABI "
             "version.\nswift-version: 4.0\n               ^~~\n",
-            ErrorMessage);
+            errorMessage);
 }
 
 TEST(TBDv1, Swift_5) {
-  static const char TBDv1Swift5[] = "---\n"
-                                    "archs: [ arm64 ]\n"
-                                    "platform: ios\n"
-                                    "install-name: Test.dylib\n"
-                                    "swift-version: 5\n"
-                                    "...\n";
+  static const char tbd_v1_swift_5[] = "---\n"
+                                       "archs: [ arm64 ]\n"
+                                       "platform: ios\n"
+                                       "install-name: Test.dylib\n"
+                                       "swift-version: 5\n"
+                                       "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1Swift5, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_swift_5, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   EXPECT_EQ(5U, File->getSwiftABIVersion());
 }
 
 TEST(TBDv1, Swift_99) {
-  static const char TBDv1Swift99[] = "---\n"
-                                     "archs: [ arm64 ]\n"
-                                     "platform: ios\n"
-                                     "install-name: Test.dylib\n"
-                                     "swift-version: 99\n"
-                                     "...\n";
+  static const char tbd_v1_swift_99[] = "---\n"
+                                        "archs: [ arm64 ]\n"
+                                        "platform: ios\n"
+                                        "install-name: Test.dylib\n"
+                                        "swift-version: 99\n"
+                                        "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1Swift99, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(tbd_v1_swift_99, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
-  TBDFile File = std::move(Result.get());
+  auto File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   EXPECT_EQ(99U, File->getSwiftABIVersion());
 }
 
 TEST(TBDv1, UnknownArchitecture) {
-  static const char TBDv1FileUnknownArch[] = "---\n"
-                                             "archs: [ foo ]\n"
-                                             "platform: macosx\n"
-                                             "install-name: Test.dylib\n"
-                                             "...\n";
+  static const char tbd_v1_file_unknown_architecture[] =
+      "---\n"
+      "archs: [ foo ]\n"
+      "platform: macosx\n"
+      "install-name: Test.dylib\n"
+      "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1FileUnknownArch, "Test.tbd"));
+  auto Buffer =
+      MemoryBuffer::getMemBuffer(tbd_v1_file_unknown_architecture, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_TRUE(!!Result);
 }
 
 TEST(TBDv1, UnknownPlatform) {
-  static const char TBDv1FileUnknownPlatform[] = "---\n"
-                                                 "archs: [ i386 ]\n"
-                                                 "platform: newOS\n"
-                                                 "...\n";
+  static const char tbd_v1_file_unknown_platform[] = "---\n"
+                                                     "archs: [ i386 ]\n"
+                                                     "platform: newOS\n"
+                                                     "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1FileUnknownPlatform, "Test.tbd"));
+  auto Buffer =
+      MemoryBuffer::getMemBuffer(tbd_v1_file_unknown_platform, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_FALSE(!!Result);
-  std::string ErrorMessage = toString(Result.takeError());
+  auto errorMessage = toString(Result.takeError());
   EXPECT_EQ("malformed file\nTest.tbd:3:11: error: unknown platform\nplatform: "
             "newOS\n          ^~~~~\n",
-            ErrorMessage);
+            errorMessage);
 }
 
 TEST(TBDv1, MalformedFile1) {
-  static const char TBDv1FileMalformed1[] = "---\n"
-                                            "archs: [ arm64 ]\n"
-                                            "foobar: \"Unsupported key\"\n"
-                                            "...\n";
+  static const char malformed_file1[] = "---\n"
+                                        "archs: [ arm64 ]\n"
+                                        "foobar: \"Unsupported key\"\n"
+                                        "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1FileMalformed1, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(malformed_file1, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_FALSE(!!Result);
-  std::string ErrorMessage = toString(Result.takeError());
+  auto errorMessage = toString(Result.takeError());
   ASSERT_EQ("malformed file\nTest.tbd:2:1: error: missing required key "
             "'platform'\narchs: [ arm64 ]\n^\n",
-            ErrorMessage);
+            errorMessage);
 }
 
 TEST(TBDv1, MalformedFile2) {
-  static const char TBDv1FileMalformed2[] = "---\n"
-                                            "archs: [ arm64 ]\n"
-                                            "platform: ios\n"
-                                            "install-name: Test.dylib\n"
-                                            "foobar: \"Unsupported key\"\n"
-                                            "...\n";
+  static const char malformed_file2[] = "---\n"
+                                        "archs: [ arm64 ]\n"
+                                        "platform: ios\n"
+                                        "install-name: Test.dylib\n"
+                                        "foobar: \"Unsupported key\"\n"
+                                        "...\n";
 
-  Expected<TBDFile> Result =
-      TextAPIReader::get(MemoryBufferRef(TBDv1FileMalformed2, "Test.tbd"));
+  auto Buffer = MemoryBuffer::getMemBuffer(malformed_file2, "Test.tbd");
+  auto Result = TextAPIReader::get(std::move(Buffer));
   EXPECT_FALSE(!!Result);
-  std::string ErrorMessage = toString(Result.takeError());
+  auto errorMessage = toString(Result.takeError());
   ASSERT_EQ(
-      "malformed file\nTest.tbd:5:1: error: unknown key 'foobar'\nfoobar: "
-      "\"Unsupported key\"\n^~~~~~\n",
-      ErrorMessage);
+      "malformed file\nTest.tbd:5:9: error: unknown key 'foobar'\nfoobar: "
+      "\"Unsupported key\"\n        ^~~~~~~~~~~~~~~~~\n",
+      errorMessage);
 }
 
 } // end namespace TBDv1.

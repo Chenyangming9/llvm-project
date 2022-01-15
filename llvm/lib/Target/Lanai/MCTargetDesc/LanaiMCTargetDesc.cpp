@@ -52,11 +52,11 @@ static MCRegisterInfo *createLanaiMCRegisterInfo(const Triple & /*TT*/) {
 
 static MCSubtargetInfo *
 createLanaiMCSubtargetInfo(const Triple &TT, StringRef CPU, StringRef FS) {
-  std::string CPUName = std::string(CPU);
+  std::string CPUName = CPU;
   if (CPUName.empty())
     CPUName = "generic";
 
-  return createLanaiMCSubtargetInfoImpl(TT, CPUName, /*TuneCPU*/ CPUName, FS);
+  return createLanaiMCSubtargetInfoImpl(TT, CPUName, FS);
 }
 
 static MCStreamer *createMCStreamer(const Triple &T, MCContext &Context,
@@ -123,7 +123,7 @@ static MCInstrAnalysis *createLanaiInstrAnalysis(const MCInstrInfo *Info) {
   return new LanaiMCInstrAnalysis(Info);
 }
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeLanaiTargetMC() {
+extern "C" void LLVMInitializeLanaiTargetMC() {
   // Register the MC asm info.
   RegisterMCAsmInfo<LanaiMCAsmInfo> X(getTheLanaiTarget());
 

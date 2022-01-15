@@ -4,5 +4,7 @@ executable("llvm-profdata") {
     "//llvm/lib/ProfileData",
     "//llvm/lib/Support",
   ]
-  sources = [ "llvm-profdata.cpp" ]
+  sources = [
+    "llvm-profdata.cpp",
+  ]
 }

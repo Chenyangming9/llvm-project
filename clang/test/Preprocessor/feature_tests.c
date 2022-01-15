@@ -25,16 +25,8 @@
 #if !__has_builtin(__builtin_LINE) || \
     !__has_builtin(__builtin_FILE) || \
     !__has_builtin(__builtin_FUNCTION) || \
-    !__has_builtin(__builtin_COLUMN) || \
-    !__has_builtin(__builtin_types_compatible_p)
+    !__has_builtin(__builtin_COLUMN)
 #error Clang should have these
-#endif
-
-// These are C++-only builtins.
-#if __has_builtin(__array_rank) || \
-    __has_builtin(__underlying_type) || \
-    __has_builtin(__is_trivial)
-#error Clang should not have these in C mode
 #endif
 
 #if __has_builtin(__builtin_insanity)

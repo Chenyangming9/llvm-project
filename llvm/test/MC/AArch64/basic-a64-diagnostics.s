@@ -167,9 +167,9 @@
         // MOV alias should not accept any fiddling
         mov x2, xsp, #123
         mov wsp, w27, #0xfff, lsl #12
-// CHECK-ERROR: error: invalid operand for instruction
+// CHECK-ERROR: error: expected compatible register or logical immediate
 // CHECK-ERROR-NEXT:         mov x2, xsp, #123
-// CHECK-ERROR-NEXT:                      ^
+// CHECK-ERROR-NEXT:                 ^
 // CHECK-ERROR-NEXT: error: invalid operand for instruction
 // CHECK-ERROR-NEXT:         mov wsp, w27, #0xfff, lsl #12
 // CHECK-ERROR-NEXT:                       ^
@@ -3216,11 +3216,35 @@
 // CHECK-ERROR:  error: invalid operand for instruction
 // CHECK-ERROR-NEXT:         movz x12, #:abs_g0:sym, lsl #0
 // CHECK-ERROR-NEXT:                                 ^
+// CHECK-ERROR-AARCH64-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-AARCH64-NEXT:         movn x2, #:abs_g0:sym
+// CHECK-ERROR-AARCH64-NEXT:                  ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movk w3, #:abs_g0:sym
+// CHECK-ERROR-NEXT:                  ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movz x3, #:abs_g0_nc:sym
+// CHECK-ERROR-NEXT:                  ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movn x4, #:abs_g0_nc:sym
+// CHECK-ERROR-NEXT:                  ^
 
         movn x2, #:abs_g1:sym
         movk w3, #:abs_g1:sym
         movz x3, #:abs_g1_nc:sym
         movn x4, #:abs_g1_nc:sym
+// CHECK-ERROR-AARCH64: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-AARCH64-NEXT:         movn x2, #:abs_g1:sym
+// CHECK-ERROR-AARCH64-NEXT:                  ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movk w3, #:abs_g1:sym
+// CHECK-ERROR-NEXT:                  ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movz x3, #:abs_g1_nc:sym
+// CHECK-ERROR-NEXT:                  ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movn x4, #:abs_g1_nc:sym
+// CHECK-ERROR-NEXT:                  ^
 
         movz w12, #:abs_g2:sym
         movn x12, #:abs_g2:sym
@@ -3231,13 +3255,28 @@
 // CHECK-ERROR: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
 // CHECK-ERROR-NEXT:         movz w12, #:abs_g2:sym
 // CHECK-ERROR-NEXT:                   ^
+// CHECK-ERROR-AARCH64-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-AARCH64-NEXT:         movn x12, #:abs_g2:sym
+// CHECK-ERROR-AARCH64-NEXT:                   ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movk x13, #:abs_g2:sym
+// CHECK-ERROR-NEXT:                   ^
 // CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
 // CHECK-ERROR-NEXT:         movk w3, #:abs_g2_nc:sym
 // CHECK-ERROR-NEXT:                  ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movz x13, #:abs_g2_nc:sym
+// CHECK-ERROR-NEXT:                   ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movn x24, #:abs_g2_nc:sym
+// CHECK-ERROR-NEXT:                   ^
 
         movn x19, #:abs_g3:sym
         movz w20, #:abs_g3:sym
         movk w21, #:abs_g3:sym
+// CHECK-ERROR-AARCH64: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-AARCH64-NEXT:         movn x19, #:abs_g3:sym
+// CHECK-ERROR-AARCH64-NEXT:                   ^
 // CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
 // CHECK-ERROR-NEXT:         movz w20, #:abs_g3:sym
 // CHECK-ERROR-NEXT:                   ^
@@ -3247,9 +3286,21 @@
 
         movk x19, #:abs_g0_s:sym
         movk w23, #:abs_g0_s:sym
+// CHECK-ERROR: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movk x19, #:abs_g0_s:sym
+// CHECK-ERROR-NEXT:                   ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movk w23, #:abs_g0_s:sym
+// CHECK-ERROR-NEXT:                   ^
 
         movk x19, #:abs_g1_s:sym
         movk w23, #:abs_g1_s:sym
+// CHECK-ERROR: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movk x19, #:abs_g1_s:sym
+// CHECK-ERROR-NEXT:                   ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movk w23, #:abs_g1_s:sym
+// CHECK-ERROR-NEXT:                   ^
 
         movz w2, #:abs_g2_s:sym
         movn w29, #:abs_g2_s:sym
@@ -3260,6 +3311,9 @@
 // CHECK-ERROR-NEXT:                    ^
 // CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
 // CHECK-ERROR-NEXT:         movn w29, #:abs_g2_s:sym
+// CHECK-ERROR-NEXT:                   ^
+// CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
+// CHECK-ERROR-NEXT:         movk x19, #:abs_g2_s:sym
 // CHECK-ERROR-NEXT:                   ^
 // CHECK-ERROR-NEXT: error: {{expected relocated symbol or|immediate must be an}} integer in range [0, 65535]
 // CHECK-ERROR-NEXT:         movk w23, #:abs_g2_s:sym
@@ -3334,16 +3388,16 @@
 // CHECK-ERROR-NEXT:               ^
 
         dsb #-1
-        dsb #17
+        dsb #16
         dsb foo
         dmb #-1
-        dmb #17
+        dmb #16
         dmb foo
 // CHECK-ERROR-NEXT: error: {{Invalid immediate for instruction|barrier operand out of range}}
 // CHECK-ERROR-NEXT:         dsb #-1
 // CHECK-ERROR-NEXT:             ^
 // CHECK-ERROR-NEXT: error: {{Invalid immediate for instruction|barrier operand out of range}}
-// CHECK-ERROR-NEXT:         dsb #17
+// CHECK-ERROR-NEXT:         dsb #16
 // CHECK-ERROR-NEXT:             ^
 // CHECK-ERROR-NEXT: error: invalid barrier option name
 // CHECK-ERROR-NEXT:         dsb foo
@@ -3352,7 +3406,7 @@
 // CHECK-ERROR-NEXT:         dmb #-1
 // CHECK-ERROR-NEXT:             ^
 // CHECK-ERROR-NEXT: error: {{Invalid immediate for instruction|barrier operand out of range}}
-// CHECK-ERROR-NEXT:         dmb #17
+// CHECK-ERROR-NEXT:         dmb #16
 // CHECK-ERROR-NEXT:             ^
 // CHECK-ERROR-NEXT: error: invalid barrier option name
 // CHECK-ERROR-NEXT:         dmb foo
@@ -3375,12 +3429,10 @@
         msr spsel, #-1
         msr spsel #-1
         msr daifclr, #16
-        msr CurrentEL, x12
-// CHECK-ERROR: [[@LINE-5]]:22: error: {{expected|immediate must be an}} integer in range [0, 15]
-// CHECK-ERROR: [[@LINE-5]]:20: error: {{expected|immediate must be an}} integer in range [0, 15]
-// CHECK-ERROR: [[@LINE-5]]:{{9|19}}: error: {{too few operands for instruction|expected comma before next operand|unexpected token in argument list}}
-// CHECK-ERROR: [[@LINE-5]]:22: error: {{expected|immediate must be an}} integer in range [0, 15]
-// CHECK-ERROR: [[@LINE-5]]:13: error: expected writable system register or pstate
+// CHECK-ERROR: [[@LINE-4]]:22: error: {{expected|immediate must be an}} integer in range [0, 15]
+// CHECK-ERROR: [[@LINE-4]]:20: error: {{expected|immediate must be an}} integer in range [0, 15]
+// CHECK-ERROR: [[@LINE-4]]:{{9|19}}: error: {{too few operands for instruction|expected comma before next operand|unexpected token in argument list}}
+// CHECK-ERROR: [[@LINE-4]]:22: error: {{expected|immediate must be an}} integer in range [0, 15]
 
         sys #8, c1, c2, #7, x9
         sys #3, c16, c2, #3, x10
@@ -3583,7 +3635,6 @@
         msr ID_MMFR2_EL1, x12
         msr ID_MMFR3_EL1, x12
         msr ID_MMFR4_EL1, x12
-        msr ID_MMFR5_EL1, x12
         msr ID_ISAR0_EL1, x12
         msr ID_ISAR1_EL1, x12
         msr ID_ISAR2_EL1, x12
@@ -3681,9 +3732,6 @@
 // CHECK-ERROR-NEXT:             ^
 // CHECK-ERROR-NEXT: error: expected writable system register or pstate
 // CHECK-ERROR-NEXT:         msr ID_MMFR4_EL1, x12
-// CHECK-ERROR-NEXT:             ^
-// CHECK-ERROR-NEXT: error: expected writable system register or pstate
-// CHECK-ERROR-NEXT:         msr ID_MMFR5_EL1, x12
 // CHECK-ERROR-NEXT:             ^
 // CHECK-ERROR-NEXT: error: expected writable system register or pstate
 // CHECK-ERROR-NEXT:         msr ID_ISAR0_EL1, x12

@@ -1,5 +1,4 @@
-; ; RUN: opt -analyze -enable-new-pm=0 -scalar-evolution < %s | FileCheck %s
-; ; RUN: opt -disable-output "-passes=print<scalar-evolution>" < %s 2>&1 | FileCheck %s
+; ; RUN: opt -analyze -scalar-evolution < %s | FileCheck %s
 
 define void @infer.sext.0(i1* %c, i32 %start, i32* %buf) {
 ; CHECK-LABEL: Classifying expressions for: @infer.sext.0

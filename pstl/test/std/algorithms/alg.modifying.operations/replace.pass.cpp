@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
 #include "support/pstl_test_config.h"
 
@@ -23,8 +23,7 @@ struct copy_int
 {
     int32_t value;
     int32_t copied_times = 0;
-    constexpr explicit copy_int(int32_t val = 0) : value(val) {}
-    constexpr copy_int(copy_int const& other) : value(other.value), copied_times(other.copied_times) { }
+    constexpr explicit copy_int(int32_t val = 0) : value(val) { }
 
     constexpr copy_int&
     operator=(const copy_int& other)
@@ -83,7 +82,8 @@ struct test_one_policy
     }
 
     template <typename T, typename Iterator1>
-    bool check(Iterator1, Iterator1)
+    bool
+    check(Iterator1, Iterator1)
     {
         return true;
     }
@@ -145,7 +145,7 @@ struct test_non_const
     }
 };
 
-int
+int32_t
 main()
 {
     test<int32_t, float32_t>(__pstl::__internal::__equal_value<int32_t>(666));

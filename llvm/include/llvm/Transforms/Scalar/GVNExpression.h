@@ -240,19 +240,14 @@ public:
   }
 };
 
-class op_inserter {
+class op_inserter
+    : public std::iterator<std::output_iterator_tag, void, void, void, void> {
 private:
   using Container = BasicExpression;
 
   Container *BE;
 
 public:
-  using iterator_category = std::output_iterator_tag;
-  using value_type = void;
-  using difference_type = void;
-  using pointer = void;
-  using reference = void;
-
   explicit op_inserter(BasicExpression &E) : BE(&E) {}
   explicit op_inserter(BasicExpression *E) : BE(E) {}
 
@@ -328,6 +323,7 @@ public:
 class LoadExpression final : public MemoryExpression {
 private:
   LoadInst *Load;
+  unsigned Alignment;
 
 public:
   LoadExpression(unsigned NumOperands, LoadInst *L,
@@ -336,7 +332,9 @@ public:
 
   LoadExpression(enum ExpressionType EType, unsigned NumOperands, LoadInst *L,
                  const MemoryAccess *MemoryLeader)
-      : MemoryExpression(NumOperands, EType, MemoryLeader), Load(L) {}
+      : MemoryExpression(NumOperands, EType, MemoryLeader), Load(L) {
+    Alignment = L ? L->getAlignment() : 0;
+  }
 
   LoadExpression() = delete;
   LoadExpression(const LoadExpression &) = delete;
@@ -349,6 +347,9 @@ public:
 
   LoadInst *getLoadInst() const { return Load; }
   void setLoadInst(LoadInst *L) { Load = L; }
+
+  unsigned getAlignment() const { return Alignment; }
+  void setAlignment(unsigned Align) { Alignment = Align; }
 
   bool equals(const Expression &Other) const override;
   bool exactlyEquals(const Expression &Other) const override {
@@ -477,19 +478,14 @@ public:
   }
 };
 
-class int_op_inserter {
+class int_op_inserter
+    : public std::iterator<std::output_iterator_tag, void, void, void, void> {
 private:
   using Container = AggregateValueExpression;
 
   Container *AVE;
 
 public:
-  using iterator_category = std::output_iterator_tag;
-  using value_type = void;
-  using difference_type = void;
-  using pointer = void;
-  using reference = void;
-
   explicit int_op_inserter(AggregateValueExpression &E) : AVE(&E) {}
   explicit int_op_inserter(AggregateValueExpression *E) : AVE(E) {}
 

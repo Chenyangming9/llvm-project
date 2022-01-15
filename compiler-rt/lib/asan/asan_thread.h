@@ -8,7 +8,7 @@
 //
 // This file is a part of AddressSanitizer, an address sanity checker.
 //
-// ASan-private header for asan_thread.cpp.
+// ASan-private header for asan_thread.cc.
 //===----------------------------------------------------------------------===//
 
 #ifndef ASAN_THREAD_H
@@ -28,11 +28,14 @@ struct DTLS;
 
 namespace __asan {
 
+const u32 kInvalidTid = 0xffffff;  // Must fit into 24 bits.
+const u32 kMaxNumberOfThreads = (1 << 22);  // 4M
+
 class AsanThread;
 
 // These objects are created for every thread and are never deleted,
 // so we can find them by tid even if the thread is long dead.
-class AsanThreadContext final : public ThreadContextBase {
+class AsanThreadContext : public ThreadContextBase {
  public:
   explicit AsanThreadContext(int tid)
       : ThreadContextBase(tid), announced(false),
@@ -66,7 +69,8 @@ class AsanThread {
   struct InitOptions;
   void Init(const InitOptions *options = nullptr);
 
-  thread_return_t ThreadStart(tid_t os_id);
+  thread_return_t ThreadStart(tid_t os_id,
+                              atomic_uintptr_t *signal_thread_is_registered);
 
   uptr stack_top();
   uptr stack_bottom();
@@ -102,18 +106,17 @@ class AsanThread {
   void FinishSwitchFiber(FakeStack *fake_stack_save, uptr *bottom_old,
                          uptr *size_old);
 
-  FakeStack *get_fake_stack() {
-    if (atomic_load(&stack_switching_, memory_order_relaxed))
-      return nullptr;
-    if (reinterpret_cast<uptr>(fake_stack_) <= 1)
-      return nullptr;
-    return fake_stack_;
+  bool has_fake_stack() {
+    return !atomic_load(&stack_switching_, memory_order_relaxed) &&
+           (reinterpret_cast<uptr>(fake_stack_) > 1);
   }
 
-  FakeStack *get_or_create_fake_stack() {
+  FakeStack *fake_stack() {
+    if (!__asan_option_detect_stack_use_after_return)
+      return nullptr;
     if (atomic_load(&stack_switching_, memory_order_relaxed))
       return nullptr;
-    if (reinterpret_cast<uptr>(fake_stack_) <= 1)
+    if (!has_fake_stack())
       return AsyncSignalSafeLazyInitFakeStack();
     return fake_stack_;
   }
@@ -128,8 +131,6 @@ class AsanThread {
   AsanStats &stats() { return stats_; }
 
   void *extra_spill_area() { return &extra_spill_area_; }
-
-  void *get_arg() { return arg_; }
 
  private:
   // NOTE: There is no AsanThread constructor. It is allocated

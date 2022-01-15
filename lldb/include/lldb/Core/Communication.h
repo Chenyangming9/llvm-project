@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_COMMUNICATION_H
-#define LLDB_CORE_COMMUNICATION_H
+#ifndef liblldb_Communication_h_
+#define liblldb_Communication_h_
 
 #include "lldb/Host/HostThread.h"
 #include "lldb/Utility/Broadcaster.h"
@@ -22,8 +22,8 @@
 #include <ratio>
 #include <string>
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace lldb_private {
 class Connection;
@@ -221,7 +221,7 @@ public:
   ///
   /// \see
   ///     class Connection
-  void SetConnection(std::unique_ptr<Connection> connection);
+  void SetConnection(Connection *connection);
 
   /// Starts a read thread whose sole purpose it to read bytes from the
   /// current connection. This function will call connection's read function:
@@ -285,7 +285,7 @@ public:
   ///
   void SynchronizeWithReadThread();
 
-  static std::string ConnectionStatusAsString(lldb::ConnectionStatus status);
+  static const char *ConnectionStatusAsCString(lldb::ConnectionStatus status);
 
   bool GetCloseOnEOF() const { return m_close_on_eof; }
 
@@ -359,10 +359,9 @@ protected:
   size_t GetCachedBytes(void *dst, size_t dst_len);
 
 private:
-  Communication(const Communication &) = delete;
-  const Communication &operator=(const Communication &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(Communication);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_COMMUNICATION_H
+#endif // liblldb_Communication_h_

@@ -15,10 +15,9 @@
 #define LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_ANALYSISMANAGER_H
 
 #include "clang/Analysis/AnalysisDeclContext.h"
-#include "clang/Analysis/PathDiagnostic.h"
-#include "clang/Lex/Preprocessor.h"
 #include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/PathDiagnostic.h"
 #include "clang/StaticAnalyzer/Core/PathDiagnosticConsumers.h"
 
 namespace clang {
@@ -33,7 +32,7 @@ class AnalysisManager : public BugReporterData {
   AnalysisDeclContextManager AnaCtxMgr;
 
   ASTContext &Ctx;
-  Preprocessor &PP;
+  DiagnosticsEngine &Diags;
   const LangOptions &LangOpts;
   PathDiagnosticConsumers PathConsumers;
 
@@ -46,7 +45,7 @@ class AnalysisManager : public BugReporterData {
 public:
   AnalyzerOptions &options;
 
-  AnalysisManager(ASTContext &ctx, Preprocessor &PP,
+  AnalysisManager(ASTContext &ctx, DiagnosticsEngine &diags,
                   const PathDiagnosticConsumers &Consumers,
                   StoreManagerCreator storemgr,
                   ConstraintManagerCreator constraintmgr,
@@ -62,8 +61,6 @@ public:
   AnalysisDeclContextManager& getAnalysisDeclContextManager() {
     return AnaCtxMgr;
   }
-
-  Preprocessor &getPreprocessor() override { return PP; }
 
   StoreManagerCreator getStoreManagerCreator() {
     return CreateStoreMgr;
@@ -85,6 +82,10 @@ public:
 
   SourceManager &getSourceManager() override {
     return getASTContext().getSourceManager();
+  }
+
+  DiagnosticsEngine &getDiagnostic() override {
+    return Diags;
   }
 
   const LangOptions &getLangOpts() const {

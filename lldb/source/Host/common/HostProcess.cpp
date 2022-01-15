@@ -1,4 +1,4 @@
-//===-- HostProcess.cpp ---------------------------------------------------===//
+//===-- HostProcess.cpp -----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -18,7 +18,7 @@ HostProcess::HostProcess() : m_native_process(new HostNativeProcess) {}
 HostProcess::HostProcess(lldb::process_t process)
     : m_native_process(new HostNativeProcess(process)) {}
 
-HostProcess::~HostProcess() = default;
+HostProcess::~HostProcess() {}
 
 Status HostProcess::Terminate() { return m_native_process->Terminate(); }
 

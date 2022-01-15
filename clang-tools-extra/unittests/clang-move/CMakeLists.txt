@@ -1,6 +1,5 @@
 set(LLVM_LINK_COMPONENTS
-  FrontendOpenMP
-  Support
+  support
   )
 
 get_filename_component(INCLUDE_FIXER_SOURCE_DIR
@@ -16,19 +15,16 @@ add_extra_unittest(ClangMoveTests
   ClangMoveTests.cpp
   )
 
-clang_target_link_libraries(ClangMoveTests
+target_link_libraries(ClangMoveTests
   PRIVATE
   clangAST
   clangASTMatchers
   clangBasic
   clangFormat
   clangFrontend
+  clangMove
   clangRewrite
   clangSerialization
   clangTooling
   clangToolingCore
-  )
-target_link_libraries(ClangMoveTests
-  PRIVATE
-  clangMove
   )

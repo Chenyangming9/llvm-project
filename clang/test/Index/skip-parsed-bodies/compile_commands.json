@@ -12,7 +12,7 @@
 {
   "directory": ".",
   "command": "/usr/bin/clang++ -fsyntax-only -fno-ms-compatibility -fno-delayed-template-parsing t3.cpp -DBLAH",
-  "file": "t3.cpp"
+  "file": "t2.cpp"
 }
 ]
 

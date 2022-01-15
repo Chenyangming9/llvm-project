@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERINFOINTERFACE_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERINFOINTERFACE_H
+#ifndef lldb_RegisterInfoInterface_h
+#define lldb_RegisterInfoInterface_h
 
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/lldb-private-types.h"
@@ -22,7 +22,7 @@ class RegisterInfoInterface {
 public:
   RegisterInfoInterface(const lldb_private::ArchSpec &target_arch)
       : m_target_arch(target_arch) {}
-  virtual ~RegisterInfoInterface() = default;
+  virtual ~RegisterInfoInterface() {}
 
   virtual size_t GetGPRSize() const = 0;
 
@@ -61,6 +61,7 @@ public:
     return nullptr;
   }
 
+public:
   // FIXME make private.
   lldb_private::ArchSpec m_target_arch;
 };

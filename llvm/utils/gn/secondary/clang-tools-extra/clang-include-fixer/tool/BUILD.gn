@@ -12,5 +12,7 @@ executable("clang-include-fixer") {
     "//clang/lib/Tooling/Core",
   ]
   include_dirs = [ ".." ]
-  sources = [ "ClangIncludeFixer.cpp" ]
+  sources = [
+    "ClangIncludeFixer.cpp",
+  ]
 }

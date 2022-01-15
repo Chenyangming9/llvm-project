@@ -14,7 +14,6 @@
 #include "llvm/DebugInfo/CodeView/TypeVisitorCallbacks.h"
 #include "llvm/DebugInfo/PDB/Native/RawTypes.h"
 #include "llvm/Support/Allocator.h"
-#include "llvm/Support/BinaryByteStream.h"
 #include "llvm/Support/BinaryItemStream.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Testing/Support/Error.h"
@@ -64,11 +63,11 @@ namespace {
 
 class MockCallbacks : public TypeVisitorCallbacks {
 public:
-  Error visitTypeBegin(CVType &CVR, TypeIndex Index) override {
+  virtual Error visitTypeBegin(CVType &CVR, TypeIndex Index) {
     Indices.push_back(Index);
     return Error::success();
   }
-  Error visitKnownRecord(CVType &CVR, ArrayRecord &AR) override {
+  virtual Error visitKnownRecord(CVType &CVR, ArrayRecord &AR) {
     VisitedRecords.push_back(AR);
     RawRecords.push_back(CVR);
     return Error::success();
@@ -89,7 +88,7 @@ public:
   RandomAccessVisitorTest() {}
 
   static void SetUpTestCase() {
-    GlobalState = std::make_unique<GlobalTestState>();
+    GlobalState = llvm::make_unique<GlobalTestState>();
 
     AppendingTypeTableBuilder Builder(GlobalState->Allocator);
 
@@ -121,7 +120,7 @@ public:
   static void TearDownTestCase() { GlobalState.reset(); }
 
   void SetUp() override {
-    TestState = std::make_unique<PerTestState>();
+    TestState = llvm::make_unique<PerTestState>();
   }
 
   void TearDown() override { TestState.reset(); }

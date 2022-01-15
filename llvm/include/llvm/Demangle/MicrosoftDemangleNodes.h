@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_DEMANGLE_MICROSOFTDEMANGLENODES_H
-#define LLVM_DEMANGLE_MICROSOFTDEMANGLENODES_H
+#ifndef LLVM_SUPPORT_MICROSOFTDEMANGLENODES_H
+#define LLVM_SUPPORT_MICROSOFTDEMANGLENODES_H
 
 #include "llvm/Demangle/DemangleConfig.h"
 #include "llvm/Demangle/StringView.h"
@@ -67,8 +67,6 @@ enum class CallingConv : uint8_t {
   Eabi,
   Vectorcall,
   Regcall,
-  Swift,      // Clang-only
-  SwiftAsync, // Clang-only
 };
 
 enum class ReferenceKind : uint8_t { None, LValueRef, RValueRef };
@@ -77,9 +75,6 @@ enum OutputFlags {
   OF_Default = 0,
   OF_NoCallingConvention = 1,
   OF_NoTagSpecifier = 2,
-  OF_NoAccessSpecifier = 4,
-  OF_NoMemberType = 8,
-  OF_NoReturnType = 16,
 };
 
 // Types
@@ -308,6 +303,8 @@ struct TypeNode : public Node {
     outputPost(OS, Flags);
   }
 
+  void outputQuals(bool SpaceBefore, bool SpaceAfter) const;
+
   Qualifiers Quals = Q_None;
 };
 
@@ -315,8 +312,8 @@ struct PrimitiveTypeNode : public TypeNode {
   explicit PrimitiveTypeNode(PrimitiveKind K)
       : TypeNode(NodeKind::PrimitiveType), PrimKind(K) {}
 
-  void outputPre(OutputStream &OS, OutputFlags Flags) const override;
-  void outputPost(OutputStream &OS, OutputFlags Flags) const override {}
+  void outputPre(OutputStream &OS, OutputFlags Flags) const;
+  void outputPost(OutputStream &OS, OutputFlags Flags) const {}
 
   PrimitiveKind PrimKind;
 };
@@ -476,8 +473,8 @@ struct PointerTypeNode : public TypeNode {
 struct TagTypeNode : public TypeNode {
   explicit TagTypeNode(TagKind Tag) : TypeNode(NodeKind::TagType), Tag(Tag) {}
 
-  void outputPre(OutputStream &OS, OutputFlags Flags) const override;
-  void outputPost(OutputStream &OS, OutputFlags Flags) const override;
+  void outputPre(OutputStream &OS, OutputFlags Flags) const;
+  void outputPost(OutputStream &OS, OutputFlags Flags) const;
 
   QualifiedNameNode *QualifiedName = nullptr;
   TagKind Tag;
@@ -486,8 +483,8 @@ struct TagTypeNode : public TypeNode {
 struct ArrayTypeNode : public TypeNode {
   ArrayTypeNode() : TypeNode(NodeKind::ArrayType) {}
 
-  void outputPre(OutputStream &OS, OutputFlags Flags) const override;
-  void outputPost(OutputStream &OS, OutputFlags Flags) const override;
+  void outputPre(OutputStream &OS, OutputFlags Flags) const;
+  void outputPost(OutputStream &OS, OutputFlags Flags) const;
 
   void outputDimensionsImpl(OutputStream &OS, OutputFlags Flags) const;
   void outputOneDimension(OutputStream &OS, OutputFlags Flags, Node *N) const;
@@ -510,7 +507,7 @@ struct CustomTypeNode : public TypeNode {
   void outputPre(OutputStream &OS, OutputFlags Flags) const override;
   void outputPost(OutputStream &OS, OutputFlags Flags) const override;
 
-  IdentifierNode *Identifier = nullptr;
+  IdentifierNode *Identifier;
 };
 
 struct NodeArrayNode : public Node {
@@ -586,7 +583,7 @@ struct SpecialTableSymbolNode : public SymbolNode {
 
   void output(OutputStream &OS, OutputFlags Flags) const override;
   QualifiedNameNode *TargetName = nullptr;
-  Qualifiers Quals = Qualifiers::Q_None;
+  Qualifiers Quals;
 };
 
 struct LocalStaticGuardVariableNode : public SymbolNode {

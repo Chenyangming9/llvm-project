@@ -28,14 +28,6 @@ CHECK-NEXT:        Time/Date Stamp: 1970-01-01 00:00:00 (0x0)
 CHECK-NEXT:        Major Version: 0
 CHECK-NEXT:        Minor Version: 0
 CHECK-NEXT:        Characteristics: 0
-CHECK-NEXT:        Data [
-CHECK-NEXT:          DataRVA: 0x0
-CHECK-NEXT:          DataSize: 57
-CHECK-NEXT:          Codepage: 0
-CHECK-NEXT:          Reserved: 0
-CHECK-NEXT:          Data (
-CHECK:               )
-CHECK-NEXT:        ]
 CHECK-NEXT:      ]
 CHECK-NEXT:    ]
 CHECK-NEXT:  ]
@@ -53,14 +45,6 @@ CHECK-NEXT:        Time/Date Stamp: 1970-01-01 00:00:00 (0x0)
 CHECK-NEXT:        Major Version: 0
 CHECK-NEXT:        Minor Version: 0
 CHECK-NEXT:        Characteristics: 0
-CHECK-NEXT:        Data [
-CHECK-NEXT:          DataRVA: 0x0
-CHECK-NEXT:          DataSize: 808
-CHECK-NEXT:          Codepage: 0
-CHECK-NEXT:          Reserved: 0
-CHECK-NEXT:          Data (
-CHECK:               )
-CHECK-NEXT:        ]
 CHECK-NEXT:      ]
 CHECK-NEXT:    ]
 CHECK-NEXT:    Name: OKAY [
@@ -73,14 +57,6 @@ CHECK-NEXT:        Time/Date Stamp: 1970-01-01 00:00:00 (0x0)
 CHECK-NEXT:        Major Version: 0
 CHECK-NEXT:        Minor Version: 0
 CHECK-NEXT:        Characteristics: 0
-CHECK-NEXT:        Data [
-CHECK-NEXT:          DataRVA: 0x0
-CHECK-NEXT:          DataSize: 808
-CHECK-NEXT:          Codepage: 0
-CHECK-NEXT:          Reserved: 0
-CHECK-NEXT:          Data (
-CHECK:               )
-CHECK-NEXT:        ]
 CHECK-NEXT:      ]
 CHECK-NEXT:    ]
 CHECK-NEXT:  ]
@@ -98,14 +74,6 @@ CHECK-NEXT:        Time/Date Stamp: 1970-01-01 00:00:00 (0x0)
 CHECK-NEXT:        Major Version: 0
 CHECK-NEXT:        Minor Version: 0
 CHECK-NEXT:        Characteristics: 0
-CHECK-NEXT:        Data [
-CHECK-NEXT:          DataRVA: 0x0
-CHECK-NEXT:          DataSize: 48
-CHECK-NEXT:          Codepage: 0
-CHECK-NEXT:          Reserved: 0
-CHECK-NEXT:          Data (
-CHECK:               )
-CHECK-NEXT:        ]
 CHECK-NEXT:      ]
 CHECK-NEXT:    ]
 CHECK-NEXT:    Name: (ID 14432) [
@@ -118,14 +86,6 @@ CHECK-NEXT:        Time/Date Stamp: 1970-01-01 00:00:00 (0x0)
 CHECK-NEXT:        Major Version: 0
 CHECK-NEXT:        Minor Version: 0
 CHECK-NEXT:        Characteristics: 0
-CHECK-NEXT:        Data [
-CHECK-NEXT:          DataRVA: 0x0
-CHECK-NEXT:          DataSize: 46
-CHECK-NEXT:          Codepage: 0
-CHECK-NEXT:          Reserved: 0
-CHECK-NEXT:          Data (
-CHECK:               )
-CHECK-NEXT:        ]
 CHECK-NEXT:      ]
 CHECK-NEXT:    ]
 CHECK-NEXT:  ]
@@ -143,14 +103,6 @@ CHECK-NEXT:        Time/Date Stamp: 1970-01-01 00:00:00 (0x0)
 CHECK-NEXT:        Major Version: 0
 CHECK-NEXT:        Minor Version: 0
 CHECK-NEXT:        Characteristics: 0
-CHECK-NEXT:        Data [
-CHECK-NEXT:          DataRVA: 0x0
-CHECK-NEXT:          DataSize: 108
-CHECK-NEXT:          Codepage: 0
-CHECK-NEXT:          Reserved: 0
-CHECK-NEXT:          Data (
-CHECK:               )
-CHECK-NEXT:        ]
 CHECK-NEXT:      ]
 CHECK-NEXT:    ]
 CHECK-NEXT:  ]
@@ -168,14 +120,6 @@ CHECK-NEXT:        Time/Date Stamp: 1970-01-01 00:00:00 (0x0)
 CHECK-NEXT:        Major Version: 0
 CHECK-NEXT:        Minor Version: 0
 CHECK-NEXT:        Characteristics: 0
-CHECK-NEXT:        Data [
-CHECK-NEXT:          DataRVA: 0x0
-CHECK-NEXT:          DataSize: 24
-CHECK-NEXT:          Codepage: 0
-CHECK-NEXT:          Reserved: 0
-CHECK-NEXT:          Data (
-CHECK:               )
-CHECK-NEXT:        ]
 CHECK-NEXT:      ]
 CHECK-NEXT:    ]
 CHECK-NEXT:    Name: (ID 12) [
@@ -188,14 +132,6 @@ CHECK-NEXT:        Time/Date Stamp: 1970-01-01 00:00:00 (0x0)
 CHECK-NEXT:        Major Version: 0
 CHECK-NEXT:        Minor Version: 0
 CHECK-NEXT:        Characteristics: 0
-CHECK-NEXT:        Data [
-CHECK-NEXT:          DataRVA: 0x0
-CHECK-NEXT:          DataSize: 24
-CHECK-NEXT:          Codepage: 0
-CHECK-NEXT:          Reserved: 0
-CHECK-NEXT:          Data (
-CHECK:               )
-CHECK-NEXT:        ]
 CHECK-NEXT:      ]
 CHECK-NEXT:    ]
 CHECK-NEXT:  ]

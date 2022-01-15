@@ -39,6 +39,11 @@ a load/store/lve*x sequence.
 
 //===----------------------------------------------------------------------===//
 
+For functions that use altivec AND have calls, we are VRSAVE'ing all call
+clobbered regs.
+
+//===----------------------------------------------------------------------===//
+
 Implement passing vectors by value into calls and receiving them as arguments.
 
 //===----------------------------------------------------------------------===//

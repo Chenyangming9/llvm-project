@@ -86,7 +86,7 @@ if(NOT COMPILER_RT_STANDALONE_BUILD)
       )
     endif()
   endif()
-  if(NOT APPLE AND COMPILER_RT_HAS_LLD AND TARGET lld)
+  if(NOT APPLE AND COMPILER_RT_HAS_LLD)
     list(APPEND CFI_TEST_DEPS
       lld
     )

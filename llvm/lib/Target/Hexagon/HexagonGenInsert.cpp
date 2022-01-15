@@ -29,7 +29,6 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/DebugLoc.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -93,10 +92,6 @@ namespace {
     RegisterSet() = default;
     explicit RegisterSet(unsigned s, bool t = false) : BitVector(s, t) {}
     RegisterSet(const RegisterSet &RS) : BitVector(RS) {}
-    RegisterSet &operator=(const RegisterSet &RS) {
-      BitVector::operator=(RS);
-      return *this;
-    }
 
     using BitVector::clear;
 
@@ -168,11 +163,11 @@ namespace {
     }
 
     static inline unsigned v2x(unsigned v) {
-      return Register::virtReg2Index(v);
+      return TargetRegisterInfo::virtReg2Index(v);
     }
 
     static inline unsigned x2v(unsigned x) {
-      return Register::index2VirtReg(x);
+      return TargetRegisterInfo::index2VirtReg(x);
     }
   };
 
@@ -272,7 +267,7 @@ namespace {
     CellMapShadow(const BitTracker &T) : BT(T) {}
 
     const BitTracker::RegisterCell &lookup(unsigned VR) {
-      unsigned RInd = Register::virtReg2Index(VR);
+      unsigned RInd = TargetRegisterInfo::virtReg2Index(VR);
       // Grow the vector to at least 32 elements.
       if (RInd >= CVect.size())
         CVect.resize(std::max(RInd+16, 32U), nullptr);
@@ -611,9 +606,9 @@ void HexagonGenInsert::buildOrderingMF(RegisterOrdering &RO) const {
       for (unsigned i = 0, n = MI->getNumOperands(); i < n; ++i) {
         const MachineOperand &MO = MI->getOperand(i);
         if (MO.isReg() && MO.isDef()) {
-          Register R = MO.getReg();
+          unsigned R = MO.getReg();
           assert(MO.getSubReg() == 0 && "Unexpected subregister in definition");
-          if (R.isVirtual())
+          if (TargetRegisterInfo::isVirtualRegister(R))
             RO.insert(std::make_pair(R, Index++));
         }
       }
@@ -729,8 +724,8 @@ void HexagonGenInsert::getInstrDefs(const MachineInstr *MI,
     const MachineOperand &MO = MI->getOperand(i);
     if (!MO.isReg() || !MO.isDef())
       continue;
-    Register R = MO.getReg();
-    if (!R.isVirtual())
+    unsigned R = MO.getReg();
+    if (!TargetRegisterInfo::isVirtualRegister(R))
       continue;
     Defs.insert(R);
   }
@@ -742,8 +737,8 @@ void HexagonGenInsert::getInstrUses(const MachineInstr *MI,
     const MachineOperand &MO = MI->getOperand(i);
     if (!MO.isReg() || !MO.isUse())
       continue;
-    Register R = MO.getReg();
-    if (!R.isVirtual())
+    unsigned R = MO.getReg();
+    if (!TargetRegisterInfo::isVirtualRegister(R))
       continue;
     Uses.insert(R);
   }
@@ -1089,7 +1084,9 @@ void HexagonGenInsert::pruneCoveredSets(unsigned VR) {
     auto IsEmpty = [] (const IFRecordWithRegSet &IR) -> bool {
       return IR.second.empty();
     };
-    llvm::erase_if(LL, IsEmpty);
+    auto End = llvm::remove_if(LL, IsEmpty);
+    if (End != LL.end())
+      LL.erase(End, LL.end());
   } else {
     // The definition of VR is constant-extended, and all candidates have
     // empty removable-register sets. Pick the maximum candidate, and remove
@@ -1177,7 +1174,9 @@ void HexagonGenInsert::pruneRegCopies(unsigned VR) {
   auto IsCopy = [] (const IFRecordWithRegSet &IR) -> bool {
     return IR.first.Wdh == 32 && (IR.first.Off == 0 || IR.first.Off == 32);
   };
-  llvm::erase_if(LL, IsCopy);
+  auto End = llvm::remove_if(LL, IsCopy);
+  if (End != LL.end())
+    LL.erase(End, LL.end());
 }
 
 void HexagonGenInsert::pruneCandidates() {
@@ -1400,7 +1399,7 @@ bool HexagonGenInsert::generateInserts() {
   for (IFMapType::iterator I = IFMap.begin(), E = IFMap.end(); I != E; ++I) {
     unsigned VR = I->first;
     const TargetRegisterClass *RC = MRI->getRegClass(VR);
-    Register NewVR = MRI->createVirtualRegister(RC);
+    unsigned NewVR = MRI->createVirtualRegister(RC);
     RegMap[VR] = NewVR;
   }
 
@@ -1478,8 +1477,9 @@ bool HexagonGenInsert::removeDeadCode(MachineDomTreeNode *N) {
     for (const MachineOperand &MO : MI->operands()) {
       if (!MO.isReg() || !MO.isDef())
         continue;
-      Register R = MO.getReg();
-      if (!R.isVirtual() || !MRI->use_nodbg_empty(R)) {
+      unsigned R = MO.getReg();
+      if (!TargetRegisterInfo::isVirtualRegister(R) ||
+          !MRI->use_nodbg_empty(R)) {
         AllDead = false;
         break;
       }
@@ -1598,7 +1598,7 @@ bool HexagonGenInsert::runOnMachineFunction(MachineFunction &MF) {
 
     IterListType Out;
     for (IFMapType::iterator I = IFMap.begin(), E = IFMap.end(); I != E; ++I) {
-      unsigned Idx = Register::virtReg2Index(I->first);
+      unsigned Idx = TargetRegisterInfo::virtReg2Index(I->first);
       if (Idx >= Cutoff)
         Out.push_back(I);
     }

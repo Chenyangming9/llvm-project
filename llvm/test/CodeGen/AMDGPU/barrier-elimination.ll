@@ -1,5 +1,4 @@
 ; RUN: llc -march=amdgcn < %s | FileCheck %s
-; RUN: llc -march=amdgcn < %s -global-isel | FileCheck %s
 
 ; CHECK-LABEL: {{^}}unknown_wgs:
 ; CHECK: s_barrier

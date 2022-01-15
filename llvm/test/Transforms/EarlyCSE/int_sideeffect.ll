@@ -1,4 +1,4 @@
-; RUN: opt -S < %s -early-cse -earlycse-debug-hash | FileCheck %s
+; RUN: opt -S < %s -early-cse | FileCheck %s
 
 declare void @llvm.sideeffect()
 

@@ -9,4 +9,4 @@
 define void @f() #0 {
   unreachable
 }
-attributes #0 = { "frame-pointer"="all" }
+attributes #0 = { "no-frame-pointer-elim"="true" }

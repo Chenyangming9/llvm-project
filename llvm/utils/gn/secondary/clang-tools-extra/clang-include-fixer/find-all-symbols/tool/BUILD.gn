@@ -11,5 +11,7 @@ executable("find-all-symbols") {
     "//clang/lib/Tooling",
   ]
   include_dirs = [ ".." ]
-  sources = [ "FindAllSymbolsMain.cpp" ]
+  sources = [
+    "FindAllSymbolsMain.cpp",
+  ]
 }

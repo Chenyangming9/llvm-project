@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_BREAKPOINT_WATCHPOINT_H
-#define LLDB_BREAKPOINT_WATCHPOINT_H
+#ifndef liblldb_Watchpoint_h_
+#define liblldb_Watchpoint_h_
 
 #include <memory>
 #include <string>
 
-#include "lldb/Breakpoint/StoppointSite.h"
+#include "lldb/Breakpoint/StoppointLocation.h"
 #include "lldb/Breakpoint/WatchpointOptions.h"
 #include "lldb/Symbol/CompilerType.h"
 #include "lldb/Target/Target.h"
@@ -22,7 +22,7 @@
 namespace lldb_private {
 
 class Watchpoint : public std::enable_shared_from_this<Watchpoint>,
-                   public StoppointSite {
+                   public StoppointLocation {
 public:
   class WatchpointEventData : public EventData {
   public:
@@ -54,8 +54,7 @@ public:
     lldb::WatchpointEventType m_watchpoint_event;
     lldb::WatchpointSP m_new_watchpoint_sp;
 
-    WatchpointEventData(const WatchpointEventData &) = delete;
-    const WatchpointEventData &operator=(const WatchpointEventData &) = delete;
+    DISALLOW_COPY_AND_ASSIGN(WatchpointEventData);
   };
 
   Watchpoint(Target &target, lldb::addr_t addr, uint32_t size,
@@ -70,6 +69,7 @@ public:
   // This doesn't really enable/disable the watchpoint.   It is currently just
   // for use in the Process plugin's {Enable,Disable}Watchpoint, which should
   // be used instead.
+  
   void SetEnabled(bool enabled, bool notify = true);
 
   bool IsHardware() const override;
@@ -113,6 +113,10 @@ public:
   ///    If \b true the callback will be run on the private event thread
   ///    before the stop event gets reported.  If false, the callback will get
   ///    handled on the public event thread after the stop has been posted.
+  ///
+  /// \return
+  ///    \b true if the process should stop when you hit the watchpoint.
+  ///    \b false if it should continue.
   void SetCallback(WatchpointHitCallback callback, void *callback_baton,
                    bool is_synchronous = false);
 
@@ -158,9 +162,11 @@ private:
   friend class Target;
   friend class WatchpointList;
 
+  void ResetHitCount() { m_hit_count = 0; }
+
   void ResetHistoricValues() {
-    m_old_value_sp.reset();
-    m_new_value_sp.reset();
+    m_old_value_sp.reset(nullptr);
+    m_new_value_sp.reset(nullptr);
   }
 
   Target &m_target;
@@ -197,16 +203,15 @@ private:
 
   std::unique_ptr<UserExpression> m_condition_up; // The condition to test.
 
-  void SetID(lldb::watch_id_t id) { m_id = id; }
+  void SetID(lldb::watch_id_t id) { m_loc_id = id; }
 
   void SendWatchpointChangedEvent(lldb::WatchpointEventType eventKind);
 
   void SendWatchpointChangedEvent(WatchpointEventData *data);
 
-  Watchpoint(const Watchpoint &) = delete;
-  const Watchpoint &operator=(const Watchpoint &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(Watchpoint);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_BREAKPOINT_WATCHPOINT_H
+#endif // liblldb_Watchpoint_h_

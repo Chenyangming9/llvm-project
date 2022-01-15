@@ -12,8 +12,8 @@
 #include "polly/CodeGen/RuntimeDebugBuilder.h"
 #include "polly/ScopInfo.h"
 #include "llvm/ADT/Triple.h"
-#include "llvm/ADT/Twine.h"
-#include "llvm/IR/IntrinsicsX86.h"
+#include "llvm/IR/Intrinsics.h"
+#include <sstream>
 
 using namespace llvm;
 using namespace polly;
@@ -82,12 +82,13 @@ static void TryRegisterGlobal(Module *M, const char *Name,
 // Generate a unique name that is usable as a LLVM name for a scop to name its
 // performance counter.
 static std::string GetScopUniqueVarname(const Scop &S) {
+  std::stringstream Name;
   std::string EntryString, ExitString;
   std::tie(EntryString, ExitString) = S.getEntryExitStr();
 
-  return (Twine("__polly_perf_in_") + S.getFunction().getName() + "_from__" +
-          EntryString + "__to__" + ExitString)
-      .str();
+  Name << "__polly_perf_in_" << std::string(S.getFunction().getName())
+       << "_from__" << EntryString << "__to__" << ExitString;
+  return Name.str();
 }
 
 void PerfMonitor::addScopCounter() {
@@ -138,12 +139,11 @@ Function *PerfMonitor::insertFinalReporting() {
   // Measure current cycles and compute final timings.
   Function *RDTSCPFn = getRDTSCP();
 
-  Type *Int64Ty = Builder.getInt64Ty();
   Value *CurrentCycles =
       Builder.CreateExtractValue(Builder.CreateCall(RDTSCPFn), {0});
-  Value *CyclesStart = Builder.CreateLoad(Int64Ty, CyclesTotalStartPtr, true);
+  Value *CyclesStart = Builder.CreateLoad(CyclesTotalStartPtr, true);
   Value *CyclesTotal = Builder.CreateSub(CurrentCycles, CyclesStart);
-  Value *CyclesInScops = Builder.CreateLoad(Int64Ty, CyclesInScopsPtr, true);
+  Value *CyclesInScops = Builder.CreateLoad(CyclesInScopsPtr, true);
 
   // Print the runtime information.
   RuntimeDebugBuilder::createCPUPrinter(Builder, "Polly runtime information\n");
@@ -176,12 +176,11 @@ void PerfMonitor::AppendScopReporting() {
   Builder.SetInsertPoint(FinalStartBB);
   ReturnFromFinal->eraseFromParent();
 
-  Type *Int64Ty = Builder.getInt64Ty();
   Value *CyclesInCurrentScop =
-      Builder.CreateLoad(Int64Ty, this->CyclesInCurrentScopPtr, true);
+      Builder.CreateLoad(this->CyclesInCurrentScopPtr, true);
 
   Value *TripCountForCurrentScop =
-      Builder.CreateLoad(Int64Ty, this->TripCountForCurrentScopPtr, true);
+      Builder.CreateLoad(this->TripCountForCurrentScopPtr, true);
 
   std::string EntryName, ExitName;
   std::tie(EntryName, ExitName) = S.getEntryExitStr();
@@ -233,8 +232,7 @@ Function *PerfMonitor::insertInitFunction(Function *FinalReporting) {
   // multiple times. To avoid initializations being run multiple times (and
   // especially to avoid that atExitFn is called more than once), we bail
   // out if the initializer is run more than once.
-  Value *HasRunBefore =
-      Builder.CreateLoad(Builder.getInt1Ty(), AlreadyInitializedPtr);
+  Value *HasRunBefore = Builder.CreateLoad(AlreadyInitializedPtr);
   Builder.CreateCondBr(HasRunBefore, EarlyReturn, InitBB);
   Builder.SetInsertPoint(EarlyReturn);
   Builder.CreateRetVoid();
@@ -279,23 +277,20 @@ void PerfMonitor::insertRegionEnd(Instruction *InsertBefore) {
 
   Builder.SetInsertPoint(InsertBefore);
   Function *RDTSCPFn = getRDTSCP();
-  Type *Int64Ty = Builder.getInt64Ty();
-  LoadInst *CyclesStart =
-      Builder.CreateLoad(Int64Ty, CyclesInScopStartPtr, true);
+  LoadInst *CyclesStart = Builder.CreateLoad(CyclesInScopStartPtr, true);
   Value *CurrentCycles =
       Builder.CreateExtractValue(Builder.CreateCall(RDTSCPFn), {0});
   Value *CyclesInScop = Builder.CreateSub(CurrentCycles, CyclesStart);
-  Value *CyclesInScops = Builder.CreateLoad(Int64Ty, CyclesInScopsPtr, true);
+  Value *CyclesInScops = Builder.CreateLoad(CyclesInScopsPtr, true);
   CyclesInScops = Builder.CreateAdd(CyclesInScops, CyclesInScop);
   Builder.CreateStore(CyclesInScops, CyclesInScopsPtr, true);
 
-  Value *CyclesInCurrentScop =
-      Builder.CreateLoad(Int64Ty, CyclesInCurrentScopPtr, true);
+  Value *CyclesInCurrentScop = Builder.CreateLoad(CyclesInCurrentScopPtr, true);
   CyclesInCurrentScop = Builder.CreateAdd(CyclesInCurrentScop, CyclesInScop);
   Builder.CreateStore(CyclesInCurrentScop, CyclesInCurrentScopPtr, true);
 
   Value *TripCountForCurrentScop =
-      Builder.CreateLoad(Int64Ty, TripCountForCurrentScopPtr, true);
+      Builder.CreateLoad(TripCountForCurrentScopPtr, true);
   TripCountForCurrentScop =
       Builder.CreateAdd(TripCountForCurrentScop, Builder.getInt64(1));
   Builder.CreateStore(TripCountForCurrentScop, TripCountForCurrentScopPtr,

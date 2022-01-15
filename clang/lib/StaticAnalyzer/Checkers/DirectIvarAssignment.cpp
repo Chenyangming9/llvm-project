@@ -144,8 +144,6 @@ void DirectIvarAssignment::checkASTDecl(const ObjCImplementationDecl *D,
       continue;
 
     const Stmt *Body = M->getBody();
-    if (M->isSynthesizedAccessorStub())
-      continue;
     assert(Body);
 
     MethodCrawler MC(IvarToPropMap, M->getCanonicalDecl(), InterD, BR, this,
@@ -219,12 +217,19 @@ static bool AttrFilter(const ObjCMethodDecl *M) {
 // Register the checker that checks for direct accesses in all functions,
 // except for the initialization and copy routines.
 void ento::registerDirectIvarAssignment(CheckerManager &mgr) {
-  auto Chk = mgr.registerChecker<DirectIvarAssignment>();
-  if (mgr.getAnalyzerOptions().getCheckerBooleanOption(Chk,
-                                                       "AnnotatedFunctions"))
-    Chk->ShouldSkipMethod = &AttrFilter;
+  mgr.registerChecker<DirectIvarAssignment>();
 }
 
-bool ento::shouldRegisterDirectIvarAssignment(const CheckerManager &mgr) {
+bool ento::shouldRegisterDirectIvarAssignment(const LangOptions &LO) {
+  return true;
+}
+
+void ento::registerDirectIvarAssignmentForAnnotatedFunctions(
+    CheckerManager &mgr) {
+  mgr.getChecker<DirectIvarAssignment>()->ShouldSkipMethod = &AttrFilter;
+}
+
+bool ento::shouldRegisterDirectIvarAssignmentForAnnotatedFunctions(
+                                                        const LangOptions &LO) {
   return true;
 }

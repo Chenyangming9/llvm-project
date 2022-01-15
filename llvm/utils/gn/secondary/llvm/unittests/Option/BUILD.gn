@@ -13,7 +13,6 @@ unittest("OptionTests") {
     "//llvm/lib/Support",
   ]
   sources = [
-    "OptionMarshallingTest.cpp",
     "OptionParsingTest.cpp",
   ]
 }

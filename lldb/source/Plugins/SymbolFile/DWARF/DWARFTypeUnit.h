@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_SYMBOLFILE_DWARF_DWARFTYPEUNIT_H
-#define LLDB_SOURCE_PLUGINS_SYMBOLFILE_DWARF_DWARFTYPEUNIT_H
+#ifndef SymbolFileDWARF_DWARFTypeUnit_h_
+#define SymbolFileDWARF_DWARFTypeUnit_h_
 
 #include "DWARFUnit.h"
 #include "llvm/Support/Error.h"
@@ -28,10 +28,10 @@ private:
   DWARFTypeUnit(SymbolFileDWARF &dwarf, lldb::user_id_t uid,
                 const DWARFUnitHeader &header,
                 const DWARFAbbreviationDeclarationSet &abbrevs,
-                DIERef::Section section, bool is_dwo)
-      : DWARFUnit(dwarf, uid, header, abbrevs, section, is_dwo) {}
+                DIERef::Section section)
+      : DWARFUnit(dwarf, uid, header, abbrevs, section) {}
 
   friend class DWARFUnit;
 };
 
-#endif // LLDB_SOURCE_PLUGINS_SYMBOLFILE_DWARF_DWARFTYPEUNIT_H
+#endif // SymbolFileDWARF_DWARFTypeUnit_h_

@@ -31,7 +31,7 @@ class raw_pwrite_stream;
   public:
     virtual ~MCWinCOFFObjectTargetWriter() = default;
 
-    Triple::ObjectFormatType getFormat() const override { return Triple::COFF; }
+    virtual Triple::ObjectFormatType getFormat() const { return Triple::COFF; }
     static bool classof(const MCObjectTargetWriter *W) {
       return W->getFormat() == Triple::COFF;
     }

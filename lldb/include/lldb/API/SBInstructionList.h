@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_API_SBINSTRUCTIONLIST_H
-#define LLDB_API_SBINSTRUCTIONLIST_H
+#ifndef LLDB_SBInstructionList_h_
+#define LLDB_SBInstructionList_h_
 
 #include "lldb/API/SBDefines.h"
 
-#include <cstdio>
+#include <stdio.h>
 
 namespace lldb {
 
@@ -46,10 +46,6 @@ public:
 
   void Print(FILE *out);
 
-  void Print(SBFile out);
-
-  void Print(FileSP out);
-
   bool GetDescription(lldb::SBStream &description);
 
   bool DumpEmulationForAllInstructions(const char *triple);
@@ -60,8 +56,6 @@ protected:
   friend class SBTarget;
 
   void SetDisassembler(const lldb::DisassemblerSP &opaque_sp);
-  bool GetDescription(lldb_private::Stream &description);
-
 
 private:
   lldb::DisassemblerSP m_opaque_sp;
@@ -69,4 +63,4 @@ private:
 
 } // namespace lldb
 
-#endif // LLDB_API_SBINSTRUCTIONLIST_H
+#endif // LLDB_SBInstructionList_h_

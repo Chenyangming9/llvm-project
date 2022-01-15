@@ -1,4 +1,4 @@
-//===-- ObjectFileJIT.cpp -------------------------------------------------===//
+//===-- ObjectFileJIT.cpp ---------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -38,10 +38,6 @@
 
 using namespace lldb;
 using namespace lldb_private;
-
-LLDB_PLUGIN_DEFINE(ObjectFileJIT)
-
-char ObjectFileJIT::ID;
 
 void ObjectFileJIT::Initialize() {
   PluginManager::RegisterPlugin(GetPluginNameStatic(),
@@ -100,7 +96,7 @@ ObjectFileJIT::ObjectFileJIT(const lldb::ModuleSP &module_sp,
   }
 }
 
-ObjectFileJIT::~ObjectFileJIT() = default;
+ObjectFileJIT::~ObjectFileJIT() {}
 
 bool ObjectFileJIT::ParseHeader() {
   // JIT code is never in a file, nor is it required to have any header
@@ -120,7 +116,7 @@ Symtab *ObjectFileJIT::GetSymtab() {
   if (module_sp) {
     std::lock_guard<std::recursive_mutex> guard(module_sp->GetMutex());
     if (m_symtab_up == nullptr) {
-      m_symtab_up = std::make_unique<Symtab>(this);
+      m_symtab_up.reset(new Symtab(this));
       std::lock_guard<std::recursive_mutex> symtab_guard(
           m_symtab_up->GetMutex());
       ObjectFileJITDelegateSP delegate_sp(m_delegate_wp.lock());
@@ -139,7 +135,7 @@ bool ObjectFileJIT::IsStripped() {
 
 void ObjectFileJIT::CreateSections(SectionList &unified_section_list) {
   if (!m_sections_up) {
-    m_sections_up = std::make_unique<SectionList>();
+    m_sections_up.reset(new SectionList());
     ObjectFileJITDelegateSP delegate_sp(m_delegate_wp.lock());
     if (delegate_sp) {
       delegate_sp->PopulateSectionList(this, *m_sections_up);
@@ -163,8 +159,7 @@ void ObjectFileJIT::Dump(Stream *s) {
 
     SectionList *sections = GetSectionList();
     if (sections)
-      sections->Dump(s->AsRawOstream(), s->GetIndentLevel(), nullptr, true,
-                     UINT32_MAX);
+      sections->Dump(s, nullptr, true, UINT32_MAX);
 
     if (m_symtab_up)
       m_symtab_up->Dump(s, nullptr, eSortOrderNone);

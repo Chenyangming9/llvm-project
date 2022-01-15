@@ -19,7 +19,7 @@
 ---
 name:            test
 # CHECK-LABEL: name:  test
-alignment:       16
+alignment:       4
 legalized:       true
 regBankSelected: true
 registers:

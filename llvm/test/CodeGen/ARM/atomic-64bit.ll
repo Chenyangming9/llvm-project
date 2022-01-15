@@ -2,8 +2,6 @@
 ; RUN: llc < %s -mtriple=thumbv7-none-linux-gnueabihf | FileCheck %s --check-prefix=CHECK-THUMB --check-prefix=CHECK-THUMB-LE
 ; RUN: llc < %s -mtriple=armebv7 -target-abi apcs | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-BE
 ; RUN: llc < %s -mtriple=thumbebv7-none-linux-gnueabihf | FileCheck %s --check-prefix=CHECK-THUMB --check-prefix=CHECK-THUMB-BE
-; RUN: llc < %s -mtriple=armv7m--none-eabi | FileCheck %s --check-prefix=CHECK-M
-; RUN: llc < %s -mtriple=armv8m--none-eabi | FileCheck %s --check-prefix=CHECK-M
 
 define i64 @test1(i64* %ptr, i64 %val) {
 ; CHECK-LABEL: test1:
@@ -29,8 +27,6 @@ define i64 @test1(i64* %ptr, i64 %val) {
 ; CHECK-THUMB: cmp
 ; CHECK-THUMB: bne
 ; CHECK-THUMB: dmb {{ish$}}
-
-; CHECK-M: __sync_fetch_and_add_8
 
   %r = atomicrmw add i64* %ptr, i64 %val seq_cst
   ret i64 %r
@@ -61,8 +57,6 @@ define i64 @test2(i64* %ptr, i64 %val) {
 ; CHECK-THUMB: bne
 ; CHECK-THUMB: dmb {{ish$}}
 
-; CHECK-M: __sync_fetch_and_sub_8
-
   %r = atomicrmw sub i64* %ptr, i64 %val seq_cst
   ret i64 %r
 }
@@ -91,8 +85,6 @@ define i64 @test3(i64* %ptr, i64 %val) {
 ; CHECK-THUMB: cmp
 ; CHECK-THUMB: bne
 ; CHECK-THUMB: dmb {{ish$}}
-
-; CHECK-M: __sync_fetch_and_and_8
 
   %r = atomicrmw and i64* %ptr, i64 %val seq_cst
   ret i64 %r
@@ -123,8 +115,6 @@ define i64 @test4(i64* %ptr, i64 %val) {
 ; CHECK-THUMB: bne
 ; CHECK-THUMB: dmb {{ish$}}
 
-; CHECK-M: __sync_fetch_and_or_8
-
   %r = atomicrmw or i64* %ptr, i64 %val seq_cst
   ret i64 %r
 }
@@ -154,8 +144,6 @@ define i64 @test5(i64* %ptr, i64 %val) {
 ; CHECK-THUMB: bne
 ; CHECK-THUMB: dmb {{ish$}}
 
-; CHECK-M: __sync_fetch_and_xor_8
-
   %r = atomicrmw xor i64* %ptr, i64 %val seq_cst
   ret i64 %r
 }
@@ -176,8 +164,6 @@ define i64 @test6(i64* %ptr, i64 %val) {
 ; CHECK-THUMB: cmp
 ; CHECK-THUMB: bne
 ; CHECK-THUMB: dmb {{ish$}}
-
-; CHECK-M: __sync_lock_test_and_set_8
 
   %r = atomicrmw xchg i64* %ptr, i64 %val seq_cst
   ret i64 %r
@@ -213,15 +199,12 @@ define i64 @test7(i64* %ptr, i64 %val1, i64 %val2) {
 ; CHECK-THUMB: beq
 ; CHECK-THUMB: dmb {{ish$}}
 
-; CHECK-M: __sync_val_compare_and_swap_8
-
   %pair = cmpxchg i64* %ptr, i64 %val1, i64 %val2 seq_cst seq_cst
   %r = extractvalue { i64, i1 } %pair, 0
   ret i64 %r
 }
 
-; Compiles down to a single ldrexd, except on M class devices where ldrexd
-; isn't supported.
+; Compiles down to a single ldrexd
 define i64 @test8(i64* %ptr) {
 ; CHECK-LABEL: test8:
 ; CHECK: ldrexd [[REG1:(r[0-9]?[02468])]], [[REG2:(r[0-9]?[13579])]]
@@ -237,15 +220,12 @@ define i64 @test8(i64* %ptr) {
 ; CHECK-THUMB-NOT: strexd
 ; CHECK-THUMB: dmb {{ish$}}
 
-; CHECK-M: __sync_val_compare_and_swap_8
-
   %r = load atomic i64, i64* %ptr seq_cst, align 8
   ret i64 %r
 }
 
 ; Compiles down to atomicrmw xchg; there really isn't any more efficient
-; way to write it. Except on M class devices, where ldrexd/strexd aren't
-; supported.
+; way to write it.
 define void @test9(i64* %ptr, i64 %val) {
 ; CHECK-LABEL: test9:
 ; CHECK: dmb {{ish$}}
@@ -262,8 +242,6 @@ define void @test9(i64* %ptr, i64 %val) {
 ; CHECK-THUMB: cmp
 ; CHECK-THUMB: bne
 ; CHECK-THUMB: dmb {{ish$}}
-
-; CHECK-M: __sync_lock_test_and_set_8
 
   store atomic i64 %val, i64* %ptr seq_cst, align 8
   ret void
@@ -308,8 +286,6 @@ define i64 @test10(i64* %ptr, i64 %val) {
 ; CHECK-THUMB: bne
 ; CHECK-THUMB: dmb {{ish$}}
 
-; CHECK-M: __sync_fetch_and_min_8
-
   %r = atomicrmw min i64* %ptr, i64 %val seq_cst
   ret i64 %r
 }
@@ -352,8 +328,6 @@ define i64 @test11(i64* %ptr, i64 %val) {
 ; CHECK-THUMB: cmp
 ; CHECK-THUMB: bne
 ; CHECK-THUMB: dmb {{ish$}}
-
-; CHECK-M: __sync_fetch_and_umin_8
 
   %r = atomicrmw umin i64* %ptr, i64 %val seq_cst
   ret i64 %r
@@ -398,8 +372,6 @@ define i64 @test12(i64* %ptr, i64 %val) {
 ; CHECK-THUMB: bne
 ; CHECK-THUMB: dmb {{ish$}}
 
-; CHECK-M: __sync_fetch_and_max_8
-
   %r = atomicrmw max i64* %ptr, i64 %val seq_cst
   ret i64 %r
 }
@@ -442,9 +414,6 @@ define i64 @test13(i64* %ptr, i64 %val) {
 ; CHECK-THUMB: cmp
 ; CHECK-THUMB: bne
 ; CHECK-THUMB: dmb {{ish$}}
-
-; CHECK-M: __sync_fetch_and_umax_8
-
   %r = atomicrmw umax i64* %ptr, i64 %val seq_cst
   ret i64 %r
 }

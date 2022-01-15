@@ -47,7 +47,8 @@ void Builtin::Context::InitializeTarget(const TargetInfo &Target,
     AuxTSRecords = AuxTarget->getTargetBuiltins();
 }
 
-bool Builtin::Context::isBuiltinFunc(llvm::StringRef FuncName) {
+bool Builtin::Context::isBuiltinFunc(const char *Name) {
+  StringRef FuncName(Name);
   for (unsigned i = Builtin::NotBuiltin + 1; i != Builtin::FirstTSBuiltin; ++i)
     if (FuncName.equals(BuiltinInfo[i].Name))
       return strchr(BuiltinInfo[i].Attributes, 'f') != nullptr;
@@ -60,8 +61,6 @@ bool Builtin::Context::builtinIsSupported(const Builtin::Info &BuiltinInfo,
   bool BuiltinsUnsupported =
       (LangOpts.NoBuiltin || LangOpts.isNoBuiltinFunc(BuiltinInfo.Name)) &&
       strchr(BuiltinInfo.Attributes, 'f');
-  bool CorBuiltinsUnsupported =
-      !LangOpts.Coroutines && (BuiltinInfo.Langs & COR_LANG);
   bool MathBuiltinsUnsupported =
     LangOpts.NoMathBuiltin && BuiltinInfo.HeaderName &&
     llvm::StringRef(BuiltinInfo.HeaderName).equals("math.h");
@@ -77,14 +76,12 @@ bool Builtin::Context::builtinIsSupported(const Builtin::Info &BuiltinInfo,
   bool OclCUnsupported = !LangOpts.OpenCL &&
                          (BuiltinInfo.Langs & ALL_OCLC_LANGUAGES);
   bool OpenMPUnsupported = !LangOpts.OpenMP && BuiltinInfo.Langs == OMP_LANG;
-  bool CUDAUnsupported = !LangOpts.CUDA && BuiltinInfo.Langs == CUDA_LANG;
   bool CPlusPlusUnsupported =
       !LangOpts.CPlusPlus && BuiltinInfo.Langs == CXX_LANG;
-  return !BuiltinsUnsupported && !CorBuiltinsUnsupported &&
-         !MathBuiltinsUnsupported && !OclCUnsupported && !OclC1Unsupported &&
-         !OclC2Unsupported && !OpenMPUnsupported && !GnuModeUnsupported &&
-         !MSModeUnsupported && !ObjCUnsupported && !CPlusPlusUnsupported &&
-         !CUDAUnsupported;
+  return !BuiltinsUnsupported && !MathBuiltinsUnsupported && !OclCUnsupported &&
+         !OclC1Unsupported && !OclC2Unsupported && !OpenMPUnsupported &&
+         !GnuModeUnsupported && !MSModeUnsupported && !ObjCUnsupported &&
+         !CPlusPlusUnsupported;
 }
 
 /// initializeBuiltins - Mark the identifiers for all the builtins with their
@@ -107,6 +104,10 @@ void Builtin::Context::initializeBuiltins(IdentifierTable &Table,
   for (unsigned i = 0, e = AuxTSRecords.size(); i != e; ++i)
     Table.get(AuxTSRecords[i].Name)
         .setBuiltinID(i + Builtin::FirstTSBuiltin + TSRecords.size());
+}
+
+void Builtin::Context::forgetBuiltin(unsigned ID, IdentifierTable &Table) {
+  Table.get(getRecord(ID).Name).setBuiltinID(0);
 }
 
 unsigned Builtin::Context::getRequiredVectorWidth(unsigned ID) const {

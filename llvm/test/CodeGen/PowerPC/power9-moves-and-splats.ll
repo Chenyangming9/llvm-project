@@ -61,12 +61,16 @@ entry:
 define <4 x i32> @test4(i32* nocapture readonly %in) {
 ; CHECK-LABEL: test4:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    lxvwsx v2, 0, r3
+; CHECK-NEXT:    lfiwzx f0, 0, r3
+; CHECK-NEXT:    xxpermdi vs0, f0, f0, 2
+; CHECK-NEXT:    xxspltw v2, vs0, 3
 ; CHECK-NEXT:    blr
 ;
 ; CHECK-BE-LABEL: test4:
 ; CHECK-BE:       # %bb.0: # %entry
-; CHECK-BE-NEXT:    lxvwsx v2, 0, r3
+; CHECK-BE-NEXT:    lfiwzx f0, 0, r3
+; CHECK-BE-NEXT:    xxsldwi vs0, f0, f0, 1
+; CHECK-BE-NEXT:    xxspltw v2, vs0, 0
 ; CHECK-BE-NEXT:    blr
 
 entry:
@@ -79,12 +83,16 @@ entry:
 define <4 x float> @test5(float* nocapture readonly %in) {
 ; CHECK-LABEL: test5:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    lxvwsx v2, 0, r3
+; CHECK-NEXT:    lfiwzx f0, 0, r3
+; CHECK-NEXT:    xxpermdi vs0, f0, f0, 2
+; CHECK-NEXT:    xxspltw v2, vs0, 3
 ; CHECK-NEXT:    blr
 ;
 ; CHECK-BE-LABEL: test5:
 ; CHECK-BE:       # %bb.0: # %entry
-; CHECK-BE-NEXT:    lxvwsx v2, 0, r3
+; CHECK-BE-NEXT:    lfiwzx f0, 0, r3
+; CHECK-BE-NEXT:    xxsldwi vs0, f0, f0, 1
+; CHECK-BE-NEXT:    xxspltw v2, vs0, 0
 ; CHECK-BE-NEXT:    blr
 
 entry:
@@ -99,14 +107,18 @@ define <4 x i32> @test6() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    addis r3, r2, .LC0@toc@ha
 ; CHECK-NEXT:    ld r3, .LC0@toc@l(r3)
-; CHECK-NEXT:    lxvwsx v2, 0, r3
+; CHECK-NEXT:    lfiwzx f0, 0, r3
+; CHECK-NEXT:    xxpermdi vs0, f0, f0, 2
+; CHECK-NEXT:    xxspltw v2, vs0, 3
 ; CHECK-NEXT:    blr
 ;
 ; CHECK-BE-LABEL: test6:
 ; CHECK-BE:       # %bb.0: # %entry
 ; CHECK-BE-NEXT:    addis r3, r2, .LC0@toc@ha
 ; CHECK-BE-NEXT:    ld r3, .LC0@toc@l(r3)
-; CHECK-BE-NEXT:    lxvwsx v2, 0, r3
+; CHECK-BE-NEXT:    lfiwzx f0, 0, r3
+; CHECK-BE-NEXT:    xxsldwi vs0, f0, f0, 1
+; CHECK-BE-NEXT:    xxspltw v2, vs0, 0
 ; CHECK-BE-NEXT:    blr
 
 entry:
@@ -121,14 +133,18 @@ define <4 x float> @test7() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    addis r3, r2, .LC1@toc@ha
 ; CHECK-NEXT:    ld r3, .LC1@toc@l(r3)
-; CHECK-NEXT:    lxvwsx v2, 0, r3
+; CHECK-NEXT:    lfiwzx f0, 0, r3
+; CHECK-NEXT:    xxpermdi vs0, f0, f0, 2
+; CHECK-NEXT:    xxspltw v2, vs0, 3
 ; CHECK-NEXT:    blr
 ;
 ; CHECK-BE-LABEL: test7:
 ; CHECK-BE:       # %bb.0: # %entry
 ; CHECK-BE-NEXT:    addis r3, r2, .LC1@toc@ha
 ; CHECK-BE-NEXT:    ld r3, .LC1@toc@l(r3)
-; CHECK-BE-NEXT:    lxvwsx v2, 0, r3
+; CHECK-BE-NEXT:    lfiwzx f0, 0, r3
+; CHECK-BE-NEXT:    xxsldwi vs0, f0, f0, 1
+; CHECK-BE-NEXT:    xxspltw v2, vs0, 0
 ; CHECK-BE-NEXT:    blr
 
 entry:
@@ -201,12 +217,12 @@ entry:
 define <16 x i8> @test12() {
 ; CHECK-LABEL: test12:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    xxleqv v2, v2, v2
+; CHECK-NEXT:    xxspltib v2, 255
 ; CHECK-NEXT:    blr
 ;
 ; CHECK-BE-LABEL: test12:
 ; CHECK-BE:       # %bb.0: # %entry
-; CHECK-BE-NEXT:    xxleqv v2, v2, v2
+; CHECK-BE-NEXT:    xxspltib v2, 255
 ; CHECK-BE-NEXT:    blr
 
 entry:
@@ -247,18 +263,16 @@ define <4 x i32> @test14(<4 x i32> %a, i32* nocapture readonly %b) {
 ; CHECK-LABEL: test14:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lwz r3, 0(r5)
-; CHECK-NEXT:    mtfprwz f0, r3
+; CHECK-NEXT:    mtvsrws v2, r3
 ; CHECK-NEXT:    addi r3, r3, 5
-; CHECK-NEXT:    xxspltw v2, vs0, 1
 ; CHECK-NEXT:    stw r3, 0(r5)
 ; CHECK-NEXT:    blr
 ;
 ; CHECK-BE-LABEL: test14:
 ; CHECK-BE:       # %bb.0: # %entry
 ; CHECK-BE-NEXT:    lwz r3, 0(r5)
-; CHECK-BE-NEXT:    mtfprwz f0, r3
+; CHECK-BE-NEXT:    mtvsrws v2, r3
 ; CHECK-BE-NEXT:    addi r3, r3, 5
-; CHECK-BE-NEXT:    xxspltw v2, vs0, 1
 ; CHECK-BE-NEXT:    stw r3, 0(r5)
 ; CHECK-BE-NEXT:    blr
 

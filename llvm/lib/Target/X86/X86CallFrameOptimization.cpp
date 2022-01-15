@@ -17,7 +17,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/X86BaseInfo.h"
-#include "X86.h"
 #include "X86FrameLowering.h"
 #include "X86InstrInfo.h"
 #include "X86MachineFunctionInfo.h"
@@ -105,7 +104,7 @@ private:
   void adjustCallSequence(MachineFunction &MF, const CallContext &Context);
 
   MachineInstr *canFoldIntoRegPush(MachineBasicBlock::iterator FrameSetup,
-                                   Register Reg);
+                                   unsigned Reg);
 
   enum InstClassification { Convert, Skip, Exit };
 
@@ -116,12 +115,12 @@ private:
 
   StringRef getPassName() const override { return "X86 Optimize Call Frame"; }
 
-  const X86InstrInfo *TII = nullptr;
-  const X86FrameLowering *TFL = nullptr;
-  const X86Subtarget *STI = nullptr;
-  MachineRegisterInfo *MRI = nullptr;
-  unsigned SlotSize = 0;
-  unsigned Log2SlotSize = 0;
+  const X86InstrInfo *TII;
+  const X86FrameLowering *TFL;
+  const X86Subtarget *STI;
+  MachineRegisterInfo *MRI;
+  unsigned SlotSize;
+  unsigned Log2SlotSize;
 };
 
 } // end anonymous namespace
@@ -156,21 +155,12 @@ bool X86CallFrameOptimization::isLegal(MachineFunction &MF) {
   // This is bad, and breaks SP adjustment.
   // So, check that all of the frames in the function are closed inside
   // the same block, and, for good measure, that there are no nested frames.
-  //
-  // If any call allocates more argument stack memory than the stack
-  // probe size, don't do this optimization. Otherwise, this pass
-  // would need to synthesize additional stack probe calls to allocate
-  // memory for arguments.
   unsigned FrameSetupOpcode = TII->getCallFrameSetupOpcode();
   unsigned FrameDestroyOpcode = TII->getCallFrameDestroyOpcode();
-  bool EmitStackProbeCall = STI->getTargetLowering()->hasStackProbeSymbol(MF);
-  unsigned StackProbeSize = STI->getTargetLowering()->getStackProbeSize(MF);
   for (MachineBasicBlock &BB : MF) {
     bool InsideFrameSequence = false;
     for (MachineInstr &MI : BB) {
       if (MI.getOpcode() == FrameSetupOpcode) {
-        if (TII->getFrameSize(MI) >= StackProbeSize && EmitStackProbeCall)
-          return false;
         if (InsideFrameSequence)
           return false;
         InsideFrameSequence = true;
@@ -199,10 +189,10 @@ bool X86CallFrameOptimization::isProfitable(MachineFunction &MF,
   if (CannotReserveFrame)
     return true;
 
-  Align StackAlign = TFL->getStackAlign();
+  unsigned StackAlign = TFL->getStackAlignment();
 
   int64_t Advantage = 0;
-  for (const auto &CC : CallSeqVector) {
+  for (auto CC : CallSeqVector) {
     // Call sites where no parameters are passed on the stack
     // do not affect the cost, since there needs to be no
     // stack adjustment.
@@ -222,7 +212,7 @@ bool X86CallFrameOptimization::isProfitable(MachineFunction &MF,
       // We'll need a add after the call.
       Advantage -= 3;
       // If we have to realign the stack, we'll also need a sub before
-      if (!isAligned(StackAlign, CC.ExpectedDist))
+      if (CC.ExpectedDist % StackAlign)
         Advantage -= 3;
       // Now, for each push, we save ~3 bytes. For small constants, we actually,
       // save more (up to 5 bytes), but 3 should be a good approximation.
@@ -265,7 +255,7 @@ bool X86CallFrameOptimization::runOnMachineFunction(MachineFunction &MF) {
   if (!isProfitable(MF, CallSeqVector))
     return false;
 
-  for (const auto &CC : CallSeqVector) {
+  for (auto CC : CallSeqVector) {
     if (CC.UsePush) {
       adjustCallSequence(MF, CC);
       Changed = true;
@@ -288,13 +278,13 @@ X86CallFrameOptimization::classifyInstruction(
     case X86::AND16mi8:
     case X86::AND32mi8:
     case X86::AND64mi8: {
-      const MachineOperand &ImmOp = MI->getOperand(X86::AddrNumOperands);
+      MachineOperand ImmOp = MI->getOperand(X86::AddrNumOperands);
       return ImmOp.getImm() == 0 ? Convert : Exit;
     }
     case X86::OR16mi8:
     case X86::OR32mi8:
     case X86::OR64mi8: {
-      const MachineOperand &ImmOp = MI->getOperand(X86::AddrNumOperands);
+      MachineOperand ImmOp = MI->getOperand(X86::AddrNumOperands);
       return ImmOp.getImm() == -1 ? Convert : Exit;
     }
     case X86::MOV32mi:
@@ -335,8 +325,8 @@ X86CallFrameOptimization::classifyInstruction(
   for (const MachineOperand &MO : MI->operands()) {
     if (!MO.isReg())
       continue;
-    Register Reg = MO.getReg();
-    if (!Reg.isPhysical())
+    unsigned int Reg = MO.getReg();
+    if (!RegInfo.isPhysicalRegister(Reg))
       continue;
     if (RegInfo.regsOverlap(Reg, RegInfo.getStackRegister()))
       return Exit;
@@ -380,7 +370,7 @@ void X86CallFrameOptimization::collectCallInfo(MachineFunction &MF,
   while (I->getOpcode() == X86::LEA32r || I->isDebugInstr())
     ++I;
 
-  Register StackPtr = RegInfo.getStackRegister();
+  unsigned StackPtr = RegInfo.getStackRegister();
   auto StackPtrCopyInst = MBB.end();
   // SelectionDAG (but not FastISel) inserts a copy of ESP into a virtual
   // register.  If it's there, use that virtual register as stack pointer
@@ -453,8 +443,8 @@ void X86CallFrameOptimization::collectCallInfo(MachineFunction &MF,
     for (const MachineOperand &MO : I->uses()) {
       if (!MO.isReg())
         continue;
-      Register Reg = MO.getReg();
-      if (Reg.isPhysical())
+      unsigned int Reg = MO.getReg();
+      if (RegInfo.isPhysicalRegister(Reg))
         UsedRegs.insert(Reg);
     }
   }
@@ -499,14 +489,14 @@ void X86CallFrameOptimization::adjustCallSequence(MachineFunction &MF,
   MachineBasicBlock &MBB = *(FrameSetup->getParent());
   TII->setFrameAdjustment(*FrameSetup, Context.ExpectedDist);
 
-  const DebugLoc &DL = FrameSetup->getDebugLoc();
+  DebugLoc DL = FrameSetup->getDebugLoc();
   bool Is64Bit = STI->is64Bit();
   // Now, iterate through the vector in reverse order, and replace the store to
   // stack with pushes. MOVmi/MOVmr doesn't have any defs, so no need to
   // replace uses.
   for (int Idx = (Context.ExpectedDist >> Log2SlotSize) - 1; Idx >= 0; --Idx) {
     MachineBasicBlock::iterator Store = *Context.ArgStoreVector[Idx];
-    const MachineOperand &PushOp = Store->getOperand(X86::AddrNumOperands);
+    MachineOperand PushOp = Store->getOperand(X86::AddrNumOperands);
     MachineBasicBlock::iterator Push = nullptr;
     unsigned PushOpcode;
     switch (Store->getOpcode()) {
@@ -531,16 +521,15 @@ void X86CallFrameOptimization::adjustCallSequence(MachineFunction &MF,
           PushOpcode = Is64Bit ? X86::PUSH64i8 : X86::PUSH32i8;
       }
       Push = BuildMI(MBB, Context.Call, DL, TII->get(PushOpcode)).add(PushOp);
-      Push->cloneMemRefs(MF, *Store);
       break;
     case X86::MOV32mr:
     case X86::MOV64mr: {
-      Register Reg = PushOp.getReg();
+      unsigned int Reg = PushOp.getReg();
 
       // If storing a 32-bit vreg on 64-bit targets, extend to a 64-bit vreg
       // in preparation for the PUSH64. The upper 32 bits can be undef.
       if (Is64Bit && Store->getOpcode() == X86::MOV32mr) {
-        Register UndefReg = MRI->createVirtualRegister(&X86::GR64RegClass);
+        unsigned UndefReg = MRI->createVirtualRegister(&X86::GR64RegClass);
         Reg = MRI->createVirtualRegister(&X86::GR64RegClass);
         BuildMI(MBB, Context.Call, DL, TII->get(X86::IMPLICIT_DEF), UndefReg);
         BuildMI(MBB, Context.Call, DL, TII->get(X86::INSERT_SUBREG), Reg)
@@ -551,7 +540,7 @@ void X86CallFrameOptimization::adjustCallSequence(MachineFunction &MF,
 
       // If PUSHrmm is not slow on this target, try to fold the source of the
       // push into the instruction.
-      bool SlowPUSHrmm = STI->slowTwoMemOps();
+      bool SlowPUSHrmm = STI->isAtom() || STI->isSLM();
 
       // Check that this is legal to fold. Right now, we're extremely
       // conservative about that.
@@ -563,14 +552,13 @@ void X86CallFrameOptimization::adjustCallSequence(MachineFunction &MF,
         unsigned NumOps = DefMov->getDesc().getNumOperands();
         for (unsigned i = NumOps - X86::AddrNumOperands; i != NumOps; ++i)
           Push->addOperand(DefMov->getOperand(i));
-        Push->cloneMergedMemRefs(MF, {DefMov, &*Store});
+
         DefMov->eraseFromParent();
       } else {
         PushOpcode = Is64Bit ? X86::PUSH64r : X86::PUSH32r;
         Push = BuildMI(MBB, Context.Call, DL, TII->get(PushOpcode))
                    .addReg(Reg)
                    .getInstr();
-        Push->cloneMemRefs(MF, *Store);
       }
       break;
     }
@@ -599,7 +587,7 @@ void X86CallFrameOptimization::adjustCallSequence(MachineFunction &MF,
 }
 
 MachineInstr *X86CallFrameOptimization::canFoldIntoRegPush(
-    MachineBasicBlock::iterator FrameSetup, Register Reg) {
+    MachineBasicBlock::iterator FrameSetup, unsigned Reg) {
   // Do an extremely restricted form of load folding.
   // ISel will often create patterns like:
   // movl    4(%edi), %eax
@@ -610,7 +598,7 @@ MachineInstr *X86CallFrameOptimization::canFoldIntoRegPush(
   // movl    %eax, (%esp)
   // call
   // Get rid of those with prejudice.
-  if (!Reg.isVirtual())
+  if (!TargetRegisterInfo::isVirtualRegister(Reg))
     return nullptr;
 
   // Make sure this is the only use of Reg.

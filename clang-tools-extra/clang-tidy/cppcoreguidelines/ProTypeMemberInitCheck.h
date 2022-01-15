@@ -9,13 +9,13 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_CPPCOREGUIDELINES_PRO_TYPE_MEMBER_INIT_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_CPPCOREGUIDELINES_PRO_TYPE_MEMBER_INIT_H
 
-#include "../ClangTidyCheck.h"
+#include "../ClangTidy.h"
 
 namespace clang {
 namespace tidy {
 namespace cppcoreguidelines {
 
-/// Implements C++ Core Guidelines Type.6.
+/// \brief Implements C++ Core Guidelines Type.6.
 ///
 /// Checks that every user-provided constructor value-initializes all class
 /// members and base classes that would have undefined behavior otherwise. Also
@@ -33,9 +33,6 @@ namespace cppcoreguidelines {
 class ProTypeMemberInitCheck : public ClangTidyCheck {
 public:
   ProTypeMemberInitCheck(StringRef Name, ClangTidyContext *Context);
-  bool isLanguageVersionSupported(const LangOptions &LangOpts) const override {
-    return LangOpts.CPlusPlus;
-  }
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
@@ -69,7 +66,7 @@ private:
   bool IgnoreArrays;
 
   // Whether fix-its for initialization of fundamental type use assignment
-  // instead of brace initialization. Only effective in C++11 mode. Default is
+  // instead of brace initalization. Only effective in C++11 mode. Default is
   // false.
   bool UseAssignment;
 };

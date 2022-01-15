@@ -6,13 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_LANGUAGERUNTIME_CPLUSPLUS_CPPLANGUAGERUNTIME_H
-#define LLDB_SOURCE_PLUGINS_LANGUAGERUNTIME_CPLUSPLUS_CPPLANGUAGERUNTIME_H
+#ifndef liblldb_CPPLanguageRuntime_h_
+#define liblldb_CPPLanguageRuntime_h_
 
 #include <vector>
-
-#include "llvm/ADT/StringMap.h"
-
 #include "lldb/Core/PluginInterface.h"
 #include "lldb/Target/LanguageRuntime.h"
 #include "lldb/lldb-private.h"
@@ -39,6 +36,8 @@ public:
 
   LibCppStdFunctionCallableInfo
   FindLibCppStdFunctionCallableInfo(lldb::ValueObjectSP &valobj_sp);
+
+  ~CPPLanguageRuntime() override;
 
   static char ID;
 
@@ -67,7 +66,7 @@ public:
   /// Obtain a ThreadPlan to get us into C++ constructs such as std::function.
   ///
   /// \param[in] thread
-  ///     Current thrad of execution.
+  ///     Curent thrad of execution.
   ///
   /// \param[in] stop_others
   ///     True if other threads should pause during execution.
@@ -77,18 +76,15 @@ public:
   lldb::ThreadPlanSP GetStepThroughTrampolinePlan(Thread &thread,
                                                   bool stop_others) override;
 
-  bool IsAllowedRuntimeValue(ConstString name) override;
+  bool IsWhitelistedRuntimeValue(ConstString name) override;
 protected:
   // Classes that inherit from CPPLanguageRuntime can see and modify these
   CPPLanguageRuntime(Process *process);
 
 private:
-  using OperatorStringToCallableInfoMap =
-    llvm::StringMap<CPPLanguageRuntime::LibCppStdFunctionCallableInfo>;
-
-  OperatorStringToCallableInfoMap CallableLookupCache;
+  DISALLOW_COPY_AND_ASSIGN(CPPLanguageRuntime);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_LANGUAGERUNTIME_CPLUSPLUS_CPPLANGUAGERUNTIME_H
+#endif // liblldb_CPPLanguageRuntime_h_

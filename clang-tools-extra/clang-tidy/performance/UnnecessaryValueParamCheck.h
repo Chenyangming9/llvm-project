@@ -17,7 +17,7 @@ namespace clang {
 namespace tidy {
 namespace performance {
 
-/// A check that flags value parameters of expensive to copy types that
+/// \brief A check that flags value parameters of expensive to copy types that
 /// can safely be converted to const references.
 ///
 /// For the user-facing documentation see:
@@ -25,9 +25,6 @@ namespace performance {
 class UnnecessaryValueParamCheck : public ClangTidyCheck {
 public:
   UnnecessaryValueParamCheck(StringRef Name, ClangTidyContext *Context);
-  bool isLanguageVersionSupported(const LangOptions &LangOpts) const override {
-    return LangOpts.CPlusPlus;
-  }
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
   void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
@@ -41,7 +38,8 @@ private:
 
   llvm::DenseMap<const FunctionDecl *, FunctionParmMutationAnalyzer>
       MutationAnalyzers;
-  utils::IncludeInserter Inserter;
+  std::unique_ptr<utils::IncludeInserter> Inserter;
+  const utils::IncludeSorter::IncludeStyle IncludeStyle;
   const std::vector<std::string> AllowedTypes;
 };
 

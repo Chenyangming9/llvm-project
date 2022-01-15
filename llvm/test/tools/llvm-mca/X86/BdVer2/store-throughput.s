@@ -81,14 +81,14 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: RCU     - Retire tokens unavailable:                 0
 # CHECK-NEXT: SCHEDQ  - Scheduler full:                            0
 # CHECK-NEXT: LQ      - Load queue full:                           0
-# CHECK-NEXT: SQ      - Store queue full:                          371  (92.1%)
+# CHECK-NEXT: SQ      - Store queue full:                          370  (91.8%)
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
-# CHECK-NEXT:  0,              24  (6.0%)
-# CHECK-NEXT:  1,              372  (92.3%)
+# CHECK-NEXT:  0,              25  (6.2%)
+# CHECK-NEXT:  1,              370  (91.8%)
+# CHECK-NEXT:  2,              1  (0.2%)
 # CHECK-NEXT:  4,              7  (1.7%)
 
 # CHECK:      Schedulers - number of cycles where we saw N micro opcodes issued:
@@ -103,10 +103,10 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: [4] Total number of buffer entries.
 
 # CHECK:       [1]            [2]        [3]        [4]
-# CHECK-NEXT: PdEX             21         22         40
+# CHECK-NEXT: PdEX             22         23         40
 # CHECK-NEXT: PdFPU            0          0          64
 # CHECK-NEXT: PdLoad           0          0          40
-# CHECK-NEXT: PdStore          22         23         24
+# CHECK-NEXT: PdStore          23         24         24
 
 # CHECK:      Resources:
 # CHECK-NEXT: [0.0] - PdAGLU01
@@ -160,10 +160,9 @@ vmovaps %ymm3, (%rbx)
 
 # CHECK:            [0]    [1]    [2]    [3]
 # CHECK-NEXT: 0.     1     1.0    1.0    0.0       movb	%spl, (%rax)
-# CHECK-NEXT: 1.     1     2.0    1.0    0.0       movb	%bpl, (%rcx)
-# CHECK-NEXT: 2.     1     3.0    1.0    0.0       movb	%sil, (%rdx)
-# CHECK-NEXT: 3.     1     4.0    1.0    0.0       movb	%dil, (%rbx)
-# CHECK-NEXT:        1     2.5    1.0    0.0       <total>
+# CHECK-NEXT: 1.     1     2.0    0.0    0.0       movb	%bpl, (%rcx)
+# CHECK-NEXT: 2.     1     3.0    0.0    0.0       movb	%sil, (%rdx)
+# CHECK-NEXT: 3.     1     4.0    0.0    0.0       movb	%dil, (%rbx)
 
 # CHECK:      [1] Code Region
 
@@ -196,14 +195,14 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: RCU     - Retire tokens unavailable:                 0
 # CHECK-NEXT: SCHEDQ  - Scheduler full:                            0
 # CHECK-NEXT: LQ      - Load queue full:                           0
-# CHECK-NEXT: SQ      - Store queue full:                          371  (92.1%)
+# CHECK-NEXT: SQ      - Store queue full:                          370  (91.8%)
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
-# CHECK-NEXT:  0,              24  (6.0%)
-# CHECK-NEXT:  1,              372  (92.3%)
+# CHECK-NEXT:  0,              25  (6.2%)
+# CHECK-NEXT:  1,              370  (91.8%)
+# CHECK-NEXT:  2,              1  (0.2%)
 # CHECK-NEXT:  4,              7  (1.7%)
 
 # CHECK:      Schedulers - number of cycles where we saw N micro opcodes issued:
@@ -218,10 +217,10 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: [4] Total number of buffer entries.
 
 # CHECK:       [1]            [2]        [3]        [4]
-# CHECK-NEXT: PdEX             21         22         40
+# CHECK-NEXT: PdEX             22         23         40
 # CHECK-NEXT: PdFPU            0          0          64
 # CHECK-NEXT: PdLoad           0          0          40
-# CHECK-NEXT: PdStore          22         23         24
+# CHECK-NEXT: PdStore          23         24         24
 
 # CHECK:      Resources:
 # CHECK-NEXT: [0.0] - PdAGLU01
@@ -275,10 +274,9 @@ vmovaps %ymm3, (%rbx)
 
 # CHECK:            [0]    [1]    [2]    [3]
 # CHECK-NEXT: 0.     1     1.0    1.0    0.0       movw	%sp, (%rax)
-# CHECK-NEXT: 1.     1     2.0    1.0    0.0       movw	%bp, (%rcx)
-# CHECK-NEXT: 2.     1     3.0    1.0    0.0       movw	%si, (%rdx)
-# CHECK-NEXT: 3.     1     4.0    1.0    0.0       movw	%di, (%rbx)
-# CHECK-NEXT:        1     2.5    1.0    0.0       <total>
+# CHECK-NEXT: 1.     1     2.0    0.0    0.0       movw	%bp, (%rcx)
+# CHECK-NEXT: 2.     1     3.0    0.0    0.0       movw	%si, (%rdx)
+# CHECK-NEXT: 3.     1     4.0    0.0    0.0       movw	%di, (%rbx)
 
 # CHECK:      [2] Code Region
 
@@ -311,14 +309,14 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: RCU     - Retire tokens unavailable:                 0
 # CHECK-NEXT: SCHEDQ  - Scheduler full:                            0
 # CHECK-NEXT: LQ      - Load queue full:                           0
-# CHECK-NEXT: SQ      - Store queue full:                          371  (92.1%)
+# CHECK-NEXT: SQ      - Store queue full:                          370  (91.8%)
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
-# CHECK-NEXT:  0,              24  (6.0%)
-# CHECK-NEXT:  1,              372  (92.3%)
+# CHECK-NEXT:  0,              25  (6.2%)
+# CHECK-NEXT:  1,              370  (91.8%)
+# CHECK-NEXT:  2,              1  (0.2%)
 # CHECK-NEXT:  4,              7  (1.7%)
 
 # CHECK:      Schedulers - number of cycles where we saw N micro opcodes issued:
@@ -333,10 +331,10 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: [4] Total number of buffer entries.
 
 # CHECK:       [1]            [2]        [3]        [4]
-# CHECK-NEXT: PdEX             21         22         40
+# CHECK-NEXT: PdEX             22         23         40
 # CHECK-NEXT: PdFPU            0          0          64
 # CHECK-NEXT: PdLoad           0          0          40
-# CHECK-NEXT: PdStore          22         23         24
+# CHECK-NEXT: PdStore          23         24         24
 
 # CHECK:      Resources:
 # CHECK-NEXT: [0.0] - PdAGLU01
@@ -390,10 +388,9 @@ vmovaps %ymm3, (%rbx)
 
 # CHECK:            [0]    [1]    [2]    [3]
 # CHECK-NEXT: 0.     1     1.0    1.0    0.0       movl	%esp, (%rax)
-# CHECK-NEXT: 1.     1     2.0    1.0    0.0       movl	%ebp, (%rcx)
-# CHECK-NEXT: 2.     1     3.0    1.0    0.0       movl	%esi, (%rdx)
-# CHECK-NEXT: 3.     1     4.0    1.0    0.0       movl	%edi, (%rbx)
-# CHECK-NEXT:        1     2.5    1.0    0.0       <total>
+# CHECK-NEXT: 1.     1     2.0    0.0    0.0       movl	%ebp, (%rcx)
+# CHECK-NEXT: 2.     1     3.0    0.0    0.0       movl	%esi, (%rdx)
+# CHECK-NEXT: 3.     1     4.0    0.0    0.0       movl	%edi, (%rbx)
 
 # CHECK:      [3] Code Region
 
@@ -426,14 +423,14 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: RCU     - Retire tokens unavailable:                 0
 # CHECK-NEXT: SCHEDQ  - Scheduler full:                            0
 # CHECK-NEXT: LQ      - Load queue full:                           0
-# CHECK-NEXT: SQ      - Store queue full:                          371  (92.1%)
+# CHECK-NEXT: SQ      - Store queue full:                          370  (91.8%)
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
-# CHECK-NEXT:  0,              24  (6.0%)
-# CHECK-NEXT:  1,              372  (92.3%)
+# CHECK-NEXT:  0,              25  (6.2%)
+# CHECK-NEXT:  1,              370  (91.8%)
+# CHECK-NEXT:  2,              1  (0.2%)
 # CHECK-NEXT:  4,              7  (1.7%)
 
 # CHECK:      Schedulers - number of cycles where we saw N micro opcodes issued:
@@ -448,10 +445,10 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: [4] Total number of buffer entries.
 
 # CHECK:       [1]            [2]        [3]        [4]
-# CHECK-NEXT: PdEX             21         22         40
+# CHECK-NEXT: PdEX             22         23         40
 # CHECK-NEXT: PdFPU            0          0          64
 # CHECK-NEXT: PdLoad           0          0          40
-# CHECK-NEXT: PdStore          22         23         24
+# CHECK-NEXT: PdStore          23         24         24
 
 # CHECK:      Resources:
 # CHECK-NEXT: [0.0] - PdAGLU01
@@ -505,10 +502,9 @@ vmovaps %ymm3, (%rbx)
 
 # CHECK:            [0]    [1]    [2]    [3]
 # CHECK-NEXT: 0.     1     1.0    1.0    0.0       movq	%rsp, (%rax)
-# CHECK-NEXT: 1.     1     2.0    1.0    0.0       movq	%rbp, (%rcx)
-# CHECK-NEXT: 2.     1     3.0    1.0    0.0       movq	%rsi, (%rdx)
-# CHECK-NEXT: 3.     1     4.0    1.0    0.0       movq	%rdi, (%rbx)
-# CHECK-NEXT:        1     2.5    1.0    0.0       <total>
+# CHECK-NEXT: 1.     1     2.0    0.0    0.0       movq	%rbp, (%rcx)
+# CHECK-NEXT: 2.     1     3.0    0.0    0.0       movq	%rsi, (%rdx)
+# CHECK-NEXT: 3.     1     4.0    0.0    0.0       movq	%rdi, (%rbx)
 
 # CHECK:      [4] Code Region
 
@@ -541,9 +537,8 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: RCU     - Retire tokens unavailable:                 0
 # CHECK-NEXT: SCHEDQ  - Scheduler full:                            0
 # CHECK-NEXT: LQ      - Load queue full:                           0
-# CHECK-NEXT: SQ      - Store queue full:                          748  (93.2%)
+# CHECK-NEXT: SQ      - Store queue full:                          747  (93.0%)
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
@@ -564,10 +559,10 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: [4] Total number of buffer entries.
 
 # CHECK:       [1]            [2]        [3]        [4]
-# CHECK-NEXT: PdEX             21         23         40
-# CHECK-NEXT: PdFPU            21         23         64
+# CHECK-NEXT: PdEX             22         23         40
+# CHECK-NEXT: PdFPU            22         23         64
 # CHECK-NEXT: PdLoad           0          0          40
-# CHECK-NEXT: PdStore          22         24         24
+# CHECK-NEXT: PdStore          23         24         24
 
 # CHECK:      Resources:
 # CHECK-NEXT: [0.0] - PdAGLU01
@@ -625,7 +620,6 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: 1.     1     3.0    0.0    0.0       movd	%mm1, (%rcx)
 # CHECK-NEXT: 2.     1     5.0    0.0    0.0       movd	%mm2, (%rdx)
 # CHECK-NEXT: 3.     1     7.0    0.0    0.0       movd	%mm3, (%rbx)
-# CHECK-NEXT:        1     4.0    0.3    0.0       <total>
 
 # CHECK:      [5] Code Region
 
@@ -656,18 +650,16 @@ vmovaps %ymm3, (%rbx)
 # CHECK:      Dynamic Dispatch Stall Cycles:
 # CHECK-NEXT: RAT     - Register unavailable:                      0
 # CHECK-NEXT: RCU     - Retire tokens unavailable:                 0
-# CHECK-NEXT: SCHEDQ  - Scheduler full:                            0
+# CHECK-NEXT: SCHEDQ  - Scheduler full:                            185  (30.7%)
 # CHECK-NEXT: LQ      - Load queue full:                           0
-# CHECK-NEXT: SQ      - Store queue full:                          559  (92.9%)
+# CHECK-NEXT: SQ      - Store queue full:                          372  (61.8%)
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
-# CHECK-NEXT:  0,              222  (36.9%)
-# CHECK-NEXT:  1,              373  (62.0%)
-# CHECK-NEXT:  3,              1  (0.2%)
-# CHECK-NEXT:  4,              6  (1.0%)
+# CHECK-NEXT:  0,              223  (37.0%)
+# CHECK-NEXT:  1,              372  (61.8%)
+# CHECK-NEXT:  4,              7  (1.2%)
 
 # CHECK:      Schedulers - number of cycles where we saw N micro opcodes issued:
 # CHECK-NEXT: [# issued], [# cycles]
@@ -681,10 +673,10 @@ vmovaps %ymm3, (%rbx)
 # CHECK-NEXT: [4] Total number of buffer entries.
 
 # CHECK:       [1]            [2]        [3]        [4]
-# CHECK-NEXT: PdEX             21         23         40
-# CHECK-NEXT: PdFPU            21         23         64
+# CHECK-NEXT: PdEX             22         24         40
+# CHECK-NEXT: PdFPU            22         24         64
 # CHECK-NEXT: PdLoad           0          0          40
-# CHECK-NEXT: PdStore          22         24         24
+# CHECK-NEXT: PdStore          23         24         24
 
 # CHECK:      Resources:
 # CHECK-NEXT: [0.0] - PdAGLU01
@@ -738,10 +730,9 @@ vmovaps %ymm3, (%rbx)
 
 # CHECK:            [0]    [1]    [2]    [3]
 # CHECK-NEXT: 0.     1     1.0    1.0    0.0       movaps	%xmm0, (%rax)
-# CHECK-NEXT: 1.     1     2.0    1.0    0.0       movaps	%xmm1, (%rcx)
-# CHECK-NEXT: 2.     1     4.0    2.0    0.0       movaps	%xmm2, (%rdx)
-# CHECK-NEXT: 3.     1     5.0    1.0    0.0       movaps	%xmm3, (%rbx)
-# CHECK-NEXT:        1     3.0    1.3    0.0       <total>
+# CHECK-NEXT: 1.     1     2.0    0.0    0.0       movaps	%xmm1, (%rcx)
+# CHECK-NEXT: 2.     1     4.0    1.0    0.0       movaps	%xmm2, (%rdx)
+# CHECK-NEXT: 3.     1     5.0    0.0    0.0       movaps	%xmm3, (%rbx)
 
 # CHECK:      [6] Code Region
 
@@ -772,11 +763,10 @@ vmovaps %ymm3, (%rbx)
 # CHECK:      Dynamic Dispatch Stall Cycles:
 # CHECK-NEXT: RAT     - Register unavailable:                      0
 # CHECK-NEXT: RCU     - Retire tokens unavailable:                 0
-# CHECK-NEXT: SCHEDQ  - Scheduler full:                            5777  (80.6%)
+# CHECK-NEXT: SCHEDQ  - Scheduler full:                            5963  (83.2%)
 # CHECK-NEXT: LQ      - Load queue full:                           0
-# CHECK-NEXT: SQ      - Store queue full:                          561  (7.8%)
+# CHECK-NEXT: SQ      - Store queue full:                          374  (5.2%)
 # CHECK-NEXT: GROUP   - Static restrictions on the dispatch group: 0
-# CHECK-NEXT: USH     - Uncategorised Structural Hazard:           0
 
 # CHECK:      Dispatch Logic - number of cycles where we saw N micro opcodes dispatched:
 # CHECK-NEXT: [# dispatched], [# cycles]
@@ -853,7 +843,6 @@ vmovaps %ymm3, (%rbx)
 
 # CHECK:            [0]    [1]    [2]    [3]
 # CHECK-NEXT: 0.     1     1.0    1.0    0.0       vmovaps	%ymm0, (%rax)
-# CHECK-NEXT: 1.     1     2.0    2.0    0.0       vmovaps	%ymm1, (%rcx)
-# CHECK-NEXT: 2.     1     35.0   34.0   0.0       vmovaps	%ymm2, (%rdx)
-# CHECK-NEXT: 3.     1     36.0   2.0    0.0       vmovaps	%ymm3, (%rbx)
-# CHECK-NEXT:        1     18.5   9.8    0.0       <total>
+# CHECK-NEXT: 1.     1     2.0    1.0    0.0       vmovaps	%ymm1, (%rcx)
+# CHECK-NEXT: 2.     1     35.0   33.0   0.0       vmovaps	%ymm2, (%rdx)
+# CHECK-NEXT: 3.     1     36.0   1.0    0.0       vmovaps	%ymm3, (%rbx)

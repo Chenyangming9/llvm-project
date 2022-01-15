@@ -21,18 +21,17 @@
 
 namespace llvm {
 
-struct BasicBlockInfo;
 using BBInfoVector = SmallVectorImpl<BasicBlockInfo>;
 
 /// UnknownPadding - Return the worst case padding that could result from
 /// unknown offset bits.  This does not include alignment padding caused by
 /// known offset bits.
 ///
-/// @param Alignment alignment
+/// @param LogAlign log2(alignment)
 /// @param KnownBits Number of known low offset bits.
-inline unsigned UnknownPadding(Align Alignment, unsigned KnownBits) {
-  if (KnownBits < Log2(Alignment))
-    return Alignment.value() - (1ull << KnownBits);
+inline unsigned UnknownPadding(unsigned LogAlign, unsigned KnownBits) {
+  if (KnownBits < LogAlign)
+    return (1u << LogAlign) - (1u << KnownBits);
   return 0;
 }
 
@@ -66,9 +65,10 @@ struct BasicBlockInfo {
   /// multiple of 1 << Unalign.
   uint8_t Unalign = 0;
 
-  /// PostAlign - When > 1, the block terminator contains a .align
-  /// directive, so the end of the block is aligned to PostAlign bytes.
-  Align PostAlign;
+  /// PostAlign - When non-zero, the block terminator contains a .align
+  /// directive, so the end of the block is aligned to 1 << PostAlign
+  /// bytes.
+  uint8_t PostAlign = 0;
 
   BasicBlockInfo() = default;
 
@@ -84,16 +84,16 @@ struct BasicBlockInfo {
     return Bits;
   }
 
-  /// Compute the offset immediately following this block.  If Align is
+  /// Compute the offset immediately following this block.  If LogAlign is
   /// specified, return the offset the successor block will get if it has
   /// this alignment.
-  unsigned postOffset(Align Alignment = Align(1)) const {
+  unsigned postOffset(unsigned LogAlign = 0) const {
     unsigned PO = Offset + Size;
-    const Align PA = std::max(PostAlign, Alignment);
-    if (PA == Align(1))
+    unsigned LA = std::max(unsigned(PostAlign), LogAlign);
+    if (!LA)
       return PO;
     // Add alignment padding from the terminator.
-    return PO + UnknownPadding(PA, internalKnownBits());
+    return PO + UnknownPadding(LA, internalKnownBits());
   }
 
   /// Compute the number of known low bits of postOffset.  If this block
@@ -101,8 +101,9 @@ struct BasicBlockInfo {
   /// instruction alignment.  An aligned terminator may increase the number
   /// of know bits.
   /// If LogAlign is given, also consider the alignment of the next block.
-  unsigned postKnownBits(Align Align = llvm::Align(1)) const {
-    return std::max(Log2(std::max(PostAlign, Align)), internalKnownBits());
+  unsigned postKnownBits(unsigned LogAlign = 0) const {
+    return std::max(std::max(unsigned(PostAlign), LogAlign),
+                    internalKnownBits());
   }
 };
 

@@ -47,7 +47,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 
 #include "llvm/ADT/SetVector.h"
@@ -132,7 +131,7 @@ struct PlaceBackedgeSafepointsImpl : public FunctionPass {
     SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
     DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
     LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-    TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
+    TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI();
     for (Loop *I : *LI) {
       runOnLoopAndSubLoops(I);
     }
@@ -189,8 +188,7 @@ static bool needsStatepoint(CallBase *Call, const TargetLibraryInfo &TLI) {
       return false;
   }
 
-  return !(isa<GCStatepointInst>(Call) || isa<GCRelocateInst>(Call) ||
-           isa<GCResultInst>(Call));
+  return !(isStatepoint(Call) || isGCRelocate(Call) || isGCResult(Call));
 }
 
 /// Returns true if this loop is known to contain a call safepoint which
@@ -242,8 +240,8 @@ static bool containsUnconditionalCallSafepoint(Loop *L, BasicBlock *Header,
 static bool mustBeFiniteCountedLoop(Loop *L, ScalarEvolution *SE,
                                     BasicBlock *Pred) {
   // A conservative bound on the loop as a whole.
-  const SCEV *MaxTrips = SE->getConstantMaxBackedgeTakenCount(L);
-  if (!isa<SCEVCouldNotCompute>(MaxTrips) &&
+  const SCEV *MaxTrips = SE->getMaxBackedgeTakenCount(L);
+  if (MaxTrips != SE->getCouldNotCompute() &&
       SE->getUnsignedRange(MaxTrips).getUnsignedMax().isIntN(
           CountedLoopTripWidth))
     return true;
@@ -255,7 +253,7 @@ static bool mustBeFiniteCountedLoop(Loop *L, ScalarEvolution *SE,
     // This returns an exact expression only.  TODO: We really only need an
     // upper bound here, but SE doesn't expose that.
     const SCEV *MaxExec = SE->getExitCount(L, Pred);
-    if (!isa<SCEVCouldNotCompute>(MaxExec) &&
+    if (MaxExec != SE->getCouldNotCompute() &&
         SE->getUnsignedRange(MaxExec).getUnsignedMax().isIntN(
             CountedLoopTripWidth))
         return true;
@@ -435,7 +433,7 @@ static Instruction *findLocationForEntrySafepoint(Function &F,
   return Cursor;
 }
 
-const char GCSafepointPollName[] = "gc.safepoint_poll";
+static const char *const GCSafepointPollName = "gc.safepoint_poll";
 
 static bool isGCSafepointPoll(Function &F) {
   return F.getName().equals(GCSafepointPollName);
@@ -480,7 +478,7 @@ bool PlaceSafepoints::runOnFunction(Function &F) {
     return false;
 
   const TargetLibraryInfo &TLI =
-      getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
+      getAnalysis<TargetLibraryInfoWrapperPass>().getTLI();
 
   bool Modified = false;
 
@@ -589,7 +587,8 @@ bool PlaceSafepoints::runOnFunction(Function &F) {
   for (Instruction *PollLocation : PollsNeeded) {
     std::vector<CallBase *> RuntimeCalls;
     InsertSafepointPoll(PollLocation, RuntimeCalls, TLI);
-    llvm::append_range(ParsePointNeeded, RuntimeCalls);
+    ParsePointNeeded.insert(ParsePointNeeded.end(), RuntimeCalls.begin(),
+                            RuntimeCalls.end());
   }
 
   return Modified;
@@ -650,7 +649,7 @@ InsertSafepointPoll(Instruction *InsertBefore,
 
   // Do the actual inlining
   InlineFunctionInfo IFI;
-  bool InlineStatus = InlineFunction(*PollCall, IFI).isSuccess();
+  bool InlineStatus = InlineFunction(PollCall, IFI);
   assert(InlineStatus && "inline must succeed");
   (void)InlineStatus; // suppress warning in release-asserts
 

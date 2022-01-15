@@ -5,34 +5,34 @@
 
 namespace {
 class StringExtractorTest : public ::testing::Test {};
-} // namespace
+}
 
 TEST_F(StringExtractorTest, InitEmpty) {
-  llvm::StringRef kEmptyString = "";
+  const char kEmptyString[] = "";
   StringExtractor ex(kEmptyString);
 
   ASSERT_EQ(true, ex.IsGood());
   ASSERT_EQ(0u, ex.GetFilePos());
-  ASSERT_EQ(kEmptyString, ex.GetStringRef());
+  ASSERT_STREQ(kEmptyString, ex.GetStringRef().c_str());
   ASSERT_EQ(true, ex.Empty());
   ASSERT_EQ(0u, ex.GetBytesLeft());
   ASSERT_EQ(nullptr, ex.Peek());
 }
 
 TEST_F(StringExtractorTest, InitMisc) {
-  llvm::StringRef kInitMiscString = "Hello, StringExtractor!";
+  const char kInitMiscString[] = "Hello, StringExtractor!";
   StringExtractor ex(kInitMiscString);
 
   ASSERT_EQ(true, ex.IsGood());
   ASSERT_EQ(0u, ex.GetFilePos());
-  ASSERT_EQ(kInitMiscString, ex.GetStringRef());
+  ASSERT_STREQ(kInitMiscString, ex.GetStringRef().c_str());
   ASSERT_EQ(false, ex.Empty());
-  ASSERT_EQ(kInitMiscString.size(), ex.GetBytesLeft());
+  ASSERT_EQ(sizeof(kInitMiscString) - 1, ex.GetBytesLeft());
   ASSERT_EQ(kInitMiscString[0], *ex.Peek());
 }
 
 TEST_F(StringExtractorTest, DecodeHexU8_Underflow) {
-  llvm::StringRef kEmptyString = "";
+  const char kEmptyString[] = "";
   StringExtractor ex(kEmptyString);
 
   ASSERT_EQ(-1, ex.DecodeHexU8());
@@ -44,7 +44,8 @@ TEST_F(StringExtractorTest, DecodeHexU8_Underflow) {
 }
 
 TEST_F(StringExtractorTest, DecodeHexU8_Underflow2) {
-  StringExtractor ex("1");
+  const char kEmptyString[] = "1";
+  StringExtractor ex(kEmptyString);
 
   ASSERT_EQ(-1, ex.DecodeHexU8());
   ASSERT_EQ(true, ex.IsGood());
@@ -54,7 +55,7 @@ TEST_F(StringExtractorTest, DecodeHexU8_Underflow2) {
 }
 
 TEST_F(StringExtractorTest, DecodeHexU8_InvalidHex) {
-  llvm::StringRef kInvalidHex = "xa";
+  const char kInvalidHex[] = "xa";
   StringExtractor ex(kInvalidHex);
 
   ASSERT_EQ(-1, ex.DecodeHexU8());
@@ -65,7 +66,7 @@ TEST_F(StringExtractorTest, DecodeHexU8_InvalidHex) {
 }
 
 TEST_F(StringExtractorTest, DecodeHexU8_InvalidHex2) {
-  llvm::StringRef kInvalidHex = "ax";
+  const char kInvalidHex[] = "ax";
   StringExtractor ex(kInvalidHex);
 
   ASSERT_EQ(-1, ex.DecodeHexU8());
@@ -76,7 +77,7 @@ TEST_F(StringExtractorTest, DecodeHexU8_InvalidHex2) {
 }
 
 TEST_F(StringExtractorTest, DecodeHexU8_Exact) {
-  llvm::StringRef kValidHexPair = "12";
+  const char kValidHexPair[] = "12";
   StringExtractor ex(kValidHexPair);
 
   ASSERT_EQ(0x12, ex.DecodeHexU8());
@@ -87,7 +88,7 @@ TEST_F(StringExtractorTest, DecodeHexU8_Exact) {
 }
 
 TEST_F(StringExtractorTest, DecodeHexU8_Extra) {
-  llvm::StringRef kValidHexPair = "1234";
+  const char kValidHexPair[] = "1234";
   StringExtractor ex(kValidHexPair);
 
   ASSERT_EQ(0x12, ex.DecodeHexU8());
@@ -98,7 +99,7 @@ TEST_F(StringExtractorTest, DecodeHexU8_Extra) {
 }
 
 TEST_F(StringExtractorTest, GetHexU8_Underflow) {
-  llvm::StringRef kEmptyString = "";
+  const char kEmptyString[] = "";
   StringExtractor ex(kEmptyString);
 
   ASSERT_EQ(0xab, ex.GetHexU8(0xab));
@@ -110,7 +111,7 @@ TEST_F(StringExtractorTest, GetHexU8_Underflow) {
 }
 
 TEST_F(StringExtractorTest, GetHexU8_Underflow2) {
-  llvm::StringRef kOneNibble = "1";
+  const char kOneNibble[] = "1";
   StringExtractor ex(kOneNibble);
 
   ASSERT_EQ(0xbc, ex.GetHexU8(0xbc));
@@ -121,7 +122,7 @@ TEST_F(StringExtractorTest, GetHexU8_Underflow2) {
 }
 
 TEST_F(StringExtractorTest, GetHexU8_InvalidHex) {
-  llvm::StringRef kInvalidHex = "xx";
+  const char kInvalidHex[] = "xx";
   StringExtractor ex(kInvalidHex);
 
   ASSERT_EQ(0xcd, ex.GetHexU8(0xcd));
@@ -132,7 +133,7 @@ TEST_F(StringExtractorTest, GetHexU8_InvalidHex) {
 }
 
 TEST_F(StringExtractorTest, GetHexU8_Exact) {
-  llvm::StringRef kValidHexPair = "12";
+  const char kValidHexPair[] = "12";
   StringExtractor ex(kValidHexPair);
 
   ASSERT_EQ(0x12, ex.GetHexU8(0x12));
@@ -143,7 +144,7 @@ TEST_F(StringExtractorTest, GetHexU8_Exact) {
 }
 
 TEST_F(StringExtractorTest, GetHexU8_Extra) {
-  llvm::StringRef kValidHexPair = "1234";
+  const char kValidHexPair[] = "1234";
   StringExtractor ex(kValidHexPair);
 
   ASSERT_EQ(0x12, ex.GetHexU8(0x12));
@@ -154,7 +155,7 @@ TEST_F(StringExtractorTest, GetHexU8_Extra) {
 }
 
 TEST_F(StringExtractorTest, GetHexU8_Underflow_NoEof) {
-  llvm::StringRef kEmptyString = "";
+  const char kEmptyString[] = "";
   StringExtractor ex(kEmptyString);
   const bool kSetEofOnFail = false;
 
@@ -168,7 +169,7 @@ TEST_F(StringExtractorTest, GetHexU8_Underflow_NoEof) {
 }
 
 TEST_F(StringExtractorTest, GetHexU8_Underflow2_NoEof) {
-  llvm::StringRef kOneNibble = "1";
+  const char kOneNibble[] = "1";
   StringExtractor ex(kOneNibble);
   const bool kSetEofOnFail = false;
 
@@ -180,7 +181,7 @@ TEST_F(StringExtractorTest, GetHexU8_Underflow2_NoEof) {
 }
 
 TEST_F(StringExtractorTest, GetHexU8_InvalidHex_NoEof) {
-  llvm::StringRef kInvalidHex = "xx";
+  const char kInvalidHex[] = "xx";
   StringExtractor ex(kInvalidHex);
   const bool kSetEofOnFail = false;
 
@@ -192,7 +193,7 @@ TEST_F(StringExtractorTest, GetHexU8_InvalidHex_NoEof) {
 }
 
 TEST_F(StringExtractorTest, GetHexU8_Exact_NoEof) {
-  llvm::StringRef kValidHexPair = "12";
+  const char kValidHexPair[] = "12";
   StringExtractor ex(kValidHexPair);
   const bool kSetEofOnFail = false;
 
@@ -204,7 +205,7 @@ TEST_F(StringExtractorTest, GetHexU8_Exact_NoEof) {
 }
 
 TEST_F(StringExtractorTest, GetHexU8_Extra_NoEof) {
-  llvm::StringRef kValidHexPair = "1234";
+  const char kValidHexPair[] = "1234";
   StringExtractor ex(kValidHexPair);
   const bool kSetEofOnFail = false;
 
@@ -216,7 +217,7 @@ TEST_F(StringExtractorTest, GetHexU8_Extra_NoEof) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytes) {
-  llvm::StringRef kHexEncodedBytes = "abcdef0123456789xyzw";
+  const char kHexEncodedBytes[] = "abcdef0123456789xyzw";
   const size_t kValidHexPairs = 8;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -239,7 +240,7 @@ TEST_F(StringExtractorTest, GetHexBytes) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytes_FullString) {
-  llvm::StringRef kHexEncodedBytes = "abcdef0123456789";
+  const char kHexEncodedBytes[] = "abcdef0123456789";
   const size_t kValidHexPairs = 8;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -256,7 +257,7 @@ TEST_F(StringExtractorTest, GetHexBytes_FullString) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytes_OddPair) {
-  llvm::StringRef kHexEncodedBytes = "abcdef012345678w";
+  const char kHexEncodedBytes[] = "abcdef012345678w";
   const size_t kValidHexPairs = 7;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -275,7 +276,7 @@ TEST_F(StringExtractorTest, GetHexBytes_OddPair) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytes_OddPair2) {
-  llvm::StringRef kHexEncodedBytes = "abcdef012345678";
+  const char kHexEncodedBytes[] = "abcdef012345678";
   const size_t kValidHexPairs = 7;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -293,7 +294,7 @@ TEST_F(StringExtractorTest, GetHexBytes_OddPair2) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytes_Underflow) {
-  llvm::StringRef kHexEncodedBytes = "abcdef0123456789xyzw";
+  const char kHexEncodedBytes[] = "abcdef0123456789xyzw";
   const size_t kValidHexPairs = 8;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -321,7 +322,7 @@ TEST_F(StringExtractorTest, GetHexBytes_Underflow) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytes_Partial) {
-  llvm::StringRef kHexEncodedBytes = "abcdef0123456789xyzw";
+  const char kHexEncodedBytes[] = "abcdef0123456789xyzw";
   const size_t kReadBytes = 4;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -352,7 +353,7 @@ TEST_F(StringExtractorTest, GetHexBytes_Partial) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytesAvail) {
-  llvm::StringRef kHexEncodedBytes = "abcdef0123456789xyzw";
+  const char kHexEncodedBytes[] = "abcdef0123456789xyzw";
   const size_t kValidHexPairs = 8;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -375,7 +376,7 @@ TEST_F(StringExtractorTest, GetHexBytesAvail) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytesAvail_FullString) {
-  llvm::StringRef kHexEncodedBytes = "abcdef0123456789";
+  const char kHexEncodedBytes[] = "abcdef0123456789";
   const size_t kValidHexPairs = 8;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -392,7 +393,7 @@ TEST_F(StringExtractorTest, GetHexBytesAvail_FullString) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytesAvail_OddPair) {
-  llvm::StringRef kHexEncodedBytes = "abcdef012345678w";
+  const char kHexEncodedBytes[] = "abcdef012345678w";
   const size_t kValidHexPairs = 7;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -408,7 +409,7 @@ TEST_F(StringExtractorTest, GetHexBytesAvail_OddPair) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytesAvail_OddPair2) {
-  llvm::StringRef kHexEncodedBytes = "abcdef012345678";
+  const char kHexEncodedBytes[] = "abcdef012345678";
   const size_t kValidHexPairs = 7;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -424,7 +425,7 @@ TEST_F(StringExtractorTest, GetHexBytesAvail_OddPair2) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytesAvail_Underflow) {
-  llvm::StringRef kHexEncodedBytes = "abcdef0123456789xyzw";
+  const char kHexEncodedBytes[] = "abcdef0123456789xyzw";
   const size_t kValidHexPairs = 8;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -453,7 +454,7 @@ TEST_F(StringExtractorTest, GetHexBytesAvail_Underflow) {
 }
 
 TEST_F(StringExtractorTest, GetHexBytesAvail_Partial) {
-  llvm::StringRef kHexEncodedBytes = "abcdef0123456789xyzw";
+  const char kHexEncodedBytes[] = "abcdef0123456789xyzw";
   const size_t kReadBytes = 4;
   StringExtractor ex(kHexEncodedBytes);
 
@@ -483,7 +484,7 @@ TEST_F(StringExtractorTest, GetHexBytesAvail_Partial) {
 }
 
 TEST_F(StringExtractorTest, GetNameColonValueSuccess) {
-  llvm::StringRef kNameColonPairs = "key1:value1;key2:value2;";
+  const char kNameColonPairs[] = "key1:value1;key2:value2;";
   StringExtractor ex(kNameColonPairs);
 
   llvm::StringRef name;
@@ -498,7 +499,7 @@ TEST_F(StringExtractorTest, GetNameColonValueSuccess) {
 }
 
 TEST_F(StringExtractorTest, GetNameColonValueContainsColon) {
-  llvm::StringRef kNameColonPairs = "key1:value1:value2;key2:value3;";
+  const char kNameColonPairs[] = "key1:value1:value2;key2:value3;";
   StringExtractor ex(kNameColonPairs);
 
   llvm::StringRef name;
@@ -513,7 +514,7 @@ TEST_F(StringExtractorTest, GetNameColonValueContainsColon) {
 }
 
 TEST_F(StringExtractorTest, GetNameColonValueNoSemicolon) {
-  llvm::StringRef kNameColonPairs = "key1:value1";
+  const char kNameColonPairs[] = "key1:value1";
   StringExtractor ex(kNameColonPairs);
 
   llvm::StringRef name;
@@ -523,7 +524,7 @@ TEST_F(StringExtractorTest, GetNameColonValueNoSemicolon) {
 }
 
 TEST_F(StringExtractorTest, GetNameColonValueNoColon) {
-  llvm::StringRef kNameColonPairs = "key1value1;";
+  const char kNameColonPairs[] = "key1value1;";
   StringExtractor ex(kNameColonPairs);
 
   llvm::StringRef name;

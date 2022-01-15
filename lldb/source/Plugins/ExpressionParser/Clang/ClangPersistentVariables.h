@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGPERSISTENTVARIABLES_H
-#define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGPERSISTENTVARIABLES_H
+#ifndef liblldb_ClangPersistentVariables_h_
+#define liblldb_ClangPersistentVariables_h_
 
 #include "llvm/ADT/DenseMap.h"
 
@@ -18,11 +18,6 @@
 
 namespace lldb_private {
 
-class ClangASTImporter;
-class ClangModulesDeclVendor;
-class Target;
-class TypeSystemClang;
-
 /// \class ClangPersistentVariables ClangPersistentVariables.h
 /// "lldb/Expression/ClangPersistentVariables.h" Manages persistent values
 /// that need to be preserved between expression invocations.
@@ -32,7 +27,7 @@ class TypeSystemClang;
 /// 0-based counter for naming result variables.
 class ClangPersistentVariables : public PersistentExpressionState {
 public:
-  ClangPersistentVariables(std::shared_ptr<Target> target_sp);
+  ClangPersistentVariables();
 
   ~ClangPersistentVariables() override = default;
 
@@ -40,9 +35,6 @@ public:
   static bool classof(const PersistentExpressionState *pv) {
     return pv->getKind() == PersistentExpressionState::eKindClang;
   }
-
-  std::shared_ptr<ClangASTImporter> GetClangASTImporter();
-  std::shared_ptr<ClangModulesDeclVendor> GetClangModulesDeclVendor();
 
   lldb::ExpressionVariableSP
   CreatePersistentVariable(const lldb::ValueObjectSP &valobj_sp) override;
@@ -53,23 +45,15 @@ public:
       uint32_t addr_byte_size) override;
 
   void RemovePersistentVariable(lldb::ExpressionVariableSP variable) override;
-
-  ConstString GetNextPersistentVariableName(bool is_error = false) override;
-
-  /// Returns the next file name that should be used for user expressions.
-  std::string GetNextExprFileName() {
-    std::string name;
-    name.append("<user expression ");
-    name.append(std::to_string(m_next_user_file_id++));
-    name.append(">");
-    return name;
+  llvm::StringRef
+  GetPersistentVariablePrefix(bool is_error) const override {
+    return "$";
   }
 
   llvm::Optional<CompilerType>
   GetCompilerTypeFromPersistentDecl(ConstString type_name) override;
 
-  void RegisterPersistentDecl(ConstString name, clang::NamedDecl *decl,
-                              TypeSystemClang *ctx);
+  void RegisterPersistentDecl(ConstString name, clang::NamedDecl *decl);
 
   clang::NamedDecl *GetPersistentDecl(ConstString name);
 
@@ -81,26 +65,11 @@ public:
     return m_hand_loaded_clang_modules;
   }
 
-protected:
-  llvm::StringRef
-  GetPersistentVariablePrefix(bool is_error = false) const override {
-    return "$";
-  }
-
 private:
-  /// The counter used by GetNextExprFileName.
-  uint32_t m_next_user_file_id = 0;
-  // The counter used by GetNextPersistentVariableName
-  uint32_t m_next_persistent_variable_id = 0;
+  uint32_t m_next_persistent_variable_id; ///< The counter used by
+                                          ///GetNextResultName().
 
-  struct PersistentDecl {
-    /// The persistent decl.
-    clang::NamedDecl *m_decl = nullptr;
-    /// The TypeSystemClang for the ASTContext of m_decl.
-    TypeSystemClang *m_context = nullptr;
-  };
-
-  typedef llvm::DenseMap<const char *, PersistentDecl> PersistentDeclMap;
+  typedef llvm::DenseMap<const char *, clang::NamedDecl *> PersistentDeclMap;
   PersistentDeclMap
       m_persistent_decls; ///< Persistent entities declared by the user.
 
@@ -108,11 +77,8 @@ private:
       m_hand_loaded_clang_modules; ///< These are Clang modules we hand-loaded;
                                    ///these are the highest-
                                    ///< priority source for macros.
-  std::shared_ptr<ClangASTImporter> m_ast_importer_sp;
-  std::shared_ptr<ClangModulesDeclVendor> m_modules_decl_vendor_sp;
-  std::shared_ptr<Target> m_target_sp;
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGPERSISTENTVARIABLES_H
+#endif // liblldb_ClangPersistentVariables_h_

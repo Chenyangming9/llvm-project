@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SYMBOL_COMPILERDECLCONTEXT_H
-#define LLDB_SYMBOL_COMPILERDECLCONTEXT_H
+#ifndef liblldb_CompilerDeclContext_h_
+#define liblldb_CompilerDeclContext_h_
 
 #include <vector>
 
@@ -16,31 +16,15 @@
 
 namespace lldb_private {
 
-/// Represents a generic declaration context in a program. A declaration context
-/// is data structure that contains declarations (e.g. namespaces).
-///
-/// This class serves as an abstraction for a declaration context inside one of
-/// the TypeSystems implemented by the language plugins. It does not have any
-/// actual logic in it but only stores an opaque pointer and a pointer to the
-/// TypeSystem that gives meaning to this opaque pointer. All methods of this
-/// class should call their respective method in the TypeSystem interface and
-/// pass the opaque pointer along.
-///
-/// \see lldb_private::TypeSystem
 class CompilerDeclContext {
 public:
-  /// Constructs an invalid CompilerDeclContext.
-  CompilerDeclContext() = default;
+  // Constructors and Destructors
+  CompilerDeclContext() : m_type_system(nullptr), m_opaque_decl_ctx(nullptr) {}
 
-  /// Constructs a CompilerDeclContext with the given opaque decl context
-  /// and its respective TypeSystem instance.
-  ///
-  /// This constructor should only be called from the respective TypeSystem
-  /// implementation.
-  ///
-  /// \see lldb_private::TypeSystemClang::CreateDeclContext(clang::DeclContext*)
   CompilerDeclContext(TypeSystem *type_system, void *decl_ctx)
       : m_type_system(type_system), m_opaque_decl_ctx(decl_ctx) {}
+
+  ~CompilerDeclContext() {}
 
   // Tests
 
@@ -55,6 +39,8 @@ public:
   bool IsValid() const {
     return m_type_system != nullptr && m_opaque_decl_ctx != nullptr;
   }
+
+  bool IsClang() const;
 
   std::vector<CompilerDecl> FindDeclByName(ConstString name,
                                            const bool ignore_using_decls);
@@ -116,9 +102,11 @@ public:
 
   ConstString GetScopeQualifiedName() const;
 
+  bool IsStructUnionOrClass() const;
+
 private:
-  TypeSystem *m_type_system = nullptr;
-  void *m_opaque_decl_ctx = nullptr;
+  TypeSystem *m_type_system;
+  void *m_opaque_decl_ctx;
 };
 
 bool operator==(const CompilerDeclContext &lhs, const CompilerDeclContext &rhs);
@@ -126,4 +114,4 @@ bool operator!=(const CompilerDeclContext &lhs, const CompilerDeclContext &rhs);
 
 } // namespace lldb_private
 
-#endif // LLDB_SYMBOL_COMPILERDECLCONTEXT_H
+#endif // #ifndef liblldb_CompilerDeclContext_h_

@@ -14,8 +14,6 @@
 
 #include "pstl_config.h"
 
-_PSTL_HIDE_FROM_ABI_PUSH
-
 namespace __pstl
 {
 namespace execution
@@ -139,7 +137,7 @@ struct is_execution_policy<__pstl::execution::unsequenced_policy> : std::true_ty
 {
 };
 
-#if defined(_PSTL_CPP14_VARIABLE_TEMPLATES_PRESENT)
+#if _PSTL_CPP14_VARIABLE_TEMPLATES_PRESENT
 template <class T>
 constexpr bool is_execution_policy_v = __pstl::execution::is_execution_policy<T>::value;
 #endif
@@ -156,7 +154,5 @@ using __enable_if_execution_policy =
 } // namespace __internal
 
 } // namespace __pstl
-
-_PSTL_HIDE_FROM_ABI_POP
 
 #endif /* _PSTL_EXECUTION_POLICY_DEFS_H */

@@ -26,7 +26,6 @@
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/OperatorKinds.h"
 #include "clang/Basic/Specifiers.h"
-#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
 #include <algorithm>
@@ -41,7 +40,7 @@ using namespace threadSafety;
 std::string threadSafety::getSourceLiteralString(const Expr *CE) {
   switch (CE->getStmtClass()) {
     case Stmt::IntegerLiteralClass:
-      return toString(cast<IntegerLiteral>(CE)->getValue(), 10, true);
+      return cast<IntegerLiteral>(CE)->getValue().toString(10, true);
     case Stmt::StringLiteralClass: {
       std::string ret("\"");
       ret += cast<StringLiteral>(CE)->getString();
@@ -186,7 +185,7 @@ CapabilityExpr SExprBuilder::translateAttrExpr(const Expr *AttrExp,
     return CapabilityExpr(nullptr, false);
 
   // Hack to deal with smart pointers -- strip off top-level pointer casts.
-  if (const auto *CE = dyn_cast<til::Cast>(E)) {
+  if (const auto *CE = dyn_cast_or_null<til::Cast>(E)) {
     if (CE->castOpcode() == til::CAST_objToPtr)
       return CapabilityExpr(CE->expr(), Neg);
   }
@@ -245,7 +244,8 @@ til::SExpr *SExprBuilder::translate(const Stmt *S, CallingContext *Ctx) {
   case Stmt::CXXBindTemporaryExprClass:
     return translate(cast<CXXBindTemporaryExpr>(S)->getSubExpr(), Ctx);
   case Stmt::MaterializeTemporaryExprClass:
-    return translate(cast<MaterializeTemporaryExpr>(S)->getSubExpr(), Ctx);
+    return translate(cast<MaterializeTemporaryExpr>(S)->GetTemporaryExpr(),
+                     Ctx);
 
   // Collect all literals
   case Stmt::CharacterLiteralClass:
@@ -275,7 +275,7 @@ til::SExpr *SExprBuilder::translateDeclRefExpr(const DeclRefExpr *DRE,
   const auto *VD = cast<ValueDecl>(DRE->getDecl()->getCanonicalDecl());
 
   // Function parameters require substitution and/or renaming.
-  if (const auto *PV = dyn_cast<ParmVarDecl>(VD)) {
+  if (const auto *PV = dyn_cast_or_null<ParmVarDecl>(VD)) {
     unsigned I = PV->getFunctionScopeIndex();
     const DeclContext *D = PV->getDeclContext();
     if (Ctx && Ctx->FunArgs) {

@@ -104,11 +104,13 @@
         .type __hexagon_fmadf4,@function
 	.global __hexagon_fmadf5
         .type __hexagon_fmadf5,@function
+	.global fma
+	.type fma,@function
 	Q6_ALIAS(fmadf5)
 	.p2align 5
 __hexagon_fmadf4:
 __hexagon_fmadf5:
-.Lfma_begin:
+fma:
 	{
 		P_TMP = dfclass(A,#2)
 		P_TMP = dfclass(B,#2)
@@ -559,7 +561,7 @@ __hexagon_fmadf5:
 		B = insert(BTMP,#63,#0)
 		AH -= asl(TMP,#HI_MANTBITS)
 	}
-	jump .Lfma_begin
+	jump fma
 
 .Lfma_ab_tiny:
 	ATMP = combine(##0x00100000,#0)
@@ -567,7 +569,7 @@ __hexagon_fmadf5:
 		A = insert(ATMP,#63,#0)
 		B = insert(ATMP,#63,#0)
 	}
-	jump .Lfma_begin
+	jump fma
 
 .Lab_inf:
 	{

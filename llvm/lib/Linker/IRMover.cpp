@@ -16,9 +16,7 @@
 #include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/IR/GVMaterializer.h"
 #include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/PseudoProbe.h"
 #include "llvm/IR/TypeFinder.h"
-#include "llvm/Object/ModuleSymbolTable.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include <utility>
@@ -175,11 +173,9 @@ bool TypeMapTy::areTypesIsomorphic(Type *DstTy, Type *SrcTy) {
     if (DSTy->isLiteral() != SSTy->isLiteral() ||
         DSTy->isPacked() != SSTy->isPacked())
       return false;
-  } else if (auto *DArrTy = dyn_cast<ArrayType>(DstTy)) {
-    if (DArrTy->getNumElements() != cast<ArrayType>(SrcTy)->getNumElements())
-      return false;
-  } else if (auto *DVecTy = dyn_cast<VectorType>(DstTy)) {
-    if (DVecTy->getElementCount() != cast<VectorType>(SrcTy)->getElementCount())
+  } else if (auto *DSeqTy = dyn_cast<SequentialType>(DstTy)) {
+    if (DSeqTy->getNumElements() !=
+        cast<SequentialType>(SrcTy)->getNumElements())
       return false;
   }
 
@@ -244,6 +240,15 @@ Type *TypeMapTy::get(Type *Ty, SmallPtrSet<StructType *, 8> &Visited) {
   bool IsUniqued = !isa<StructType>(Ty) || cast<StructType>(Ty)->isLiteral();
 
   if (!IsUniqued) {
+    StructType *STy = cast<StructType>(Ty);
+    // This is actually a type from the destination module, this can be reached
+    // when this type is loaded in another module, added to DstStructTypesSet,
+    // and then we reach the same type in another module where it has not been
+    // added to MappedTypes. (PR37684)
+    if (STy->getContext().isODRUniquingDebugTypes() && !STy->isOpaque() &&
+        DstStructTypesSet.hasType(STy))
+      return *Entry = STy;
+
 #ifndef NDEBUG
     for (auto &Pair : MappedTypes) {
       assert(!(Pair.first != Ty && Pair.second == Ty) &&
@@ -251,7 +256,7 @@ Type *TypeMapTy::get(Type *Ty, SmallPtrSet<StructType *, 8> &Visited) {
     }
 #endif
 
-    if (!Visited.insert(cast<StructType>(Ty)).second) {
+    if (!Visited.insert(STy).second) {
       StructType *DTy = StructType::create(Ty->getContext());
       return *Entry = DTy;
     }
@@ -298,10 +303,9 @@ Type *TypeMapTy::get(Type *Ty, SmallPtrSet<StructType *, 8> &Visited) {
   case Type::ArrayTyID:
     return *Entry = ArrayType::get(ElementTypes[0],
                                    cast<ArrayType>(Ty)->getNumElements());
-  case Type::ScalableVectorTyID:
-  case Type::FixedVectorTyID:
+  case Type::VectorTyID:
     return *Entry = VectorType::get(ElementTypes[0],
-                                    cast<VectorType>(Ty)->getElementCount());
+                                    cast<VectorType>(Ty)->getNumElements());
   case Type::PointerTyID:
     return *Entry = PointerType::get(ElementTypes[0],
                                      cast<PointerType>(Ty)->getAddressSpace());
@@ -394,7 +398,7 @@ class IRLinker {
   /// due to the use of Value handles which the Linker doesn't actually need,
   /// but this allows us to reuse the ValueMapper code.
   ValueToValueMapTy ValueMap;
-  ValueToValueMapTy IndirectSymbolValueMap;
+  ValueToValueMapTy AliasValueMap;
 
   DenseSet<GlobalValue *> ValuesToLink;
   std::vector<GlobalValue *> Worklist;
@@ -433,7 +437,7 @@ class IRLinker {
 
   /// Entry point for mapping values and alternate context for mapping aliases.
   ValueMapper Mapper;
-  unsigned IndirectSymbolMCID;
+  unsigned AliasMCID;
 
   /// Handles cloning of a global values from the source module into
   /// the destination module, including setting the attributes and visibility.
@@ -461,14 +465,6 @@ class IRLinker {
     if (DGV->hasLocalLinkage())
       return nullptr;
 
-    // If we found an intrinsic declaration with mismatching prototypes, we
-    // probably had a nameclash. Don't use that version.
-    if (auto *FDGV = dyn_cast<Function>(DGV))
-      if (FDGV->isIntrinsic())
-        if (const auto *FSrcGV = dyn_cast<Function>(SrcGV))
-          if (FDGV->getFunctionType() != TypeMap.get(FSrcGV->getFunctionType()))
-            return nullptr;
-
     // Otherwise, we do in fact link to the destination global.
     return DGV;
   }
@@ -484,15 +480,13 @@ class IRLinker {
   ///
   /// Note this code may call the client-provided \p AddLazyFor.
   bool shouldLink(GlobalValue *DGV, GlobalValue &SGV);
-  Expected<Constant *> linkGlobalValueProto(GlobalValue *GV,
-                                            bool ForIndirectSymbol);
+  Expected<Constant *> linkGlobalValueProto(GlobalValue *GV, bool ForAlias);
 
   Error linkModuleFlagsMetadata();
 
   void linkGlobalVariable(GlobalVariable &Dst, GlobalVariable &Src);
   Error linkFunctionBody(Function &Dst, Function &Src);
-  void linkIndirectSymbolBody(GlobalIndirectSymbol &Dst,
-                              GlobalIndirectSymbol &Src);
+  void linkAliasBody(GlobalAlias &Dst, GlobalAlias &Src);
   Error linkGlobalValueBody(GlobalValue &Dst, GlobalValue &Src);
 
   /// Replace all types in the source AttributeList with the
@@ -503,7 +497,7 @@ class IRLinker {
   /// into the destination module.
   GlobalVariable *copyGlobalVariableProto(const GlobalVariable *SGVar);
   Function *copyFunctionProto(const Function *SF);
-  GlobalValue *copyGlobalIndirectSymbolProto(const GlobalIndirectSymbol *SGIS);
+  GlobalValue *copyGlobalAliasProto(const GlobalAlias *SGA);
 
   /// Perform "replace all uses with" operations. These work items need to be
   /// performed as part of materialization, but we postpone them to happen after
@@ -528,10 +522,10 @@ public:
       : DstM(DstM), SrcM(std::move(SrcM)), AddLazyFor(std::move(AddLazyFor)),
         TypeMap(Set), GValMaterializer(*this), LValMaterializer(*this),
         SharedMDs(SharedMDs), IsPerformingImport(IsPerformingImport),
-        Mapper(ValueMap, RF_ReuseAndMutateDistinctMDs | RF_IgnoreMissingLocals,
-               &TypeMap, &GValMaterializer),
-        IndirectSymbolMCID(Mapper.registerAlternateMappingContext(
-            IndirectSymbolValueMap, &LValMaterializer)) {
+        Mapper(ValueMap, RF_MoveDistinctMDs | RF_IgnoreMissingLocals, &TypeMap,
+               &GValMaterializer),
+        AliasMCID(Mapper.registerAlternateMappingContext(AliasValueMap,
+                                                         &LValMaterializer)) {
     ValueMap.getMDMap() = std::move(SharedMDs);
     for (GlobalValue *GV : ValuesToLink)
       maybeAdd(GV);
@@ -541,7 +535,7 @@ public:
   ~IRLinker() { SharedMDs = std::move(*ValueMap.getMDMap()); }
 
   Error run();
-  Value *materialize(Value *V, bool ForIndirectSymbol);
+  Value *materialize(Value *V, bool ForAlias);
 };
 }
 
@@ -574,19 +568,12 @@ Value *LocalValueMaterializer::materialize(Value *SGV) {
   return TheIRLinker.materialize(SGV, true);
 }
 
-Value *IRLinker::materialize(Value *V, bool ForIndirectSymbol) {
+Value *IRLinker::materialize(Value *V, bool ForAlias) {
   auto *SGV = dyn_cast<GlobalValue>(V);
   if (!SGV)
     return nullptr;
 
-  // When linking a global from other modules than source & dest, skip
-  // materializing it because it would be mapped later when its containing
-  // module is linked. Linking it now would potentially pull in many types that
-  // may not be mapped properly.
-  if (SGV->getParent() != &DstM && SGV->getParent() != SrcM.get())
-    return nullptr;
-
-  Expected<Constant *> NewProto = linkGlobalValueProto(SGV, ForIndirectSymbol);
+  Expected<Constant *> NewProto = linkGlobalValueProto(SGV, ForAlias);
   if (!NewProto) {
     setError(NewProto.takeError());
     return nullptr;
@@ -606,24 +593,23 @@ Value *IRLinker::materialize(Value *V, bool ForIndirectSymbol) {
     if (V->hasInitializer() || V->hasAppendingLinkage())
       return New;
   } else {
-    auto *IS = cast<GlobalIndirectSymbol>(New);
-    if (IS->getIndirectSymbol())
+    auto *A = cast<GlobalAlias>(New);
+    if (A->getAliasee())
       return New;
   }
 
-  // If the global is being linked for an indirect symbol, it may have already
-  // been scheduled to satisfy a regular symbol. Similarly, a global being linked
-  // for a regular symbol may have already been scheduled for an indirect
-  // symbol. Check for these cases by looking in the other value map and
-  // confirming the same value has been scheduled.  If there is an entry in the
-  // ValueMap but the value is different, it means that the value already had a
-  // definition in the destination module (linkonce for instance), but we need a
-  // new definition for the indirect symbol ("New" will be different).
-  if ((ForIndirectSymbol && ValueMap.lookup(SGV) == New) ||
-      (!ForIndirectSymbol && IndirectSymbolValueMap.lookup(SGV) == New))
+  // When linking a global for an alias, it will always be linked. However we
+  // need to check if it was not already scheduled to satisfy a reference from a
+  // regular global value initializer. We know if it has been schedule if the
+  // "New" GlobalValue that is mapped here for the alias is the same as the one
+  // already mapped. If there is an entry in the ValueMap but the value is
+  // different, it means that the value already had a definition in the
+  // destination module (linkonce for instance), but we need a new definition
+  // for the alias ("New" will be different.
+  if (ForAlias && ValueMap.lookup(SGV) == New)
     return New;
 
-  if (ForIndirectSymbol || shouldLink(New, *SGV))
+  if (ForAlias || shouldLink(New, *SGV))
     setError(linkGlobalValueBody(*New, *SGV));
 
   return New;
@@ -640,23 +626,22 @@ GlobalVariable *IRLinker::copyGlobalVariableProto(const GlobalVariable *SGVar) {
                          SGVar->isConstant(), GlobalValue::ExternalLinkage,
                          /*init*/ nullptr, SGVar->getName(),
                          /*insertbefore*/ nullptr, SGVar->getThreadLocalMode(),
-                         SGVar->getAddressSpace());
-  NewDGV->setAlignment(MaybeAlign(SGVar->getAlignment()));
+                         SGVar->getType()->getAddressSpace());
+  NewDGV->setAlignment(SGVar->getAlignment());
   NewDGV->copyAttributesFrom(SGVar);
   return NewDGV;
 }
 
 AttributeList IRLinker::mapAttributeTypes(LLVMContext &C, AttributeList Attrs) {
   for (unsigned i = 0; i < Attrs.getNumAttrSets(); ++i) {
-    for (Attribute::AttrKind TypedAttr :
-         {Attribute::ByVal, Attribute::StructRet, Attribute::ByRef,
-          Attribute::InAlloca}) {
-      if (Attrs.hasAttribute(i, TypedAttr)) {
-        if (Type *Ty = Attrs.getAttribute(i, TypedAttr).getValueAsType()) {
-          Attrs = Attrs.replaceAttributeType(C, i, TypedAttr, TypeMap.get(Ty));
-          break;
-        }
-      }
+    if (Attrs.hasAttribute(i, Attribute::ByVal)) {
+      Type *Ty = Attrs.getAttribute(i, Attribute::ByVal).getValueAsType();
+      if (!Ty)
+        continue;
+
+      Attrs = Attrs.removeAttribute(C, i, Attribute::ByVal);
+      Attrs = Attrs.addAttribute(
+          C, i, Attribute::getWithByValType(C, TypeMap.get(Ty)));
     }
   }
   return Attrs;
@@ -667,32 +652,24 @@ AttributeList IRLinker::mapAttributeTypes(LLVMContext &C, AttributeList Attrs) {
 Function *IRLinker::copyFunctionProto(const Function *SF) {
   // If there is no linkage to be performed or we are linking from the source,
   // bring SF over.
-  auto *F = Function::Create(TypeMap.get(SF->getFunctionType()),
-                             GlobalValue::ExternalLinkage,
-                             SF->getAddressSpace(), SF->getName(), &DstM);
+  auto *F =
+      Function::Create(TypeMap.get(SF->getFunctionType()),
+                       GlobalValue::ExternalLinkage, SF->getName(), &DstM);
   F->copyAttributesFrom(SF);
   F->setAttributes(mapAttributeTypes(F->getContext(), F->getAttributes()));
   return F;
 }
 
-/// Set up prototypes for any indirect symbols that come over from the source
-/// module.
-GlobalValue *
-IRLinker::copyGlobalIndirectSymbolProto(const GlobalIndirectSymbol *SGIS) {
+/// Set up prototypes for any aliases that come over from the source module.
+GlobalValue *IRLinker::copyGlobalAliasProto(const GlobalAlias *SGA) {
   // If there is no linkage to be performed or we're linking from the source,
   // bring over SGA.
-  auto *Ty = TypeMap.get(SGIS->getValueType());
-  GlobalIndirectSymbol *GIS;
-  if (isa<GlobalAlias>(SGIS))
-    GIS = GlobalAlias::create(Ty, SGIS->getAddressSpace(),
-                              GlobalValue::ExternalLinkage, SGIS->getName(),
-                              &DstM);
-  else
-    GIS = GlobalIFunc::create(Ty, SGIS->getAddressSpace(),
-                              GlobalValue::ExternalLinkage, SGIS->getName(),
-                              nullptr, &DstM);
-  GIS->copyAttributesFrom(SGIS);
-  return GIS;
+  auto *Ty = TypeMap.get(SGA->getValueType());
+  auto *GA =
+      GlobalAlias::create(Ty, SGA->getType()->getPointerAddressSpace(),
+                          GlobalValue::ExternalLinkage, SGA->getName(), &DstM);
+  GA->copyAttributesFrom(SGA);
+  return GA;
 }
 
 GlobalValue *IRLinker::copyGlobalValueProto(const GlobalValue *SGV,
@@ -704,19 +681,18 @@ GlobalValue *IRLinker::copyGlobalValueProto(const GlobalValue *SGV,
     NewGV = copyFunctionProto(SF);
   } else {
     if (ForDefinition)
-      NewGV = copyGlobalIndirectSymbolProto(cast<GlobalIndirectSymbol>(SGV));
+      NewGV = copyGlobalAliasProto(cast<GlobalAlias>(SGV));
     else if (SGV->getValueType()->isFunctionTy())
       NewGV =
           Function::Create(cast<FunctionType>(TypeMap.get(SGV->getValueType())),
-                           GlobalValue::ExternalLinkage, SGV->getAddressSpace(),
-                           SGV->getName(), &DstM);
+                           GlobalValue::ExternalLinkage, SGV->getName(), &DstM);
     else
-      NewGV =
-          new GlobalVariable(DstM, TypeMap.get(SGV->getValueType()),
-                             /*isConstant*/ false, GlobalValue::ExternalLinkage,
-                             /*init*/ nullptr, SGV->getName(),
-                             /*insertbefore*/ nullptr,
-                             SGV->getThreadLocalMode(), SGV->getAddressSpace());
+      NewGV = new GlobalVariable(
+          DstM, TypeMap.get(SGV->getValueType()),
+          /*isConstant*/ false, GlobalValue::ExternalLinkage,
+          /*init*/ nullptr, SGV->getName(),
+          /*insertbefore*/ nullptr, SGV->getThreadLocalMode(),
+          SGV->getType()->getAddressSpace());
   }
 
   if (ForDefinition)
@@ -772,18 +748,8 @@ void IRLinker::computeTypeMapping() {
   }
 
   for (GlobalValue &SGV : *SrcM)
-    if (GlobalValue *DGV = getLinkedToGlobal(&SGV)) {
-      if (DGV->getType() == SGV.getType()) {
-        // If the types of DGV and SGV are the same, it means that DGV is from
-        // the source module and got added to DstM from a shared metadata.  We
-        // shouldn't map this type to itself in case the type's components get
-        // remapped to a new type from DstM (for instance, during the loop over
-        // SrcM->getIdentifiedStructTypes() below).
-        continue;
-      }
-
+    if (GlobalValue *DGV = getLinkedToGlobal(&SGV))
       TypeMap.addTypeMapping(DGV->getType(), SGV.getType());
-    }
 
   for (GlobalValue &SGV : SrcM->aliases())
     if (GlobalValue *DGV = getLinkedToGlobal(&SGV))
@@ -807,11 +773,11 @@ void IRLinker::computeTypeMapping() {
     }
 
     auto STTypePrefix = getTypeNamePrefix(ST->getName());
-    if (STTypePrefix.size() == ST->getName().size())
+    if (STTypePrefix.size()== ST->getName().size())
       continue;
 
     // Check to see if the destination module has a struct with the prefix name.
-    StructType *DST = StructType::getTypeByName(ST->getContext(), STTypePrefix);
+    StructType *DST = DstM.getTypeByName(STTypePrefix);
     if (!DST)
       continue;
 
@@ -853,38 +819,6 @@ static void getArrayElements(const Constant *C,
 Expected<Constant *>
 IRLinker::linkAppendingVarProto(GlobalVariable *DstGV,
                                 const GlobalVariable *SrcGV) {
-  // Check that both variables have compatible properties.
-  if (DstGV && !DstGV->isDeclaration() && !SrcGV->isDeclaration()) {
-    if (!SrcGV->hasAppendingLinkage() || !DstGV->hasAppendingLinkage())
-      return stringErr(
-          "Linking globals named '" + SrcGV->getName() +
-          "': can only link appending global with another appending "
-          "global!");
-
-    if (DstGV->isConstant() != SrcGV->isConstant())
-      return stringErr("Appending variables linked with different const'ness!");
-
-    if (DstGV->getAlignment() != SrcGV->getAlignment())
-      return stringErr(
-          "Appending variables with different alignment need to be linked!");
-
-    if (DstGV->getVisibility() != SrcGV->getVisibility())
-      return stringErr(
-          "Appending variables with different visibility need to be linked!");
-
-    if (DstGV->hasGlobalUnnamedAddr() != SrcGV->hasGlobalUnnamedAddr())
-      return stringErr(
-          "Appending variables with different unnamed_addr need to be linked!");
-
-    if (DstGV->getSection() != SrcGV->getSection())
-      return stringErr(
-          "Appending variables with different section name need to be linked!");
-  }
-
-  // Do not need to do anything if source is a declaration.
-  if (SrcGV->isDeclaration())
-    return DstGV;
-
   Type *EltTy = cast<ArrayType>(TypeMap.get(SrcGV->getValueType()))
                     ->getElementType();
 
@@ -910,20 +844,44 @@ IRLinker::linkAppendingVarProto(GlobalVariable *DstGV,
   }
 
   uint64_t DstNumElements = 0;
-  if (DstGV && !DstGV->isDeclaration()) {
+  if (DstGV) {
     ArrayType *DstTy = cast<ArrayType>(DstGV->getValueType());
     DstNumElements = DstTy->getNumElements();
+
+    if (!SrcGV->hasAppendingLinkage() || !DstGV->hasAppendingLinkage())
+      return stringErr(
+          "Linking globals named '" + SrcGV->getName() +
+          "': can only link appending global with another appending "
+          "global!");
 
     // Check to see that they two arrays agree on type.
     if (EltTy != DstTy->getElementType())
       return stringErr("Appending variables with different element types!");
+    if (DstGV->isConstant() != SrcGV->isConstant())
+      return stringErr("Appending variables linked with different const'ness!");
+
+    if (DstGV->getAlignment() != SrcGV->getAlignment())
+      return stringErr(
+          "Appending variables with different alignment need to be linked!");
+
+    if (DstGV->getVisibility() != SrcGV->getVisibility())
+      return stringErr(
+          "Appending variables with different visibility need to be linked!");
+
+    if (DstGV->hasGlobalUnnamedAddr() != SrcGV->hasGlobalUnnamedAddr())
+      return stringErr(
+          "Appending variables with different unnamed_addr need to be linked!");
+
+    if (DstGV->getSection() != SrcGV->getSection())
+      return stringErr(
+          "Appending variables with different section name need to be linked!");
   }
 
   SmallVector<Constant *, 16> SrcElements;
   getArrayElements(SrcGV->getInitializer(), SrcElements);
 
   if (IsNewStructor) {
-    erase_if(SrcElements, [this](Constant *E) {
+    auto It = remove_if(SrcElements, [this](Constant *E) {
       auto *Key =
           dyn_cast<GlobalValue>(E->getAggregateElement(2)->stripPointerCasts());
       if (!Key)
@@ -931,6 +889,7 @@ IRLinker::linkAppendingVarProto(GlobalVariable *DstGV,
       GlobalValue *DGV = getLinkedToGlobal(Key);
       return !shouldLink(DGV, *Key);
     });
+    SrcElements.erase(It, SrcElements.end());
   }
   uint64_t NewSize = DstNumElements + SrcElements.size();
   ArrayType *NewType = ArrayType::get(EltTy, NewSize);
@@ -939,17 +898,16 @@ IRLinker::linkAppendingVarProto(GlobalVariable *DstGV,
   GlobalVariable *NG = new GlobalVariable(
       DstM, NewType, SrcGV->isConstant(), SrcGV->getLinkage(),
       /*init*/ nullptr, /*name*/ "", DstGV, SrcGV->getThreadLocalMode(),
-      SrcGV->getAddressSpace());
+      SrcGV->getType()->getAddressSpace());
 
   NG->copyAttributesFrom(SrcGV);
   forceRenaming(NG, SrcGV->getName());
 
   Constant *Ret = ConstantExpr::getBitCast(NG, TypeMap.get(SrcGV->getType()));
 
-  Mapper.scheduleMapAppendingVariable(
-      *NG,
-      (DstGV && !DstGV->isDeclaration()) ? DstGV->getInitializer() : nullptr,
-      IsOldStructor, SrcElements);
+  Mapper.scheduleMapAppendingVariable(*NG,
+                                      DstGV ? DstGV->getInitializer() : nullptr,
+                                      IsOldStructor, SrcElements);
 
   // Replace any uses of the two global variables with uses of the new
   // global.
@@ -982,7 +940,7 @@ bool IRLinker::shouldLink(GlobalValue *DGV, GlobalValue &SGV) {
 }
 
 Expected<Constant *> IRLinker::linkGlobalValueProto(GlobalValue *SGV,
-                                                    bool ForIndirectSymbol) {
+                                                    bool ForAlias) {
   GlobalValue *DGV = getLinkedToGlobal(SGV);
 
   bool ShouldLink = shouldLink(DGV, *SGV);
@@ -993,20 +951,20 @@ Expected<Constant *> IRLinker::linkGlobalValueProto(GlobalValue *SGV,
     if (I != ValueMap.end())
       return cast<Constant>(I->second);
 
-    I = IndirectSymbolValueMap.find(SGV);
-    if (I != IndirectSymbolValueMap.end())
+    I = AliasValueMap.find(SGV);
+    if (I != AliasValueMap.end())
       return cast<Constant>(I->second);
   }
 
-  if (!ShouldLink && ForIndirectSymbol)
+  if (!ShouldLink && ForAlias)
     DGV = nullptr;
 
   // Handle the ultra special appending linkage case first.
-  if (SGV->hasAppendingLinkage() || (DGV && DGV->hasAppendingLinkage()))
+  assert(!DGV || SGV->hasAppendingLinkage() == DGV->hasAppendingLinkage());
+  if (SGV->hasAppendingLinkage())
     return linkAppendingVarProto(cast_or_null<GlobalVariable>(DGV),
                                  cast<GlobalVariable>(SGV));
 
-  bool NeedsRenaming = false;
   GlobalValue *NewGV;
   if (DGV && !ShouldLink) {
     NewGV = DGV;
@@ -1017,25 +975,19 @@ Expected<Constant *> IRLinker::linkGlobalValueProto(GlobalValue *SGV,
     if (DoneLinkingBodies)
       return nullptr;
 
-    NewGV = copyGlobalValueProto(SGV, ShouldLink || ForIndirectSymbol);
-    if (ShouldLink || !ForIndirectSymbol)
-      NeedsRenaming = true;
+    NewGV = copyGlobalValueProto(SGV, ShouldLink || ForAlias);
+    if (ShouldLink || !ForAlias)
+      forceRenaming(NewGV, SGV->getName());
   }
 
   // Overloaded intrinsics have overloaded types names as part of their
   // names. If we renamed overloaded types we should rename the intrinsic
   // as well.
   if (Function *F = dyn_cast<Function>(NewGV))
-    if (auto Remangled = Intrinsic::remangleIntrinsicFunction(F)) {
-      NewGV->eraseFromParent();
+    if (auto Remangled = Intrinsic::remangleIntrinsicFunction(F))
       NewGV = Remangled.getValue();
-      NeedsRenaming = false;
-    }
 
-  if (NeedsRenaming)
-    forceRenaming(NewGV, SGV->getName());
-
-  if (ShouldLink || ForIndirectSymbol) {
+  if (ShouldLink || ForAlias) {
     if (const Comdat *SC = SGV->getComdat()) {
       if (auto *GO = dyn_cast<GlobalObject>(NewGV)) {
         Comdat *DC = DstM.getOrInsertComdat(SC->getName());
@@ -1045,7 +997,7 @@ Expected<Constant *> IRLinker::linkGlobalValueProto(GlobalValue *SGV,
     }
   }
 
-  if (!ShouldLink && ForIndirectSymbol)
+  if (!ShouldLink && ForAlias)
     NewGV->setLinkage(GlobalValue::InternalLinkage);
 
   Constant *C = NewGV;
@@ -1108,10 +1060,8 @@ Error IRLinker::linkFunctionBody(Function &Dst, Function &Src) {
   return Error::success();
 }
 
-void IRLinker::linkIndirectSymbolBody(GlobalIndirectSymbol &Dst,
-                                      GlobalIndirectSymbol &Src) {
-  Mapper.scheduleMapGlobalIndirectSymbol(Dst, *Src.getIndirectSymbol(),
-                                         IndirectSymbolMCID);
+void IRLinker::linkAliasBody(GlobalAlias &Dst, GlobalAlias &Src) {
+  Mapper.scheduleMapGlobalAliasee(Dst, *Src.getAliasee(), AliasMCID);
 }
 
 Error IRLinker::linkGlobalValueBody(GlobalValue &Dst, GlobalValue &Src) {
@@ -1121,12 +1071,12 @@ Error IRLinker::linkGlobalValueBody(GlobalValue &Dst, GlobalValue &Src) {
     linkGlobalVariable(cast<GlobalVariable>(Dst), *GVar);
     return Error::success();
   }
-  linkIndirectSymbolBody(cast<GlobalIndirectSymbol>(Dst), cast<GlobalIndirectSymbol>(Src));
+  linkAliasBody(cast<GlobalAlias>(Dst), cast<GlobalAlias>(Src));
   return Error::success();
 }
 
 void IRLinker::flushRAUWWorklist() {
-  for (const auto &Elem : RAUWWorklist) {
+  for (const auto Elem : RAUWWorklist) {
     GlobalValue *Old;
     Value *New;
     std::tie(Old, New) = Elem;
@@ -1149,13 +1099,14 @@ void IRLinker::prepareCompileUnitsForImport() {
     assert(CU && "Expected valid compile unit");
     // Enums, macros, and retained types don't need to be listed on the
     // imported DICompileUnit. This means they will only be imported
-    // if reached from the mapped IR.
-    CU->replaceEnumTypes(nullptr);
-    CU->replaceMacros(nullptr);
-    CU->replaceRetainedTypes(nullptr);
-
+    // if reached from the mapped IR. Do this by setting their value map
+    // entries to nullptr, which will automatically prevent their importing
+    // when reached from the DICompileUnit during metadata mapping.
+    ValueMap.MD()[CU->getRawEnumTypes()].reset(nullptr);
+    ValueMap.MD()[CU->getRawMacros()].reset(nullptr);
+    ValueMap.MD()[CU->getRawRetainedTypes()].reset(nullptr);
     // The original definition (or at least its debug info - if the variable is
-    // internalized and optimized away) will remain in the source module, so
+    // internalized an optimized away) will remain in the source module, so
     // there's no need to import them.
     // If LLVM ever does more advanced optimizations on global variables
     // (removing/localizing write operations, for instance) that can track
@@ -1163,7 +1114,7 @@ void IRLinker::prepareCompileUnitsForImport() {
     // with care when it comes to debug info size. Emitting small CUs containing
     // only a few imported entities into every destination module may be very
     // size inefficient.
-    CU->replaceGlobalVariables(nullptr);
+    ValueMap.MD()[CU->getRawGlobalVariables()].reset(nullptr);
 
     // Imported entities only need to be mapped in if they have local
     // scope, as those might correspond to an imported entity inside a
@@ -1196,7 +1147,7 @@ void IRLinker::prepareCompileUnitsForImport() {
       else
         // If there were no local scope imported entities, we can map
         // the whole list to nullptr.
-        CU->replaceImportedEntities(nullptr);
+        ValueMap.MD()[CU->getRawImportedEntities()].reset(nullptr);
     }
   }
 }
@@ -1207,10 +1158,6 @@ void IRLinker::linkNamedMDNodes() {
   for (const NamedMDNode &NMD : SrcM->named_metadata()) {
     // Don't link module flags here. Do them separately.
     if (&NMD == SrcModFlags)
-      continue;
-    // Don't import pseudo probe descriptors here for thinLTO. They will be
-    // emitted by the originating module.
-    if (IsPerformingImport && NMD.getName() == PseudoProbeDescMetadataName)
       continue;
     NamedMDNode *DestNMD = DstM.getOrInsertNamedMetadata(NMD.getName());
     // Add Src elements into Dest node.
@@ -1307,17 +1254,11 @@ Error IRLinker::linkModuleFlagsMetadata() {
     }
 
     // Diagnose inconsistent merge behavior types.
-    if (SrcBehaviorValue != DstBehaviorValue) {
-      bool MaxAndWarn = (SrcBehaviorValue == Module::Max &&
-                         DstBehaviorValue == Module::Warning) ||
-                        (DstBehaviorValue == Module::Max &&
-                         SrcBehaviorValue == Module::Warning);
-      if (!MaxAndWarn)
-        return stringErr("linking module flags '" + ID->getString() +
-                         "': IDs have conflicting behaviors in '" +
-                         SrcM->getModuleIdentifier() + "' and '" +
-                         DstM.getModuleIdentifier() + "'");
-    }
+    if (SrcBehaviorValue != DstBehaviorValue)
+      return stringErr("linking module flags '" + ID->getString() +
+                       "': IDs have conflicting behaviors in '" +
+                       SrcM->getModuleIdentifier() + "' and '" +
+                       DstM.getModuleIdentifier() + "'");
 
     auto replaceDstValue = [&](MDNode *New) {
       Metadata *FlagOps[] = {DstOp->getOperand(0), ID, New};
@@ -1325,40 +1266,6 @@ Error IRLinker::linkModuleFlagsMetadata() {
       DstModFlags->setOperand(DstIndex, Flag);
       Flags[ID].first = Flag;
     };
-
-    // Emit a warning if the values differ and either source or destination
-    // request Warning behavior.
-    if ((DstBehaviorValue == Module::Warning ||
-         SrcBehaviorValue == Module::Warning) &&
-        SrcOp->getOperand(2) != DstOp->getOperand(2)) {
-      std::string Str;
-      raw_string_ostream(Str)
-          << "linking module flags '" << ID->getString()
-          << "': IDs have conflicting values ('" << *SrcOp->getOperand(2)
-          << "' from " << SrcM->getModuleIdentifier() << " with '"
-          << *DstOp->getOperand(2) << "' from " << DstM.getModuleIdentifier()
-          << ')';
-      emitWarning(Str);
-    }
-
-    // Choose the maximum if either source or destination request Max behavior.
-    if (DstBehaviorValue == Module::Max || SrcBehaviorValue == Module::Max) {
-      ConstantInt *DstValue =
-          mdconst::extract<ConstantInt>(DstOp->getOperand(2));
-      ConstantInt *SrcValue =
-          mdconst::extract<ConstantInt>(SrcOp->getOperand(2));
-
-      // The resulting flag should have a Max behavior, and contain the maximum
-      // value from between the source and destination values.
-      Metadata *FlagOps[] = {
-          (DstBehaviorValue != Module::Max ? SrcOp : DstOp)->getOperand(0), ID,
-          (SrcValue->getZExtValue() > DstValue->getZExtValue() ? SrcOp : DstOp)
-              ->getOperand(2)};
-      MDNode *Flag = MDNode::get(DstM.getContext(), FlagOps);
-      DstModFlags->setOperand(DstIndex, Flag);
-      Flags[ID].first = Flag;
-      continue;
-    }
 
     // Perform the merge for standard behavior types.
     switch (SrcBehaviorValue) {
@@ -1375,9 +1282,26 @@ Error IRLinker::linkModuleFlagsMetadata() {
       continue;
     }
     case Module::Warning: {
-      break;
+      // Emit a warning if the values differ.
+      if (SrcOp->getOperand(2) != DstOp->getOperand(2)) {
+        std::string str;
+        raw_string_ostream(str)
+            << "linking module flags '" << ID->getString()
+            << "': IDs have conflicting values ('" << *SrcOp->getOperand(2)
+            << "' from " << SrcM->getModuleIdentifier() << " with '"
+            << *DstOp->getOperand(2) << "' from " << DstM.getModuleIdentifier()
+            << ')';
+        emitWarning(str);
+      }
+      continue;
     }
     case Module::Max: {
+      ConstantInt *DstValue =
+          mdconst::extract<ConstantInt>(DstOp->getOperand(2));
+      ConstantInt *SrcValue =
+          mdconst::extract<ConstantInt>(SrcOp->getOperand(2));
+      if (SrcValue->getZExtValue() > DstValue->getZExtValue())
+        overrideDstValue();
       break;
     }
     case Module::Append: {
@@ -1403,7 +1327,6 @@ Error IRLinker::linkModuleFlagsMetadata() {
       break;
     }
     }
-
   }
 
   // Check all of the requirements.
@@ -1459,13 +1382,24 @@ Error IRLinker::run() {
 
   if (!SrcM->getTargetTriple().empty()&&
       !SrcTriple.isCompatibleWith(DstTriple))
-    emitWarning("Linking two modules of different target triples: '" +
+    emitWarning("Linking two modules of different target triples: " +
                 SrcM->getModuleIdentifier() + "' is '" +
                 SrcM->getTargetTriple() + "' whereas '" +
                 DstM.getModuleIdentifier() + "' is '" + DstM.getTargetTriple() +
                 "'\n");
 
   DstM.setTargetTriple(SrcTriple.merge(DstTriple));
+
+  // Append the module inline asm string.
+  if (!IsPerformingImport && !SrcM->getModuleInlineAsm().empty()) {
+    std::string SrcModuleInlineAsm = adjustInlineAsm(SrcM->getModuleInlineAsm(),
+                                                     SrcTriple);
+    if (DstM.getModuleInlineAsm().empty())
+      DstM.setModuleInlineAsm(SrcModuleInlineAsm);
+    else
+      DstM.setModuleInlineAsm(DstM.getModuleInlineAsm() + "\n" +
+                              SrcModuleInlineAsm);
+  }
 
   // Loop over all of the linked values to compute type mappings.
   computeTypeMapping();
@@ -1477,7 +1411,7 @@ Error IRLinker::run() {
 
     // Already mapped.
     if (ValueMap.find(GV) != ValueMap.end() ||
-        IndirectSymbolValueMap.find(GV) != IndirectSymbolValueMap.end())
+        AliasValueMap.find(GV) != AliasValueMap.end())
       continue;
 
     assert(!GV->isDeclaration());
@@ -1496,38 +1430,6 @@ Error IRLinker::run() {
   // after linking GlobalValues so that MDNodes that reference GlobalValues
   // are properly remapped.
   linkNamedMDNodes();
-
-  if (!IsPerformingImport && !SrcM->getModuleInlineAsm().empty()) {
-    // Append the module inline asm string.
-    DstM.appendModuleInlineAsm(adjustInlineAsm(SrcM->getModuleInlineAsm(),
-                                               SrcTriple));
-  } else if (IsPerformingImport) {
-    // Import any symver directives for symbols in DstM.
-    ModuleSymbolTable::CollectAsmSymvers(*SrcM,
-                                         [&](StringRef Name, StringRef Alias) {
-      if (DstM.getNamedValue(Name)) {
-        SmallString<256> S(".symver ");
-        S += Name;
-        S += ", ";
-        S += Alias;
-        DstM.appendModuleInlineAsm(S);
-      }
-    });
-  }
-
-  // Reorder the globals just added to the destination module to match their
-  // original order in the source module.
-  Module::GlobalListType &Globals = DstM.getGlobalList();
-  for (GlobalVariable &GV : SrcM->globals()) {
-    if (GV.hasAppendingLinkage())
-      continue;
-    Value *NewValue = Mapper.mapValue(GV);
-    if (NewValue) {
-      auto *NewGV = dyn_cast<GlobalVariable>(NewValue->stripPointerCasts());
-      if (NewGV)
-        Globals.splice(Globals.end(), Globals, NewGV->getIterator());
-    }
-  }
 
   // Merge the module flags into the DstM module.
   return linkModuleFlagsMetadata();

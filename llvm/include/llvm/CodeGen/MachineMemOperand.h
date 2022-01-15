@@ -18,11 +18,9 @@
 #include "llvm/ADT/BitmaskEnum.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
-#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Value.h" // PointerLikeTypeTraits<Value*>
 #include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/DataTypes.h"
-#include "llvm/Support/LowLevelTypeImpl.h"
 
 namespace llvm {
 
@@ -44,9 +42,9 @@ struct MachinePointerInfo {
   /// Offset - This is an offset from the base Value*.
   int64_t Offset;
 
-  unsigned AddrSpace = 0;
-
   uint8_t StackID;
+
+  unsigned AddrSpace = 0;
 
   explicit MachinePointerInfo(const Value *v, int64_t offset = 0,
                               uint8_t ID = 0)
@@ -60,9 +58,9 @@ struct MachinePointerInfo {
     AddrSpace = v ? v->getAddressSpace() : 0;
   }
 
-  explicit MachinePointerInfo(unsigned AddressSpace = 0, int64_t offset = 0)
-      : V((const Value *)nullptr), Offset(offset), AddrSpace(AddressSpace),
-        StackID(0) {}
+  explicit MachinePointerInfo(unsigned AddressSpace = 0)
+      : V((const Value *)nullptr), Offset(0), StackID(0),
+        AddrSpace(AddressSpace) {}
 
   explicit MachinePointerInfo(
     PointerUnion<const Value *, const PseudoSourceValue *> v,
@@ -79,10 +77,10 @@ struct MachinePointerInfo {
 
   MachinePointerInfo getWithOffset(int64_t O) const {
     if (V.isNull())
-      return MachinePointerInfo(AddrSpace, Offset + O);
+      return MachinePointerInfo(AddrSpace);
     if (V.is<const Value*>())
-      return MachinePointerInfo(V.get<const Value*>(), Offset + O, StackID);
-    return MachinePointerInfo(V.get<const PseudoSourceValue*>(), Offset + O,
+      return MachinePointerInfo(V.get<const Value*>(), Offset+O, StackID);
+    return MachinePointerInfo(V.get<const PseudoSourceValue*>(), Offset+O,
                               StackID);
   }
 
@@ -169,13 +167,9 @@ private:
   };
 
   MachinePointerInfo PtrInfo;
-
-  /// Track the memory type of the access. An access size which is unknown or
-  /// too large to be represented by LLT should use the invalid LLT.
-  LLT MemoryType;
-
+  uint64_t Size;
   Flags FlagVals;
-  Align BaseAlign;
+  uint16_t BaseAlignLog2; // log_2(base_alignment) + 1
   MachineAtomicInfo AtomicInfo;
   AAMDNodes AAInfo;
   const MDNode *Ranges;
@@ -187,12 +181,7 @@ public:
   /// atomic operations the atomic ordering requirements when store does not
   /// occur must also be specified.
   MachineMemOperand(MachinePointerInfo PtrInfo, Flags flags, uint64_t s,
-                    Align a, const AAMDNodes &AAInfo = AAMDNodes(),
-                    const MDNode *Ranges = nullptr,
-                    SyncScope::ID SSID = SyncScope::System,
-                    AtomicOrdering Ordering = AtomicOrdering::NotAtomic,
-                    AtomicOrdering FailureOrdering = AtomicOrdering::NotAtomic);
-  MachineMemOperand(MachinePointerInfo PtrInfo, Flags flags, LLT type, Align a,
+                    uint64_t a,
                     const AAMDNodes &AAInfo = AAMDNodes(),
                     const MDNode *Ranges = nullptr,
                     SyncScope::ID SSID = SyncScope::System,
@@ -228,31 +217,19 @@ public:
 
   unsigned getAddrSpace() const { return PtrInfo.getAddrSpace(); }
 
-  /// Return the memory type of the memory reference. This should only be relied
-  /// on for GlobalISel G_* operation legalization.
-  LLT getMemoryType() const { return MemoryType; }
-
   /// Return the size in bytes of the memory reference.
-  uint64_t getSize() const {
-    return MemoryType.isValid() ? MemoryType.getSizeInBytes() : ~UINT64_C(0);
-  }
+  uint64_t getSize() const { return Size; }
 
   /// Return the size in bits of the memory reference.
-  uint64_t getSizeInBits() const {
-    return MemoryType.isValid() ? MemoryType.getSizeInBits() : ~UINT64_C(0);
-  }
-
-  LLT getType() const {
-    return MemoryType;
-  }
+  uint64_t getSizeInBits() const { return Size * 8; }
 
   /// Return the minimum known alignment in bytes of the actual memory
   /// reference.
-  Align getAlign() const;
+  uint64_t getAlignment() const;
 
   /// Return the minimum known alignment in bytes of the base address, without
   /// the offset.
-  Align getBaseAlign() const { return BaseAlign; }
+  uint64_t getBaseAlignment() const { return (1u << BaseAlignLog2) >> 1; }
 
   /// Return the AA tags for the memory reference.
   AAMDNodes getAAInfo() const { return AAInfo; }
@@ -268,7 +245,7 @@ public:
   /// Return the atomic ordering requirements for this memory operation. For
   /// cmpxchg atomic operations, return the atomic ordering requirements when
   /// store occurs.
-  AtomicOrdering getSuccessOrdering() const {
+  AtomicOrdering getOrdering() const {
     return static_cast<AtomicOrdering>(AtomicInfo.Ordering);
   }
 
@@ -276,23 +253,6 @@ public:
   /// when store does not occur.
   AtomicOrdering getFailureOrdering() const {
     return static_cast<AtomicOrdering>(AtomicInfo.FailureOrdering);
-  }
-
-  /// Return a single atomic ordering that is at least as strong as both the
-  /// success and failure orderings for an atomic operation.  (For operations
-  /// other than cmpxchg, this is equivalent to getSuccessOrdering().)
-  AtomicOrdering getMergedOrdering() const {
-    AtomicOrdering Ordering = getSuccessOrdering();
-    AtomicOrdering FailureOrdering = getFailureOrdering();
-    if (FailureOrdering == AtomicOrdering::SequentiallyConsistent)
-      return AtomicOrdering::SequentiallyConsistent;
-    if (FailureOrdering == AtomicOrdering::Acquire) {
-      if (Ordering == AtomicOrdering::Monotonic)
-        return AtomicOrdering::Acquire;
-      if (Ordering == AtomicOrdering::Release)
-        return AtomicOrdering::AcquireRelease;
-    }
-    return Ordering;
   }
 
   bool isLoad() const { return FlagVals & MOLoad; }
@@ -304,16 +264,14 @@ public:
 
   /// Returns true if this operation has an atomic ordering requirement of
   /// unordered or higher, false otherwise.
-  bool isAtomic() const {
-    return getSuccessOrdering() != AtomicOrdering::NotAtomic;
-  }
+  bool isAtomic() const { return getOrdering() != AtomicOrdering::NotAtomic; }
 
   /// Returns true if this memory operation doesn't have any ordering
   /// constraints other than normal aliasing. Volatile and (ordered) atomic
-  /// memory operations can't be reordered.
+  /// memory operations can't be reordered. 
   bool isUnordered() const {
-    return (getSuccessOrdering() == AtomicOrdering::NotAtomic ||
-            getSuccessOrdering() == AtomicOrdering::Unordered) &&
+    return (getOrdering() == AtomicOrdering::NotAtomic ||
+            getOrdering() == AtomicOrdering::Unordered) &&
            !isVolatile();
   }
 
@@ -329,17 +287,14 @@ public:
   void setValue(const PseudoSourceValue *NewSV) { PtrInfo.V = NewSV; }
   void setOffset(int64_t NewOffset) { PtrInfo.Offset = NewOffset; }
 
-  /// Reset the tracked memory type.
-  void setType(LLT NewTy) {
-    MemoryType = NewTy;
-  }
-
   /// Profile - Gather unique data for the object.
   ///
   void Profile(FoldingSetNodeID &ID) const;
 
   /// Support for operator<<.
   /// @{
+  void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS, ModuleSlotTracker &MST) const;
   void print(raw_ostream &OS, ModuleSlotTracker &MST,
              SmallVectorImpl<StringRef> &SSNs, const LLVMContext &Context,
              const MachineFrameInfo *MFI, const TargetInstrInfo *TII) const;
@@ -354,7 +309,7 @@ public:
            LHS.getFlags() == RHS.getFlags() &&
            LHS.getAAInfo() == RHS.getAAInfo() &&
            LHS.getRanges() == RHS.getRanges() &&
-           LHS.getAlign() == RHS.getAlign() &&
+           LHS.getAlignment() == RHS.getAlignment() &&
            LHS.getAddrSpace() == RHS.getAddrSpace();
   }
 
@@ -363,6 +318,11 @@ public:
     return !(LHS == RHS);
   }
 };
+
+inline raw_ostream &operator<<(raw_ostream &OS, const MachineMemOperand &MRO) {
+  MRO.print(OS);
+  return OS;
+}
 
 } // End llvm namespace
 

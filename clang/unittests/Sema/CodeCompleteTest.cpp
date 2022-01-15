@@ -101,10 +101,10 @@ ParsedSourceLocation offsetToPosition(llvm::StringRef Code, size_t Offset) {
 
 CompletionContext runCompletion(StringRef Code, size_t Offset) {
   CompletionContext ResultCtx;
-  clang::tooling::runToolOnCodeWithArgs(
-      std::make_unique<CodeCompleteAction>(offsetToPosition(Code, Offset),
-                                           ResultCtx),
-      Code, {"-std=c++11"}, TestCCName);
+  auto Action = llvm::make_unique<CodeCompleteAction>(
+      offsetToPosition(Code, Offset), ResultCtx);
+  clang::tooling::runToolOnCodeWithArgs(Action.release(), Code, {"-std=c++11"},
+                                        TestCCName);
   return ResultCtx;
 }
 
@@ -481,16 +481,4 @@ TEST(PreferredTypeTest, FunctionArguments) {
   )cpp";
   EXPECT_THAT(collectPreferredTypes(Code), Each("vector<int>"));
 }
-
-TEST(PreferredTypeTest, NoCrashOnInvalidTypes) {
-  StringRef Code = R"cpp(
-    auto x = decltype(&1)(^);
-    auto y = new decltype(&1)(^);
-    // GNU decimal type extension is not supported in clang.
-    auto z = new _Decimal128(^);
-    void foo() { (void)(foo)(^); }
-  )cpp";
-  EXPECT_THAT(collectPreferredTypes(Code), Each("NULL TYPE"));
-}
-
 } // namespace

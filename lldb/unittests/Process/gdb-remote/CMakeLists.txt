@@ -4,7 +4,6 @@ add_lldb_unittest(ProcessGdbRemoteTests
   GDBRemoteCommunicationServerTest.cpp
   GDBRemoteCommunicationTest.cpp
   GDBRemoteTestUtils.cpp
-  PortMapTest.cpp
 
   LINK_LIBS
     lldbCore

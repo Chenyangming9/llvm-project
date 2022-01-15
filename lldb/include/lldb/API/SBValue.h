@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_API_SBVALUE_H
-#define LLDB_API_SBVALUE_H
+#ifndef LLDB_SBValue_h_
+#define LLDB_SBValue_h_
 
 #include "lldb/API/SBData.h"
 #include "lldb/API/SBDefines.h"
@@ -74,6 +74,8 @@ public:
                          lldb::SBTypeSummaryOptions &options);
 
   const char *GetObjectDescription();
+
+  const char *GetTypeValidatorResult();
 
   lldb::SBValue GetDynamicValue(lldb::DynamicValueType use_dynamic);
 
@@ -430,4 +432,4 @@ private:
 
 } // namespace lldb
 
-#endif // LLDB_API_SBVALUE_H
+#endif // LLDB_SBValue_h_

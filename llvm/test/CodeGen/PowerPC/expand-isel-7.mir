@@ -15,7 +15,7 @@
 ...
 ---
 name:            testExpandISEL
-alignment:       4
+alignment:       2
 exposesReturnsTwice: false
 legalized:       false
 regBankSelected: false

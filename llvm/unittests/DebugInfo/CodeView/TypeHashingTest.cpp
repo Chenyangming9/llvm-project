@@ -8,7 +8,6 @@
 
 #include "llvm/DebugInfo/CodeView/TypeHashing.h"
 #include "llvm/DebugInfo/CodeView/AppendingTypeTableBuilder.h"
-#include "llvm/DebugInfo/CodeView/TypeRecord.h"
 
 #include "gtest/gtest.h"
 

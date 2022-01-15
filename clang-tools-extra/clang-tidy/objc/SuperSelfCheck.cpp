@@ -19,7 +19,7 @@ namespace objc {
 
 namespace {
 
-/// Matches Objective-C methods in the initializer family.
+/// \brief Matches Objective-C methods in the initializer family.
 ///
 /// Example matches -init and -initWithInt:.
 ///   (matcher = objcMethodDecl(isInitializer()))
@@ -35,28 +35,41 @@ AST_MATCHER(ObjCMethodDecl, isInitializer) {
   return Node.getMethodFamily() == OMF_init;
 }
 
-/// Matches Objective-C implementations with interfaces that match
-/// \c Base.
+/// \brief Matches Objective-C implementations of classes that directly or
+/// indirectly have a superclass matching \c InterfaceDecl.
 ///
-/// Example matches implementation declarations for X.
-///   (matcher = objcImplementationDecl(hasInterface(hasName("X"))))
+/// Note that a class is not considered to be a subclass of itself.
+///
+/// Example matches implementation declarations for Y and Z.
+///   (matcher = objcInterfaceDecl(isSubclassOf(hasName("X"))))
 /// \code
 ///   @interface X
 ///   @end
-///   @implementation X
+///   @interface Y : X
 ///   @end
-///   @interface Y
-//    @end
-///   @implementation Y
+///   @implementation Y  // directly derived
+///   @end
+///   @interface Z : Y
+///   @end
+///   @implementation Z  // indirectly derived
 ///   @end
 /// \endcode
-AST_MATCHER_P(ObjCImplementationDecl, hasInterface,
-              ast_matchers::internal::Matcher<ObjCInterfaceDecl>, Base) {
-  const ObjCInterfaceDecl *InterfaceDecl = Node.getClassInterface();
-  return Base.matches(*InterfaceDecl, Finder, Builder);
+AST_MATCHER_P(ObjCImplementationDecl, isSubclassOf,
+              ast_matchers::internal::Matcher<ObjCInterfaceDecl>,
+              InterfaceDecl) {
+  // Check if any of the superclasses of the class match.
+  for (const ObjCInterfaceDecl *SuperClass =
+           Node.getClassInterface()->getSuperClass();
+       SuperClass != nullptr; SuperClass = SuperClass->getSuperClass()) {
+    if (InterfaceDecl.matches(*SuperClass, Finder, Builder))
+      return true;
+  }
+
+  // No matches found.
+  return false;
 }
 
-/// Matches Objective-C message expressions where the receiver is the
+/// \brief Matches Objective-C message expressions where the receiver is the
 /// super instance.
 ///
 /// Example matches the invocations of -banana and -orange.
@@ -75,12 +88,16 @@ AST_MATCHER(ObjCMessageExpr, isMessagingSuperInstance) {
 } // namespace
 
 void SuperSelfCheck::registerMatchers(MatchFinder *Finder) {
+  // This check should only be applied to Objective-C sources.
+  if (!getLangOpts().ObjC)
+    return;
+
   Finder->addMatcher(
-      objcMessageExpr(hasSelector("self"), isMessagingSuperInstance(),
-                      hasAncestor(objcMethodDecl(
-                          isInitializer(),
-                          hasDeclContext(objcImplementationDecl(hasInterface(
-                              isDerivedFrom(hasName("NSObject"))))))))
+      objcMessageExpr(
+          hasSelector("self"), isMessagingSuperInstance(),
+          hasAncestor(objcMethodDecl(isInitializer(),
+                                     hasDeclContext(objcImplementationDecl(
+                                         isSubclassOf(hasName("NSObject")))))))
           .bind("message"),
       this);
 }

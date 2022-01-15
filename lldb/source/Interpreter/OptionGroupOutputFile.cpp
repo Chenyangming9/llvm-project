@@ -1,4 +1,4 @@
-//===-- OptionGroupOutputFile.cpp -----------------------------------------===//
+//===-- OptionGroupOutputFile.cpp -------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,7 +13,10 @@
 using namespace lldb;
 using namespace lldb_private;
 
-OptionGroupOutputFile::OptionGroupOutputFile() : m_append(false, false) {}
+OptionGroupOutputFile::OptionGroupOutputFile()
+    : m_file(), m_append(false, false) {}
+
+OptionGroupOutputFile::~OptionGroupOutputFile() {}
 
 static const uint32_t SHORT_OPTION_APND = 0x61706e64; // 'apnd'
 
@@ -47,7 +50,8 @@ OptionGroupOutputFile::SetOptionValue(uint32_t option_idx,
     break;
 
   default:
-    llvm_unreachable("Unimplemented option");
+    error.SetErrorStringWithFormat("unrecognized option '%c'", short_option);
+    break;
   }
 
   return error;

@@ -6,14 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_HOST_MAINLOOP_H
-#define LLDB_HOST_MAINLOOP_H
+#ifndef lldb_Host_MainLoop_h_
+#define lldb_Host_MainLoop_h_
 
 #include "lldb/Host/Config.h"
 #include "lldb/Host/MainLoopBase.h"
 #include "llvm/ADT/DenseMap.h"
 #include <csignal>
-#include <list>
 
 #if !HAVE_PPOLL && !HAVE_SYS_EVENT_H && !defined(__ANDROID__)
 #define SIGNAL_POLLING_UNSUPPORTED 1
@@ -69,7 +68,7 @@ public:
 protected:
   void UnregisterReadObject(IOObject::WaitableHandle handle) override;
 
-  void UnregisterSignal(int signo, std::list<Callback>::iterator callback_it);
+  void UnregisterSignal(int signo);
 
 private:
   void ProcessReadObject(IOObject::WaitableHandle handle);
@@ -77,24 +76,21 @@ private:
 
   class SignalHandle {
   public:
-    ~SignalHandle() { m_mainloop.UnregisterSignal(m_signo, m_callback_it); }
+    ~SignalHandle() { m_mainloop.UnregisterSignal(m_signo); }
 
   private:
-    SignalHandle(MainLoop &mainloop, int signo,
-                 std::list<Callback>::iterator callback_it)
-        : m_mainloop(mainloop), m_signo(signo), m_callback_it(callback_it) {}
+    SignalHandle(MainLoop &mainloop, int signo)
+        : m_mainloop(mainloop), m_signo(signo) {}
 
     MainLoop &m_mainloop;
     int m_signo;
-    std::list<Callback>::iterator m_callback_it;
 
     friend class MainLoop;
-    SignalHandle(const SignalHandle &) = delete;
-    const SignalHandle &operator=(const SignalHandle &) = delete;
+    DISALLOW_COPY_AND_ASSIGN(SignalHandle);
   };
 
   struct SignalInfo {
-    std::list<Callback> callbacks;
+    Callback callback;
 #if HAVE_SIGACTION
     struct sigaction old_action;
 #endif
@@ -112,4 +108,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_HOST_MAINLOOP_H
+#endif // lldb_Host_MainLoop_h_

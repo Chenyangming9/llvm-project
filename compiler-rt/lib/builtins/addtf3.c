@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements quad-precision soft-float addition.
+// This file implements quad-precision soft-float addition with the IEEE-754
+// default rounding (to nearest, ties to even).
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,7 +17,7 @@
 #if defined(CRT_HAS_128BIT) && defined(CRT_LDBL_128BIT)
 #include "fp_add_impl.inc"
 
-COMPILER_RT_ABI fp_t __addtf3(fp_t a, fp_t b) {
+COMPILER_RT_ABI long double __addtf3(long double a, long double b) {
   return __addXf3__(a, b);
 }
 

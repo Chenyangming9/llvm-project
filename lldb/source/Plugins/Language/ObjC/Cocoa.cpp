@@ -1,4 +1,4 @@
-//===-- Cocoa.cpp ---------------------------------------------------------===//
+//===-- Cocoa.cpp -----------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,7 +8,6 @@
 
 #include "Cocoa.h"
 
-#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/Core/Mangled.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Core/ValueObjectConstResult.h"
@@ -16,6 +15,7 @@
 #include "lldb/DataFormatters/StringPrinter.h"
 #include "lldb/DataFormatters/TypeSummary.h"
 #include "lldb/Host/Time.h"
+#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Target/Language.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/ProcessStructReader.h"
@@ -72,9 +72,6 @@ bool lldb_private::formatters::NSBundleSummaryProvider(
         valobj.GetCompilerType().GetBasicTypeFromAST(lldb::eBasicTypeObjCID),
         true));
 
-    if (!text)
-      return false;
-
     StreamString summary_stream;
     bool was_nsstring_ok =
         NSStringSummaryProvider(*text, summary_stream, options);
@@ -120,10 +117,6 @@ bool lldb_private::formatters::NSTimeZoneSummaryProvider(
     uint64_t offset = ptr_size;
     ValueObjectSP text(valobj.GetSyntheticChildAtOffset(
         offset, valobj.GetCompilerType(), true));
-
-    if (!text)
-      return false;
-
     StreamString summary_stream;
     bool was_nsstring_ok =
         NSStringSummaryProvider(*text, summary_stream, options);
@@ -169,10 +162,6 @@ bool lldb_private::formatters::NSNotificationSummaryProvider(
     uint64_t offset = ptr_size;
     ValueObjectSP text(valobj.GetSyntheticChildAtOffset(
         offset, valobj.GetCompilerType(), true));
-
-    if (!text)
-      return false;
-
     StreamString summary_stream;
     bool was_nsstring_ok =
         NSStringSummaryProvider(*text, summary_stream, options);
@@ -351,7 +340,7 @@ static void NSNumber_FormatInt(ValueObject &valobj, Stream &stream, int value,
 }
 
 static void NSNumber_FormatLong(ValueObject &valobj, Stream &stream,
-                                int64_t value, lldb::LanguageType lang) {
+                                uint64_t value, lldb::LanguageType lang) {
   static ConstString g_TypeHint("NSNumber:long");
 
   std::string prefix, suffix;
@@ -367,10 +356,10 @@ static void NSNumber_FormatLong(ValueObject &valobj, Stream &stream,
 }
 
 static void NSNumber_FormatInt128(ValueObject &valobj, Stream &stream,
-                                  const llvm::APInt &value,
-                                  lldb::LanguageType lang) {
+                                 const llvm::APInt &value,
+                                 lldb::LanguageType lang) {
   static ConstString g_TypeHint("NSNumber:int128_t");
-
+  
   std::string prefix, suffix;
   if (Language *language = Language::FindPlugin(lang)) {
     if (!language->GetFormatterPrefixSuffix(valobj, g_TypeHint, prefix,
@@ -379,11 +368,11 @@ static void NSNumber_FormatInt128(ValueObject &valobj, Stream &stream,
       suffix.clear();
     }
   }
-
+  
   stream.PutCString(prefix.c_str());
   const int radix = 10;
   const bool isSigned = true;
-  std::string str = llvm::toString(value, radix, isSigned);
+  std::string str = value.toString(radix, isSigned);
   stream.PutCString(str.c_str());
   stream.PutCString(suffix.c_str());
 }
@@ -426,7 +415,6 @@ bool lldb_private::formatters::NSNumberSummaryProvider(
   if (!process_sp)
     return false;
 
-  Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_DATAFORMATTERS);
   ObjCLanguageRuntime *runtime = ObjCLanguageRuntime::Get(*process_sp);
 
   if (!runtime)
@@ -457,18 +445,9 @@ bool lldb_private::formatters::NSNumberSummaryProvider(
     return NSDecimalNumberSummaryProvider(valobj, stream, options);
 
   if (class_name == "NSNumber" || class_name == "__NSCFNumber") {
-    int64_t value = 0;
+    uint64_t value = 0;
     uint64_t i_bits = 0;
-    if (descriptor->GetTaggedPointerInfoSigned(&i_bits, &value)) {
-      // Check for "preserved" numbers.  We still don't support them yet.
-      if (i_bits & 0x8) {
-        if (log)
-          log->Printf(
-              "Unsupported (preserved) NSNumber tagged pointer 0x%" PRIu64,
-              valobj_addr);
-        return false;
-      }
-
+    if (descriptor->GetTaggedPointerInfo(&i_bits, &value)) {
       switch (i_bits) {
       case 0:
         NSNumber_FormatChar(valobj, stream, (char)value, options.GetLanguage());
@@ -508,66 +487,49 @@ bool lldb_private::formatters::NSNumberSummaryProvider(
         f64 = 0x5,
         sint128 = 0x6
       };
-
+      
       uint64_t data_location = valobj_addr + 2 * ptr_size;
       TypeCodes type_code;
-
+      
       if (new_format) {
-        uint64_t cfinfoa = process_sp->ReadUnsignedIntegerFromMemory(
-            valobj_addr + ptr_size, ptr_size, 0, error);
-
+        uint64_t cfinfoa =
+            process_sp->ReadUnsignedIntegerFromMemory(valobj_addr + ptr_size,
+                                                      ptr_size, 0, error);
+        
         if (error.Fail())
           return false;
 
         bool is_preserved_number = cfinfoa & 0x8;
         if (is_preserved_number) {
-          if (log)
-            log->Printf(
-                "Unsupported preserved NSNumber tagged pointer 0x%" PRIu64,
-                valobj_addr);
+          lldbassert(!static_cast<bool>("We should handle preserved numbers!"));
           return false;
         }
 
         type_code = static_cast<TypeCodes>(cfinfoa & 0x7);
       } else {
-        uint8_t data_type = process_sp->ReadUnsignedIntegerFromMemory(
-                                valobj_addr + ptr_size, 1, 0, error) &
-                            0x1F;
-
+        uint8_t data_type =
+        process_sp->ReadUnsignedIntegerFromMemory(valobj_addr + ptr_size, 1,
+                                                  0, error) & 0x1F;
+        
         if (error.Fail())
           return false;
-
+        
         switch (data_type) {
-        case 1:
-          type_code = TypeCodes::sint8;
-          break;
-        case 2:
-          type_code = TypeCodes::sint16;
-          break;
-        case 3:
-          type_code = TypeCodes::sint32;
-          break;
-        case 17:
-          data_location += 8;
-          LLVM_FALLTHROUGH;
-        case 4:
-          type_code = TypeCodes::sint64;
-          break;
-        case 5:
-          type_code = TypeCodes::f32;
-          break;
-        case 6:
-          type_code = TypeCodes::f64;
-          break;
-        default:
-          return false;
+          case 1: type_code = TypeCodes::sint8; break;
+          case 2: type_code = TypeCodes::sint16; break;
+          case 3: type_code = TypeCodes::sint32; break;
+          case 17: data_location += 8; LLVM_FALLTHROUGH;
+          case 4: type_code = TypeCodes::sint64; break;
+          case 5: type_code = TypeCodes::f32; break;
+          case 6: type_code = TypeCodes::f64; break;
+          default: return false;
         }
       }
-
+      
       uint64_t value = 0;
       bool success = false;
       switch (type_code) {
-      case TypeCodes::sint8:
+        case TypeCodes::sint8:
         value = process_sp->ReadUnsignedIntegerFromMemory(data_location, 1, 0,
                                                           error);
         if (error.Fail())
@@ -575,7 +537,7 @@ bool lldb_private::formatters::NSNumberSummaryProvider(
         NSNumber_FormatChar(valobj, stream, (char)value, options.GetLanguage());
         success = true;
         break;
-      case TypeCodes::sint16:
+        case TypeCodes::sint16:
         value = process_sp->ReadUnsignedIntegerFromMemory(data_location, 2, 0,
                                                           error);
         if (error.Fail())
@@ -600,7 +562,8 @@ bool lldb_private::formatters::NSNumberSummaryProvider(
         NSNumber_FormatLong(valobj, stream, value, options.GetLanguage());
         success = true;
         break;
-      case TypeCodes::f32: {
+      case TypeCodes::f32:
+      {
         uint32_t flt_as_int = process_sp->ReadUnsignedIntegerFromMemory(
             data_location, 4, 0, error);
         if (error.Fail())
@@ -611,7 +574,8 @@ bool lldb_private::formatters::NSNumberSummaryProvider(
         success = true;
         break;
       }
-      case TypeCodes::f64: {
+      case TypeCodes::f64:
+      {
         uint64_t dbl_as_lng = process_sp->ReadUnsignedIntegerFromMemory(
             data_location, 8, 0, error);
         if (error.Fail())
@@ -625,17 +589,16 @@ bool lldb_private::formatters::NSNumberSummaryProvider(
       case TypeCodes::sint128: // internally, this is the same
       {
         uint64_t words[2];
-        words[1] = process_sp->ReadUnsignedIntegerFromMemory(data_location, 8,
-                                                             0, error);
+        words[1] = process_sp->ReadUnsignedIntegerFromMemory(
+            data_location, 8, 0, error);
         if (error.Fail())
           return false;
-        words[0] = process_sp->ReadUnsignedIntegerFromMemory(data_location + 8,
-                                                             8, 0, error);
+        words[0] = process_sp->ReadUnsignedIntegerFromMemory(
+            data_location + 8, 8, 0, error);
         if (error.Fail())
           return false;
         llvm::APInt i128_value(128, words);
-        NSNumber_FormatInt128(valobj, stream, i128_value,
-                              options.GetLanguage());
+        NSNumber_FormatInt128(valobj, stream, i128_value, options.GetLanguage());
         success = true;
         break;
       }
@@ -731,44 +694,32 @@ bool lldb_private::formatters::NSURLSummaryProvider(
   CompilerType type(valobj.GetCompilerType());
   ValueObjectSP text(valobj.GetSyntheticChildAtOffset(offset_text, type, true));
   ValueObjectSP base(valobj.GetSyntheticChildAtOffset(offset_base, type, true));
-  if (!text || text->GetValueAsUnsigned(0) == 0)
+  if (!text)
     return false;
-
-  StreamString base_summary;
-  if (base && base->GetValueAsUnsigned(0)) {
-    if (!NSURLSummaryProvider(*base, base_summary, options))
-      base_summary.Clear();
-  }
-  if (base_summary.Empty())
-    return NSStringSummaryProvider(*text, stream, options);
-
+  if (text->GetValueAsUnsigned(0) == 0)
+    return false;
   StreamString summary;
-  if (!NSStringSummaryProvider(*text, summary, options) || summary.Empty())
+  if (!NSStringSummaryProvider(*text, summary, options))
     return false;
+  if (base && base->GetValueAsUnsigned(0)) {
+    std::string summary_str = summary.GetString();
 
-  const char quote_char = '"';
-  std::string prefix, suffix;
-  if (Language *language = Language::FindPlugin(options.GetLanguage())) {
-    if (!language->GetFormatterPrefixSuffix(*text, ConstString("NSString"),
-                                            prefix, suffix)) {
-      prefix.clear();
-      suffix.clear();
+    if (!summary_str.empty())
+      summary_str.pop_back();
+    summary_str += " -- ";
+    StreamString base_summary;
+    if (NSURLSummaryProvider(*base, base_summary, options) &&
+        !base_summary.Empty()) {
+      llvm::StringRef base_str = base_summary.GetString();
+      if (base_str.size() > 2)
+        base_str = base_str.drop_front(2);
+      summary_str += base_str;
     }
+    summary.Clear();
+    summary.PutCString(summary_str);
   }
-  // @"A" -> @"A
-  llvm::StringRef summary_str = summary.GetString();
-  bool back_consumed = summary_str.consume_back(quote_char + suffix);
-  assert(back_consumed);
-  UNUSED_IF_ASSERT_DISABLED(back_consumed);
-  // @"B" -> B"
-  llvm::StringRef base_summary_str = base_summary.GetString();
-  bool front_consumed = base_summary_str.consume_front(prefix + quote_char);
-  assert(front_consumed);
-  UNUSED_IF_ASSERT_DISABLED(front_consumed);
-  // @"A -- B"
-  if (!summary_str.empty() && !base_summary_str.empty()) {
-    stream.Printf("%s -- %s", summary_str.str().c_str(),
-                  base_summary_str.str().c_str());
+  if (!summary.Empty()) {
+    stream.PutCString(summary.GetString());
     return true;
   }
 
@@ -855,14 +806,13 @@ bool lldb_private::formatters::NSDateSummaryProvider(
   static const ConstString g___NSDate("__NSDate");
   static const ConstString g___NSTaggedDate("__NSTaggedDate");
   static const ConstString g_NSCalendarDate("NSCalendarDate");
-  static const ConstString g_NSConstantDate("NSConstantDate");
 
   if (class_name.IsEmpty())
     return false;
 
   uint64_t info_bits = 0, value_bits = 0;
   if ((class_name == g_NSDate) || (class_name == g___NSDate) ||
-      (class_name == g___NSTaggedDate) || (class_name == g_NSConstantDate)) {
+      (class_name == g___NSTaggedDate)) {
     if (descriptor->GetTaggedPointerInfo(&info_bits, &value_bits)) {
       date_value_bits = ((value_bits << 8) | (info_bits << 4));
       memcpy(&date_value, &date_value_bits, sizeof(date_value_bits));
@@ -888,14 +838,8 @@ bool lldb_private::formatters::NSDateSummaryProvider(
   } else
     return false;
 
-  // FIXME: It seems old dates are not formatted according to NSDate's calendar
-  // so we hardcode distantPast's value so that it looks like LLDB is doing
-  // the right thing.
-
-  // The relative time in seconds from Cocoa Epoch to [NSDate distantPast].
-  const double RelSecondsFromCocoaEpochToNSDateDistantPast = -63114076800;
-  if (date_value == RelSecondsFromCocoaEpochToNSDateDistantPast) {
-    stream.Printf("0001-01-01 00:00:00 UTC");
+  if (date_value == -63114076800) {
+    stream.Printf("0001-12-30 00:00:00 +0000");
     return true;
   }
 
@@ -911,7 +855,7 @@ bool lldb_private::formatters::NSDateSummaryProvider(
   // is generally true and POSIXly happy, but might break if a library vendor
   // decides to get creative
   time_t epoch = GetOSXEpoch();
-  epoch = epoch + static_cast<time_t>(std::floor(date_value));
+  epoch = epoch + (time_t)date_value;
   tm *tm_date = gmtime(&epoch);
   if (!tm_date)
     return false;
@@ -946,7 +890,8 @@ bool lldb_private::formatters::ObjCClassSummaryProvider(
   if (class_name.IsEmpty())
     return false;
 
-  if (ConstString cs = Mangled(class_name).GetDemangledName())
+  if (ConstString cs =
+          Mangled(class_name).GetDemangledName(lldb::eLanguageTypeUnknown))
     class_name = cs;
 
   stream.Printf("%s", class_name.AsCString("<unknown class>"));
@@ -1061,7 +1006,7 @@ bool lldb_private::formatters::ObjCBOOLSummaryProvider(
     if (!real_guy_sp)
       return false;
   }
-  int8_t value = (real_guy_sp->GetValueAsSigned(0) & 0xFF);
+  uint8_t value = (real_guy_sp->GetValueAsUnsigned(0) & 0xFF);
   switch (value) {
   case 0:
     stream.Printf("NO");
@@ -1070,7 +1015,7 @@ bool lldb_private::formatters::ObjCBOOLSummaryProvider(
     stream.Printf("YES");
     break;
   default:
-    stream.Printf("%d", value);
+    stream.Printf("%u", value);
     break;
   }
   return true;

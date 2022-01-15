@@ -8,16 +8,13 @@
 
 // <stack>
 
-// explicit stack(const Container&);
+// explicit stack(const container_type& c);
 
 #include <stack>
 #include <cassert>
 #include <cstddef>
 
 #include "test_macros.h"
-#if TEST_STD_VER >= 11
-#include "test_convertible.h"
-#endif
 
 template <class C>
 C
@@ -31,10 +28,8 @@ make(int n)
 
 int main(int, char**)
 {
-    typedef std::deque<int> Container;
-    typedef std::stack<int> Q;
-    Container d = make<Container>(5);
-    Q q(d);
+    std::deque<int> d = make<std::deque<int> >(5);
+    std::stack<int> q(d);
     assert(q.size() == 5);
     for (std::size_t i = 0; i < d.size(); ++i)
     {
@@ -42,9 +37,5 @@ int main(int, char**)
         q.pop();
     }
 
-#if TEST_STD_VER >= 11
-    static_assert(!test_convertible<Q, const Container&>(), "");
-#endif
-
-    return 0;
+  return 0;
 }

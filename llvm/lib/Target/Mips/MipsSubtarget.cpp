@@ -69,12 +69,11 @@ void MipsSubtarget::anchor() {}
 
 MipsSubtarget::MipsSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
                              bool little, const MipsTargetMachine &TM,
-                             MaybeAlign StackAlignOverride)
-    : MipsGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS),
-      MipsArchVersion(MipsDefault), IsLittle(little), IsSoftFloat(false),
-      IsSingleFloat(false), IsFPXX(false), NoABICalls(false), Abs2008(false),
-      IsFP64bit(false), UseOddSPReg(true), IsNaN2008bit(false),
-      IsGP64bit(false), HasVFPU(false), HasCnMips(false), HasCnMipsP(false),
+                             unsigned StackAlignOverride)
+    : MipsGenSubtargetInfo(TT, CPU, FS), MipsArchVersion(MipsDefault),
+      IsLittle(little), IsSoftFloat(false), IsSingleFloat(false), IsFPXX(false),
+      NoABICalls(false), Abs2008(false), IsFP64bit(false), UseOddSPReg(true),
+      IsNaN2008bit(false), IsGP64bit(false), HasVFPU(false), HasCnMips(false),
       HasMips3_32(false), HasMips3_32r2(false), HasMips4_32(false),
       HasMips4_32r2(false), HasMips5_32r2(false), InMips16Mode(false),
       InMips16HardFloat(Mips16HardFloat), InMicroMipsMode(false), HasDSP(false),
@@ -82,9 +81,10 @@ MipsSubtarget::MipsSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
       Os16(Mips_Os16), HasMSA(false), UseTCCInDIV(false), HasSym32(false),
       HasEVA(false), DisableMadd4(false), HasMT(false), HasCRC(false),
       HasVirt(false), HasGINV(false), UseIndirectJumpsHazard(false),
-      StackAlignOverride(StackAlignOverride), TM(TM), TargetTriple(TT),
-      TSInfo(), InstrInfo(MipsInstrInfo::create(
-                    initializeSubtargetDependencies(CPU, FS, TM))),
+      StackAlignOverride(StackAlignOverride),
+      TM(TM), TargetTriple(TT), TSInfo(),
+      InstrInfo(
+          MipsInstrInfo::create(initializeSubtargetDependencies(CPU, FS, TM))),
       FrameLowering(MipsFrameLowering::create(*this)),
       TLInfo(MipsTargetLowering::create(TM, *this)) {
 
@@ -237,10 +237,10 @@ CodeGenOpt::Level MipsSubtarget::getOptLevelToEnablePostRAScheduler() const {
 MipsSubtarget &
 MipsSubtarget::initializeSubtargetDependencies(StringRef CPU, StringRef FS,
                                                const TargetMachine &TM) {
-  StringRef CPUName = MIPS_MC::selectMipsCPU(TM.getTargetTriple(), CPU);
+  std::string CPUName = MIPS_MC::selectMipsCPU(TM.getTargetTriple(), CPU);
 
   // Parse features string.
-  ParseSubtargetFeatures(CPUName, /*TuneCPU*/ CPUName, FS);
+  ParseSubtargetFeatures(CPUName, FS);
   // Initialize scheduling itinerary for the specified CPU.
   InstrItins = getInstrItineraryForCPU(CPUName);
 
@@ -248,17 +248,13 @@ MipsSubtarget::initializeSubtargetDependencies(StringRef CPU, StringRef FS,
     InMips16HardFloat = true;
 
   if (StackAlignOverride)
-    stackAlignment = *StackAlignOverride;
+    stackAlignment = StackAlignOverride;
   else if (isABI_N32() || isABI_N64())
-    stackAlignment = Align(16);
+    stackAlignment = 16;
   else {
     assert(isABI_O32() && "Unknown ABI for stack alignment!");
-    stackAlignment = Align(8);
+    stackAlignment = 8;
   }
-
-  if ((isABI_N32() || isABI_N64()) && !isGP64bit())
-    report_fatal_error("64-bit code requested on a subtarget that doesn't "
-                       "support it!");
 
   return *this;
 }
@@ -290,6 +286,6 @@ const RegisterBankInfo *MipsSubtarget::getRegBankInfo() const {
   return RegBankInfo.get();
 }
 
-InstructionSelector *MipsSubtarget::getInstructionSelector() const {
+const InstructionSelector *MipsSubtarget::getInstructionSelector() const {
   return InstSelector.get();
 }

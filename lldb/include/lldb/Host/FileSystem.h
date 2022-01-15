@@ -6,23 +6,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_HOST_FILESYSTEM_H
-#define LLDB_HOST_FILESYSTEM_H
+#ifndef liblldb_Host_FileSystem_h
+#define liblldb_Host_FileSystem_h
 
 #include "lldb/Host/File.h"
 #include "lldb/Utility/DataBufferLLVM.h"
+#include "lldb/Utility/FileCollector.h"
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/Status.h"
 
 #include "llvm/ADT/Optional.h"
 #include "llvm/Support/Chrono.h"
-#include "llvm/Support/FileCollector.h"
 #include "llvm/Support/VirtualFileSystem.h"
 
 #include "lldb/lldb-types.h"
 
-#include <cstdint>
-#include <cstdio>
+#include <stdint.h>
+#include <stdio.h>
 #include <sys/stat.h>
 
 namespace lldb_private {
@@ -33,14 +33,13 @@ public:
 
   FileSystem()
       : m_fs(llvm::vfs::getRealFileSystem()), m_collector(nullptr),
-        m_home_directory() {}
-  FileSystem(std::shared_ptr<llvm::FileCollectorBase> collector)
-      : m_fs(llvm::vfs::getRealFileSystem()), m_collector(std::move(collector)),
-        m_home_directory(), m_mapped(false) {}
+        m_mapped(false) {}
+  FileSystem(FileCollector &collector)
+      : m_fs(llvm::vfs::getRealFileSystem()), m_collector(&collector),
+        m_mapped(false) {}
   FileSystem(llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> fs,
              bool mapped = false)
-      : m_fs(std::move(fs)), m_collector(nullptr), m_home_directory(),
-        m_mapped(mapped) {}
+      : m_fs(fs), m_collector(nullptr), m_mapped(mapped) {}
 
   FileSystem(const FileSystem &fs) = delete;
   FileSystem &operator=(const FileSystem &fs) = delete;
@@ -48,7 +47,7 @@ public:
   static FileSystem &Instance();
 
   static void Initialize();
-  static void Initialize(std::shared_ptr<llvm::FileCollectorBase> collector);
+  static void Initialize(FileCollector &collector);
   static llvm::Error Initialize(const FileSpec &mapping);
   static void Initialize(llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> fs);
   static void Terminate();
@@ -64,10 +63,9 @@ public:
   /// Wraps ::open in a platform-independent way.
   int Open(const char *path, int flags, int mode);
 
-  llvm::Expected<std::unique_ptr<File>>
-  Open(const FileSpec &file_spec, File::OpenOptions options,
-       uint32_t permissions = lldb::eFilePermissionsFileDefault,
-       bool should_close_fd = true);
+  Status Open(File &File, const FileSpec &file_spec, uint32_t options,
+              uint32_t permissions = lldb::eFilePermissionsFileDefault,
+              bool should_close_fd = true);
 
   /// Get a directory iterator.
   /// \{
@@ -155,10 +153,6 @@ public:
   /// Call into the Host to see if it can help find the file.
   bool ResolveExecutableLocation(FileSpec &file_spec);
 
-  /// Get the user home directory.
-  bool GetHomeDirectory(llvm::SmallVectorImpl<char> &path) const;
-  bool GetHomeDirectory(FileSpec &file_spec) const;
-
   enum EnumerateDirectoryResult {
     /// Enumerate next entry in the current directory.
     eEnumerateDirectoryResultNext,
@@ -191,17 +185,11 @@ public:
     return m_fs;
   }
 
-  void Collect(const FileSpec &file_spec);
-  void Collect(const llvm::Twine &file);
-
-  void SetHomeDirectory(std::string home_directory);
-
 private:
   static llvm::Optional<FileSystem> &InstanceImpl();
   llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> m_fs;
-  std::shared_ptr<llvm::FileCollectorBase> m_collector;
-  std::string m_home_directory;
-  bool m_mapped = false;
+  FileCollector *m_collector;
+  bool m_mapped;
 };
 } // namespace lldb_private
 

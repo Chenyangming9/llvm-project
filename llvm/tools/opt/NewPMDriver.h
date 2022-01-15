@@ -20,18 +20,12 @@
 #ifndef LLVM_TOOLS_OPT_NEWPMDRIVER_H
 #define LLVM_TOOLS_OPT_NEWPMDRIVER_H
 
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/Support/CommandLine.h"
-
 namespace llvm {
 class StringRef;
+class LLVMContext;
 class Module;
 class TargetMachine;
 class ToolOutputFile;
-class TargetLibraryInfoImpl;
-
-extern cl::opt<bool> DebugifyEach;
-extern cl::opt<std::string> DebugifyExport;
 
 namespace opt_tool {
 enum OutputKind {
@@ -54,8 +48,6 @@ enum PGOKind {
 enum CSPGOKind { NoCSPGO, CSInstrGen, CSInstrUse };
 }
 
-void printPasses(raw_ostream &OS);
-
 /// Driver function to run the new pass manager over a module.
 ///
 /// This function only exists factored away from opt.cpp in order to prevent
@@ -66,9 +58,8 @@ void printPasses(raw_ostream &OS);
 /// ThinLTOLinkOut is only used when OK is OK_OutputThinLTOBitcode, and can be
 /// nullptr.
 bool runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
-                     TargetLibraryInfoImpl *TLII, ToolOutputFile *Out,
-                     ToolOutputFile *ThinLinkOut, ToolOutputFile *OptRemarkFile,
-                     StringRef PassPipeline, ArrayRef<StringRef> PassInfos,
+                     ToolOutputFile *Out, ToolOutputFile *ThinLinkOut,
+                     ToolOutputFile *OptRemarkFile, StringRef PassPipeline,
                      opt_tool::OutputKind OK, opt_tool::VerifierKind VK,
                      bool ShouldPreserveAssemblyUseListOrder,
                      bool ShouldPreserveBitcodeUseListOrder,

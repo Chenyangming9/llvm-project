@@ -140,24 +140,17 @@ RetainSummaryManager::getPersistentSummary(const RetainSummary &OldSumm) {
 static bool isSubclass(const Decl *D,
                        StringRef ClassName) {
   using namespace ast_matchers;
-  DeclarationMatcher SubclassM =
-      cxxRecordDecl(isSameOrDerivedFrom(std::string(ClassName)));
+  DeclarationMatcher SubclassM = cxxRecordDecl(isSameOrDerivedFrom(ClassName));
   return !(match(SubclassM, *D, D->getASTContext()).empty());
 }
 
-static bool isExactClass(const Decl *D, StringRef ClassName) {
-  using namespace ast_matchers;
-  DeclarationMatcher sameClassM =
-      cxxRecordDecl(hasName(std::string(ClassName)));
-  return !(match(sameClassM, *D, D->getASTContext()).empty());
-}
-
 static bool isOSObjectSubclass(const Decl *D) {
-  return D && isSubclass(D, "OSMetaClassBase") &&
-         !isExactClass(D, "OSMetaClass");
+  return D && isSubclass(D, "OSMetaClassBase");
 }
 
-static bool isOSObjectDynamicCast(StringRef S) { return S == "safeMetaCast"; }
+static bool isOSObjectDynamicCast(StringRef S) {
+  return S == "safeMetaCast";
+}
 
 static bool isOSObjectRequiredCast(StringRef S) {
   return S == "requiredMetaCast";
@@ -189,22 +182,20 @@ static bool hasRCAnnotation(const Decl *D, StringRef rcAnnotation) {
 }
 
 static bool isRetain(const FunctionDecl *FD, StringRef FName) {
-  return FName.startswith_insensitive("retain") ||
-         FName.endswith_insensitive("retain");
+  return FName.startswith_lower("retain") || FName.endswith_lower("retain");
 }
 
 static bool isRelease(const FunctionDecl *FD, StringRef FName) {
-  return FName.startswith_insensitive("release") ||
-         FName.endswith_insensitive("release");
+  return FName.startswith_lower("release") || FName.endswith_lower("release");
 }
 
 static bool isAutorelease(const FunctionDecl *FD, StringRef FName) {
-  return FName.startswith_insensitive("autorelease") ||
-         FName.endswith_insensitive("autorelease");
+  return FName.startswith_lower("autorelease") ||
+         FName.endswith_lower("autorelease");
 }
 
 static bool isMakeCollectable(StringRef FName) {
-  return FName.contains_insensitive("MakeCollectable");
+  return FName.contains_lower("MakeCollectable");
 }
 
 /// A function is OSObject related if it is declared on a subclass
@@ -513,7 +504,7 @@ RetainSummaryManager::generateSummary(const FunctionDecl *FD,
   FName = FName.substr(FName.find_first_not_of('_'));
 
   // Inspect the result type. Strip away any typedefs.
-  const auto *FT = FD->getType()->castAs<FunctionType>();
+  const auto *FT = FD->getType()->getAs<FunctionType>();
   QualType RetTy = FT->getReturnType();
 
   if (TrackOSObjects)
@@ -671,7 +662,6 @@ RetainSummaryManager::getSummary(AnyCall C,
   switch (C.getKind()) {
   case AnyCall::Function:
   case AnyCall::Constructor:
-  case AnyCall::InheritedConstructor:
   case AnyCall::Allocator:
   case AnyCall::Deallocator:
     Summ = getFunctionSummary(cast_or_null<FunctionDecl>(C.getDecl()));
@@ -889,8 +879,8 @@ RetainSummaryManager::getRetEffectFromAnnotations(QualType RetTy,
   return None;
 }
 
-/// \return Whether the chain of typedefs starting from @c QT
-/// has a typedef with a given name @c Name.
+/// \return Whether the chain of typedefs starting from {@code QT}
+/// has a typedef with a given name {@code Name}.
 static bool hasTypedefNamed(QualType QT,
                             StringRef Name) {
   while (auto *T = dyn_cast<TypedefType>(QT)) {
@@ -1102,7 +1092,7 @@ RetainSummaryManager::getStandardMethodSummary(const ObjCMethodDecl *MD,
   if (S.isKeywordSelector()) {
     for (unsigned i = 0, e = S.getNumArgs(); i != e; ++i) {
       StringRef Slot = S.getNameForSlot(i);
-      if (Slot.substr(Slot.size() - 8).equals_insensitive("delegate")) {
+      if (Slot.substr(Slot.size() - 8).equals_lower("delegate")) {
         if (ResultEff == ObjCInitRetE)
           ResultEff = RetEffect::MakeNoRetHard();
         else

@@ -84,7 +84,7 @@ struct identity {
 #if __cplusplus <= 199711L
   // expected-warning@-2 {{'typename' occurs outside of a template}}
 #endif
-  int array[5] = {[3] = 2}; // expected-warning {{C99 extension}}
+  int array[5] = {[3] = 2};
   return [super method];
 }
 @end

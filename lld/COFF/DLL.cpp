@@ -19,7 +19,6 @@
 
 #include "DLL.h"
 #include "Chunks.h"
-#include "SymbolTable.h"
 #include "llvm/Object/COFF.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/Path.h"
@@ -136,7 +135,7 @@ private:
 static std::vector<std::vector<DefinedImportData *>>
 binImports(const std::vector<DefinedImportData *> &imports) {
   // Group DLL-imported symbols by DLL name because that's how
-  // symbols are laid out in the import descriptor table.
+  // symbols are layed out in the import descriptor table.
   auto less = [](const std::string &a, const std::string &b) {
     return config->dllOrder[a] < config->dllOrder[b];
   };
@@ -158,6 +157,7 @@ binImports(const std::vector<DefinedImportData *> &imports) {
   return v;
 }
 
+// Export table
 // See Microsoft PE/COFF spec 4.3 for details.
 
 // A chunk for the delay import descriptor table etnry.
@@ -188,7 +188,7 @@ public:
 
 // Initial contents for delay-loaded functions.
 // This code calls __delayLoadHelper2 function to resolve a symbol
-// which then overwrites its jump table slot with the result
+// and then overwrites its jump table slot with the result
 // for subsequent function calls.
 static const uint8_t thunkX64[] = {
     0x48, 0x8D, 0x05, 0, 0, 0, 0,       // lea     rax, [__imp_<FUNCNAME>]
@@ -365,9 +365,7 @@ public:
 
 class ThunkChunkARM : public NonSectionChunk {
 public:
-  ThunkChunkARM(Defined *i, Chunk *tm) : imp(i), tailMerge(tm) {
-    setAlignment(2);
-  }
+  ThunkChunkARM(Defined *i, Chunk *tm) : imp(i), tailMerge(tm) {}
 
   size_t getSize() const override { return sizeof(thunkARM); }
 
@@ -387,9 +385,7 @@ public:
 
 class TailMergeChunkARM : public NonSectionChunk {
 public:
-  TailMergeChunkARM(Chunk *d, Defined *h) : desc(d), helper(h) {
-    setAlignment(2);
-  }
+  TailMergeChunkARM(Chunk *d, Defined *h) : desc(d), helper(h) {}
 
   size_t getSize() const override { return sizeof(tailMergeARM); }
 
@@ -409,9 +405,7 @@ public:
 
 class ThunkChunkARM64 : public NonSectionChunk {
 public:
-  ThunkChunkARM64(Defined *i, Chunk *tm) : imp(i), tailMerge(tm) {
-    setAlignment(4);
-  }
+  ThunkChunkARM64(Defined *i, Chunk *tm) : imp(i), tailMerge(tm) {}
 
   size_t getSize() const override { return sizeof(thunkARM64); }
 
@@ -428,9 +422,7 @@ public:
 
 class TailMergeChunkARM64 : public NonSectionChunk {
 public:
-  TailMergeChunkARM64(Chunk *d, Defined *h) : desc(d), helper(h) {
-    setAlignment(4);
-  }
+  TailMergeChunkARM64(Chunk *d, Defined *h) : desc(d), helper(h) {}
 
   size_t getSize() const override { return sizeof(tailMergeARM64); }
 
@@ -524,8 +516,6 @@ public:
       if (e.forwardChunk) {
         write32le(p, e.forwardChunk->getRVA() | bit);
       } else {
-        assert(cast<Defined>(e.sym)->getRVA() != 0 &&
-               "Exported symbol unmapped");
         write32le(p, cast<Defined>(e.sym)->getRVA() | bit);
       }
     }
@@ -655,18 +645,9 @@ void DelayLoadContents::create(Defined *h) {
         auto *c = make<HintNameChunk>(extName, 0);
         names.push_back(make<LookupChunk>(c));
         hintNames.push_back(c);
-        // Add a syntentic symbol for this load thunk, using the "__imp_load"
-        // prefix, in case this thunk needs to be added to the list of valid
-        // call targets for Control Flow Guard.
-        StringRef symName = saver.save("__imp_load_" + extName);
-        s->loadThunkSym =
-            cast<DefinedSynthetic>(symtab->addSynthetic(symName, t));
       }
     }
     thunks.push_back(tm);
-    StringRef tmName =
-        saver.save("__tailMerge_" + syms[0]->getDLLName().lower());
-    symtab->addSynthetic(tmName, tm);
     // Terminate with null values.
     addresses.push_back(make<NullChunk>(8));
     names.push_back(make<NullChunk>(8));

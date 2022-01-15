@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_EXECUTIONENGINE_ORC_THREADSAFEMODULE_H
-#define LLVM_EXECUTIONENGINE_ORC_THREADSAFEMODULE_H
+#ifndef LLVM_EXECUTIONENGINE_ORC_THREADSAFEMODULEWRAPPER_H
+#define LLVM_EXECUTIONENGINE_ORC_THREADSAFEMODULEWRAPPER_H
 
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -38,12 +38,17 @@ private:
 public:
   // RAII based lock for ThreadSafeContext.
   class LLVM_NODISCARD Lock {
+  private:
+    using UnderlyingLock = std::lock_guard<std::recursive_mutex>;
+
   public:
-    Lock(std::shared_ptr<State> S) : S(std::move(S)), L(this->S->Mutex) {}
+    Lock(std::shared_ptr<State> S)
+        : S(std::move(S)),
+          L(llvm::make_unique<UnderlyingLock>(this->S->Mutex)) {}
 
   private:
     std::shared_ptr<State> S;
-    std::unique_lock<std::recursive_mutex> L;
+    std::unique_ptr<UnderlyingLock> L;
   };
 
   /// Construct a null context.
@@ -64,7 +69,7 @@ public:
   /// instance, or null if the instance was default constructed.
   const LLVMContext *getContext() const { return S ? S->Ctx.get() : nullptr; }
 
-  Lock getLock() const {
+  Lock getLock() {
     assert(S && "Can not lock an empty ThreadSafeContext");
     return Lock(S);
   }
@@ -90,7 +95,7 @@ public:
     // We also need to lock the context to make sure the module tear-down
     // does not overlap any other work on the context.
     if (M) {
-      auto L = TSCtx.getLock();
+      auto L = getContextLock();
       M = nullptr;
     }
     M = std::move(Other.M);
@@ -112,14 +117,23 @@ public:
   ~ThreadSafeModule() {
     // We need to lock the context while we destruct the module.
     if (M) {
-      auto L = TSCtx.getLock();
+      auto L = getContextLock();
       M = nullptr;
     }
   }
 
+  /// Get the module wrapped by this ThreadSafeModule.
+  Module *getModule() { return M.get(); }
+
+  /// Get the module wrapped by this ThreadSafeModule.
+  const Module *getModule() const { return M.get(); }
+
+  /// Take out a lock on the ThreadSafeContext for this module.
+  ThreadSafeContext::Lock getContextLock() { return TSCtx.getLock(); }
+
   /// Boolean conversion: This ThreadSafeModule will evaluate to true if it
   /// wraps a non-null module.
-  explicit operator bool() const {
+  explicit operator bool() {
     if (M) {
       assert(TSCtx.getContext() &&
              "Non-null module must have non-null context");
@@ -127,30 +141,6 @@ public:
     }
     return false;
   }
-
-  /// Locks the associated ThreadSafeContext and calls the given function
-  /// on the contained Module.
-  template <typename Func> decltype(auto) withModuleDo(Func &&F) {
-    assert(M && "Can not call on null module");
-    auto Lock = TSCtx.getLock();
-    return F(*M);
-  }
-
-  /// Locks the associated ThreadSafeContext and calls the given function
-  /// on the contained Module.
-  template <typename Func> decltype(auto) withModuleDo(Func &&F) const {
-    auto Lock = TSCtx.getLock();
-    return F(*M);
-  }
-
-  /// Get a raw pointer to the contained module without locking the context.
-  Module *getModuleUnlocked() { return M.get(); }
-
-  /// Get a raw pointer to the contained module without locking the context.
-  const Module *getModuleUnlocked() const { return M.get(); }
-
-  /// Returns the context for this ThreadSafeModule.
-  ThreadSafeContext getContext() const { return TSCtx; }
 
 private:
   std::unique_ptr<Module> M;
@@ -162,11 +152,11 @@ using GVModifier = std::function<void(GlobalValue &)>;
 
 /// Clones the given module on to a new context.
 ThreadSafeModule
-cloneToNewContext(const ThreadSafeModule &TSMW,
+cloneToNewContext(ThreadSafeModule &TSMW,
                   GVPredicate ShouldCloneDef = GVPredicate(),
                   GVModifier UpdateClonedDefSource = GVModifier());
 
 } // End namespace orc
 } // End namespace llvm
 
-#endif // LLVM_EXECUTIONENGINE_ORC_THREADSAFEMODULE_H
+#endif // LLVM_EXECUTIONENGINE_ORC_THREADSAFEMODULEWRAPPER_H

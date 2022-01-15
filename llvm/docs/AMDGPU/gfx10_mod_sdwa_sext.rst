@@ -11,3 +11,4 @@ m
 ===========================
 
 This operand may be used with integer operand modifier :ref:`sext<amdgpu_synid_sext>`.
+

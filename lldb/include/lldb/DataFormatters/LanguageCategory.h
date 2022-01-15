@@ -7,8 +7,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_DATAFORMATTERS_LANGUAGECATEGORY_H
-#define LLDB_DATAFORMATTERS_LANGUAGECATEGORY_H
+#ifndef lldb_LanguageCategory_h_
+#define lldb_LanguageCategory_h_
+
 
 #include "lldb/DataFormatters/FormatCache.h"
 #include "lldb/DataFormatters/FormatClasses.h"
@@ -24,11 +25,27 @@ public:
 
   LanguageCategory(lldb::LanguageType lang_type);
 
-  template <typename ImplSP>
-  bool Get(FormattersMatchData &match_data, ImplSP &format_sp);
-  template <typename ImplSP>
+  bool Get(FormattersMatchData &match_data, lldb::TypeFormatImplSP &format_sp);
+
+  bool Get(FormattersMatchData &match_data, lldb::TypeSummaryImplSP &format_sp);
+
+  bool Get(FormattersMatchData &match_data,
+           lldb::SyntheticChildrenSP &format_sp);
+
+  bool Get(FormattersMatchData &match_data,
+           lldb::TypeValidatorImplSP &format_sp);
+
   bool GetHardcoded(FormatManager &fmt_mgr, FormattersMatchData &match_data,
-                    ImplSP &format_sp);
+                    lldb::TypeFormatImplSP &format_sp);
+
+  bool GetHardcoded(FormatManager &fmt_mgr, FormattersMatchData &match_data,
+                    lldb::TypeSummaryImplSP &format_sp);
+
+  bool GetHardcoded(FormatManager &fmt_mgr, FormattersMatchData &match_data,
+                    lldb::SyntheticChildrenSP &format_sp);
+
+  bool GetHardcoded(FormatManager &fmt_mgr, FormattersMatchData &match_data,
+                    lldb::TypeValidatorImplSP &format_sp);
 
   lldb::TypeCategoryImplSP GetCategory() const;
 
@@ -46,9 +63,7 @@ private:
   HardcodedFormatters::HardcodedFormatFinder m_hardcoded_formats;
   HardcodedFormatters::HardcodedSummaryFinder m_hardcoded_summaries;
   HardcodedFormatters::HardcodedSyntheticFinder m_hardcoded_synthetics;
-
-  template <typename ImplSP>
-  auto &GetHardcodedFinder();
+  HardcodedFormatters::HardcodedValidatorFinder m_hardcoded_validators;
 
   lldb_private::FormatCache m_format_cache;
 
@@ -57,4 +72,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // LLDB_DATAFORMATTERS_LANGUAGECATEGORY_H
+#endif // lldb_LanguageCategory_h_

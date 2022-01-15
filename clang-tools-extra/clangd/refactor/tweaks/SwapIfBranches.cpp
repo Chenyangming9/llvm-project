@@ -5,10 +5,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-#include "ParsedAST.h"
+#include "ClangdUnit.h"
+#include "Logger.h"
 #include "SourceCode.h"
 #include "refactor/Tweak.h"
-#include "support/Logger.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/Stmt.h"
@@ -39,10 +39,7 @@ public:
   bool prepare(const Selection &Inputs) override;
   Expected<Effect> apply(const Selection &Inputs) override;
   std::string title() const override { return "Swap if branches"; }
-  llvm::StringLiteral kind() const override {
-    return CodeAction::REFACTOR_KIND;
-  }
-  bool hidden() const override { return true; }
+  Intent intent() const override { return Refactor; }
 
 private:
   const IfStmt *If = nullptr;
@@ -54,28 +51,32 @@ bool SwapIfBranches::prepare(const Selection &Inputs) {
   for (const SelectionTree::Node *N = Inputs.ASTSelection.commonAncestor();
        N && !If; N = N->Parent) {
     // Stop once we hit a block, e.g. a lambda in the if condition.
-    if (llvm::isa_and_nonnull<CompoundStmt>(N->ASTNode.get<Stmt>()))
+    if (dyn_cast_or_null<CompoundStmt>(N->ASTNode.get<Stmt>()))
       return false;
     If = dyn_cast_or_null<IfStmt>(N->ASTNode.get<Stmt>());
   }
   // avoid dealing with single-statement brances, they require careful handling
   // to avoid changing semantics of the code (i.e. dangling else).
-  return If && isa_and_nonnull<CompoundStmt>(If->getThen()) &&
-         isa_and_nonnull<CompoundStmt>(If->getElse());
+  return If && dyn_cast_or_null<CompoundStmt>(If->getThen()) &&
+         dyn_cast_or_null<CompoundStmt>(If->getElse());
 }
 
 Expected<Tweak::Effect> SwapIfBranches::apply(const Selection &Inputs) {
-  auto &Ctx = Inputs.AST->getASTContext();
-  auto &SrcMgr = Inputs.AST->getSourceManager();
+  auto &Ctx = Inputs.AST.getASTContext();
+  auto &SrcMgr = Inputs.AST.getSourceManager();
 
   auto ThenRng = toHalfOpenFileRange(SrcMgr, Ctx.getLangOpts(),
                                      If->getThen()->getSourceRange());
   if (!ThenRng)
-    return error("Could not obtain range of the 'then' branch. Macros?");
+    return llvm::createStringError(
+        llvm::inconvertibleErrorCode(),
+        "Could not obtain range of the 'then' branch. Macros?");
   auto ElseRng = toHalfOpenFileRange(SrcMgr, Ctx.getLangOpts(),
                                      If->getElse()->getSourceRange());
   if (!ElseRng)
-    return error("Could not obtain range of the 'else' branch. Macros?");
+    return llvm::createStringError(
+        llvm::inconvertibleErrorCode(),
+        "Could not obtain range of the 'else' branch. Macros?");
 
   auto ThenCode = toSourceCode(SrcMgr, *ThenRng);
   auto ElseCode = toSourceCode(SrcMgr, *ElseRng);
@@ -89,7 +90,7 @@ Expected<Tweak::Effect> SwapIfBranches::apply(const Selection &Inputs) {
                                                  ElseRng->getBegin(),
                                                  ElseCode.size(), ThenCode)))
     return std::move(Err);
-  return Effect::mainFileEdit(SrcMgr, std::move(Result));
+  return Effect::applyEdit(Result);
 }
 
 } // namespace

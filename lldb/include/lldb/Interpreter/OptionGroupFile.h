@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONGROUPFILE_H
-#define LLDB_INTERPRETER_OPTIONGROUPFILE_H
+#ifndef liblldb_OptionGroupFile_h_
+#define liblldb_OptionGroupFile_h_
 
 #include "lldb/Interpreter/OptionValueFileSpec.h"
 #include "lldb/Interpreter/OptionValueFileSpecList.h"
@@ -24,7 +24,7 @@ public:
                   lldb::CommandArgumentType argument_type,
                   const char *usage_text);
 
-  ~OptionGroupFile() override = default;
+  ~OptionGroupFile() override;
 
   llvm::ArrayRef<OptionDefinition> GetDefinitions() override {
     return llvm::ArrayRef<OptionDefinition>(&m_option_definition, 1);
@@ -32,6 +32,7 @@ public:
 
   Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
                         ExecutionContext *execution_context) override;
+  Status SetOptionValue(uint32_t, const char *, ExecutionContext *) = delete;
 
   void OptionParsingStarting(ExecutionContext *execution_context) override;
 
@@ -62,6 +63,7 @@ public:
 
   Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
                         ExecutionContext *execution_context) override;
+  Status SetOptionValue(uint32_t, const char *, ExecutionContext *) = delete;
 
   void OptionParsingStarting(ExecutionContext *execution_context) override;
 
@@ -76,4 +78,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONGROUPFILE_H
+#endif // liblldb_OptionGroupFile_h_

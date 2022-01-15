@@ -63,14 +63,9 @@
 // };
 //
 // template <typename KeyT, typename ValT, unsigned N, typename Traits>
-// class IntervalMap::const_iterator {
+// class IntervalMap::const_iterator :
+//   public std::iterator<std::bidirectional_iterator_tag, ValT> {
 // public:
-//   using iterator_category = std::bidirectional_iterator_tag;
-//   using value_type = ValT;
-//   using difference_type = std::ptrdiff_t;
-//   using pointer = value_type *;
-//   using reference = value_type &;
-//
 //   bool operator==(const const_iterator &) const;
 //   bool operator!=(const const_iterator &) const;
 //   bool valid() const;
@@ -496,7 +491,7 @@ class NodeRef {
   struct CacheAlignedPointerTraits {
     static inline void *getAsVoidPointer(void *P) { return P; }
     static inline void *getFromVoidPointer(void *P) { return P; }
-    static constexpr int NumLowBitsAvailable = Log2CacheLine;
+    enum { NumLowBitsAvailable = Log2CacheLine };
   };
   PointerIntPair<void*, Log2CacheLine, unsigned, CacheAlignedPointerTraits> pip;
 
@@ -828,7 +823,7 @@ public:
   }
 
   /// reset - Reset cached information about node(Level) from subtree(Level -1).
-  /// @param Level 1..height. The node to update after parent node changed.
+  /// @param Level 1..height. THe node to update after parent node changed.
   void reset(unsigned Level) {
     path[Level] = Entry(subtree(Level - 1), offset(Level));
   }
@@ -889,7 +884,7 @@ public:
   }
 
   /// getLeftSibling - Get the left sibling node at Level, or a null NodeRef.
-  /// @param Level Get the sibling to node(Level).
+  /// @param Level Get the sinbling to node(Level).
   /// @return Left sibling, or NodeRef().
   NodeRef getRightSibling(unsigned Level) const;
 
@@ -968,6 +963,7 @@ public:
 
 private:
   // The root data is either a RootLeaf or a RootBranchData instance.
+  LLVM_ALIGNAS(RootLeaf) LLVM_ALIGNAS(RootBranchData)
   AlignedCharArrayUnion<RootLeaf, RootBranchData> data;
 
   // Tree height.
@@ -983,7 +979,10 @@ private:
   Allocator &allocator;
 
   /// Represent data as a node type without breaking aliasing rules.
-  template <typename T> T &dataAs() const { return *bit_cast<T *>(&data); }
+  template <typename T>
+  T &dataAs() const {
+    return *bit_cast<T *>(const_cast<char *>(data.buffer));
+  }
 
   const RootLeaf &rootLeaf() const {
     assert(!branched() && "Cannot acces leaf data in branched root");
@@ -1041,7 +1040,7 @@ private:
 
 public:
   explicit IntervalMap(Allocator &a) : height(0), rootSize(0), allocator(a) {
-    assert((uintptr_t(&data) & (alignof(RootLeaf) - 1)) == 0 &&
+    assert((uintptr_t(data.buffer) & (alignof(RootLeaf) - 1)) == 0 &&
            "Insufficient alignment");
     new(&rootLeaf()) RootLeaf();
   }
@@ -1294,17 +1293,12 @@ clear() {
 //===----------------------------------------------------------------------===//
 
 template <typename KeyT, typename ValT, unsigned N, typename Traits>
-class IntervalMap<KeyT, ValT, N, Traits>::const_iterator {
-  friend class IntervalMap;
-
-public:
-  using iterator_category = std::bidirectional_iterator_tag;
-  using value_type = ValT;
-  using difference_type = std::ptrdiff_t;
-  using pointer = value_type *;
-  using reference = value_type &;
+class IntervalMap<KeyT, ValT, N, Traits>::const_iterator :
+  public std::iterator<std::bidirectional_iterator_tag, ValT> {
 
 protected:
+  friend class IntervalMap;
+
   // The map referred to.
   IntervalMap *map = nullptr;
 
@@ -1402,7 +1396,7 @@ public:
     setRoot(map->rootSize);
   }
 
-  /// preincrement - Move to the next interval.
+  /// preincrement - move to the next interval.
   const_iterator &operator++() {
     assert(valid() && "Cannot increment end()");
     if (++path.leafOffset() == path.leafSize() && branched())
@@ -1410,14 +1404,14 @@ public:
     return *this;
   }
 
-  /// postincrement - Don't do that!
+  /// postincrement - Dont do that!
   const_iterator operator++(int) {
     const_iterator tmp = *this;
     operator++();
     return tmp;
   }
 
-  /// predecrement - Move to the previous interval.
+  /// predecrement - move to the previous interval.
   const_iterator &operator--() {
     if (path.leafOffset() && (valid() || !branched()))
       --path.leafOffset();
@@ -1426,7 +1420,7 @@ public:
     return *this;
   }
 
-  /// postdecrement - Don't do that!
+  /// postdecrement - Dont do that!
   const_iterator operator--(int) {
     const_iterator tmp = *this;
     operator--();

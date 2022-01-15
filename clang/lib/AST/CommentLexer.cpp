@@ -740,11 +740,12 @@ void Lexer::lexHTMLEndTag(Token &T) {
 
 Lexer::Lexer(llvm::BumpPtrAllocator &Allocator, DiagnosticsEngine &Diags,
              const CommandTraits &Traits, SourceLocation FileLoc,
-             const char *BufferStart, const char *BufferEnd, bool ParseCommands)
+             const char *BufferStart, const char *BufferEnd,
+             bool ParseCommands)
     : Allocator(Allocator), Diags(Diags), Traits(Traits),
-      BufferStart(BufferStart), BufferEnd(BufferEnd), BufferPtr(BufferStart),
-      FileLoc(FileLoc), ParseCommands(ParseCommands),
-      CommentState(LCS_BeforeComment), State(LS_Normal) {}
+      BufferStart(BufferStart), BufferEnd(BufferEnd), FileLoc(FileLoc),
+      BufferPtr(BufferStart), CommentState(LCS_BeforeComment), State(LS_Normal),
+      ParseCommands(ParseCommands) {}
 
 void Lexer::lex(Token &T) {
 again:
@@ -849,14 +850,17 @@ again:
 }
 
 StringRef Lexer::getSpelling(const Token &Tok,
-                             const SourceManager &SourceMgr) const {
+                             const SourceManager &SourceMgr,
+                             bool *Invalid) const {
   SourceLocation Loc = Tok.getLocation();
   std::pair<FileID, unsigned> LocInfo = SourceMgr.getDecomposedLoc(Loc);
 
   bool InvalidTemp = false;
   StringRef File = SourceMgr.getBufferData(LocInfo.first, &InvalidTemp);
-  if (InvalidTemp)
+  if (InvalidTemp) {
+    *Invalid = true;
     return StringRef();
+  }
 
   const char *Begin = File.data() + LocInfo.second;
   return StringRef(Begin, Tok.getLength());

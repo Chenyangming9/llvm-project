@@ -10,6 +10,8 @@ unittest("MITests") {
     "//llvm/lib/Target",
     "//llvm/lib/Target:TargetsToBuild",
   ]
-  sources = [ "LiveIntervalTest.cpp" ]
+  sources = [
+    "LiveIntervalTest.cpp",
+  ]
   has_custom_main = true
 }

@@ -6,10 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
-
-// These tests require locale for non-char paths
-// UNSUPPORTED: libcpp-has-no-localization
+// UNSUPPORTED: c++98, c++03
 
 // <filesystem>
 
@@ -21,20 +18,20 @@
 //      path(InputIterator first, InputIterator last);
 
 
-#include "filesystem_include.h"
+#include "filesystem_include.hpp"
 #include <type_traits>
 #include <cassert>
 
 #include "test_macros.h"
 #include "test_iterators.h"
 #include "min_allocator.h"
-#include "filesystem_test_helper.h"
+#include "filesystem_test_helper.hpp"
 
 
 template <class CharT, class ...Args>
 void RunTestCaseImpl(MultiStringType const& MS, Args... args) {
   using namespace fs;
-  const fs::path::value_type* Expect = MS;
+  const char* Expect = MS;
   const CharT* TestPath = MS;
   const CharT* TestPathEnd = StrEnd(TestPath);
   const std::size_t Size = TestPathEnd - TestPath;
@@ -68,13 +65,13 @@ void RunTestCaseImpl(MultiStringType const& MS, Args... args) {
   }
   // Iterators
   {
-    using It = cpp17_input_iterator<const CharT*>;
+    using It = input_iterator<const CharT*>;
     path p(It{TestPath}, args...);
     assert(p.native() == Expect);
     assert(p.string<CharT>() == TestPath);
   }
   {
-    using It = cpp17_input_iterator<const CharT*>;
+    using It = input_iterator<const CharT*>;
     path p(It{TestPath}, It{TestPathEnd}, args...);
     assert(p.native() == Expect);
     assert(p.string<CharT>() == TestPath);
@@ -87,9 +84,6 @@ void RunTestCase(MultiStringType const& MS) {
   RunTestCaseImpl<CharT>(MS, fs::path::format::auto_format);
   RunTestCaseImpl<CharT>(MS, fs::path::format::native_format);
   RunTestCaseImpl<CharT>(MS, fs::path::format::generic_format);
-  RunTestCaseImpl<CharT>(MS, fs::path::auto_format);
-  RunTestCaseImpl<CharT>(MS, fs::path::native_format);
-  RunTestCaseImpl<CharT>(MS, fs::path::generic_format);
 }
 
 void test_sfinae() {
@@ -99,7 +93,7 @@ void test_sfinae() {
     static_assert(std::is_constructible<path, It>::value, "");
   }
   {
-    using It = cpp17_input_iterator<const char*>;
+    using It = input_iterator<const char*>;
     static_assert(std::is_constructible<path, It>::value, "");
   }
   {
@@ -110,7 +104,7 @@ void test_sfinae() {
       using reference = const char&;
       using difference_type = std::ptrdiff_t;
     };
-    using It = cpp17_input_iterator<const char*, Traits>;
+    using It = input_iterator<const char*, Traits>;
     static_assert(std::is_constructible<path, It>::value, "");
   }
   {
@@ -126,9 +120,6 @@ void test_sfinae() {
 int main(int, char**) {
   for (auto const& MS : PathList) {
     RunTestCase<char>(MS);
-#if TEST_STD_VER > 17 && defined(__cpp_char8_t)
-    RunTestCase<char8_t>(MS);
-#endif
     RunTestCase<wchar_t>(MS);
     RunTestCase<char16_t>(MS);
     RunTestCase<char32_t>(MS);

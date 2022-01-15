@@ -1,7 +1,4 @@
-; RUN: llc -debugify-and-strip-all-safe -verify-machineinstrs %s -o - -mtriple=arm64-apple-ios7.0 | FileCheck %s
-; RUN: llc -debugify-and-strip-all-safe -verify-machineinstrs %s -o - -mtriple=arm64-apple-ios7.0 -global-isel -pass-remarks-missed=gisel* 2>&1 | FileCheck %s --check-prefixes=CHECK,FALLBACK
-
-; FALLBACK-NOT: remark
+; RUN: llc -verify-machineinstrs %s -o - -mtriple=arm64-apple-ios7.0 | FileCheck %s
 
 @var32 = global i32 0
 @var64 = global i64 0
@@ -301,3 +298,4 @@ end:
   ret i32 0
 ; CHECK: ret
 }
+

@@ -6,16 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
 
 #define TESTING_CXA_GUARD
 #include "../src/cxa_guard_impl.h"
-#include <cassert>
-
-// Disable GCC warning about tautological comparison of a function's address
-#if defined(__GNUC__) && !defined(__clang__)
-# pragma GCC diagnostic ignored "-Waddress"
-#endif
 
 using namespace __cxxabiv1;
 
@@ -114,7 +108,7 @@ void NopFutexWait(int*, int) { assert(false); }
 void NopFutexWake(int*) { assert(false); }
 uint32_t MockGetThreadID() { return 0; }
 
-int main(int, char**) {
+int main() {
   {
 #if defined(_LIBCXXABI_HAS_NO_THREADS)
     static_assert(CurrentImplementation == Implementation::NoThreads, "");
@@ -132,7 +126,7 @@ int main(int, char**) {
 #endif
   }
   {
-#if (defined(__APPLE__) || defined(__linux__))  && !defined(_LIBCXXABI_HAS_NO_THREADS)
+#if defined(__APPLE__) || defined(__linux__)
     assert(PlatformThreadID);
 #endif
     if (PlatformSupportsThreadID()) {
@@ -157,6 +151,4 @@ int main(int, char**) {
     Tests<uint32_t, FutexImpl>::test();
     Tests<uint64_t, FutexImpl>::test();
   }
-
-  return 0;
 }

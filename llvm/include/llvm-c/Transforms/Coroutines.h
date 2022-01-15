@@ -19,11 +19,11 @@
 #ifndef LLVM_C_TRANSFORMS_COROUTINES_H
 #define LLVM_C_TRANSFORMS_COROUTINES_H
 
-#include "llvm-c/ExternC.h"
 #include "llvm-c/Types.h"
-#include "llvm-c/Transforms/PassManagerBuilder.h"
 
-LLVM_C_EXTERN_C_BEGIN
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @defgroup LLVMCTransformsCoroutines Coroutine transformations
@@ -32,25 +32,24 @@ LLVM_C_EXTERN_C_BEGIN
  * @{
  */
 
-/** See llvm::createCoroEarlyLegacyPass function. */
+/** See llvm::createCoroEarlyPass function. */
 void LLVMAddCoroEarlyPass(LLVMPassManagerRef PM);
 
-/** See llvm::createCoroSplitLegacyPass function. */
+/** See llvm::createCoroSplitPass function. */
 void LLVMAddCoroSplitPass(LLVMPassManagerRef PM);
 
-/** See llvm::createCoroElideLegacyPass function. */
+/** See llvm::createCoroElidePass function. */
 void LLVMAddCoroElidePass(LLVMPassManagerRef PM);
 
-/** See llvm::createCoroCleanupLegacyPass function. */
+/** See llvm::createCoroCleanupPass function. */
 void LLVMAddCoroCleanupPass(LLVMPassManagerRef PM);
-
-/** See llvm::addCoroutinePassesToExtensionPoints. */
-void LLVMPassManagerBuilderAddCoroutinePassesToExtensionPoints(LLVMPassManagerBuilderRef PMB);
 
 /**
  * @}
  */
 
-LLVM_C_EXTERN_C_END
+#ifdef __cplusplus
+}
+#endif /* defined(__cplusplus) */
 
 #endif

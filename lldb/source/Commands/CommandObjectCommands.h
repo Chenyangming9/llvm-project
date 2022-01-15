@@ -7,9 +7,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_COMMANDS_COMMANDOBJECTCOMMANDS_H
-#define LLDB_SOURCE_COMMANDS_COMMANDOBJECTCOMMANDS_H
+#ifndef liblldb_CommandObjectCommands_h_
+#define liblldb_CommandObjectCommands_h_
 
+#include "lldb/Core/STLUtils.h"
+#include "lldb/Interpreter/CommandObject.h"
 #include "lldb/Interpreter/CommandObjectMultiword.h"
 
 namespace lldb_private {
@@ -25,4 +27,4 @@ public:
 
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_COMMANDS_COMMANDOBJECTCOMMANDS_H
+#endif // liblldb_CommandObjectCommands_h_

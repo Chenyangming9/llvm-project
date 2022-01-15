@@ -1,4 +1,4 @@
-//===-- SBInstruction.cpp -------------------------------------------------===//
+//===-- SBInstruction.cpp ---------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,7 +11,6 @@
 
 #include "lldb/API/SBAddress.h"
 #include "lldb/API/SBFrame.h"
-#include "lldb/API/SBFile.h"
 
 #include "lldb/API/SBInstruction.h"
 #include "lldb/API/SBStream.h"
@@ -89,7 +88,7 @@ const SBInstruction &SBInstruction::operator=(const SBInstruction &rhs) {
   return LLDB_RECORD_RESULT(*this);
 }
 
-SBInstruction::~SBInstruction() = default;
+SBInstruction::~SBInstruction() {}
 
 bool SBInstruction::IsValid() {
   LLDB_RECORD_METHOD_NO_ARGS(bool, SBInstruction, IsValid);
@@ -107,7 +106,7 @@ SBAddress SBInstruction::GetAddress() {
   SBAddress sb_addr;
   lldb::InstructionSP inst_sp(GetOpaque());
   if (inst_sp && inst_sp->GetAddress().IsValid())
-    sb_addr.SetAddress(inst_sp->GetAddress());
+    sb_addr.SetAddress(&inst_sp->GetAddress());
   return LLDB_RECORD_RESULT(sb_addr);
 }
 
@@ -256,21 +255,10 @@ bool SBInstruction::GetDescription(lldb::SBStream &s) {
   return false;
 }
 
-void SBInstruction::Print(FILE *outp) {
-  LLDB_RECORD_METHOD(void, SBInstruction, Print, (FILE *), outp);
-  FileSP out = std::make_shared<NativeFile>(outp, /*take_ownership=*/false);
-  Print(out);
-}
+void SBInstruction::Print(FILE *out) {
+  LLDB_RECORD_METHOD(void, SBInstruction, Print, (FILE *), out);
 
-void SBInstruction::Print(SBFile out) {
-  LLDB_RECORD_METHOD(void, SBInstruction, Print, (SBFile), out);
-  Print(out.m_opaque_sp);
-}
-
-void SBInstruction::Print(FileSP out_sp) {
-  LLDB_RECORD_METHOD(void, SBInstruction, Print, (FileSP), out_sp);
-
-  if (!out_sp || !out_sp->IsValid())
+  if (out == nullptr)
     return;
 
   lldb::InstructionSP inst_sp(GetOpaque());
@@ -281,7 +269,7 @@ void SBInstruction::Print(FileSP out_sp) {
     if (module_sp)
       module_sp->ResolveSymbolContextForAddress(addr, eSymbolContextEverything,
                                                 sc);
-    StreamFile out_stream(out_sp);
+    StreamFile out_stream(out, false);
     FormatEntity::Entry format;
     FormatEntity::Parse("${addr}: ", format);
     inst_sp->Dump(&out_stream, 0, true, false, nullptr, &sc, nullptr, &format,
@@ -370,8 +358,6 @@ void RegisterMethods<SBInstruction>(Registry &R) {
   LLDB_REGISTER_METHOD(bool, SBInstruction, GetDescription,
                        (lldb::SBStream &));
   LLDB_REGISTER_METHOD(void, SBInstruction, Print, (FILE *));
-  LLDB_REGISTER_METHOD(void, SBInstruction, Print, (SBFile));
-  LLDB_REGISTER_METHOD(void, SBInstruction, Print, (FileSP));
   LLDB_REGISTER_METHOD(bool, SBInstruction, EmulateWithFrame,
                        (lldb::SBFrame &, uint32_t));
   LLDB_REGISTER_METHOD(bool, SBInstruction, DumpEmulation, (const char *));

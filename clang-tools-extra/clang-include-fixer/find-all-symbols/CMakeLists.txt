@@ -1,6 +1,5 @@
 set(LLVM_LINK_COMPONENTS
   Support
-  FrontendOpenMP
   )
 
 add_clang_library(findAllSymbols
@@ -13,12 +12,7 @@ add_clang_library(findAllSymbols
   STLPostfixHeaderMap.cpp
   SymbolInfo.cpp
 
-  DEPENDS
-  omp_gen
-  )
-
-clang_target_link_libraries(findAllSymbols
-  PRIVATE
+  LINK_LIBS
   clangAST
   clangASTMatchers
   clangBasic

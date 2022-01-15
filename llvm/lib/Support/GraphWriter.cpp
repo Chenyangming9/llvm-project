@@ -11,9 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/GraphWriter.h"
-
-#include "DebugOptions.h"
-
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -32,21 +29,8 @@
 
 using namespace llvm;
 
-#ifdef __APPLE__
-namespace {
-struct CreateViewBackground {
-  static void *call() {
-    return new cl::opt<bool>("view-background", cl::Hidden,
-                             cl::desc("Execute graph viewer in the background. "
-                                      "Creates tmp file litter."));
-  }
-};
-} // namespace
-static ManagedStatic<cl::opt<bool>, CreateViewBackground> ViewBackground;
-void llvm::initGraphWriterOptions() { *ViewBackground; }
-#else
-void llvm::initGraphWriterOptions() {}
-#endif
+static cl::opt<bool> ViewBackground("view-background", cl::Hidden,
+  cl::desc("Execute graph viewer in the background. Creates tmp file litter."));
 
 std::string llvm::DOT::EscapeString(const std::string &Label) {
   std::string Str(Label);
@@ -70,7 +54,7 @@ std::string llvm::DOT::EscapeString(const std::string &Label) {
             Str.erase(Str.begin()+i); continue;
           default: break;
         }
-      LLVM_FALLTHROUGH;
+        LLVM_FALLTHROUGH;
     case '{': case '}':
     case '<': case '>':
     case '|': case '"':
@@ -92,42 +76,17 @@ StringRef llvm::DOT::getColorString(unsigned ColorNumber) {
   return Colors[ColorNumber % NumColors];
 }
 
-static std::string replaceIllegalFilenameChars(std::string Filename,
-                                               const char ReplacementChar) {
-#ifdef _WIN32
-  std::string IllegalChars = "\\/:?\"<>|";
-#else
-  std::string IllegalChars = "/";
-#endif
-
-  for (char IllegalChar : IllegalChars) {
-    std::replace(Filename.begin(), Filename.end(), IllegalChar,
-                 ReplacementChar);
-  }
-
-  return Filename;
-}
-
 std::string llvm::createGraphFilename(const Twine &Name, int &FD) {
   FD = -1;
   SmallString<128> Filename;
-
-  // Windows can't always handle long paths, so limit the length of the name.
-  std::string N = Name.str();
-  N = N.substr(0, std::min<std::size_t>(N.size(), 140));
-
-  // Replace illegal characters in graph Filename with '_' if needed
-  std::string CleansedName = replaceIllegalFilenameChars(N, '_');
-
-  std::error_code EC =
-      sys::fs::createTemporaryFile(CleansedName, "dot", FD, Filename);
+  std::error_code EC = sys::fs::createTemporaryFile(Name, "dot", FD, Filename);
   if (EC) {
     errs() << "Error: " << EC.message() << "\n";
     return "";
   }
 
   errs() << "Writing '" << Filename << "'... ";
-  return std::string(Filename.str());
+  return Filename.str();
 }
 
 // Execute the graph viewer. Return true if there were errors.
@@ -188,13 +147,13 @@ static const char *getProgramName(GraphProgram::Name program) {
 
 bool llvm::DisplayGraph(StringRef FilenameRef, bool wait,
                         GraphProgram::Name program) {
-  std::string Filename = std::string(FilenameRef);
+  std::string Filename = FilenameRef;
   std::string ErrMsg;
   std::string ViewerPath;
   GraphSession S;
 
 #ifdef __APPLE__
-  wait &= !*ViewBackground;
+  wait &= !ViewBackground;
   if (S.TryFindProgram("open", ViewerPath)) {
     std::vector<StringRef> args;
     args.push_back(ViewerPath);

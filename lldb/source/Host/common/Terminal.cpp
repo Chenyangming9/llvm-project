@@ -1,4 +1,4 @@
-//===-- Terminal.cpp ------------------------------------------------------===//
+//===-- Terminal.cpp --------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -12,10 +12,10 @@
 #include "lldb/Host/PosixApi.h"
 #include "llvm/ADT/STLExtras.h"
 
-#include <csignal>
 #include <fcntl.h>
+#include <signal.h>
 
-#if LLDB_ENABLE_TERMIOS
+#ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
 #include <termios.h>
 #endif
 
@@ -25,7 +25,7 @@ bool Terminal::IsATerminal() const { return m_fd >= 0 && ::isatty(m_fd); }
 
 bool Terminal::SetEcho(bool enabled) {
   if (FileDescriptorIsValid()) {
-#if LLDB_ENABLE_TERMIOS
+#ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
     if (IsATerminal()) {
       struct termios fd_termios;
       if (::tcgetattr(m_fd, &fd_termios) == 0) {
@@ -47,14 +47,14 @@ bool Terminal::SetEcho(bool enabled) {
         return ::tcsetattr(m_fd, TCSANOW, &fd_termios) == 0;
       }
     }
-#endif // #if LLDB_ENABLE_TERMIOS
+#endif // #ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
   }
   return false;
 }
 
 bool Terminal::SetCanonical(bool enabled) {
   if (FileDescriptorIsValid()) {
-#if LLDB_ENABLE_TERMIOS
+#ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
     if (IsATerminal()) {
       struct termios fd_termios;
       if (::tcgetattr(m_fd, &fd_termios) == 0) {
@@ -76,28 +76,27 @@ bool Terminal::SetCanonical(bool enabled) {
         return ::tcsetattr(m_fd, TCSANOW, &fd_termios) == 0;
       }
     }
-#endif // #if LLDB_ENABLE_TERMIOS
+#endif // #ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
   }
   return false;
 }
 
 // Default constructor
 TerminalState::TerminalState()
-    : m_tty()
-#if LLDB_ENABLE_TERMIOS
-      ,
-      m_termios_up()
+    : m_tty(), m_tflags(-1),
+#ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
+      m_termios_up(),
 #endif
-{
+      m_process_group(-1) {
 }
 
 // Destructor
-TerminalState::~TerminalState() = default;
+TerminalState::~TerminalState() {}
 
 void TerminalState::Clear() {
   m_tty.Clear();
   m_tflags = -1;
-#if LLDB_ENABLE_TERMIOS
+#ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
   m_termios_up.reset();
 #endif
   m_process_group = -1;
@@ -109,17 +108,17 @@ void TerminalState::Clear() {
 bool TerminalState::Save(int fd, bool save_process_group) {
   m_tty.SetFileDescriptor(fd);
   if (m_tty.IsATerminal()) {
-#if LLDB_ENABLE_POSIX
+#ifndef LLDB_DISABLE_POSIX
     m_tflags = ::fcntl(fd, F_GETFL, 0);
 #endif
-#if LLDB_ENABLE_TERMIOS
+#ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
     if (m_termios_up == nullptr)
       m_termios_up.reset(new struct termios);
     int err = ::tcgetattr(fd, m_termios_up.get());
     if (err != 0)
       m_termios_up.reset();
-#endif // #if LLDB_ENABLE_TERMIOS
-#if LLDB_ENABLE_POSIX
+#endif // #ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
+#ifndef LLDB_DISABLE_POSIX
     if (save_process_group)
       m_process_group = ::tcgetpgrp(0);
     else
@@ -128,7 +127,7 @@ bool TerminalState::Save(int fd, bool save_process_group) {
   } else {
     m_tty.Clear();
     m_tflags = -1;
-#if LLDB_ENABLE_TERMIOS
+#ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
     m_termios_up.reset();
 #endif
     m_process_group = -1;
@@ -139,16 +138,16 @@ bool TerminalState::Save(int fd, bool save_process_group) {
 // Restore the state of the TTY using the cached values from a previous call to
 // Save().
 bool TerminalState::Restore() const {
-#if LLDB_ENABLE_POSIX
+#ifndef LLDB_DISABLE_POSIX
   if (IsValid()) {
     const int fd = m_tty.GetFileDescriptor();
     if (TFlagsIsValid())
       fcntl(fd, F_SETFL, m_tflags);
 
-#if LLDB_ENABLE_TERMIOS
+#ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
     if (TTYStateIsValid())
       tcsetattr(fd, TCSANOW, m_termios_up.get());
-#endif // #if LLDB_ENABLE_TERMIOS
+#endif // #ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
 
     if (ProcessGroupIsValid()) {
       // Save the original signal handler.
@@ -177,7 +176,7 @@ bool TerminalState::TFlagsIsValid() const { return m_tflags != -1; }
 
 // Returns true if m_ttystate is valid
 bool TerminalState::TTYStateIsValid() const {
-#if LLDB_ENABLE_TERMIOS
+#ifdef LLDB_CONFIG_TERMIOS_SUPPORTED
   return m_termios_up != nullptr;
 #else
   return false;
@@ -190,10 +189,10 @@ bool TerminalState::ProcessGroupIsValid() const {
 }
 
 // Constructor
-TerminalStateSwitcher::TerminalStateSwitcher() = default;
+TerminalStateSwitcher::TerminalStateSwitcher() : m_currentState(UINT32_MAX) {}
 
 // Destructor
-TerminalStateSwitcher::~TerminalStateSwitcher() = default;
+TerminalStateSwitcher::~TerminalStateSwitcher() {}
 
 // Returns the number of states that this switcher contains
 uint32_t TerminalStateSwitcher::GetNumberOfStates() const {

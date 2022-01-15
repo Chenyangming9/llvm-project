@@ -57,8 +57,8 @@ build would look like this:
 
   $ cd where-you-want-libunwind-to-live
   $ # Check out llvm, and libunwind
-  $ ``svn co https://llvm.org/svn/llvm-project/llvm/trunk llvm``
-  $ ``svn co https://llvm.org/svn/llvm-project/libunwind/trunk libunwind``
+  $ ``svn co http://llvm.org/svn/llvm-project/llvm/trunk llvm``
+  $ ``svn co http://llvm.org/svn/llvm-project/libunwind/trunk libunwind``
   $ cd where-you-want-to-build
   $ mkdir build && cd build
   $ export CC=clang CXX=clang++
@@ -159,10 +159,3 @@ libunwind specific options
 .. option:: LIBUNWIND_SYSROOT
 
   Sysroot for cross compiling
-
-.. option:: LIBUNWIND_INSTALL_LIBRARY_DIR:PATH
-
-  **Default**: ``lib${LIBUNWIND_LIBDIR_SUFFIX}``
-
-  Path where built libunwind libraries should be installed. If a relative path,
-  relative to ``CMAKE_INSTALL_PREFIX``.

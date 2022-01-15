@@ -1,8 +1,5 @@
 ; RUN: FileCheck -input-file %s %s -check-prefix=CHECKOK
-;
-; RUN: %ProtectFileCheckOutput \
-; RUN: not FileCheck -input-file %s %s -check-prefix=CHECKFAIL 2>&1 \
-; RUN: | FileCheck %s -check-prefix=CHECKERROR
+; RUN: not FileCheck -input-file %s %s -check-prefix=CHECKFAIL 2>&1 | FileCheck %s -check-prefix=CHECKERROR
 
 label0:
 a

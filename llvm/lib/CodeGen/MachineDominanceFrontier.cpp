@@ -10,7 +10,6 @@
 #include "llvm/Analysis/DominanceFrontierImpl.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/Passes.h"
-#include "llvm/InitializePasses.h"
 
 using namespace llvm;
 

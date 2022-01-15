@@ -94,11 +94,10 @@ protected:
 
     unsigned : NumInlineContentCommentBits;
 
-    unsigned RenderKind : 3;
-
+    unsigned RenderKind : 2;
     unsigned CommandID : CommandInfo::NumCommandIDBits;
   };
-  enum { NumInlineCommandCommentBits = NumInlineContentCommentBits + 3 +
+  enum { NumInlineCommandCommentBits = NumInlineContentCommentBits + 2 +
                                        CommandInfo::NumCommandIDBits };
 
   class HTMLTagCommentBitfields {
@@ -209,7 +208,9 @@ public:
 
   void dump() const;
   void dumpColor() const;
-  void dump(raw_ostream &OS, const ASTContext &Context) const;
+  void dump(const ASTContext &Context) const;
+  void dump(raw_ostream &OS, const CommandTraits *Traits,
+            const SourceManager *SM) const;
 
   SourceRange getSourceRange() const LLVM_READONLY { return Range; }
 
@@ -309,8 +310,7 @@ public:
     RenderNormal,
     RenderBold,
     RenderMonospaced,
-    RenderEmphasized,
-    RenderAnchor
+    RenderEmphasized
   };
 
 protected:

@@ -35,8 +35,7 @@ High Level
 ==========
 
 The ABI of ``Blocks`` consist of their layout and the runtime functions required
-by the compiler.  A ``Block`` of type ``R (^)(P...)`` consists of a structure of
-the following form:
+by the compiler.  A ``Block`` consists of a structure of the following form:
 
 .. code-block:: c
 
@@ -44,7 +43,7 @@ the following form:
         void *isa; // initialized to &_NSConcreteStackBlock or &_NSConcreteGlobalBlock
         int flags;
         int reserved; 
-        R (*invoke)(struct Block_literal_1 *, P...);
+        void (*invoke)(void *, ...);
         struct Block_descriptor_1 {
         unsigned long int reserved;         // NULL
             unsigned long int size;         // sizeof(struct Block_literal_1)
@@ -64,7 +63,7 @@ The following flags bits are in use thusly for a possible ABI.2010.3.16:
     enum {
         // Set to true on blocks that have captures (and thus are not true
         // global blocks) but are known not to escape for various other
-        // reasons. For backward compatibility with old runtimes, whenever
+        // reasons. For backward compatiblity with old runtimes, whenever
         // BLOCK_IS_NOESCAPE is set, BLOCK_IS_GLOBAL is set too. Copying a
         // non-escaping block returns the original block and releasing such a
         // block is a no-op, which is exactly how global blocks are handled.
@@ -153,7 +152,7 @@ would cause the following to be created on a 32-bit system:
     static struct __block_descriptor_1 {
         unsigned long int reserved;
         unsigned long int Block_size;
-    } __block_descriptor_1 = { 0, sizeof(struct __block_literal_1) };
+    } __block_descriptor_1 = { 0, sizeof(struct __block_literal_1), __block_invoke_1 };
 
 and where the ``Block`` literal itself appears:
 

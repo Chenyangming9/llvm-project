@@ -9,7 +9,6 @@
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Analysis/DomTreeUpdater.h"
 #include "llvm/Analysis/PostDominators.h"
-#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DIBuilder.h"
@@ -154,7 +153,7 @@ TEST(Local, ReplaceDbgDeclare) {
   ASSERT_TRUE(DII);
   Value *NewBase = Constant::getNullValue(Type::getInt32PtrTy(C));
   DIBuilder DIB(*M);
-  replaceDbgDeclare(AI, NewBase, DIB, DIExpression::ApplyOffset, 0);
+  replaceDbgDeclare(AI, NewBase, DII, DIB, DIExpression::ApplyOffset, 0);
 
   // There should be exactly two dbg.declares.
   int Declares = 0;
@@ -489,7 +488,7 @@ struct SalvageDebugInfoTest : ::testing::Test {
   std::unique_ptr<Module> M;
   Function *F = nullptr;
 
-  void SetUp() override {
+  void SetUp() {
     M = parseIR(C,
                 R"(
       define void @f() !dbg !8 {
@@ -524,9 +523,7 @@ struct SalvageDebugInfoTest : ::testing::Test {
   }
 
   bool doesDebugValueDescribeX(const DbgValueInst &DI) {
-    if (DI.getNumVariableLocationOps() != 1u)
-      return false;
-    const auto &CI = *cast<ConstantInt>(DI.getValue(0));
+    const auto &CI = *cast<ConstantInt>(DI.getValue());
     if (CI.isZero())
       return DI.getExpression()->getElements().equals(
           {dwarf::DW_OP_plus_uconst, 1, dwarf::DW_OP_stack_value});
@@ -536,9 +533,7 @@ struct SalvageDebugInfoTest : ::testing::Test {
   }
 
   bool doesDebugValueDescribeY(const DbgValueInst &DI) {
-    if (DI.getNumVariableLocationOps() != 1u)
-      return false;
-    const auto &CI = *cast<ConstantInt>(DI.getVariableLocationOp(0));
+    const auto &CI = *cast<ConstantInt>(DI.getValue());
     if (CI.isZero())
       return DI.getExpression()->getElements().equals(
           {dwarf::DW_OP_plus_uconst, 1, dwarf::DW_OP_plus_uconst, 2,
@@ -623,7 +618,7 @@ TEST(Local, ChangeToUnreachable) {
 
   ASSERT_TRUE(isa<ReturnInst>(&A));
   // One instruction should be affected.
-  EXPECT_EQ(changeToUnreachable(&A), 1U);
+  EXPECT_EQ(changeToUnreachable(&A, /*UseLLVMTrap*/false), 1U);
 
   Instruction &B = BB.front();
 
@@ -762,18 +757,13 @@ TEST(Local, ReplaceAllDbgUsesWith) {
   EXPECT_TRUE(replaceAllDbgUsesWith(A, F_, F_, DT));
 
   auto *ADbgVal = cast<DbgValueInst>(A.getNextNode());
-  EXPECT_EQ(ADbgVal->getNumVariableLocationOps(), 1u);
-  EXPECT_EQ(ConstantInt::get(A.getType(), 0), ADbgVal->getVariableLocationOp(0));
+  EXPECT_EQ(ConstantInt::get(A.getType(), 0), ADbgVal->getVariableLocation());
 
-  // Introduce a use-before-def. Check that the dbg.values for %f become undef.
+  // Introduce a use-before-def. Check that the dbg.values for %f are deleted.
   EXPECT_TRUE(replaceAllDbgUsesWith(F_, G, G, DT));
 
-  auto *FDbgVal = cast<DbgValueInst>(F_.getNextNode());
-  EXPECT_EQ(FDbgVal->getNumVariableLocationOps(), 1u);
-  EXPECT_TRUE(FDbgVal->isUndef());
-
   SmallVector<DbgValueInst *, 1> FDbgVals;
-  findDbgValues(FDbgVals, &F_);
+  findDbgValues(FDbgVals, &F);
   EXPECT_EQ(0U, FDbgVals.size());
 
   // Simulate i32 -> i64 conversion to test sign-extension. Here are some
@@ -877,42 +867,12 @@ TEST(Local, RemoveUnreachableBlocks) {
       bb2:
         br label %bb1
       }
-
-      declare i32 @__gxx_personality_v0(...)
-
-      define void @invoke_terminator() personality i8* bitcast (i32 (...)* @__gxx_personality_v0 to i8*) {
-      entry:
-        br i1 undef, label %invoke.block, label %exit
-
-      invoke.block:
-        %cond = invoke zeroext i1 @invokable()
-                to label %continue.block unwind label %lpad.block
-
-      continue.block:
-        br i1 %cond, label %if.then, label %if.end
-
-      if.then:
-        unreachable
-
-      if.end:
-        unreachable
-
-      lpad.block:
-        %lp = landingpad { i8*, i32 }
-                catch i8* null
-        br label %exit
-
-      exit:
-        ret void
-      }
-
-      declare i1 @invokable()
       )");
 
   auto runEager = [&](Function &F, DominatorTree *DT) {
     PostDominatorTree PDT = PostDominatorTree(F);
     DomTreeUpdater DTU(*DT, PDT, DomTreeUpdater::UpdateStrategy::Eager);
-    removeUnreachableBlocks(F, &DTU);
+    removeUnreachableBlocks(F, nullptr, &DTU);
     EXPECT_TRUE(DTU.getDomTree().verify());
     EXPECT_TRUE(DTU.getPostDomTree().verify());
   };
@@ -920,7 +880,7 @@ TEST(Local, RemoveUnreachableBlocks) {
   auto runLazy = [&](Function &F, DominatorTree *DT) {
     PostDominatorTree PDT = PostDominatorTree(F);
     DomTreeUpdater DTU(*DT, PDT, DomTreeUpdater::UpdateStrategy::Lazy);
-    removeUnreachableBlocks(F, &DTU);
+    removeUnreachableBlocks(F, nullptr, &DTU);
     EXPECT_TRUE(DTU.getDomTree().verify());
     EXPECT_TRUE(DTU.getPostDomTree().verify());
   };
@@ -930,14 +890,12 @@ TEST(Local, RemoveUnreachableBlocks) {
   runWithDomTree(*M, "br_self_loop", runEager);
   runWithDomTree(*M, "br_constant", runEager);
   runWithDomTree(*M, "br_loop", runEager);
-  runWithDomTree(*M, "invoke_terminator", runEager);
 
   // Test removeUnreachableBlocks under Lazy UpdateStrategy.
   runWithDomTree(*M, "br_simple", runLazy);
   runWithDomTree(*M, "br_self_loop", runLazy);
   runWithDomTree(*M, "br_constant", runLazy);
   runWithDomTree(*M, "br_loop", runLazy);
-  runWithDomTree(*M, "invoke_terminator", runLazy);
 
   M = parseIR(C,
               R"(
@@ -951,123 +909,10 @@ TEST(Local, RemoveUnreachableBlocks) {
 
   auto checkRUBlocksRetVal = [&](Function &F, DominatorTree *DT) {
     DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Lazy);
-    EXPECT_TRUE(removeUnreachableBlocks(F, &DTU));
-    EXPECT_FALSE(removeUnreachableBlocks(F, &DTU));
+    EXPECT_TRUE(removeUnreachableBlocks(F, nullptr, &DTU));
+    EXPECT_FALSE(removeUnreachableBlocks(F, nullptr, &DTU));
     EXPECT_TRUE(DTU.getDomTree().verify());
   };
 
   runWithDomTree(*M, "f", checkRUBlocksRetVal);
-}
-
-TEST(Local, SimplifyCFGWithNullAC) {
-  LLVMContext Ctx;
-
-  std::unique_ptr<Module> M = parseIR(Ctx, R"(
-    declare void @true_path()
-    declare void @false_path()
-    declare void @llvm.assume(i1 %cond);
-
-    define i32 @foo(i1, i32) {
-    entry:
-      %cmp = icmp sgt i32 %1, 0
-      br i1 %cmp, label %if.bb1, label %then.bb1
-    if.bb1:
-      call void @true_path()
-      br label %test.bb
-    then.bb1:
-      call void @false_path()
-      br label %test.bb
-    test.bb:
-      %phi = phi i1 [1, %if.bb1], [%0, %then.bb1]
-      call void @llvm.assume(i1 %0)
-      br i1 %phi, label %if.bb2, label %then.bb2
-    if.bb2:
-      ret i32 %1
-    then.bb2:
-      ret i32 0
-    }
-  )");
-
-  Function &F = *cast<Function>(M->getNamedValue("foo"));
-  TargetTransformInfo TTI(M->getDataLayout());
-
-  SimplifyCFGOptions Options{};
-  Options.setAssumptionCache(nullptr);
-
-  // Obtain BasicBlock of interest to this test, %test.bb.
-  BasicBlock *TestBB = nullptr;
-  for (BasicBlock &BB : F) {
-    if (BB.getName().equals("test.bb")) {
-      TestBB = &BB;
-      break;
-    }
-  }
-  ASSERT_TRUE(TestBB);
-
-  DominatorTree DT(F);
-  DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Eager);
-
-  // %test.bb is expected to be simplified by FoldCondBranchOnPHI.
-  EXPECT_TRUE(simplifyCFG(TestBB, TTI,
-                          RequireAndPreserveDomTree ? &DTU : nullptr, Options));
-}
-
-TEST(Local, CanReplaceOperandWithVariable) {
-  LLVMContext Ctx;
-  Module M("test_module", Ctx);
-  IRBuilder<> B(Ctx);
-
-  FunctionType *FnType =
-    FunctionType::get(Type::getVoidTy(Ctx), {}, false);
-
-  FunctionType *VarArgFnType =
-    FunctionType::get(Type::getVoidTy(Ctx), {B.getInt32Ty()}, true);
-
-  Function *TestBody = Function::Create(FnType, GlobalValue::ExternalLinkage,
-                                        0, "", &M);
-
-  BasicBlock *BB0 = BasicBlock::Create(Ctx, "", TestBody);
-  B.SetInsertPoint(BB0);
-
-  FunctionCallee Intrin = M.getOrInsertFunction("llvm.foo", FnType);
-  FunctionCallee Func = M.getOrInsertFunction("foo", FnType);
-  FunctionCallee VarArgFunc
-    = M.getOrInsertFunction("foo.vararg", VarArgFnType);
-  FunctionCallee VarArgIntrin
-    = M.getOrInsertFunction("llvm.foo.vararg", VarArgFnType);
-
-  auto *CallToIntrin = B.CreateCall(Intrin);
-  auto *CallToFunc = B.CreateCall(Func);
-
-  // Test if it's valid to replace the callee operand.
-  EXPECT_FALSE(canReplaceOperandWithVariable(CallToIntrin, 0));
-  EXPECT_TRUE(canReplaceOperandWithVariable(CallToFunc, 0));
-
-  // That it's invalid to replace an argument in the variadic argument list for
-  // an intrinsic, but OK for a normal function.
-  auto *CallToVarArgFunc = B.CreateCall(
-    VarArgFunc, {B.getInt32(0), B.getInt32(1), B.getInt32(2)});
-  EXPECT_TRUE(canReplaceOperandWithVariable(CallToVarArgFunc, 0));
-  EXPECT_TRUE(canReplaceOperandWithVariable(CallToVarArgFunc, 1));
-  EXPECT_TRUE(canReplaceOperandWithVariable(CallToVarArgFunc, 2));
-  EXPECT_TRUE(canReplaceOperandWithVariable(CallToVarArgFunc, 3));
-
-  auto *CallToVarArgIntrin = B.CreateCall(
-    VarArgIntrin, {B.getInt32(0), B.getInt32(1), B.getInt32(2)});
-  EXPECT_TRUE(canReplaceOperandWithVariable(CallToVarArgIntrin, 0));
-  EXPECT_FALSE(canReplaceOperandWithVariable(CallToVarArgIntrin, 1));
-  EXPECT_FALSE(canReplaceOperandWithVariable(CallToVarArgIntrin, 2));
-  EXPECT_FALSE(canReplaceOperandWithVariable(CallToVarArgIntrin, 3));
-
-  // Test that it's invalid to replace gcroot operands, even though it can't use
-  // immarg.
-  Type *PtrPtr = B.getInt8Ty()->getPointerTo(0);
-  Value *Alloca = B.CreateAlloca(PtrPtr, (unsigned)0);
-  CallInst *GCRoot = B.CreateIntrinsic(Intrinsic::gcroot, {},
-    {Alloca, Constant::getNullValue(PtrPtr)});
-  EXPECT_TRUE(canReplaceOperandWithVariable(GCRoot, 0)); // Alloca
-  EXPECT_FALSE(canReplaceOperandWithVariable(GCRoot, 1));
-  EXPECT_FALSE(canReplaceOperandWithVariable(GCRoot, 2));
-
-  BB0->dropAllReferences();
 }

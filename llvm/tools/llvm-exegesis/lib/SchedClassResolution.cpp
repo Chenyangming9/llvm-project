@@ -46,20 +46,20 @@ namespace exegesis {
 // Note that in this case, P016 does not contribute any cycles, so it would
 // be removed by this function.
 // FIXME: Move this to MCSubtargetInfo and use it in llvm-mca.
-static SmallVector<MCWriteProcResEntry, 8>
-getNonRedundantWriteProcRes(const MCSchedClassDesc &SCDesc,
-                            const MCSubtargetInfo &STI) {
-  SmallVector<MCWriteProcResEntry, 8> Result;
+static llvm::SmallVector<llvm::MCWriteProcResEntry, 8>
+getNonRedundantWriteProcRes(const llvm::MCSchedClassDesc &SCDesc,
+                            const llvm::MCSubtargetInfo &STI) {
+  llvm::SmallVector<llvm::MCWriteProcResEntry, 8> Result;
   const auto &SM = STI.getSchedModel();
   const unsigned NumProcRes = SM.getNumProcResourceKinds();
 
   // This assumes that the ProcResDescs are sorted in topological order, which
   // is guaranteed by the tablegen backend.
-  SmallVector<float, 32> ProcResUnitUsage(NumProcRes);
+  llvm::SmallVector<float, 32> ProcResUnitUsage(NumProcRes);
   for (const auto *WPR = STI.getWriteProcResBegin(&SCDesc),
                   *const WPREnd = STI.getWriteProcResEnd(&SCDesc);
        WPR != WPREnd; ++WPR) {
-    const MCProcResourceDesc *const ProcResDesc =
+    const llvm::MCProcResourceDesc *const ProcResDesc =
         SM.getProcResource(WPR->ProcResourceIdx);
     if (ProcResDesc->SubUnitsIdxBegin == nullptr) {
       // This is a ProcResUnit.
@@ -123,11 +123,11 @@ getNonRedundantWriteProcRes(const MCSchedClassDesc &SCDesc,
 //     RemainingPressure = 0.0
 // We stop as there is no remaining budget to distribute.
 static void distributePressure(float RemainingPressure,
-                               SmallVector<uint16_t, 32> Subunits,
-                               SmallVector<float, 32> &DensePressure) {
+                               llvm::SmallVector<uint16_t, 32> Subunits,
+                               llvm::SmallVector<float, 32> &DensePressure) {
   // Find the number of subunits with minimal pressure (they are at the
   // front).
-  sort(Subunits, [&DensePressure](const uint16_t A, const uint16_t B) {
+  llvm::sort(Subunits, [&DensePressure](const uint16_t A, const uint16_t B) {
     return DensePressure[A] < DensePressure[B];
   });
   const auto getPressureForSubunit = [&DensePressure,
@@ -171,26 +171,27 @@ static void distributePressure(float RemainingPressure,
   }
 }
 
-std::vector<std::pair<uint16_t, float>>
-computeIdealizedProcResPressure(const MCSchedModel &SM,
-                                SmallVector<MCWriteProcResEntry, 8> WPRS) {
+std::vector<std::pair<uint16_t, float>> computeIdealizedProcResPressure(
+    const llvm::MCSchedModel &SM,
+    llvm::SmallVector<llvm::MCWriteProcResEntry, 8> WPRS) {
   // DensePressure[I] is the port pressure for Proc Resource I.
-  SmallVector<float, 32> DensePressure(SM.getNumProcResourceKinds());
-  sort(WPRS, [](const MCWriteProcResEntry &A, const MCWriteProcResEntry &B) {
+  llvm::SmallVector<float, 32> DensePressure(SM.getNumProcResourceKinds());
+  llvm::sort(WPRS, [](const llvm::MCWriteProcResEntry &A,
+                      const llvm::MCWriteProcResEntry &B) {
     return A.ProcResourceIdx < B.ProcResourceIdx;
   });
-  for (const MCWriteProcResEntry &WPR : WPRS) {
+  for (const llvm::MCWriteProcResEntry &WPR : WPRS) {
     // Get units for the entry.
-    const MCProcResourceDesc *const ProcResDesc =
+    const llvm::MCProcResourceDesc *const ProcResDesc =
         SM.getProcResource(WPR.ProcResourceIdx);
     if (ProcResDesc->SubUnitsIdxBegin == nullptr) {
       // This is a ProcResUnit.
       DensePressure[WPR.ProcResourceIdx] += WPR.Cycles;
     } else {
       // This is a ProcResGroup.
-      SmallVector<uint16_t, 32> Subunits(ProcResDesc->SubUnitsIdxBegin,
-                                         ProcResDesc->SubUnitsIdxBegin +
-                                             ProcResDesc->NumUnits);
+      llvm::SmallVector<uint16_t, 32> Subunits(ProcResDesc->SubUnitsIdxBegin,
+                                               ProcResDesc->SubUnitsIdxBegin +
+                                                   ProcResDesc->NumUnits);
       distributePressure(WPR.Cycles, Subunits, DensePressure);
     }
   }
@@ -203,7 +204,7 @@ computeIdealizedProcResPressure(const MCSchedModel &SM,
   return Pressure;
 }
 
-ResolvedSchedClass::ResolvedSchedClass(const MCSubtargetInfo &STI,
+ResolvedSchedClass::ResolvedSchedClass(const llvm::MCSubtargetInfo &STI,
                                        unsigned ResolvedSchedClassId,
                                        bool WasVariant)
     : SchedClassId(ResolvedSchedClassId),
@@ -216,37 +217,34 @@ ResolvedSchedClass::ResolvedSchedClass(const MCSubtargetInfo &STI,
          "ResolvedSchedClass should never be variant");
 }
 
-static unsigned ResolveVariantSchedClassId(const MCSubtargetInfo &STI,
-                                           const MCInstrInfo &InstrInfo,
+static unsigned ResolveVariantSchedClassId(const llvm::MCSubtargetInfo &STI,
                                            unsigned SchedClassId,
-                                           const MCInst &MCI) {
+                                           const llvm::MCInst &MCI) {
   const auto &SM = STI.getSchedModel();
-  while (SchedClassId && SM.getSchedClassDesc(SchedClassId)->isVariant()) {
-    SchedClassId = STI.resolveVariantSchedClass(SchedClassId, &MCI, &InstrInfo,
-                                                SM.getProcessorID());
-  }
+  while (SchedClassId && SM.getSchedClassDesc(SchedClassId)->isVariant())
+    SchedClassId =
+        STI.resolveVariantSchedClass(SchedClassId, &MCI, SM.getProcessorID());
   return SchedClassId;
 }
 
 std::pair<unsigned /*SchedClassId*/, bool /*WasVariant*/>
-ResolvedSchedClass::resolveSchedClassId(const MCSubtargetInfo &SubtargetInfo,
-                                        const MCInstrInfo &InstrInfo,
-                                        const MCInst &MCI) {
+ResolvedSchedClass::resolveSchedClassId(
+    const llvm::MCSubtargetInfo &SubtargetInfo,
+    const llvm::MCInstrInfo &InstrInfo, const llvm::MCInst &MCI) {
   unsigned SchedClassId = InstrInfo.get(MCI.getOpcode()).getSchedClass();
   const bool WasVariant = SchedClassId && SubtargetInfo.getSchedModel()
                                               .getSchedClassDesc(SchedClassId)
                                               ->isVariant();
-  SchedClassId =
-      ResolveVariantSchedClassId(SubtargetInfo, InstrInfo, SchedClassId, MCI);
+  SchedClassId = ResolveVariantSchedClassId(SubtargetInfo, SchedClassId, MCI);
   return std::make_pair(SchedClassId, WasVariant);
 }
 
 // Returns a ProxResIdx by id or name.
-static unsigned findProcResIdx(const MCSubtargetInfo &STI,
-                               const StringRef NameOrId) {
+static unsigned findProcResIdx(const llvm::MCSubtargetInfo &STI,
+                               const llvm::StringRef NameOrId) {
   // Interpret the key as an ProcResIdx.
   unsigned ProcResIdx = 0;
-  if (to_integer(NameOrId, ProcResIdx, 10))
+  if (llvm::to_integer(NameOrId, ProcResIdx, 10))
     return ProcResIdx;
   // Interpret the key as a ProcRes name.
   const auto &SchedModel = STI.getSchedModel();
@@ -258,7 +256,7 @@ static unsigned findProcResIdx(const MCSubtargetInfo &STI,
 }
 
 std::vector<BenchmarkMeasure> ResolvedSchedClass::getAsPoint(
-    InstructionBenchmark::ModeE Mode, const MCSubtargetInfo &STI,
+    InstructionBenchmark::ModeE Mode, const llvm::MCSubtargetInfo &STI,
     ArrayRef<PerInstructionStats> Representative) const {
   const size_t NumMeasurements = Representative.size();
 
@@ -272,13 +270,13 @@ std::vector<BenchmarkMeasure> ResolvedSchedClass::getAsPoint(
     LatencyMeasure.PerInstructionValue = 0.0;
 
     for (unsigned I = 0; I < SCDesc->NumWriteLatencyEntries; ++I) {
-      const MCWriteLatencyEntry *const WLE =
+      const llvm::MCWriteLatencyEntry *const WLE =
           STI.getWriteLatencyEntry(SCDesc, I);
       LatencyMeasure.PerInstructionValue =
           std::max<double>(LatencyMeasure.PerInstructionValue, WLE->Cycles);
     }
   } else if (Mode == InstructionBenchmark::Uops) {
-    for (auto I : zip(SchedClassPoint, Representative)) {
+    for (const auto &I : llvm::zip(SchedClassPoint, Representative)) {
       BenchmarkMeasure &Measure = std::get<0>(I);
       const PerInstructionStats &Stats = std::get<1>(I);
 
@@ -286,11 +284,11 @@ std::vector<BenchmarkMeasure> ResolvedSchedClass::getAsPoint(
       uint16_t ProcResIdx = findProcResIdx(STI, Key);
       if (ProcResIdx > 0) {
         // Find the pressure on ProcResIdx `Key`.
-        const auto ProcResPressureIt =
-            llvm::find_if(IdealizedProcResPressure,
-                          [ProcResIdx](const std::pair<uint16_t, float> &WPR) {
-                            return WPR.first == ProcResIdx;
-                          });
+        const auto ProcResPressureIt = std::find_if(
+            IdealizedProcResPressure.begin(), IdealizedProcResPressure.end(),
+            [ProcResIdx](const std::pair<uint16_t, float> &WPR) {
+              return WPR.first == ProcResIdx;
+            });
         Measure.PerInstructionValue =
             ProcResPressureIt == IdealizedProcResPressure.end()
                 ? 0.0
@@ -298,9 +296,9 @@ std::vector<BenchmarkMeasure> ResolvedSchedClass::getAsPoint(
       } else if (Key == "NumMicroOps") {
         Measure.PerInstructionValue = SCDesc->NumMicroOps;
       } else {
-        errs() << "expected `key` to be either a ProcResIdx or a ProcRes "
-                  "name, got "
-               << Key << "\n";
+        llvm::errs() << "expected `key` to be either a ProcResIdx or a ProcRes "
+                        "name, got "
+                     << Key << "\n";
         return {};
       }
     }

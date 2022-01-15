@@ -13,12 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Scalar/PartiallyInlineLibCalls.h"
-#include "llvm/Analysis/DomTreeUpdater.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
-#include "llvm/IR/Dominators.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/DebugCounter.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -32,7 +29,7 @@ DEBUG_COUNTER(PILCounter, "partially-inline-libcalls-transform",
 
 static bool optimizeSQRT(CallInst *Call, Function *CalledFunc,
                          BasicBlock &CurrBB, Function::iterator &BB,
-                         const TargetTransformInfo *TTI, DomTreeUpdater *DTU) {
+                         const TargetTransformInfo *TTI) {
   // There is no need to change the IR, since backend will emit sqrt
   // instruction if the call has already been marked read-only.
   if (Call->onlyReadsMemory())
@@ -53,44 +50,33 @@ static bool optimizeSQRT(CallInst *Call, Function *CalledFunc,
   // dst = phi(v0, v1)
   //
 
+  // Move all instructions following Call to newly created block JoinBB.
+  // Create phi and replace all uses.
+  BasicBlock *JoinBB = llvm::SplitBlock(&CurrBB, Call->getNextNode());
+  IRBuilder<> Builder(JoinBB, JoinBB->begin());
   Type *Ty = Call->getType();
-  IRBuilder<> Builder(Call->getNextNode());
-
-  // Split CurrBB right after the call, create a 'then' block (that branches
-  // back to split-off tail of CurrBB) into which we'll insert a libcall.
-  Instruction *LibCallTerm = SplitBlockAndInsertIfThen(
-      Builder.getTrue(), Call->getNextNode(), /*Unreachable=*/false,
-      /*BranchWeights*/ nullptr, DTU);
-
-  auto *CurrBBTerm = cast<BranchInst>(CurrBB.getTerminator());
-  // We want an 'else' block though, not a 'then' block.
-  cast<BranchInst>(CurrBBTerm)->swapSuccessors();
-
-  // Create phi that will merge results of either sqrt and replace all uses.
-  BasicBlock *JoinBB = LibCallTerm->getSuccessor(0);
-  JoinBB->setName(CurrBB.getName() + ".split");
-  Builder.SetInsertPoint(JoinBB, JoinBB->begin());
   PHINode *Phi = Builder.CreatePHI(Ty, 2);
   Call->replaceAllUsesWith(Phi);
 
-  // Finally, insert the libcall into 'else' block.
-  BasicBlock *LibCallBB = LibCallTerm->getParent();
-  LibCallBB->setName("call.sqrt");
-  Builder.SetInsertPoint(LibCallTerm);
+  // Create basic block LibCallBB and insert a call to library function sqrt.
+  BasicBlock *LibCallBB = BasicBlock::Create(CurrBB.getContext(), "call.sqrt",
+                                             CurrBB.getParent(), JoinBB);
+  Builder.SetInsertPoint(LibCallBB);
   Instruction *LibCall = Call->clone();
   Builder.Insert(LibCall);
+  Builder.CreateBr(JoinBB);
 
   // Add attribute "readnone" so that backend can use a native sqrt instruction
-  // for this call.
+  // for this call. Insert a FP compare instruction and a conditional branch
+  // at the end of CurrBB.
   Call->addAttribute(AttributeList::FunctionIndex, Attribute::ReadNone);
-
-  // Insert a FP compare instruction and use it as the CurrBB branch condition.
-  Builder.SetInsertPoint(CurrBBTerm);
+  CurrBB.getTerminator()->eraseFromParent();
+  Builder.SetInsertPoint(&CurrBB);
   Value *FCmp = TTI->isFCmpOrdCheaperThanFCmpZero(Ty)
                     ? Builder.CreateFCmpORD(Call, Call)
                     : Builder.CreateFCmpOGE(Call->getOperand(0),
                                             ConstantFP::get(Ty, 0.0));
-  CurrBBTerm->setCondition(FCmp);
+  Builder.CreateCondBr(FCmp, JoinBB, LibCallBB);
 
   // Add phi operands.
   Phi->addIncoming(Call, &CurrBB);
@@ -101,12 +87,7 @@ static bool optimizeSQRT(CallInst *Call, Function *CalledFunc,
 }
 
 static bool runPartiallyInlineLibCalls(Function &F, TargetLibraryInfo *TLI,
-                                       const TargetTransformInfo *TTI,
-                                       DominatorTree *DT) {
-  Optional<DomTreeUpdater> DTU;
-  if (DT)
-    DTU.emplace(DT, DomTreeUpdater::UpdateStrategy::Lazy);
-
+                                       const TargetTransformInfo *TTI) {
   bool Changed = false;
 
   Function::iterator CurrBB;
@@ -121,7 +102,7 @@ static bool runPartiallyInlineLibCalls(Function &F, TargetLibraryInfo *TLI,
       if (!Call || !(CalledFunc = Call->getCalledFunction()))
         continue;
 
-      if (Call->isNoBuiltin() || Call->isStrictFP())
+      if (Call->isNoBuiltin())
         continue;
 
       // Skip if function either has local linkage or is not a known library
@@ -135,8 +116,7 @@ static bool runPartiallyInlineLibCalls(Function &F, TargetLibraryInfo *TLI,
       case LibFunc_sqrtf:
       case LibFunc_sqrt:
         if (TTI->haveFastSqrt(Call->getType()) &&
-            optimizeSQRT(Call, CalledFunc, *CurrBB, BB, TTI,
-                         DTU.hasValue() ? DTU.getPointer() : nullptr))
+            optimizeSQRT(Call, CalledFunc, *CurrBB, BB, TTI))
           break;
         continue;
       default:
@@ -155,12 +135,9 @@ PreservedAnalyses
 PartiallyInlineLibCallsPass::run(Function &F, FunctionAnalysisManager &AM) {
   auto &TLI = AM.getResult<TargetLibraryAnalysis>(F);
   auto &TTI = AM.getResult<TargetIRAnalysis>(F);
-  auto *DT = AM.getCachedResult<DominatorTreeAnalysis>(F);
-  if (!runPartiallyInlineLibCalls(F, &TLI, &TTI, DT))
+  if (!runPartiallyInlineLibCalls(F, &TLI, &TTI))
     return PreservedAnalyses::all();
-  PreservedAnalyses PA;
-  PA.preserve<DominatorTreeAnalysis>();
-  return PA;
+  return PreservedAnalyses::none();
 }
 
 namespace {
@@ -176,7 +153,6 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<TargetLibraryInfoWrapperPass>();
     AU.addRequired<TargetTransformInfoWrapperPass>();
-    AU.addPreserved<DominatorTreeWrapperPass>();
     FunctionPass::getAnalysisUsage(AU);
   }
 
@@ -185,13 +161,10 @@ public:
       return false;
 
     TargetLibraryInfo *TLI =
-        &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
+        &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI();
     const TargetTransformInfo *TTI =
         &getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F);
-    DominatorTree *DT = nullptr;
-    if (auto *DTWP = getAnalysisIfAvailable<DominatorTreeWrapperPass>())
-      DT = &DTWP->getDomTree();
-    return runPartiallyInlineLibCalls(F, TLI, TTI, DT);
+    return runPartiallyInlineLibCalls(F, TLI, TTI);
   }
 };
 }
@@ -202,7 +175,6 @@ INITIALIZE_PASS_BEGIN(PartiallyInlineLibCallsLegacyPass,
                       "Partially inline calls to library functions", false,
                       false)
 INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
-INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
 INITIALIZE_PASS_END(PartiallyInlineLibCallsLegacyPass,
                     "partially-inline-libcalls",

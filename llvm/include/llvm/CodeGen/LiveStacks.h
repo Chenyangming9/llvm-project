@@ -17,7 +17,6 @@
 
 #include "llvm/CodeGen/LiveInterval.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include <cassert>
 #include <map>

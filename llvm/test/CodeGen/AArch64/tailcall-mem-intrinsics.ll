@@ -1,5 +1,4 @@
 ; RUN: llc -mtriple=aarch64-unknown-unknown < %s | FileCheck %s
-; RUN: llc -global-isel-abort=1 -verify-machineinstrs -mtriple=aarch64-unknown-unknown -global-isel < %s | FileCheck %s
 
 ; CHECK-LABEL: tail_memcpy:
 ; CHECK: b memcpy

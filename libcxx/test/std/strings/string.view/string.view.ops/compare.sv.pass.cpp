@@ -14,7 +14,7 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "constexpr_char_traits.h"
+#include "constexpr_char_traits.hpp"
 
 int sign ( int x ) { return x > 0 ? 1 : ( x < 0 ? -1 : 0 ); }
 

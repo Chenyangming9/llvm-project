@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "CodeCompletionStrings.h"
-#include "TestTU.h"
 #include "clang/Sema/CodeCompleteConsumer.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -57,14 +56,6 @@ TEST_F(CompletionStringTest, DocumentationWithAnnotation) {
             "Annotation: Ano\n\nIs this brief?");
 }
 
-TEST_F(CompletionStringTest, GetDeclCommentBadUTF8) {
-  // <ff> is not a valid byte here, should be replaced by encoded <U+FFFD>.
-  auto TU = TestTU::withCode("/*x\xffy*/ struct X;");
-  auto AST = TU.build();
-  EXPECT_EQ("x\xef\xbf\xbdy",
-            getDeclComment(AST.getASTContext(), findDecl(AST, "X")));
-}
-
 TEST_F(CompletionStringTest, MultipleAnnotations) {
   Builder.AddAnnotation("Ano1");
   Builder.AddAnnotation("Ano2");
@@ -97,30 +88,6 @@ TEST_F(CompletionStringTest, Function) {
   EXPECT_EQ(Signature, "(p1, p2)");
   EXPECT_EQ(Snippet, "(${1:p1}, ${2:p2})");
   EXPECT_EQ(formatDocumentation(*CCS, "Foo's comment"), "Foo's comment");
-}
-
-TEST_F(CompletionStringTest, FunctionWithDefaultParams) {
-  // return_type foo(p1, p2 = 0, p3 = 0)
-  Builder.AddChunk(CodeCompletionString::CK_Comma);
-  Builder.AddTypedTextChunk("p3 = 0");
-  auto *DefaultParam2 = Builder.TakeString();
-
-  Builder.AddChunk(CodeCompletionString::CK_Comma);
-  Builder.AddTypedTextChunk("p2 = 0");
-  Builder.AddOptionalChunk(DefaultParam2);
-  auto *DefaultParam1 = Builder.TakeString();
-
-  Builder.AddResultTypeChunk("return_type");
-  Builder.AddTypedTextChunk("Foo");
-  Builder.AddChunk(CodeCompletionString::CK_LeftParen);
-  Builder.AddPlaceholderChunk("p1");
-  Builder.AddOptionalChunk(DefaultParam1);
-  Builder.AddChunk(CodeCompletionString::CK_RightParen);
-
-  auto *CCS = Builder.TakeString();
-  computeSignature(*CCS);
-  EXPECT_EQ(Signature, "(p1, p2 = 0, p3 = 0)");
-  EXPECT_EQ(Snippet, "(${1:p1})");
 }
 
 TEST_F(CompletionStringTest, EscapeSnippet) {

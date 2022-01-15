@@ -10,6 +10,7 @@
 #ifndef LLVM_IR_INSTVISITOR_H
 #define LLVM_IR_INSTVISITOR_H
 
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
@@ -198,7 +199,6 @@ public:
   RetTy visitFuncletPadInst(FuncletPadInst &I) { DELEGATE(Instruction); }
   RetTy visitCleanupPadInst(CleanupPadInst &I) { DELEGATE(FuncletPadInst); }
   RetTy visitCatchPadInst(CatchPadInst &I)     { DELEGATE(FuncletPadInst); }
-  RetTy visitFreezeInst(FreezeInst &I)         { DELEGATE(Instruction); }
 
   // Handle the special instrinsic instruction classes.
   RetTy visitDbgDeclareInst(DbgDeclareInst &I)    { DELEGATE(DbgVariableIntrinsic);}
@@ -209,9 +209,6 @@ public:
   RetTy visitDbgInfoIntrinsic(DbgInfoIntrinsic &I){ DELEGATE(IntrinsicInst); }
   RetTy visitMemSetInst(MemSetInst &I)            { DELEGATE(MemIntrinsic); }
   RetTy visitMemCpyInst(MemCpyInst &I)            { DELEGATE(MemTransferInst); }
-  RetTy visitMemCpyInlineInst(MemCpyInlineInst &I) {
-    DELEGATE(MemTransferInst);
-  }
   RetTy visitMemMoveInst(MemMoveInst &I)          { DELEGATE(MemTransferInst); }
   RetTy visitMemTransferInst(MemTransferInst &I)  { DELEGATE(MemIntrinsic); }
   RetTy visitMemIntrinsic(MemIntrinsic &I)        { DELEGATE(IntrinsicInst); }
@@ -219,9 +216,18 @@ public:
   RetTy visitVAEndInst(VAEndInst &I)              { DELEGATE(IntrinsicInst); }
   RetTy visitVACopyInst(VACopyInst &I)            { DELEGATE(IntrinsicInst); }
   RetTy visitIntrinsicInst(IntrinsicInst &I)      { DELEGATE(CallInst); }
-  RetTy visitCallInst(CallInst &I)                { DELEGATE(CallBase); }
-  RetTy visitInvokeInst(InvokeInst &I)            { DELEGATE(CallBase); }
-  RetTy visitCallBrInst(CallBrInst &I)            { DELEGATE(CallBase); }
+
+  // Call, Invoke and CallBr are slightly different as they delegate first
+  // through a generic CallSite visitor.
+  RetTy visitCallInst(CallInst &I) {
+    return static_cast<SubClass*>(this)->visitCallSite(&I);
+  }
+  RetTy visitInvokeInst(InvokeInst &I) {
+    return static_cast<SubClass*>(this)->visitCallSite(&I);
+  }
+  RetTy visitCallBrInst(CallBrInst &I) {
+    return static_cast<SubClass *>(this)->visitCallSite(&I);
+  }
 
   // While terminators don't have a distinct type modeling them, we support
   // intercepting them with dedicated a visitor callback.
@@ -271,6 +277,16 @@ public:
       return static_cast<SubClass *>(this)->visitTerminator(I);
 
     DELEGATE(Instruction);
+  }
+
+  // Provide a legacy visitor for a 'callsite' that visits calls, invokes,
+  // and calbrs.
+  //
+  // Prefer overriding the type system based `CallBase` instead.
+  RetTy visitCallSite(CallSite CS) {
+    assert(CS);
+    Instruction &I = *CS.getInstruction();
+    DELEGATE(CallBase);
   }
 
   // If the user wants a 'default' case, they can choose to override this

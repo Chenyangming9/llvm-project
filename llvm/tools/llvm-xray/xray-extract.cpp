@@ -38,18 +38,15 @@ static cl::opt<std::string>
                   cl::desc("output file; use '-' for stdout"),
                   cl::sub(Extract));
 static cl::alias ExtractOutput2("o", cl::aliasopt(ExtractOutput),
-                                cl::desc("Alias for -output"));
+                                cl::desc("Alias for -output"),
+                                cl::sub(Extract));
 static cl::opt<bool> ExtractSymbolize("symbolize", cl::value_desc("symbolize"),
                                       cl::init(false),
                                       cl::desc("symbolize functions"),
                                       cl::sub(Extract));
 static cl::alias ExtractSymbolize2("s", cl::aliasopt(ExtractSymbolize),
-                                   cl::desc("alias for -symbolize"));
-static cl::opt<bool> ExtractNoDemangle("no-demangle",
-                                       cl::value_desc("no-demangle"),
-                                       cl::init(false),
-                                       cl::desc("don't demangle symbols"),
-                                       cl::sub(Extract));
+                                   cl::desc("alias for -symbolize"),
+                                   cl::sub(Extract));
 
 namespace {
 
@@ -63,9 +60,9 @@ void exportAsYAML(const InstrumentationMap &Map, raw_ostream &OS,
     auto FuncId = Map.getFunctionId(Sled.Function);
     if (!FuncId)
       return;
-    YAMLSleds.push_back(
-        {*FuncId, Sled.Address, Sled.Function, Sled.Kind, Sled.AlwaysInstrument,
-         ExtractSymbolize ? FH.SymbolOrNumber(*FuncId) : "", Sled.Version});
+    YAMLSleds.push_back({*FuncId, Sled.Address, Sled.Function, Sled.Kind,
+                         Sled.AlwaysInstrument,
+                         ExtractSymbolize ? FH.SymbolOrNumber(*FuncId) : ""});
   }
   Output Out(OS, nullptr, 0);
   Out << YAMLSleds;
@@ -83,16 +80,13 @@ static CommandRegistration Unused(&Extract, []() -> Error {
                       InstrumentationMapOrError.takeError());
 
   std::error_code EC;
-  raw_fd_ostream OS(ExtractOutput, EC, sys::fs::OpenFlags::OF_TextWithCRLF);
+  raw_fd_ostream OS(ExtractOutput, EC, sys::fs::OpenFlags::F_Text);
   if (EC)
     return make_error<StringError>(
         Twine("Cannot open file '") + ExtractOutput + "' for writing.", EC);
   const auto &FunctionAddresses =
       InstrumentationMapOrError->getFunctionAddresses();
-  symbolize::LLVMSymbolizer::Options opts;
-  if (ExtractNoDemangle)
-    opts.Demangle = false;
-  symbolize::LLVMSymbolizer Symbolizer(opts);
+  symbolize::LLVMSymbolizer Symbolizer;
   llvm::xray::FuncIdConversionHelper FuncIdHelper(ExtractInput, Symbolizer,
                                                   FunctionAddresses);
   exportAsYAML(*InstrumentationMapOrError, OS, FuncIdHelper);

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_HOST_POSIX_CONNECTIONFILEDESCRIPTORPOSIX_H
-#define LLDB_HOST_POSIX_CONNECTIONFILEDESCRIPTORPOSIX_H
+#ifndef liblldb_Host_posix_ConnectionFileDescriptorPosix_h_
+#define liblldb_Host_posix_ConnectionFileDescriptorPosix_h_
 
 #include <atomic>
 #include <memory>
@@ -108,7 +108,7 @@ protected:
   std::atomic<bool> m_shutting_down; // This marks that we are shutting down so
                                      // if we get woken up from
   // BytesAvailable to disconnect, we won't try to read again.
-  bool m_waiting_for_accept = false;
+  bool m_waiting_for_accept;
   bool m_child_processes_inherit;
 
   std::string m_uri;
@@ -116,11 +116,9 @@ protected:
 private:
   void InitializeSocket(Socket *socket);
 
-  ConnectionFileDescriptor(const ConnectionFileDescriptor &) = delete;
-  const ConnectionFileDescriptor &
-  operator=(const ConnectionFileDescriptor &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(ConnectionFileDescriptor);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_HOST_POSIX_CONNECTIONFILEDESCRIPTORPOSIX_H
+#endif // liblldb_ConnectionFileDescriptor_h_

@@ -1939,7 +1939,7 @@ _mm256_maskz_sll_epi16(__mmask16 __U, __m256i __A, __m128i __B)
 }
 
 static __inline__ __m128i __DEFAULT_FN_ATTRS128
-_mm_mask_slli_epi16(__m128i __W, __mmask8 __U, __m128i __A, unsigned int __B)
+_mm_mask_slli_epi16(__m128i __W, __mmask8 __U, __m128i __A, int __B)
 {
   return (__m128i)__builtin_ia32_selectw_128((__mmask8)__U,
                                              (__v8hi)_mm_slli_epi16(__A, __B),
@@ -1947,7 +1947,7 @@ _mm_mask_slli_epi16(__m128i __W, __mmask8 __U, __m128i __A, unsigned int __B)
 }
 
 static __inline__ __m128i __DEFAULT_FN_ATTRS128
-_mm_maskz_slli_epi16 (__mmask8 __U, __m128i __A, unsigned int __B)
+_mm_maskz_slli_epi16 (__mmask8 __U, __m128i __A, int __B)
 {
   return (__m128i)__builtin_ia32_selectw_128((__mmask8)__U,
                                              (__v8hi)_mm_slli_epi16(__A, __B),
@@ -1955,8 +1955,7 @@ _mm_maskz_slli_epi16 (__mmask8 __U, __m128i __A, unsigned int __B)
 }
 
 static __inline__ __m256i __DEFAULT_FN_ATTRS256
-_mm256_mask_slli_epi16(__m256i __W, __mmask16 __U, __m256i __A,
-                       unsigned int __B)
+_mm256_mask_slli_epi16(__m256i __W, __mmask16 __U, __m256i __A, int __B)
 {
   return (__m256i)__builtin_ia32_selectw_256((__mmask16)__U,
                                          (__v16hi)_mm256_slli_epi16(__A, __B),
@@ -1964,7 +1963,7 @@ _mm256_mask_slli_epi16(__m256i __W, __mmask16 __U, __m256i __A,
 }
 
 static __inline__ __m256i __DEFAULT_FN_ATTRS256
-_mm256_maskz_slli_epi16(__mmask16 __U, __m256i __A, unsigned int __B)
+_mm256_maskz_slli_epi16(__mmask16 __U, __m256i __A, int __B)
 {
   return (__m256i)__builtin_ia32_selectw_256((__mmask16)__U,
                                          (__v16hi)_mm256_slli_epi16(__A, __B),
@@ -2092,7 +2091,7 @@ _mm256_maskz_sra_epi16(__mmask16 __U, __m256i __A, __m128i __B)
 }
 
 static __inline__ __m128i __DEFAULT_FN_ATTRS128
-_mm_mask_srai_epi16(__m128i __W, __mmask8 __U, __m128i __A, unsigned int __B)
+_mm_mask_srai_epi16(__m128i __W, __mmask8 __U, __m128i __A, int __B)
 {
   return (__m128i)__builtin_ia32_selectw_128((__mmask8)__U,
                                              (__v8hi)_mm_srai_epi16(__A, __B),
@@ -2100,7 +2099,7 @@ _mm_mask_srai_epi16(__m128i __W, __mmask8 __U, __m128i __A, unsigned int __B)
 }
 
 static __inline__ __m128i __DEFAULT_FN_ATTRS128
-_mm_maskz_srai_epi16(__mmask8 __U, __m128i __A, unsigned int __B)
+_mm_maskz_srai_epi16(__mmask8 __U, __m128i __A, int __B)
 {
   return (__m128i)__builtin_ia32_selectw_128((__mmask8)__U,
                                              (__v8hi)_mm_srai_epi16(__A, __B),
@@ -2108,8 +2107,7 @@ _mm_maskz_srai_epi16(__mmask8 __U, __m128i __A, unsigned int __B)
 }
 
 static __inline__ __m256i __DEFAULT_FN_ATTRS256
-_mm256_mask_srai_epi16(__m256i __W, __mmask16 __U, __m256i __A,
-                       unsigned int __B)
+_mm256_mask_srai_epi16(__m256i __W, __mmask16 __U, __m256i __A, int __B)
 {
   return (__m256i)__builtin_ia32_selectw_256((__mmask16)__U,
                                          (__v16hi)_mm256_srai_epi16(__A, __B),
@@ -2117,7 +2115,7 @@ _mm256_mask_srai_epi16(__m256i __W, __mmask16 __U, __m256i __A,
 }
 
 static __inline__ __m256i __DEFAULT_FN_ATTRS256
-_mm256_maskz_srai_epi16(__mmask16 __U, __m256i __A, unsigned int __B)
+_mm256_maskz_srai_epi16(__mmask16 __U, __m256i __A, int __B)
 {
   return (__m256i)__builtin_ia32_selectw_256((__mmask16)__U,
                                          (__v16hi)_mm256_srai_epi16(__A, __B),
@@ -2291,13 +2289,13 @@ _mm_loadu_epi16 (void const *__P)
   struct __loadu_epi16 {
     __m128i_u __v;
   } __attribute__((__packed__, __may_alias__));
-  return ((const struct __loadu_epi16*)__P)->__v;
+  return ((struct __loadu_epi16*)__P)->__v;
 }
 
 static __inline__ __m128i __DEFAULT_FN_ATTRS128
 _mm_mask_loadu_epi16 (__m128i __W, __mmask8 __U, void const *__P)
 {
-  return (__m128i) __builtin_ia32_loaddquhi128_mask ((const __v8hi *) __P,
+  return (__m128i) __builtin_ia32_loaddquhi128_mask ((__v8hi *) __P,
                  (__v8hi) __W,
                  (__mmask8) __U);
 }
@@ -2305,7 +2303,7 @@ _mm_mask_loadu_epi16 (__m128i __W, __mmask8 __U, void const *__P)
 static __inline__ __m128i __DEFAULT_FN_ATTRS128
 _mm_maskz_loadu_epi16 (__mmask8 __U, void const *__P)
 {
-  return (__m128i) __builtin_ia32_loaddquhi128_mask ((const __v8hi *) __P,
+  return (__m128i) __builtin_ia32_loaddquhi128_mask ((__v8hi *) __P,
                  (__v8hi)
                  _mm_setzero_si128 (),
                  (__mmask8) __U);
@@ -2317,13 +2315,13 @@ _mm256_loadu_epi16 (void const *__P)
   struct __loadu_epi16 {
     __m256i_u __v;
   } __attribute__((__packed__, __may_alias__));
-  return ((const struct __loadu_epi16*)__P)->__v;
+  return ((struct __loadu_epi16*)__P)->__v;
 }
 
 static __inline__ __m256i __DEFAULT_FN_ATTRS256
 _mm256_mask_loadu_epi16 (__m256i __W, __mmask16 __U, void const *__P)
 {
-  return (__m256i) __builtin_ia32_loaddquhi256_mask ((const __v16hi *) __P,
+  return (__m256i) __builtin_ia32_loaddquhi256_mask ((__v16hi *) __P,
                  (__v16hi) __W,
                  (__mmask16) __U);
 }
@@ -2331,7 +2329,7 @@ _mm256_mask_loadu_epi16 (__m256i __W, __mmask16 __U, void const *__P)
 static __inline__ __m256i __DEFAULT_FN_ATTRS256
 _mm256_maskz_loadu_epi16 (__mmask16 __U, void const *__P)
 {
-  return (__m256i) __builtin_ia32_loaddquhi256_mask ((const __v16hi *) __P,
+  return (__m256i) __builtin_ia32_loaddquhi256_mask ((__v16hi *) __P,
                  (__v16hi)
                  _mm256_setzero_si256 (),
                  (__mmask16) __U);
@@ -2343,13 +2341,13 @@ _mm_loadu_epi8 (void const *__P)
   struct __loadu_epi8 {
     __m128i_u __v;
   } __attribute__((__packed__, __may_alias__));
-  return ((const struct __loadu_epi8*)__P)->__v;
+  return ((struct __loadu_epi8*)__P)->__v;
 }
 
 static __inline__ __m128i __DEFAULT_FN_ATTRS128
 _mm_mask_loadu_epi8 (__m128i __W, __mmask16 __U, void const *__P)
 {
-  return (__m128i) __builtin_ia32_loaddquqi128_mask ((const __v16qi *) __P,
+  return (__m128i) __builtin_ia32_loaddquqi128_mask ((__v16qi *) __P,
                  (__v16qi) __W,
                  (__mmask16) __U);
 }
@@ -2357,7 +2355,7 @@ _mm_mask_loadu_epi8 (__m128i __W, __mmask16 __U, void const *__P)
 static __inline__ __m128i __DEFAULT_FN_ATTRS128
 _mm_maskz_loadu_epi8 (__mmask16 __U, void const *__P)
 {
-  return (__m128i) __builtin_ia32_loaddquqi128_mask ((const __v16qi *) __P,
+  return (__m128i) __builtin_ia32_loaddquqi128_mask ((__v16qi *) __P,
                  (__v16qi)
                  _mm_setzero_si128 (),
                  (__mmask16) __U);
@@ -2369,13 +2367,13 @@ _mm256_loadu_epi8 (void const *__P)
   struct __loadu_epi8 {
     __m256i_u __v;
   } __attribute__((__packed__, __may_alias__));
-  return ((const struct __loadu_epi8*)__P)->__v;
+  return ((struct __loadu_epi8*)__P)->__v;
 }
 
 static __inline__ __m256i __DEFAULT_FN_ATTRS256
 _mm256_mask_loadu_epi8 (__m256i __W, __mmask32 __U, void const *__P)
 {
-  return (__m256i) __builtin_ia32_loaddquqi256_mask ((const __v32qi *) __P,
+  return (__m256i) __builtin_ia32_loaddquqi256_mask ((__v32qi *) __P,
                  (__v32qi) __W,
                  (__mmask32) __U);
 }
@@ -2383,7 +2381,7 @@ _mm256_mask_loadu_epi8 (__m256i __W, __mmask32 __U, void const *__P)
 static __inline__ __m256i __DEFAULT_FN_ATTRS256
 _mm256_maskz_loadu_epi8 (__mmask32 __U, void const *__P)
 {
-  return (__m256i) __builtin_ia32_loaddquqi256_mask ((const __v32qi *) __P,
+  return (__m256i) __builtin_ia32_loaddquqi256_mask ((__v32qi *) __P,
                  (__v32qi)
                  _mm256_setzero_si256 (),
                  (__mmask32) __U);

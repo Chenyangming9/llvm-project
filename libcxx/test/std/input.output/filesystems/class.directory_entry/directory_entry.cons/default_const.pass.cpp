@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
+// UNSUPPORTED: c++98, c++03
+// XFAIL: apple-clang-7, clang-3.7, clang-3.8
 
 // <filesystem>
 
@@ -14,7 +15,7 @@
 
 //          directory_entry() noexcept = default;
 
-#include "filesystem_include.h"
+#include "filesystem_include.hpp"
 #include <type_traits>
 #include <cassert>
 

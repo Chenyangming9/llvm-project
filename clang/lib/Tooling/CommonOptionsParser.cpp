@@ -115,7 +115,8 @@ llvm::Error CommonOptionsParser::init(
   // Stop initializing if command-line option parsing failed.
   if (!cl::ParseCommandLineOptions(argc, argv, Overview, &OS)) {
     OS.flush();
-    return llvm::make_error<llvm::StringError>(ErrorMessage,
+    return llvm::make_error<llvm::StringError>("[CommonOptionsParser]: " +
+                                                   ErrorMessage,
                                                llvm::inconvertibleErrorCode());
   }
 
@@ -141,7 +142,7 @@ llvm::Error CommonOptionsParser::init(
     }
   }
   auto AdjustingCompilations =
-      std::make_unique<ArgumentsAdjustingCompilations>(
+      llvm::make_unique<ArgumentsAdjustingCompilations>(
           std::move(Compilations));
   Adjuster =
       getInsertArgumentAdjuster(ArgsBefore, ArgumentInsertPosition::BEGIN);

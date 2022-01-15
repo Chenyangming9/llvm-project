@@ -12,11 +12,11 @@ typedef struct my_struct_type *my_struct_ref;
 
 int *call_eventually_noreturn(void) {
   eventually_noreturn();
-} // expected-warning{{non-void function does not return a value}}
+} // expected-warning{{control reaches end of non-void function}}
 
 int *call_eventually_noreturn2(void) {
   eventually_noreturn2();
-} // expected-warning{{non-void function does not return a value}}
+} // expected-warning{{control reaches end of non-void function}}
 
 @import redecl_merge_right;
 

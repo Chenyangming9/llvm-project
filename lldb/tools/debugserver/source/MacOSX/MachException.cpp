@@ -17,7 +17,7 @@
 #include "MachProcess.h"
 #include "PThreadMutex.h"
 #include "SysSignal.h"
-#include <cerrno>
+#include <errno.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 
@@ -489,10 +489,8 @@ const char *MachException::Name(exception_type_t exc_type) {
     return "EXC_MACH_SYSCALL";
   case EXC_RPC_ALERT:
     return "EXC_RPC_ALERT";
-#ifdef EXC_CRASH
   case EXC_CRASH:
     return "EXC_CRASH";
-#endif
   case EXC_RESOURCE:
     return "EXC_RESOURCE";
 #ifdef EXC_GUARD

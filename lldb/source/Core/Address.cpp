@@ -1,4 +1,4 @@
-//===-- Address.cpp -------------------------------------------------------===//
+//===-- Address.cpp ---------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,12 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/Address.h"
-#include "lldb/Core/Declaration.h"
 #include "lldb/Core/DumpDataExtractor.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleList.h"
 #include "lldb/Core/Section.h"
 #include "lldb/Symbol/Block.h"
+#include "lldb/Symbol/Declaration.h"
 #include "lldb/Symbol/LineEntry.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/Symbol.h"
@@ -43,9 +43,9 @@
 #include <memory>
 #include <vector>
 
-#include <cassert>
-#include <cinttypes>
-#include <cstring>
+#include <assert.h>
+#include <inttypes.h>
+#include <string.h>
 
 namespace lldb_private {
 class CompileUnit;
@@ -65,9 +65,9 @@ static size_t ReadBytes(ExecutionContextScope *exe_scope,
   TargetSP target_sp(exe_scope->CalculateTarget());
   if (target_sp) {
     Status error;
-    bool force_live_memory = true;
-    return target_sp->ReadMemory(address, dst, dst_len, error,
-                                 force_live_memory);
+    bool prefer_file_cache = false;
+    return target_sp->ReadMemory(address, prefer_file_cache, dst, dst_len,
+                                 error);
   }
   return 0;
 }
@@ -261,24 +261,6 @@ bool Address::ResolveAddressUsingFileSections(addr_t file_addr,
   return false; // Failed to resolve this address to a section offset value
 }
 
-/// if "addr_range_ptr" is not NULL, then fill in with the address range of the function.
-bool Address::ResolveFunctionScope(SymbolContext &sym_ctx,
-                                   AddressRange *addr_range_ptr) {
-  constexpr SymbolContextItem resolve_scope =
-    eSymbolContextFunction | eSymbolContextSymbol;
-
-  if (!(CalculateSymbolContext(&sym_ctx, resolve_scope) & resolve_scope)) {
-    if (addr_range_ptr)
-      addr_range_ptr->Clear();
-   return false;
-  }
-
-  if (!addr_range_ptr)
-    return true;
-
-  return sym_ctx.GetAddressRange(resolve_scope, 0, false, *addr_range_ptr);
-}
-
 ModuleSP Address::GetModule() const {
   lldb::ModuleSP module_sp;
   SectionSP section_sp(GetSection());
@@ -415,16 +397,16 @@ bool Address::Dump(Stream *s, ExecutionContextScope *exe_scope, DumpStyle style,
 
   case DumpStyleSectionNameOffset:
     if (section_sp) {
-      section_sp->DumpName(s->AsRawOstream());
+      section_sp->DumpName(s);
       s->Printf(" + %" PRIu64, m_offset);
     } else {
-      DumpAddress(s->AsRawOstream(), m_offset, addr_size);
+      s->Address(m_offset, addr_size);
     }
     break;
 
   case DumpStyleSectionPointerOffset:
     s->Printf("(Section *)%p + ", static_cast<void *>(section_sp.get()));
-    DumpAddress(s->AsRawOstream(), m_offset, addr_size);
+    s->Address(m_offset, addr_size);
     break;
 
   case DumpStyleModuleWithFileAddress:
@@ -444,7 +426,7 @@ bool Address::Dump(Stream *s, ExecutionContextScope *exe_scope, DumpStyle style,
         return Dump(s, exe_scope, fallback_style, DumpStyleInvalid, addr_size);
       return false;
     }
-    DumpAddress(s->AsRawOstream(), file_addr, addr_size);
+    s->Address(file_addr, addr_size);
     if (style == DumpStyleModuleWithFileAddress && section_sp)
       s->PutChar(']');
   } break;
@@ -472,7 +454,7 @@ bool Address::Dump(Stream *s, ExecutionContextScope *exe_scope, DumpStyle style,
         return Dump(s, exe_scope, fallback_style, DumpStyleInvalid, addr_size);
       return false;
     }
-    DumpAddress(s->AsRawOstream(), load_addr, addr_size);
+    s->Address(load_addr, addr_size);
   } break;
 
   case DumpStyleResolvedDescription:
@@ -493,19 +475,23 @@ bool Address::Dump(Stream *s, ExecutionContextScope *exe_scope, DumpStyle style,
         switch (sect_type) {
         case eSectionTypeData:
           if (module_sp) {
-            if (Symtab *symtab = module_sp->GetSymtab()) {
-              const addr_t file_Addr = GetFileAddress();
-              Symbol *symbol =
-                  symtab->FindSymbolContainingFileAddress(file_Addr);
-              if (symbol) {
-                const char *symbol_name = symbol->GetName().AsCString();
-                if (symbol_name) {
-                  s->PutCString(symbol_name);
-                  addr_t delta =
-                      file_Addr - symbol->GetAddressRef().GetFileAddress();
-                  if (delta)
-                    s->Printf(" + %" PRIu64, delta);
-                  showed_info = true;
+            SymbolVendor *sym_vendor = module_sp->GetSymbolVendor();
+            if (sym_vendor) {
+              Symtab *symtab = sym_vendor->GetSymtab();
+              if (symtab) {
+                const addr_t file_Addr = GetFileAddress();
+                Symbol *symbol =
+                    symtab->FindSymbolContainingFileAddress(file_Addr);
+                if (symbol) {
+                  const char *symbol_name = symbol->GetName().AsCString();
+                  if (symbol_name) {
+                    s->PutCString(symbol_name);
+                    addr_t delta =
+                        file_Addr - symbol->GetAddressRef().GetFileAddress();
+                    if (delta)
+                      s->Printf(" + %" PRIu64, delta);
+                    showed_info = true;
+                  }
                 }
               }
             }
@@ -712,20 +698,22 @@ bool Address::Dump(Stream *s, ExecutionContextScope *exe_scope, DumpStyle style,
                                     [](Variable *) { return true; },
                                     &variable_list);
 
-          for (const VariableSP &var_sp : variable_list) {
-            if (var_sp && var_sp->LocationIsValidForAddress(*this)) {
+          const size_t num_variables = variable_list.GetSize();
+          for (size_t var_idx = 0; var_idx < num_variables; ++var_idx) {
+            Variable *var = variable_list.GetVariableAtIndex(var_idx).get();
+            if (var && var->LocationIsValidForAddress(*this)) {
               s->Indent();
               s->Printf("   Variable: id = {0x%8.8" PRIx64 "}, name = \"%s\"",
-                        var_sp->GetID(), var_sp->GetName().GetCString());
-              Type *type = var_sp->GetType();
+                        var->GetID(), var->GetName().GetCString());
+              Type *type = var->GetType();
               if (type)
                 s->Printf(", type = \"%s\"", type->GetName().GetCString());
               else
                 s->PutCString(", type = <unknown>");
               s->PutCString(", location = ");
-              var_sp->DumpLocationForAddress(s, *this);
+              var->DumpLocationForAddress(s, *this);
               s->PutCString(", decl = ");
-              var_sp->GetDeclaration().DumpStopContext(s, false);
+              var->GetDeclaration().DumpStopContext(s, false);
               s->EOL();
             }
           }
@@ -754,8 +742,7 @@ bool Address::Dump(Stream *s, ExecutionContextScope *exe_scope, DumpStyle style,
             if (dereferenced_addr.Dump(&strm, exe_scope,
                                        DumpStyleResolvedDescription,
                                        DumpStyleInvalid, addr_size)) {
-              DumpAddress(s->AsRawOstream(), dereferenced_load_addr, addr_size,
-                          " -> ", " ");
+              s->Address(dereferenced_load_addr, addr_size, " -> ", " ");
               s->Write(strm.GetString().data(), strm.GetSize());
               return true;
             }
@@ -998,9 +985,10 @@ AddressClass Address::GetAddressClass() const {
   if (module_sp) {
     ObjectFile *obj_file = module_sp->GetObjectFile();
     if (obj_file) {
-      // Give the symbol file a chance to add to the unified section list
-      // and to the symtab.
-      module_sp->GetSymtab();
+      // Give the symbol vendor a chance to add to the unified section list
+      // and to symtab from symbol file
+      if (SymbolVendor *vendor = module_sp->GetSymbolVendor())
+        vendor->GetSymtab();
       return obj_file->GetAddressClass(GetFileAddress());
     }
   }

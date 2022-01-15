@@ -7,7 +7,6 @@
 # NODEMANGLE: error: undefined symbol: ?foo@@YAHXZ
 # NODEMANGLE: error: undefined symbol: ?bar@@YAHXZ
 # NODEMANGLE: error: undefined symbol: __imp_?baz@@YAHXZ
-# NODEMANGLE: error: undefined symbol: __imp_undecorated
 
 # CHECK: error: undefined symbol: int __cdecl foo(void)
 # CHECK-NEXT: >>> referenced by {{.*}}.obj:(main)
@@ -18,9 +17,6 @@
 # CHECK-NEXT: >>> referenced by {{.*}}.obj:(f1)
 # CHECK-EMPTY:
 # CHECK-NEXT: error: undefined symbol: __declspec(dllimport) int __cdecl baz(void)
-# CHECK-NEXT: >>> referenced by {{.*}}.obj:(f2)
-# CHECK-EMPTY:
-# CHECK-NEXT: error: undefined symbol: __declspec(dllimport) undecorated
 # CHECK-NEXT: >>> referenced by {{.*}}.obj:(f2)
 
         .section        .text,"xr",one_only,main
@@ -38,4 +34,3 @@ f1:
 .globl f2
 f2:
 	callq	*"__imp_?baz@@YAHXZ"(%rip)
-	callq	*__imp_undecorated(%rip)

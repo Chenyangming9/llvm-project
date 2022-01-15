@@ -1,17 +1,11 @@
 set(LLVM_LINK_COMPONENTS
-  FrontendOpenMP
-  Support
+  support
   )
 
 add_clang_library(clangChangeNamespace
   ChangeNamespace.cpp
 
-  DEPENDS
-  omp_gen
-)
-
-clang_target_link_libraries(clangChangeNamespace
-  PRIVATE
+  LINK_LIBS
   clangAST
   clangASTMatchers
   clangBasic

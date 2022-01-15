@@ -10,7 +10,6 @@
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/LLVM.h"
 #include "llvm/Demangle/Demangle.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/GlobPattern.h"
 #include <algorithm>
 #include <mutex>
@@ -19,40 +18,53 @@
 using namespace llvm;
 using namespace lld;
 
-// Returns the demangled C++ symbol name for name.
-std::string lld::demangleItanium(StringRef name) {
-  // demangleItanium() can be called for all symbols. Only demangle C++ symbols,
-  // to avoid getting unexpected result for a C symbol that happens to match a
-  // mangled type name such as "Pi" (which would demangle to "int*").
-  if (!name.startswith("_Z") && !name.startswith("__Z") &&
-      !name.startswith("___Z") && !name.startswith("____Z"))
-    return std::string(name);
+// Returns the demangled C++ symbol name for Name.
+Optional<std::string> lld::demangleItanium(StringRef name) {
+  // itaniumDemangle can be used to demangle strings other than symbol
+  // names which do not necessarily start with "_Z". Name can be
+  // either a C or C++ symbol. Don't call itaniumDemangle if the name
+  // does not look like a C++ symbol name to avoid getting unexpected
+  // result for a C symbol that happens to match a mangled type name.
+  if (!name.startswith("_Z"))
+    return None;
 
-  return demangle(std::string(name));
+  char *buf = itaniumDemangle(name.str().c_str(), nullptr, nullptr, nullptr);
+  if (!buf)
+    return None;
+  std::string s(buf);
+  free(buf);
+  return s;
 }
 
-SingleStringMatcher::SingleStringMatcher(StringRef Pattern) {
-  if (Pattern.size() > 2 && Pattern.startswith("\"") &&
-      Pattern.endswith("\"")) {
-    ExactMatch = true;
-    ExactPattern = Pattern.substr(1, Pattern.size() - 2);
-  } else {
-    Expected<GlobPattern> Glob = GlobPattern::create(Pattern);
-    if (!Glob) {
-      error(toString(Glob.takeError()));
-      return;
-    }
-    ExactMatch = false;
-    GlobPatternMatcher = *Glob;
+Optional<std::string> lld::demangleMSVC(StringRef name) {
+  std::string prefix;
+  if (name.consume_front("__imp_"))
+    prefix = "__declspec(dllimport) ";
+
+  // Demangle only C++ names.
+  if (!name.startswith("?"))
+    return None;
+
+  char *buf = microsoftDemangle(name.str().c_str(), nullptr, nullptr, nullptr);
+  if (!buf)
+    return None;
+  std::string s(buf);
+  free(buf);
+  return prefix + s;
+}
+
+StringMatcher::StringMatcher(ArrayRef<StringRef> pat) {
+  for (StringRef s : pat) {
+    Expected<GlobPattern> pat = GlobPattern::create(s);
+    if (!pat)
+      error(toString(pat.takeError()));
+    else
+      patterns.push_back(*pat);
   }
 }
 
-bool SingleStringMatcher::match(StringRef s) const {
-  return ExactMatch ? (ExactPattern == s) : GlobPatternMatcher.match(s);
-}
-
 bool StringMatcher::match(StringRef s) const {
-  for (const SingleStringMatcher &pat : patterns)
+  for (const GlobPattern &pat : patterns)
     if (pat.match(s))
       return true;
   return false;
@@ -76,14 +88,15 @@ std::vector<uint8_t> lld::parseHex(StringRef s) {
 
 // Returns true if S is valid as a C language identifier.
 bool lld::isValidCIdentifier(StringRef s) {
-  return !s.empty() && !isDigit(s[0]) &&
-         llvm::all_of(s, [](char c) { return isAlnum(c) || c == '_'; });
+  return !s.empty() && (isAlpha(s[0]) || s[0] == '_') &&
+         std::all_of(s.begin() + 1, s.end(),
+                     [](char c) { return c == '_' || isAlnum(c); });
 }
 
 // Write the contents of the a buffer to a file
 void lld::saveBuffer(StringRef buffer, const Twine &path) {
   std::error_code ec;
-  raw_fd_ostream os(path.str(), ec, sys::fs::OpenFlags::OF_None);
+  raw_fd_ostream os(path.str(), ec, sys::fs::OpenFlags::F_None);
   if (ec)
     error("cannot create " + path + ": " + ec.message());
   os << buffer;

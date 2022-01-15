@@ -14,7 +14,6 @@
 #include "Symbol.h"
 #include "SymbolID.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/FunctionExtras.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/JSON.h"
@@ -25,10 +24,10 @@ namespace clang {
 namespace clangd {
 
 struct FuzzyFindRequest {
-  /// A query string for the fuzzy find. This is matched against symbols'
+  /// \brief A query string for the fuzzy find. This is matched against symbols'
   /// un-qualified identifiers and should not contain qualifiers like "::".
   std::string Query;
-  /// If this is non-empty, symbols must be in at least one of the scopes
+  /// \brief If this is non-empty, symbols must be in at least one of the scopes
   /// (e.g. namespaces) excluding nested scopes. For example, if a scope "xyz::"
   /// is provided, the matched symbols must be defined in namespace xyz but not
   /// namespace xyz::abc.
@@ -38,7 +37,7 @@ struct FuzzyFindRequest {
   /// If set to true, allow symbols from any scope. Scopes explicitly listed
   /// above will be ranked higher.
   bool AnyScope = false;
-  /// The number of top candidates to return. The index may choose to
+  /// \brief The number of top candidates to return. The index may choose to
   /// return more than this, e.g. if it doesn't know which candidates are best.
   llvm::Optional<uint32_t> Limit;
   /// If set to true, only symbols for completion support will be considered.
@@ -58,8 +57,7 @@ struct FuzzyFindRequest {
   }
   bool operator!=(const FuzzyFindRequest &Req) const { return !(*this == Req); }
 };
-bool fromJSON(const llvm::json::Value &Value, FuzzyFindRequest &Request,
-              llvm::json::Path);
+bool fromJSON(const llvm::json::Value &Value, FuzzyFindRequest &Request);
 llvm::json::Value toJSON(const FuzzyFindRequest &Request);
 
 struct LookupRequest {
@@ -77,34 +75,10 @@ struct RefsRequest {
 
 struct RelationsRequest {
   llvm::DenseSet<SymbolID> Subjects;
-  RelationKind Predicate;
+  index::SymbolRole Predicate;
   /// If set, limit the number of relations returned from the index.
   llvm::Optional<uint32_t> Limit;
 };
-
-/// Describes what data is covered by an index.
-///
-/// Indexes may contain symbols but not references from a file, etc.
-/// This affects merging: if a staler index contains a reference but a fresher
-/// one does not, we want to trust the fresher index *only* if it actually
-/// includes references in general.
-enum class IndexContents : uint8_t {
-  None = 0,
-  Symbols = 1 << 1,
-  References = 1 << 2,
-  Relations = 1 << 3,
-  All = Symbols | References | Relations
-};
-
-inline constexpr IndexContents operator&(IndexContents L, IndexContents R) {
-  return static_cast<IndexContents>(static_cast<uint8_t>(L) &
-                                    static_cast<uint8_t>(R));
-}
-
-inline constexpr IndexContents operator|(IndexContents L, IndexContents R) {
-  return static_cast<IndexContents>(static_cast<uint8_t>(L) |
-                                    static_cast<uint8_t>(R));
-}
 
 /// Interface for symbol indexes that can be used for searching or
 /// matching symbols among a set of symbols based on names or unique IDs.
@@ -112,7 +86,7 @@ class SymbolIndex {
 public:
   virtual ~SymbolIndex() = default;
 
-  /// Matches symbols in the index fuzzily and applies \p Callback on
+  /// \brief Matches symbols in the index fuzzily and applies \p Callback on
   /// each matched symbol before returning.
   /// If returned Symbols are used outside Callback, they must be deep-copied!
   ///
@@ -128,15 +102,12 @@ public:
   lookup(const LookupRequest &Req,
          llvm::function_ref<void(const Symbol &)> Callback) const = 0;
 
-  /// Finds all occurrences (e.g. references, declarations, definitions) of
-  /// symbols and applies \p Callback on each result.
+  /// Finds all occurrences (e.g. references, declarations, definitions) of a
+  /// symbol and applies \p Callback on each result.
   ///
   /// Results should be returned in arbitrary order.
   /// The returned result must be deep-copied if it's used outside Callback.
-  /// FIXME: there's no indication which result references which symbol.
-  ///
-  /// Returns true if there will be more results (limited by Req.Limit);
-  virtual bool refs(const RefsRequest &Req,
+  virtual void refs(const RefsRequest &Req,
                     llvm::function_ref<void(const Ref &)> Callback) const = 0;
 
   /// Finds all relations (S, P, O) stored in the index such that S is among
@@ -146,12 +117,6 @@ public:
       const RelationsRequest &Req,
       llvm::function_ref<void(const SymbolID &Subject, const Symbol &Object)>
           Callback) const = 0;
-
-  /// Returns function which checks if the specified file was used to build this
-  /// index or not. The function must only be called while the index is alive.
-  using IndexedFiles =
-      llvm::unique_function<IndexContents(llvm::StringRef) const>;
-  virtual IndexedFiles indexedFiles() const = 0;
 
   /// Returns estimated size of index (in bytes).
   virtual size_t estimateMemoryUsage() const = 0;
@@ -171,14 +136,11 @@ public:
                  llvm::function_ref<void(const Symbol &)>) const override;
   void lookup(const LookupRequest &,
               llvm::function_ref<void(const Symbol &)>) const override;
-  bool refs(const RefsRequest &,
+  void refs(const RefsRequest &,
             llvm::function_ref<void(const Ref &)>) const override;
   void relations(const RelationsRequest &,
                  llvm::function_ref<void(const SymbolID &, const Symbol &)>)
       const override;
-
-  llvm::unique_function<IndexContents(llvm::StringRef) const>
-  indexedFiles() const override;
 
   size_t estimateMemoryUsage() const override;
 

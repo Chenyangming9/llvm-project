@@ -27,7 +27,7 @@ namespace __sanitizer {
 void SetErrnoToENOMEM();
 
 // A common errno setting logic shared by almost all sanitizer allocator APIs.
-inline void *SetErrnoOnNull(void *ptr) {
+INLINE void *SetErrnoOnNull(void *ptr) {
   if (UNLIKELY(!ptr))
     SetErrnoToENOMEM();
   return ptr;
@@ -41,7 +41,7 @@ inline void *SetErrnoOnNull(void *ptr) {
 // two and that the size is a multiple of alignment for POSIX implementation,
 // and a bit relaxed requirement for non-POSIX ones, that the size is a multiple
 // of alignment.
-inline bool CheckAlignedAllocAlignmentAndSize(uptr alignment, uptr size) {
+INLINE bool CheckAlignedAllocAlignmentAndSize(uptr alignment, uptr size) {
 #if SANITIZER_POSIX
   return alignment != 0 && IsPowerOfTwo(alignment) &&
          (size & (alignment - 1)) == 0;
@@ -52,13 +52,13 @@ inline bool CheckAlignedAllocAlignmentAndSize(uptr alignment, uptr size) {
 
 // Checks posix_memalign() parameters, verifies that alignment is a power of two
 // and a multiple of sizeof(void *).
-inline bool CheckPosixMemalignAlignment(uptr alignment) {
+INLINE bool CheckPosixMemalignAlignment(uptr alignment) {
   return alignment != 0 && IsPowerOfTwo(alignment) &&
-         (alignment % sizeof(void *)) == 0;
+         (alignment % sizeof(void *)) == 0; // NOLINT
 }
 
 // Returns true if calloc(size, n) call overflows on size*n calculation.
-inline bool CheckForCallocOverflow(uptr size, uptr n) {
+INLINE bool CheckForCallocOverflow(uptr size, uptr n) {
   if (!size)
     return false;
   uptr max = (uptr)-1L;
@@ -67,7 +67,7 @@ inline bool CheckForCallocOverflow(uptr size, uptr n) {
 
 // Returns true if the size passed to pvalloc overflows when rounded to the next
 // multiple of page_size.
-inline bool CheckForPvallocOverflow(uptr size, uptr page_size) {
+INLINE bool CheckForPvallocOverflow(uptr size, uptr page_size) {
   return RoundUpTo(size, page_size) < size;
 }
 

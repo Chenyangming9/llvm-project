@@ -6,15 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_ADDRESSRESOLVERFILELINE_H
-#define LLDB_CORE_ADDRESSRESOLVERFILELINE_H
+#ifndef liblldb_AddressResolverFileLine_h_
+#define liblldb_AddressResolverFileLine_h_
 
 #include "lldb/Core/AddressResolver.h"
 #include "lldb/Core/SearchFilter.h"
-#include "lldb/Core/SourceLocationSpec.h"
+#include "lldb/Utility/FileSpec.h"
 #include "lldb/lldb-defines.h"
 
-#include <cstdint>
+#include <stdint.h>
 
 namespace lldb_private {
 class Address;
@@ -28,27 +28,29 @@ class SymbolContext;
 
 class AddressResolverFileLine : public AddressResolver {
 public:
-  AddressResolverFileLine(SourceLocationSpec location_spec);
+  AddressResolverFileLine(const FileSpec &resolver, uint32_t line_no,
+                          bool check_inlines);
 
   ~AddressResolverFileLine() override;
 
   Searcher::CallbackReturn SearchCallback(SearchFilter &filter,
-                                          SymbolContext &context,
-                                          Address *addr) override;
+                                          SymbolContext &context, Address *addr,
+                                          bool containing) override;
 
   lldb::SearchDepth GetDepth() override;
 
   void GetDescription(Stream *s) override;
 
 protected:
-  SourceLocationSpec m_src_location_spec;
+  FileSpec m_file_spec;   // This is the file spec we are looking for.
+  uint32_t m_line_number; // This is the line number that we are looking for.
+  bool m_inlines; // This determines whether the resolver looks for inlined
+                  // functions or not.
 
 private:
-  AddressResolverFileLine(const AddressResolverFileLine &) = delete;
-  const AddressResolverFileLine &
-  operator=(const AddressResolverFileLine &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(AddressResolverFileLine);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_ADDRESSRESOLVERFILELINE_H
+#endif // liblldb_AddressResolverFileLine_h_

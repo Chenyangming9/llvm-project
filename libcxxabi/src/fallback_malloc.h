@@ -10,7 +10,7 @@
 #define _FALLBACK_MALLOC_H
 
 #include "__cxxabi_config.h"
-#include <stddef.h> // for size_t
+#include <cstddef> // for size_t
 
 namespace __cxxabiv1 {
 

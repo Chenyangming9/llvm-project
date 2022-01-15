@@ -66,9 +66,9 @@ TEST(ValueMapperTest, mapMDNodeCycle) {
 TEST(ValueMapperTest, mapMDNodeDuplicatedCycle) {
   LLVMContext Context;
   auto *PtrTy = Type::getInt8Ty(Context)->getPointerTo();
-  std::unique_ptr<GlobalVariable> G0 = std::make_unique<GlobalVariable>(
+  std::unique_ptr<GlobalVariable> G0 = llvm::make_unique<GlobalVariable>(
       PtrTy, false, GlobalValue::ExternalLinkage, nullptr, "G0");
-  std::unique_ptr<GlobalVariable> G1 = std::make_unique<GlobalVariable>(
+  std::unique_ptr<GlobalVariable> G1 = llvm::make_unique<GlobalVariable>(
       PtrTy, false, GlobalValue::ExternalLinkage, nullptr, "G1");
 
   // Create a cycle that references G0.
@@ -124,7 +124,7 @@ TEST(ValueMapperTest, mapMDNodeDistinct) {
   {
     // The node should be moved.
     ValueToValueMapTy VM;
-    EXPECT_EQ(D, ValueMapper(VM, RF_ReuseAndMutateDistinctMDs).mapMDNode(*D));
+    EXPECT_EQ(D, ValueMapper(VM, RF_MoveDistinctMDs).mapMDNode(*D));
   }
 }
 
@@ -139,7 +139,7 @@ TEST(ValueMapperTest, mapMDNodeDistinctOperands) {
   VM.MD()[Old].reset(New);
 
   // Make sure operands are updated.
-  EXPECT_EQ(D, ValueMapper(VM, RF_ReuseAndMutateDistinctMDs).mapMDNode(*D));
+  EXPECT_EQ(D, ValueMapper(VM, RF_MoveDistinctMDs).mapMDNode(*D));
   EXPECT_EQ(New, D->getOperand(0));
 }
 

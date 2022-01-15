@@ -15,7 +15,6 @@
 
 #include "polly/LinkAllPasses.h"
 #include "polly/ScopDetection.h"
-#include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -23,9 +22,7 @@
 
 #define DEBUG_TYPE "polly-scop-inliner"
 
-using namespace llvm;
 using namespace polly;
-
 extern bool polly::PollyAllowFullFunction;
 
 namespace {
@@ -78,7 +75,6 @@ public:
     const bool HasScopAsTopLevelRegion =
         SD.ValidRegions.count(RI.getTopLevelRegion()) > 0;
 
-    bool Changed = false;
     if (HasScopAsTopLevelRegion) {
       LLVM_DEBUG(dbgs() << "Skipping " << F->getName()
                         << " has scop as top level region");
@@ -91,15 +87,13 @@ public:
       MPM.addPass(AlwaysInlinerPass());
       Module *M = F->getParent();
       assert(M && "Function has illegal module");
-      PreservedAnalyses PA = MPM.run(*M, MAM);
-      if (!PA.areAllPreserved())
-        Changed = true;
+      MPM.run(*M, MAM);
     } else {
       LLVM_DEBUG(dbgs() << F->getName()
                         << " does NOT have scop as top level region\n");
     }
 
-    return Changed;
+    return false;
   };
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {

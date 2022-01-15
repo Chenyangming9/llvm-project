@@ -10,7 +10,6 @@
 #define SCUDO_STATS_H_
 
 #include "atomic_helpers.h"
-#include "list.h"
 #include "mutex.h"
 
 #include <string.h>
@@ -18,7 +17,7 @@
 namespace scudo {
 
 // Memory allocator statistics
-enum StatType { StatAllocated, StatFree, StatMapped, StatCount };
+enum StatType { StatAllocated, StatMapped, StatCount };
 
 typedef uptr StatCounters[StatCount];
 
@@ -29,10 +28,8 @@ typedef uptr StatCounters[StatCount];
 // LocalStats::add'ing, this is OK, we will still get a meaningful number.
 class LocalStats {
 public:
-  void init() {
-    for (uptr I = 0; I < StatCount; I++)
-      DCHECK_EQ(get(static_cast<StatType>(I)), 0U);
-  }
+  void initLinkerInitialized() {}
+  void init() { memset(this, 0, sizeof(*this)); }
 
   void add(StatType I, uptr V) {
     V += atomic_load_relaxed(&StatsArray[I]);
@@ -48,52 +45,59 @@ public:
 
   uptr get(StatType I) const { return atomic_load_relaxed(&StatsArray[I]); }
 
-  LocalStats *Next = nullptr;
-  LocalStats *Prev = nullptr;
-
 private:
-  atomic_uptr StatsArray[StatCount] = {};
+  friend class GlobalStats;
+  atomic_uptr StatsArray[StatCount];
+  LocalStats *Next;
+  LocalStats *Prev;
 };
 
 // Global stats, used for aggregation and querying.
 class GlobalStats : public LocalStats {
 public:
-  void init() { LocalStats::init(); }
+  void initLinkerInitialized() {
+    Next = this;
+    Prev = this;
+  }
+  void init() {
+    memset(this, 0, sizeof(*this));
+    initLinkerInitialized();
+  }
 
   void link(LocalStats *S) {
     ScopedLock L(Mutex);
-    StatsList.push_back(S);
+    S->Next = Next;
+    S->Prev = this;
+    Next->Prev = S;
+    Next = S;
   }
 
   void unlink(LocalStats *S) {
     ScopedLock L(Mutex);
-    StatsList.remove(S);
+    S->Prev->Next = S->Next;
+    S->Next->Prev = S->Prev;
     for (uptr I = 0; I < StatCount; I++)
       add(static_cast<StatType>(I), S->get(static_cast<StatType>(I)));
   }
 
   void get(uptr *S) const {
+    memset(S, 0, StatCount * sizeof(uptr));
     ScopedLock L(Mutex);
-    for (uptr I = 0; I < StatCount; I++)
-      S[I] = LocalStats::get(static_cast<StatType>(I));
-    for (const auto &Stats : StatsList) {
+    const LocalStats *Stats = this;
+    for (;;) {
       for (uptr I = 0; I < StatCount; I++)
-        S[I] += Stats.get(static_cast<StatType>(I));
+        S[I] += Stats->get(static_cast<StatType>(I));
+      Stats = Stats->Next;
+      if (Stats == this)
+        break;
     }
     // All stats must be non-negative.
     for (uptr I = 0; I < StatCount; I++)
       S[I] = static_cast<sptr>(S[I]) >= 0 ? S[I] : 0;
   }
 
-  void lock() { Mutex.lock(); }
-  void unlock() { Mutex.unlock(); }
-
-  void disable() { lock(); }
-  void enable() { unlock(); }
-
 private:
   mutable HybridMutex Mutex;
-  DoublyLinkedList<LocalStats> StatsList;
 };
 
 } // namespace scudo

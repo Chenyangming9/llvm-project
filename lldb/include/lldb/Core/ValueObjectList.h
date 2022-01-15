@@ -6,20 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_CORE_VALUEOBJECTLIST_H
-#define LLDB_CORE_VALUEOBJECTLIST_H
+#ifndef liblldb_ValueObjectList_h_
+#define liblldb_ValueObjectList_h_
 
 #include "lldb/lldb-forward.h"
 #include "lldb/lldb-types.h"
 
 #include <vector>
 
-#include <cstddef>
+#include <stddef.h>
 
 namespace lldb_private {
 class ValueObject;
 
-/// A collection of ValueObject values that.
+// A collection of ValueObject values that
 class ValueObjectList {
 public:
   const ValueObjectList &operator=(const ValueObjectList &rhs);
@@ -59,4 +59,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_CORE_VALUEOBJECTLIST_H
+#endif // liblldb_ValueObjectList_h_

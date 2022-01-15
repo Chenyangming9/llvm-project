@@ -13,7 +13,6 @@
 #include "lld/Common/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/LTO/LTO.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/Wasm.h"
@@ -31,8 +30,7 @@ class InputChunk;
 class InputFunction;
 class InputSegment;
 class InputGlobal;
-class InputTag;
-class InputTable;
+class InputEvent;
 class InputSection;
 
 // If --reproduce option is given, all input files are written
@@ -56,23 +54,14 @@ public:
   Kind kind() const { return fileKind; }
 
   // An archive file name if this file is created from an archive.
-  std::string archiveName;
+  StringRef archiveName;
 
   ArrayRef<Symbol *> getSymbols() const { return symbols; }
 
   MutableArrayRef<Symbol *> getMutableSymbols() { return symbols; }
 
-  // An InputFile is considered live if any of the symbols defined by it
-  // are live.
-  void markLive() { live = true; }
-  bool isLive() const { return live; }
-
 protected:
-  InputFile(Kind k, MemoryBufferRef m)
-      : mb(m), fileKind(k), live(!config->gcSections) {}
-
-  void checkArch(llvm::Triple::ArchType arch) const;
-
+  InputFile(Kind k, MemoryBufferRef m) : mb(m), fileKind(k) {}
   MemoryBufferRef mb;
 
   // List of all symbols referenced or defined by this file.
@@ -80,7 +69,6 @@ protected:
 
 private:
   const Kind fileKind;
-  bool live;
 };
 
 // .a file (ar archive)
@@ -103,11 +91,7 @@ class ObjFile : public InputFile {
 public:
   explicit ObjFile(MemoryBufferRef m, StringRef archiveName)
       : InputFile(ObjectKind, m) {
-    this->archiveName = std::string(archiveName);
-
-    // If this isn't part of an archive, it's eagerly linked, so mark it live.
-    if (archiveName.empty())
-      markLive();
+    this->archiveName = archiveName;
   }
   static bool classof(const InputFile *f) { return f->kind() == ObjectKind; }
 
@@ -119,9 +103,9 @@ public:
   void dumpInfo() const;
 
   uint32_t calcNewIndex(const WasmRelocation &reloc) const;
-  uint64_t calcNewValue(const WasmRelocation &reloc, uint64_t tombstone,
-                        const InputChunk *chunk) const;
-  uint64_t calcNewAddend(const WasmRelocation &reloc) const;
+  uint32_t calcNewValue(const WasmRelocation &reloc) const;
+  uint32_t calcNewAddend(const WasmRelocation &reloc) const;
+  uint32_t calcExpectedValue(const WasmRelocation &reloc) const;
   Symbol *getSymbol(const WasmRelocation &reloc) const {
     return symbols[reloc.Index];
   };
@@ -134,30 +118,26 @@ public:
   std::vector<bool> typeIsUsed;
   // Maps function indices to table indices
   std::vector<uint32_t> tableEntries;
-  std::vector<uint32_t> tableEntriesRel;
   std::vector<bool> keptComdats;
-  std::vector<InputChunk *> segments;
+  std::vector<InputSegment *> segments;
   std::vector<InputFunction *> functions;
   std::vector<InputGlobal *> globals;
-  std::vector<InputTag *> tags;
-  std::vector<InputTable *> tables;
-  std::vector<InputChunk *> customSections;
-  llvm::DenseMap<uint32_t, InputChunk *> customSectionsByIndex;
+  std::vector<InputEvent *> events;
+  std::vector<InputSection *> customSections;
+  llvm::DenseMap<uint32_t, InputSection *> customSectionsByIndex;
 
   Symbol *getSymbol(uint32_t index) const { return symbols[index]; }
   FunctionSymbol *getFunctionSymbol(uint32_t index) const;
   DataSymbol *getDataSymbol(uint32_t index) const;
   GlobalSymbol *getGlobalSymbol(uint32_t index) const;
   SectionSymbol *getSectionSymbol(uint32_t index) const;
-  TagSymbol *getTagSymbol(uint32_t index) const;
-  TableSymbol *getTableSymbol(uint32_t index) const;
+  EventSymbol *getEventSymbol(uint32_t index) const;
 
 private:
   Symbol *createDefined(const WasmSymbol &sym);
   Symbol *createUndefined(const WasmSymbol &sym, bool isCalledDirectly);
 
   bool isExcludedByComdat(InputChunk *chunk) const;
-  void addLegacyIndirectFunctionTableIfNeeded(uint32_t tableSymbolCount);
 
   std::unique_ptr<WasmObjectFile> wasmObj;
 };
@@ -174,25 +154,13 @@ class BitcodeFile : public InputFile {
 public:
   explicit BitcodeFile(MemoryBufferRef m, StringRef archiveName)
       : InputFile(BitcodeKind, m) {
-    this->archiveName = std::string(archiveName);
-
-    // If this isn't part of an archive, it's eagerly linked, so mark it live.
-    if (archiveName.empty())
-      markLive();
+    this->archiveName = archiveName;
   }
   static bool classof(const InputFile *f) { return f->kind() == BitcodeKind; }
 
   void parse();
   std::unique_ptr<llvm::lto::InputFile> obj;
-
-  // Set to true once LTO is complete in order prevent further bitcode objects
-  // being added.
-  static bool doneLTO;
 };
-
-inline bool isBitcode(MemoryBufferRef mb) {
-  return identify_magic(mb.getBuffer()) == llvm::file_magic::bitcode;
-}
 
 // Will report a fatal() error if the input buffer is not a valid bitcode
 // or wasm object file.

@@ -9,7 +9,7 @@ include(SanitizerUtils)
 #
 #TODO: Refactor sanitizer_common into smaller pieces (e.g. flag parsing, utils).
 if (COMPILER_RT_HAS_SANITIZER_COMMON AND
-    (COMPILER_RT_BUILD_SANITIZERS OR COMPILER_RT_BUILD_XRAY OR COMPILER_RT_BUILD_MEMPROF))
+    (COMPILER_RT_BUILD_SANITIZERS OR COMPILER_RT_BUILD_XRAY))
   add_subdirectory(sanitizer_common)
 endif()
 
@@ -34,11 +34,9 @@ function(compiler_rt_build_runtime runtime)
   endif()
 endfunction()
 
-if(COMPILER_RT_BUILD_SANITIZERS OR COMPILER_RT_BUILD_MEMPROF)
-  compiler_rt_build_runtime(interception)
-endif()
-
 if(COMPILER_RT_BUILD_SANITIZERS)
+  compiler_rt_build_runtime(interception)
+
   if(COMPILER_RT_HAS_SANITIZER_COMMON)
     add_subdirectory(stats)
     add_subdirectory(lsan)
@@ -61,17 +59,3 @@ endif()
 if(COMPILER_RT_BUILD_LIBFUZZER)
   compiler_rt_build_runtime(fuzzer)
 endif()
-
-if(COMPILER_RT_BUILD_MEMPROF AND COMPILER_RT_HAS_SANITIZER_COMMON)
-  compiler_rt_build_runtime(memprof)
-endif()
-
-if(COMPILER_RT_BUILD_ORC)
-  compiler_rt_build_runtime(orc)
-endif()
-
-# It doesn't normally make sense to build runtimes when a sanitizer is enabled,
-# so we don't add_subdirectory the runtimes in that case. However, the opposite
-# is true for fuzzers that exercise parts of the runtime. So we add the fuzzer
-# directories explicitly here.
-add_subdirectory(scudo/standalone/fuzz)

@@ -17,10 +17,10 @@
 # RUN: llvm-readobj --symbols -S %t | FileCheck %s --check-prefix=EXPR
 # EXPR:     Symbol {
 # EXPR:      Name: foo2
-# EXPR-NEXT:  Value: 0x201127
+# EXPR-NEXT:  Value: 0x201007
 # EXPR:     Symbol {
 # EXPR:      Name: etext
-# EXPR-NEXT:  Value: 0x201125
+# EXPR-NEXT:  Value: 0x201005
 
 .globl foo1
  foo1 = 0x123

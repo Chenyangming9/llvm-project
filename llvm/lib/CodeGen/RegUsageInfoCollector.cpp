@@ -56,7 +56,7 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
-  // Call getCalleeSaves and then also set the bits for subregs and
+  // Call determineCalleeSaves and then also set the bits for subregs and
   // fully saved superregs.
   static void computeCalleeSavedRegs(BitVector &SavedRegs, MachineFunction &MF);
 
@@ -142,13 +142,6 @@ bool RegUsageInfoCollector::runOnMachineFunction(MachineFunction &MF) {
   auto SetRegAsDefined = [&RegMask] (unsigned Reg) {
     RegMask[Reg / 32] &= ~(1u << Reg % 32);
   };
-
-  // Some targets can clobber registers "inside" a call, typically in
-  // linker-generated code.
-  for (const MCPhysReg Reg : TRI->getIntraCallClobberedRegs(&MF))
-    for (MCRegAliasIterator AI(Reg, TRI, true); AI.isValid(); ++AI)
-      SetRegAsDefined(*AI);
-
   // Scan all the physical registers. When a register is defined in the current
   // function set it and all the aliasing registers as defined in the regmask.
   // FIXME: Rewrite to use regunits.
@@ -171,8 +164,7 @@ bool RegUsageInfoCollector::runOnMachineFunction(MachineFunction &MF) {
       SetRegAsDefined(PReg);
   }
 
-  if (TargetFrameLowering::isSafeForNoCSROpt(F) &&
-      MF.getSubtarget().getFrameLowering()->isProfitableForNoCSROpt(F)) {
+  if (TargetFrameLowering::isSafeForNoCSROpt(F)) {
     ++NumCSROpt;
     LLVM_DEBUG(dbgs() << MF.getName()
                       << " function optimized for not having CSR.\n");
@@ -199,7 +191,7 @@ computeCalleeSavedRegs(BitVector &SavedRegs, MachineFunction &MF) {
 
   // Target will return the set of registers that it saves/restores as needed.
   SavedRegs.clear();
-  TFI.getCalleeSaves(MF, SavedRegs);
+  TFI.determineCalleeSaves(MF, SavedRegs);
   if (SavedRegs.none())
     return;
 

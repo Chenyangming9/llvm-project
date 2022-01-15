@@ -44,6 +44,8 @@ public:
 
   StringRef getExecutorName() const override { return ExecutorName; }
 
+  bool isSingleProcess() const override { return true; }
+
   using ToolExecutor::execute;
 
   llvm::Error
@@ -56,7 +58,7 @@ public:
   ToolResults *getToolResults() override { return Results.get(); }
 
   void mapVirtualFile(StringRef FilePath, StringRef Content) override {
-    OverlayFiles[FilePath] = std::string(Content);
+    OverlayFiles[FilePath] = Content;
   }
 
 private:
@@ -69,7 +71,6 @@ private:
   unsigned ThreadCount;
 };
 
-extern llvm::cl::opt<unsigned> ExecutorConcurrency;
 extern llvm::cl::opt<std::string> Filter;
 
 } // end namespace tooling

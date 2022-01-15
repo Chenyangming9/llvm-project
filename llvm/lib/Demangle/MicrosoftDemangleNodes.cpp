@@ -107,12 +107,6 @@ static void outputCallingConvention(OutputStream &OS, CallingConv CC) {
   case CallingConv::Clrcall:
     OS << "__clrcall";
     break;
-  case CallingConv::Swift:
-    OS << "__attribute__((__swiftcall__)) ";
-    break;
-  case CallingConv::SwiftAsync:
-    OS << "__attribute__((__swiftasynccall__)) ";
-    break;
   default:
     break;
   }
@@ -123,10 +117,10 @@ std::string Node::toString(OutputFlags Flags) const {
   initializeOutputStream(nullptr, nullptr, OS, 1024);
   this->output(OS, Flags);
   OS << '\0';
-  std::string Owned(OS.getBuffer());
-  std::free(OS.getBuffer());
-  return Owned;
+  return {OS.getBuffer()};
 }
+
+void TypeNode::outputQuals(bool SpaceBefore, bool SpaceAfter) const {}
 
 void PrimitiveTypeNode::outputPre(OutputStream &OS, OutputFlags Flags) const {
   switch (PrimKind) {
@@ -386,28 +380,24 @@ void LiteralOperatorIdentifierNode::output(OutputStream &OS,
 
 void FunctionSignatureNode::outputPre(OutputStream &OS,
                                       OutputFlags Flags) const {
-  if (!(Flags & OF_NoAccessSpecifier)) {
-    if (FunctionClass & FC_Public)
-      OS << "public: ";
-    if (FunctionClass & FC_Protected)
-      OS << "protected: ";
-    if (FunctionClass & FC_Private)
-      OS << "private: ";
+  if (FunctionClass & FC_Public)
+    OS << "public: ";
+  if (FunctionClass & FC_Protected)
+    OS << "protected: ";
+  if (FunctionClass & FC_Private)
+    OS << "private: ";
+
+  if (!(FunctionClass & FC_Global)) {
+    if (FunctionClass & FC_Static)
+      OS << "static ";
   }
+  if (FunctionClass & FC_Virtual)
+    OS << "virtual ";
 
-  if (!(Flags & OF_NoMemberType)) {
-    if (!(FunctionClass & FC_Global)) {
-      if (FunctionClass & FC_Static)
-        OS << "static ";
-    }
-    if (FunctionClass & FC_Virtual)
-      OS << "virtual ";
+  if (FunctionClass & FC_ExternC)
+    OS << "extern \"C\" ";
 
-    if (FunctionClass & FC_ExternC)
-      OS << "extern \"C\" ";
-  }
-
-  if (!(Flags & OF_NoReturnType) && ReturnType) {
+  if (ReturnType) {
     ReturnType->outputPre(OS, Flags);
     OS << " ";
   }
@@ -450,7 +440,7 @@ void FunctionSignatureNode::outputPost(OutputStream &OS,
   else if (RefQualifier == FunctionRefQualifier::RValueReference)
     OS << " &&";
 
-  if (!(Flags & OF_NoReturnType) && ReturnType)
+  if (ReturnType)
     ReturnType->outputPost(OS, Flags);
 }
 
@@ -592,26 +582,19 @@ void FunctionSymbolNode::output(OutputStream &OS, OutputFlags Flags) const {
 }
 
 void VariableSymbolNode::output(OutputStream &OS, OutputFlags Flags) const {
-  const char *AccessSpec = nullptr;
-  bool IsStatic = true;
   switch (SC) {
   case StorageClass::PrivateStatic:
-    AccessSpec = "private";
+    OS << "private: static ";
     break;
   case StorageClass::PublicStatic:
-    AccessSpec = "public";
+    OS << "public: static ";
     break;
   case StorageClass::ProtectedStatic:
-    AccessSpec = "protected";
+    OS << "protected: static ";
     break;
   default:
-    IsStatic = false;
     break;
   }
-  if (!(Flags & OF_NoAccessSpecifier) && AccessSpec)
-    OS << AccessSpec << ": ";
-  if (!(Flags & OF_NoMemberType) && IsStatic)
-    OS << "static ";
 
   if (Type) {
     Type->outputPre(OS, Flags);
@@ -657,4 +640,5 @@ void SpecialTableSymbolNode::output(OutputStream &OS, OutputFlags Flags) const {
     TargetName->output(OS, Flags);
     OS << "'}";
   }
+  return;
 }

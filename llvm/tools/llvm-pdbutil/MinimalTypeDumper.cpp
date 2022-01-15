@@ -201,9 +201,8 @@ static std::string formatPointerAttrs(const PointerRecord &Record) {
   PointerMode Mode = Record.getMode();
   PointerOptions Opts = Record.getOptions();
   PointerKind Kind = Record.getPointerKind();
-  return std::string(formatv("mode = {0}, opts = {1}, kind = {2}",
-                             formatPointerMode(Mode), pointerOptions(Opts),
-                             pointerKind(Kind)));
+  return formatv("mode = {0}, opts = {1}, kind = {2}", formatPointerMode(Mode),
+                 pointerOptions(Opts), pointerKind(Kind));
 }
 
 static std::string formatFunctionOptions(FunctionOptions Options) {
@@ -557,7 +556,7 @@ Error MinimalTypeDumpVisitor::visitKnownMember(CVMemberRecord &CVR,
 Error MinimalTypeDumpVisitor::visitKnownMember(CVMemberRecord &CVR,
                                                EnumeratorRecord &Enum) {
   P.format(" [{0} = {1}]", Enum.Name,
-           toString(Enum.Value, 10, Enum.Value.isSigned()));
+           Enum.Value.toString(10, Enum.Value.isSigned()));
   return Error::success();
 }
 

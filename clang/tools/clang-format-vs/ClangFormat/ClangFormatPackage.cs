@@ -24,7 +24,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
 using System.Linq;
-using System.Text;
 
 namespace LLVM.ClangFormat
 {
@@ -293,7 +292,8 @@ namespace LLVM.ClangFormat
             string text = view.TextBuffer.CurrentSnapshot.GetText();
             int start = view.Selection.Start.Position.GetContainingLine().Start.Position;
             int end = view.Selection.End.Position.GetContainingLine().End.Position;
-
+            int length = end - start;
+            
             // clang-format doesn't support formatting a range that starts at the end
             // of the file.
             if (start >= text.Length && text.Length > 0)
@@ -301,7 +301,7 @@ namespace LLVM.ClangFormat
             string path = Vsix.GetDocumentParent(view);
             string filePath = Vsix.GetDocumentPath(view);
 
-            RunClangFormatAndApplyReplacements(text, start, end, path, filePath, options, view);
+            RunClangFormatAndApplyReplacements(text, start, length, path, filePath, options, view);
         }
 
         /// <summary>
@@ -336,11 +336,11 @@ namespace LLVM.ClangFormat
             RunClangFormatAndApplyReplacements(text, 0, text.Length, path, filePath, options, view);
         }
 
-        private void RunClangFormatAndApplyReplacements(string text, int start, int end, string path, string filePath, OptionPageGrid options, IWpfTextView view)
+        private void RunClangFormatAndApplyReplacements(string text, int offset, int length, string path, string filePath, OptionPageGrid options, IWpfTextView view)
         {
             try
             {
-                string replacements = RunClangFormat(text, start, end, path, filePath, options);
+                string replacements = RunClangFormat(text, offset, length, path, filePath, options);
                 ApplyClangFormatReplacements(replacements, view);
             }
             catch (Exception e)
@@ -363,9 +363,9 @@ namespace LLVM.ClangFormat
         /// <summary>
         /// Runs the given text through clang-format and returns the replacements as XML.
         /// 
-        /// Formats the text in range start and end.
+        /// Formats the text range starting at offset of the given length.
         /// </summary>
-        private static string RunClangFormat(string text, int start, int end, string path, string filePath, OptionPageGrid options)
+        private static string RunClangFormat(string text, int offset, int length, string path, string filePath, OptionPageGrid options)
         {
             string vsixPath = Path.GetDirectoryName(
                 typeof(ClangFormatPackage).Assembly.Location);
@@ -373,9 +373,6 @@ namespace LLVM.ClangFormat
             System.Diagnostics.Process process = new System.Diagnostics.Process();
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.FileName = vsixPath + "\\clang-format.exe";
-            char[] chars = text.ToCharArray();
-            int offset = Encoding.UTF8.GetByteCount(chars, 0, start);
-            int length = Encoding.UTF8.GetByteCount(chars, 0, end) - offset;
             // Poor man's escaping - this will not work when quotes are already escaped
             // in the input (but we don't need more).
             string style = options.Style.Replace("\"", "\\\"");
@@ -416,11 +413,10 @@ namespace LLVM.ClangFormat
             // 2. We write everything to the standard output - this cannot block, as clang-format
             //    reads the full standard input before analyzing it without writing anything to the
             //    standard output.
-            StreamWriter utf8Writer = new StreamWriter(process.StandardInput.BaseStream, new UTF8Encoding(false));
-            utf8Writer.Write(text);
+            process.StandardInput.Write(text);
             // 3. We notify clang-format that the input is done - after this point clang-format
             //    will start analyzing the input and eventually write the output.
-            utf8Writer.Close();
+            process.StandardInput.Close();
             // 4. We must read clang-format's output before waiting for it to exit; clang-format
             //    will close the channel by exiting.
             string output = process.StandardOutput.ReadToEnd();
@@ -444,18 +440,13 @@ namespace LLVM.ClangFormat
             if (replacements.Length == 0)
                 return;
 
-            string text = view.TextBuffer.CurrentSnapshot.GetText();
-            byte[] bytes = Encoding.UTF8.GetBytes(text);
-
             var root = XElement.Parse(replacements);
             var edit = view.TextBuffer.CreateEdit();
             foreach (XElement replacement in root.Descendants("replacement"))
             {
-                int offset = int.Parse(replacement.Attribute("offset").Value);
-                int length = int.Parse(replacement.Attribute("length").Value);
                 var span = new Span(
-                    Encoding.UTF8.GetCharCount(bytes, 0, offset),
-                    Encoding.UTF8.GetCharCount(bytes, offset, length));
+                    int.Parse(replacement.Attribute("offset").Value),
+                    int.Parse(replacement.Attribute("length").Value));
                 edit.Replace(span, replacement.Value);
             }
             edit.Apply();

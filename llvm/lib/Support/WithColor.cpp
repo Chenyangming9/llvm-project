@@ -7,34 +7,19 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/WithColor.h"
-
-#include "DebugOptions.h"
-
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Error.h"
-#include "llvm/Support/ManagedStatic.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
-cl::OptionCategory &llvm::getColorCategory() {
-  static cl::OptionCategory ColorCategory("Color Options");
-  return ColorCategory;
-}
-namespace {
-struct CreateUseColor {
-  static void *call() {
-    return new cl::opt<cl::boolOrDefault>(
-        "color", cl::cat(getColorCategory()),
-        cl::desc("Use colors in output (default=autodetect)"),
-        cl::init(cl::BOU_UNSET));
-  }
-};
-} // namespace
-static ManagedStatic<cl::opt<cl::boolOrDefault>, CreateUseColor> UseColor;
-void llvm::initWithColorOptions() { *UseColor; }
+cl::OptionCategory llvm::ColorCategory("Color Options");
 
-WithColor::WithColor(raw_ostream &OS, HighlightColor Color, ColorMode Mode)
-    : OS(OS), Mode(Mode) {
+static cl::opt<cl::boolOrDefault>
+    UseColor("color", cl::cat(ColorCategory),
+             cl::desc("Use colors in output (default=autodetect)"),
+             cl::init(cl::BOU_UNSET));
+
+WithColor::WithColor(raw_ostream &OS, HighlightColor Color, bool DisableColors)
+    : OS(OS), DisableColors(DisableColors) {
   // Detect color from terminal type unless the user passed the --color option.
   if (colorsEnabled()) {
     switch (Color) {
@@ -84,9 +69,7 @@ raw_ostream &WithColor::error(raw_ostream &OS, StringRef Prefix,
                               bool DisableColors) {
   if (!Prefix.empty())
     OS << Prefix << ": ";
-  return WithColor(OS, HighlightColor::Error,
-                   DisableColors ? ColorMode::Disable : ColorMode::Auto)
-             .get()
+  return WithColor(OS, HighlightColor::Error, DisableColors).get()
          << "error: ";
 }
 
@@ -94,9 +77,7 @@ raw_ostream &WithColor::warning(raw_ostream &OS, StringRef Prefix,
                                 bool DisableColors) {
   if (!Prefix.empty())
     OS << Prefix << ": ";
-  return WithColor(OS, HighlightColor::Warning,
-                   DisableColors ? ColorMode::Disable : ColorMode::Auto)
-             .get()
+  return WithColor(OS, HighlightColor::Warning, DisableColors).get()
          << "warning: ";
 }
 
@@ -104,33 +85,23 @@ raw_ostream &WithColor::note(raw_ostream &OS, StringRef Prefix,
                              bool DisableColors) {
   if (!Prefix.empty())
     OS << Prefix << ": ";
-  return WithColor(OS, HighlightColor::Note,
-                   DisableColors ? ColorMode::Disable : ColorMode::Auto)
-             .get()
-         << "note: ";
+  return WithColor(OS, HighlightColor::Note, DisableColors).get() << "note: ";
 }
 
 raw_ostream &WithColor::remark(raw_ostream &OS, StringRef Prefix,
                                bool DisableColors) {
   if (!Prefix.empty())
     OS << Prefix << ": ";
-  return WithColor(OS, HighlightColor::Remark,
-                   DisableColors ? ColorMode::Disable : ColorMode::Auto)
-             .get()
+  return WithColor(OS, HighlightColor::Remark, DisableColors).get()
          << "remark: ";
 }
 
 bool WithColor::colorsEnabled() {
-  switch (Mode) {
-  case ColorMode::Enable:
-    return true;
-  case ColorMode::Disable:
+  if (DisableColors)
     return false;
-  case ColorMode::Auto:
-    return *UseColor == cl::BOU_UNSET ? OS.has_colors()
-                                      : *UseColor == cl::BOU_TRUE;
-  }
-  llvm_unreachable("All cases handled above.");
+  if (UseColor == cl::BOU_UNSET)
+    return OS.has_colors();
+  return UseColor == cl::BOU_TRUE;
 }
 
 WithColor &WithColor::changeColor(raw_ostream::Colors Color, bool Bold,
@@ -147,15 +118,3 @@ WithColor &WithColor::resetColor() {
 }
 
 WithColor::~WithColor() { resetColor(); }
-
-void WithColor::defaultErrorHandler(Error Err) {
-  handleAllErrors(std::move(Err), [](ErrorInfoBase &Info) {
-    WithColor::error() << Info.message() << '\n';
-  });
-}
-
-void WithColor::defaultWarningHandler(Error Warning) {
-  handleAllErrors(std::move(Warning), [](ErrorInfoBase &Info) {
-    WithColor::warning() << Info.message() << '\n';
-  });
-}

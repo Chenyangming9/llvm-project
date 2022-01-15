@@ -19,32 +19,28 @@ using namespace clang::ast_matchers;
 namespace clang {
 namespace tidy {
 namespace bugprone {
-namespace {
-AST_MATCHER(Decl, isFromStdNamespace) {
-  if (const auto *D = Node.getDeclContext()->getEnclosingNamespaceContext())
-    return D->isStdNamespace();
-  return false;
-}
-} // namespace
 
 ArgumentCommentCheck::ArgumentCommentCheck(StringRef Name,
                                            ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      StrictMode(Options.getLocalOrGlobal("StrictMode", false)),
-      IgnoreSingleArgument(Options.get("IgnoreSingleArgument", false)),
-      CommentBoolLiterals(Options.get("CommentBoolLiterals", false)),
-      CommentIntegerLiterals(Options.get("CommentIntegerLiterals", false)),
-      CommentFloatLiterals(Options.get("CommentFloatLiterals", false)),
-      CommentStringLiterals(Options.get("CommentStringLiterals", false)),
+      StrictMode(Options.getLocalOrGlobal("StrictMode", 0) != 0),
+      CommentBoolLiterals(Options.getLocalOrGlobal("CommentBoolLiterals", 0) !=
+                          0),
+      CommentIntegerLiterals(
+          Options.getLocalOrGlobal("CommentIntegerLiterals", 0) != 0),
+      CommentFloatLiterals(
+          Options.getLocalOrGlobal("CommentFloatLiterals", 0) != 0),
+      CommentStringLiterals(
+          Options.getLocalOrGlobal("CommentStringLiterals", 0) != 0),
       CommentUserDefinedLiterals(
-          Options.get("CommentUserDefinedLiterals", false)),
-      CommentCharacterLiterals(Options.get("CommentCharacterLiterals", false)),
-      CommentNullPtrs(Options.get("CommentNullPtrs", false)),
+          Options.getLocalOrGlobal("CommentUserDefinedLiterals", 0) != 0),
+      CommentCharacterLiterals(
+          Options.getLocalOrGlobal("CommentCharacterLiterals", 0) != 0),
+      CommentNullPtrs(Options.getLocalOrGlobal("CommentNullPtrs", 0) != 0),
       IdentRE("^(/\\* *)([_A-Za-z][_A-Za-z0-9]*)( *= *\\*/)$") {}
 
 void ArgumentCommentCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "StrictMode", StrictMode);
-  Options.store(Opts, "IgnoreSingleArgument", IgnoreSingleArgument);
   Options.store(Opts, "CommentBoolLiterals", CommentBoolLiterals);
   Options.store(Opts, "CommentIntegerLiterals", CommentIntegerLiterals);
   Options.store(Opts, "CommentFloatLiterals", CommentFloatLiterals);
@@ -61,18 +57,10 @@ void ArgumentCommentCheck::registerMatchers(MatchFinder *Finder) {
                // don't check them against NewCallback's parameter names.
                // FIXME: Make this configurable.
                unless(hasDeclaration(functionDecl(
-                   hasAnyName("NewCallback", "NewPermanentCallback")))),
-               // Ignore APIs from the standard library, since their names are
-               // not specified by the standard, and standard library
-               // implementations in practice have to use reserved names to
-               // avoid conflicts with same-named macros.
-               unless(hasDeclaration(isFromStdNamespace())))
+                   hasAnyName("NewCallback", "NewPermanentCallback")))))
           .bind("expr"),
       this);
-  Finder->addMatcher(
-      cxxConstructExpr(unless(hasDeclaration(isFromStdNamespace())))
-          .bind("expr"),
-      this);
+  Finder->addMatcher(cxxConstructExpr().bind("expr"), this);
 }
 
 static std::vector<std::pair<SourceLocation, StringRef>>
@@ -176,8 +164,8 @@ static bool sameName(StringRef InComment, StringRef InDecl, bool StrictMode) {
     return InComment == InDecl;
   InComment = InComment.trim('_');
   InDecl = InDecl.trim('_');
-  // FIXME: compare_insensitive only works for ASCII.
-  return InComment.compare_insensitive(InDecl) == 0;
+  // FIXME: compare_lower only works for ASCII.
+  return InComment.compare_lower(InDecl) == 0;
 }
 
 static bool looksLikeExpectMethod(const CXXMethodDecl *Expect) {
@@ -242,11 +230,9 @@ static const FunctionDecl *resolveMocks(const FunctionDecl *Func) {
 // Given the argument type and the options determine if we should
 // be adding an argument comment.
 bool ArgumentCommentCheck::shouldAddComment(const Expr *Arg) const {
-  Arg = Arg->IgnoreImpCasts();
-  if (isa<UnaryOperator>(Arg))
-    Arg = cast<UnaryOperator>(Arg)->getSubExpr();
   if (Arg->getExprLoc().isMacroID())
     return false;
+  Arg = Arg->IgnoreImpCasts();
   return (CommentBoolLiterals && isa<CXXBoolLiteralExpr>(Arg)) ||
          (CommentIntegerLiterals && isa<IntegerLiteral>(Arg)) ||
          (CommentFloatLiterals && isa<FloatingLiteral>(Arg)) ||
@@ -266,7 +252,7 @@ void ArgumentCommentCheck::checkCallArgs(ASTContext *Ctx,
 
   Callee = Callee->getFirstDecl();
   unsigned NumArgs = std::min<unsigned>(Args.size(), Callee->getNumParams());
-  if ((NumArgs == 0) || (IgnoreSingleArgument && NumArgs == 1))
+  if (NumArgs == 0)
     return;
 
   auto MakeFileCharRange = [Ctx](SourceLocation Begin, SourceLocation End) {
@@ -280,7 +266,7 @@ void ArgumentCommentCheck::checkCallArgs(ASTContext *Ctx,
     IdentifierInfo *II = PVD->getIdentifier();
     if (!II)
       continue;
-    if (FunctionDecl *Template = Callee->getTemplateInstantiationPattern()) {
+    if (auto Template = Callee->getTemplateInstantiationPattern()) {
       // Don't warn on arguments for parameters instantiated from template
       // parameter packs. If we find more arguments than the template
       // definition has, it also means that they correspond to a parameter
@@ -300,8 +286,8 @@ void ArgumentCommentCheck::checkCallArgs(ASTContext *Ctx,
       Comments = getCommentsInRange(Ctx, BeforeArgument);
     } else {
       // Fall back to parsing back from the start of the argument.
-      CharSourceRange ArgsRange =
-          MakeFileCharRange(Args[I]->getBeginLoc(), Args[I]->getEndLoc());
+      CharSourceRange ArgsRange = MakeFileCharRange(
+          Args[I]->getBeginLoc(), Args[NumArgs - 1]->getEndLoc());
       Comments = getCommentsBeforeLoc(Ctx, ArgsRange.getBegin());
     }
 
@@ -339,7 +325,7 @@ void ArgumentCommentCheck::checkCallArgs(ASTContext *Ctx,
           << FixItHint::CreateInsertion(Args[I]->getBeginLoc(), ArgComment);
     }
   }
-}
+} // namespace bugprone
 
 void ArgumentCommentCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *E = Result.Nodes.getNodeAs<Expr>("expr");
@@ -352,7 +338,7 @@ void ArgumentCommentCheck::check(const MatchFinder::MatchResult &Result) {
                   llvm::makeArrayRef(Call->getArgs(), Call->getNumArgs()));
   } else {
     const auto *Construct = cast<CXXConstructExpr>(E);
-    if (Construct->getNumArgs() > 0 &&
+    if (Construct->getNumArgs() == 1 &&
         Construct->getArg(0)->getSourceRange() == Construct->getSourceRange()) {
       // Ignore implicit construction.
       return;

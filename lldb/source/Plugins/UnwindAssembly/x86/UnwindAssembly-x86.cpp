@@ -1,4 +1,4 @@
-//===-- UnwindAssembly-x86.cpp --------------------------------------------===//
+//===-- UnwindAssembly-x86.cpp ----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -30,8 +30,6 @@
 using namespace lldb;
 using namespace lldb_private;
 
-LLDB_PLUGIN_DEFINE_ADV(UnwindAssembly_x86, UnwindAssemblyX86)
-
 //  UnwindAssemblyParser_x86 method definitions
 
 UnwindAssembly_x86::UnwindAssembly_x86(const ArchSpec &arch)
@@ -51,11 +49,12 @@ bool UnwindAssembly_x86::GetNonCallSiteUnwindPlanFromAssembly(
   ProcessSP process_sp(thread.GetProcess());
   if (process_sp.get() == nullptr)
     return false;
+  const bool prefer_file_cache = true;
   std::vector<uint8_t> function_text(func.GetByteSize());
   Status error;
   if (process_sp->GetTarget().ReadMemory(
-          func.GetBaseAddress(), function_text.data(), func.GetByteSize(),
-          error) == func.GetByteSize()) {
+          func.GetBaseAddress(), prefer_file_cache, function_text.data(),
+          func.GetByteSize(), error) == func.GetByteSize()) {
     RegisterContextSP reg_ctx(thread.GetRegisterContext());
     m_assembly_inspection_engine->Initialize(reg_ctx);
     return m_assembly_inspection_engine->GetNonCallSiteUnwindPlanFromAssembly(
@@ -140,7 +139,7 @@ bool UnwindAssembly_x86::AugmentUnwindPlanFromCallSite(
           // and we don't need to modify it at all.
 
           if (first_row_pc_loc.GetOffset() == -wordsize) {
-            return true;
+            do_augment_unwindplan = false;
           }
         }
       }
@@ -152,11 +151,12 @@ bool UnwindAssembly_x86::AugmentUnwindPlanFromCallSite(
       return false;
     if (m_assembly_inspection_engine == nullptr)
       return false;
+    const bool prefer_file_cache = true;
     std::vector<uint8_t> function_text(func.GetByteSize());
     Status error;
     if (process_sp->GetTarget().ReadMemory(
-            func.GetBaseAddress(), function_text.data(), func.GetByteSize(),
-            error) == func.GetByteSize()) {
+            func.GetBaseAddress(), prefer_file_cache, function_text.data(),
+            func.GetByteSize(), error) == func.GetByteSize()) {
       RegisterContextSP reg_ctx(thread.GetRegisterContext());
       m_assembly_inspection_engine->Initialize(reg_ctx);
       return m_assembly_inspection_engine->AugmentUnwindPlanFromCallSite(
@@ -183,9 +183,10 @@ bool UnwindAssembly_x86::GetFastUnwindPlan(AddressRange &func, Thread &thread,
   ProcessSP process_sp = thread.GetProcess();
   if (process_sp) {
     Target &target(process_sp->GetTarget());
+    const bool prefer_file_cache = true;
     Status error;
-    if (target.ReadMemory(func.GetBaseAddress(), opcode_data.data(), 4,
-                          error) == 4) {
+    if (target.ReadMemory(func.GetBaseAddress(), prefer_file_cache,
+                          opcode_data.data(), 4, error) == 4) {
       uint8_t i386_push_mov[] = {0x55, 0x89, 0xe5};
       uint8_t x86_64_push_mov[] = {0x55, 0x48, 0x89, 0xe5};
 
@@ -217,10 +218,12 @@ bool UnwindAssembly_x86::FirstNonPrologueInsn(
   if (m_assembly_inspection_engine == nullptr)
     return false;
 
+  const bool prefer_file_cache = true;
   std::vector<uint8_t> function_text(func.GetByteSize());
   Status error;
-  if (target->ReadMemory(func.GetBaseAddress(), function_text.data(),
-                         func.GetByteSize(), error) == func.GetByteSize()) {
+  if (target->ReadMemory(func.GetBaseAddress(), prefer_file_cache,
+                         function_text.data(), func.GetByteSize(),
+                         error) == func.GetByteSize()) {
     size_t offset;
     if (m_assembly_inspection_engine->FindFirstNonPrologueInstruction(
             function_text.data(), func.GetByteSize(), offset)) {

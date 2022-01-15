@@ -26,7 +26,6 @@
 
 namespace llvm {
 
-class AAResults;
 class InstrItineraryData;
 
   /// ScheduleDAGSDNodes - A ScheduleDAG for scheduling SDNode-based DAGs.
@@ -94,7 +93,7 @@ class InstrItineraryData;
     /// are input.  This SUnit graph is similar to the SelectionDAG, but
     /// excludes nodes that aren't interesting to scheduling, and represents
     /// flagged together nodes with a single SUnit.
-    void BuildSchedGraph(AAResults *AA);
+    void BuildSchedGraph(AliasAnalysis *AA);
 
     /// InitNumRegDefsLeft - Determine the # of regs defined by this node.
     ///
@@ -184,7 +183,7 @@ class InstrItineraryData;
     void BuildSchedUnits();
     void AddSchedEdges();
 
-    void EmitPhysRegCopy(SUnit *SU, DenseMap<SUnit*, Register> &VRBaseMap,
+    void EmitPhysRegCopy(SUnit *SU, DenseMap<SUnit*, unsigned> &VRBaseMap,
                          MachineBasicBlock::iterator InsertPos);
   };
 

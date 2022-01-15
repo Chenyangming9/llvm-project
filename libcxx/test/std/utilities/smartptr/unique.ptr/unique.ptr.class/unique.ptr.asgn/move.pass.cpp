@@ -6,10 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03
-
-// Self assignement post-conditions are tested.
-// ADDITIONAL_COMPILE_FLAGS: -Wno-self-move
+// UNSUPPORTED: c++98, c++03
 
 // <memory>
 
@@ -73,14 +70,6 @@ void test_basic() {
     assert(A::count == expect_alive);
     assert(d1.state() == 5);
     assert(d2.state() == 5);
-  }
-  assert(A::count == 0);
-  {
-    std::unique_ptr<VT> s(newValue<VT>(expect_alive));
-    A* p = s.get();
-    s = std::move(s);
-    assert(A::count == expect_alive);
-    assert(s.get() == p);
   }
   assert(A::count == 0);
 }

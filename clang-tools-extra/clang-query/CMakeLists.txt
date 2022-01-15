@@ -1,25 +1,18 @@
 set(LLVM_LINK_COMPONENTS
   lineeditor
   support
-  FrontendOpenMP
   )
 
 add_clang_library(clangQuery
   Query.cpp
   QueryParser.cpp
 
-  DEPENDS
-  omp_gen
-  )
-
-clang_target_link_libraries(clangQuery
-  PRIVATE
+  LINK_LIBS
   clangAST
   clangASTMatchers
   clangBasic
   clangDynamicASTMatchers
   clangFrontend
-  clangTooling
   clangSerialization
   )
 

@@ -6,14 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERCONTEXTPOSIX_S390X_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERCONTEXTPOSIX_S390X_H
+#ifndef liblldb_RegisterContextPOSIX_s390x_h_
+#define liblldb_RegisterContextPOSIX_s390x_h_
 
 #include "RegisterContext_s390x.h"
 #include "RegisterInfoInterface.h"
 #include "lldb-s390x-register-enums.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Utility/Log.h"
+
+class ProcessMonitor;
 
 class RegisterContextPOSIX_s390x : public lldb_private::RegisterContext {
 public:
@@ -41,6 +43,9 @@ public:
 
   const char *GetRegisterName(unsigned reg);
 
+  uint32_t ConvertRegisterKindToRegisterNumber(lldb::RegisterKind kind,
+                                               uint32_t num) override;
+
 protected:
   struct RegInfo {
     uint32_t num_registers;
@@ -63,10 +68,12 @@ protected:
 
   bool IsFPR(unsigned reg);
 
+  lldb::ByteOrder GetByteOrder();
+
   virtual bool ReadGPR() = 0;
   virtual bool ReadFPR() = 0;
   virtual bool WriteGPR() = 0;
   virtual bool WriteFPR() = 0;
 };
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_UTILITY_REGISTERCONTEXTPOSIX_S390X_H
+#endif // liblldb_RegisterContextPOSIX_s390x_h_

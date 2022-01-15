@@ -12,5 +12,7 @@ unittest("IndexTests") {
     "//clang/lib/Tooling",
     "//llvm/lib/Support",
   ]
-  sources = [ "IndexTests.cpp" ]
+  sources = [
+    "IndexTests.cpp",
+  ]
 }

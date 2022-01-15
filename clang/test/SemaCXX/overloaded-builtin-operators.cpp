@@ -194,8 +194,10 @@ struct A {
 };
 
 void test_dr425(A a) {
+  // FIXME: lots of candidates here!
   (void)(1.0f * a); // expected-error{{ambiguous}} \
-                    // expected-note 12{{candidate}}
+                    // expected-note 4{{candidate}} \
+                    // expected-note {{remaining 140 candidates omitted; pass -fshow-overloads=all to show them}}
 }
 
 // pr5432
@@ -235,10 +237,9 @@ namespace PR8477 {
     (void)(foo - zero);
     (void)(zero + foo);
     (void)(zero[foo]);
-    // FIXME: It would be nice to report fewer candidates here.
     (void)(foo - foo); // expected-error{{use of overloaded operator '-' is ambiguous}} \
     // expected-note 4{{built-in candidate operator-}} \
-    // expected-note{{142 candidates omitted}}
+    // expected-note{{candidates omitted}}
     return foo[zero] == zero;
   }
 }

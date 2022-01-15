@@ -10,7 +10,7 @@ entry:
   ret void
 
 ; CHECK-LABEL: @foo1
-; CHECK:     mtfprwz
+; CHECK:     mtvsrwz
 }
 
 define void @foo2(i16* %p) {
@@ -21,6 +21,6 @@ entry:
   ret void
 
 ; CHECK-LABEL: @foo2
-; CHECK:       mtfprwz
+; CHECK:       mtvsrwz
 }
 

@@ -1,4 +1,4 @@
-add_llvm_component_library(LLVMObject
+add_llvm_library(LLVMObject
   Archive.cpp
   ArchiveWriter.cpp
   Binary.cpp
@@ -9,7 +9,6 @@ add_llvm_component_library(LLVMObject
   ELF.cpp
   ELFObjectFile.cpp
   Error.cpp
-  FaultMapParser.cpp
   IRObjectFile.cpp
   IRSymtab.cpp
   MachOObjectFile.cpp
@@ -22,9 +21,6 @@ add_llvm_component_library(LLVMObject
   RelocationResolver.cpp
   SymbolicFile.cpp
   SymbolSize.cpp
-  TapiFile.cpp
-  TapiUniversal.cpp
-  MachOUniversalWriter.cpp
   WasmObjectFile.cpp
   WindowsMachineFlag.cpp
   WindowsResource.cpp
@@ -36,13 +32,4 @@ add_llvm_component_library(LLVMObject
   DEPENDS
   intrinsics_gen
   llvm_vcsrevision_h
-
-  LINK_COMPONENTS
-  BitReader
-  Core
-  MC
-  BinaryFormat
-  MCParser
-  Support
-  TextAPI
   )

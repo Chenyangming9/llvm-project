@@ -38,29 +38,11 @@ DeclarationMatcher FunctionBodyMatcher(StringRef ContainingFunction) {
                       has(compoundStmt(has(stmt().bind("id")))));
 }
 
-static void PrintStmt(raw_ostream &Out, const ASTContext *Context,
-                      const Stmt *S, PrintingPolicyAdjuster PolicyAdjuster) {
-  assert(S != nullptr && "Expected non-null Stmt");
-  PrintingPolicy Policy = Context->getPrintingPolicy();
-  if (PolicyAdjuster)
-    PolicyAdjuster(Policy);
-  S->printPretty(Out, /*Helper*/ nullptr, Policy);
-}
-
-template <typename Matcher>
-::testing::AssertionResult
-PrintedStmtMatches(StringRef Code, const std::vector<std::string> &Args,
-                   const Matcher &NodeMatch, StringRef ExpectedPrinted,
-                   PrintingPolicyAdjuster PolicyAdjuster = nullptr) {
-  return PrintedNodeMatches<Stmt>(Code, Args, NodeMatch, ExpectedPrinted, "",
-                                  PrintStmt, PolicyAdjuster);
-}
-
 template <typename T>
 ::testing::AssertionResult
 PrintedStmtCXXMatches(StdVer Standard, StringRef Code, const T &NodeMatch,
                       StringRef ExpectedPrinted,
-                      PrintingPolicyAdjuster PolicyAdjuster = nullptr) {
+                      PolicyAdjusterType PolicyAdjuster = None) {
   const char *StdOpt;
   switch (Standard) {
   case StdVer::CXX98: StdOpt = "-std=c++98"; break;
@@ -82,7 +64,7 @@ template <typename T>
 ::testing::AssertionResult
 PrintedStmtMSMatches(StringRef Code, const T &NodeMatch,
                      StringRef ExpectedPrinted,
-                     PrintingPolicyAdjuster PolicyAdjuster = nullptr) {
+                     PolicyAdjusterType PolicyAdjuster = None) {
   std::vector<std::string> Args = {
     "-std=c++98",
     "-target", "i686-pc-win32",
@@ -97,7 +79,7 @@ template <typename T>
 ::testing::AssertionResult
 PrintedStmtObjCMatches(StringRef Code, const T &NodeMatch,
                        StringRef ExpectedPrinted,
-                       PrintingPolicyAdjuster PolicyAdjuster = nullptr) {
+                       PolicyAdjusterType PolicyAdjuster = None) {
   std::vector<std::string> Args = {
     "-ObjC",
     "-fobjc-runtime=macosx-10.12.0",
@@ -147,17 +129,17 @@ TEST(StmtPrinter, TestFloatingPointLiteral) {
 }
 
 TEST(StmtPrinter, TestCXXConversionDeclImplicit) {
-  ASSERT_TRUE(PrintedStmtCXXMatches(
-      StdVer::CXX98,
-      "struct A {"
+  ASSERT_TRUE(PrintedStmtCXXMatches(StdVer::CXX98,
+    "struct A {"
       "operator void *();"
       "A operator&(A);"
-      "};"
-      "void bar(void *);"
-      "void foo(A a, A b) {"
-      "  bar(a & b);"
-      "}",
-      traverse(TK_AsIs, cxxMemberCallExpr(anything()).bind("id")), "a & b"));
+    "};"
+    "void bar(void *);"
+    "void foo(A a, A b) {"
+    "  bar(a & b);"
+    "}",
+    cxxMemberCallExpr(anything()).bind("id"),
+    "a & b"));
 }
 
 TEST(StmtPrinter, TestCXXConversionDeclExplicit) {
@@ -220,10 +202,10 @@ class A {
 };
 )";
   // No implicit 'this'.
-  ASSERT_TRUE(PrintedStmtCXXMatches(
-      StdVer::CXX11, CPPSource, memberExpr(anything()).bind("id"), "field",
-
-      [](PrintingPolicy &PP) { PP.SuppressImplicitBase = true; }));
+  ASSERT_TRUE(PrintedStmtCXXMatches(StdVer::CXX11,
+      CPPSource, memberExpr(anything()).bind("id"), "field",
+      PolicyAdjusterType(
+          [](PrintingPolicy &PP) { PP.SuppressImplicitBase = true; })));
   // Print implicit 'this'.
   ASSERT_TRUE(PrintedStmtCXXMatches(StdVer::CXX11,
       CPPSource, memberExpr(anything()).bind("id"), "this->field"));
@@ -240,10 +222,11 @@ class A {
 @end
       )";
   // No implicit 'self'.
-  ASSERT_TRUE(PrintedStmtObjCMatches(
-      ObjCSource, returnStmt().bind("id"), "return ivar;\n",
-
-      [](PrintingPolicy &PP) { PP.SuppressImplicitBase = true; }));
+  ASSERT_TRUE(PrintedStmtObjCMatches(ObjCSource, returnStmt().bind("id"),
+                                     "return ivar;\n",
+                                     PolicyAdjusterType([](PrintingPolicy &PP) {
+                                       PP.SuppressImplicitBase = true;
+                                     })));
   // Print implicit 'self'.
   ASSERT_TRUE(PrintedStmtObjCMatches(ObjCSource, returnStmt().bind("id"),
                                      "return self->ivar;\n"));
@@ -260,6 +243,5 @@ TEST(StmtPrinter, TerseOutputWithLambdas) {
   // body not printed when TerseOutput is on.
   ASSERT_TRUE(PrintedStmtCXXMatches(
       StdVer::CXX11, CPPSource, lambdaExpr(anything()).bind("id"), "[] {}",
-
-      [](PrintingPolicy &PP) { PP.TerseOutput = true; }));
+      PolicyAdjusterType([](PrintingPolicy &PP) { PP.TerseOutput = true; })));
 }

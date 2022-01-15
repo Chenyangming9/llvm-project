@@ -5,7 +5,7 @@ struct NoDefault {
   NoDefault(int);
 };
 struct Explicit { // expected-note 2 {{candidate}} expected-note {{here}}
-  explicit Explicit(int); // expected-note {{not a candidate}}
+  explicit Explicit(int);
 };
 struct NoCopy {
   NoCopy();

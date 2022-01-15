@@ -1,4 +1,4 @@
-//===-- VectorType.cpp ----------------------------------------------------===//
+//===-- VectorType.cpp ------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -15,7 +15,6 @@
 #include "lldb/Target/Target.h"
 
 #include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/Log.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -219,9 +218,14 @@ public:
     m_parent_format = m_backend.GetFormat();
     CompilerType parent_type(m_backend.GetCompilerType());
     CompilerType element_type;
-    parent_type.IsVectorType(&element_type);
-    m_child_type = ::GetCompilerTypeForFormat(m_parent_format, element_type,
-                                              parent_type.GetTypeSystem());
+    parent_type.IsVectorType(&element_type, nullptr);
+    TargetSP target_sp(m_backend.GetTargetSP());
+    m_child_type = ::GetCompilerTypeForFormat(
+        m_parent_format, element_type,
+        target_sp
+            ? target_sp->GetScratchTypeSystemForLanguage(nullptr,
+                                                         lldb::eLanguageTypeC)
+            : nullptr);
     m_num_children = ::CalculateNumChildren(parent_type, m_child_type);
     m_item_format = GetItemFormatForFormat(m_parent_format, m_child_type);
     return false;

@@ -62,7 +62,8 @@ int main(int argc, char **argv) {
           errorOrToExpected(MemoryBuffer::getFileOrSTDIN(InputFilename)));
       std::vector<BitcodeModule> Mods = ExitOnErr(getBitcodeModuleList(*MB));
       for (auto &BitcodeMod : Mods) {
-        llvm::append_range(Buffer, BitcodeMod.getBuffer());
+        Buffer.insert(Buffer.end(), BitcodeMod.getBuffer().begin(),
+                      BitcodeMod.getBuffer().end());
         Writer.copyStrtab(BitcodeMod.getStrtab());
       }
     }
@@ -84,7 +85,7 @@ int main(int argc, char **argv) {
   }
 
   std::error_code EC;
-  raw_fd_ostream OS(OutputFilename, EC, sys::fs::OpenFlags::OF_None);
+  raw_fd_ostream OS(OutputFilename, EC, sys::fs::OpenFlags::F_None);
   if (EC) {
     errs() << argv[0] << ": cannot open " << OutputFilename << " for writing: "
            << EC.message();

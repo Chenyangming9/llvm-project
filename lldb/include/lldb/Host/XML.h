@@ -6,12 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_HOST_XML_H
-#define LLDB_HOST_XML_H
+#ifndef liblldb_XML_h_
+#define liblldb_XML_h_
 
-#include "lldb/Host/Config.h"
-
-#if LLDB_ENABLE_LIBXML2
+#if defined(LIBXML2_DEFINED)
 #include <libxml/xmlreader.h>
 #endif
 
@@ -27,7 +25,7 @@
 
 namespace lldb_private {
 
-#if LLDB_ENABLE_LIBXML2
+#if defined(LIBXML2_DEFINED)
 typedef xmlNodePtr XMLNodeImpl;
 typedef xmlDocPtr XMLDocumentImpl;
 #else
@@ -107,7 +105,7 @@ public:
   void ForEachAttribute(AttributeCallback const &callback) const;
 
 protected:
-  XMLNodeImpl m_node = nullptr;
+  XMLNodeImpl m_node;
 };
 
 class XMLDocument {
@@ -138,7 +136,7 @@ public:
   static bool XMLEnabled();
 
 protected:
-  XMLDocumentImpl m_document = nullptr;
+  XMLDocumentImpl m_document;
   StreamString m_errors;
 };
 
@@ -179,4 +177,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_HOST_XML_H
+#endif // liblldb_XML_h_

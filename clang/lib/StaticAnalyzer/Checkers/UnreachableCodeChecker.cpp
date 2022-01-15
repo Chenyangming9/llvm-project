@@ -55,7 +55,7 @@ void UnreachableCodeChecker::checkEndAnalysis(ExplodedGraph &G,
 
   const Decl *D = nullptr;
   CFG *C = nullptr;
-  const ParentMap *PM = nullptr;
+  ParentMap *PM = nullptr;
   const LocationContext *LC = nullptr;
   // Iterate over ExplodedGraph
   for (ExplodedGraph::node_iterator I = G.nodes_begin(), E = G.nodes_end();
@@ -169,7 +169,7 @@ void UnreachableCodeChecker::checkEndAnalysis(ExplodedGraph &G,
     if (SM.isInSystemHeader(SL) || SM.isInExternCSystemHeader(SL))
       continue;
 
-    B.EmitBasicReport(D, this, "Unreachable code", categories::UnusedCode,
+    B.EmitBasicReport(D, this, "Unreachable code", "Dead code",
                       "This statement is never executed", DL, SR);
   }
 }
@@ -257,6 +257,6 @@ void ento::registerUnreachableCodeChecker(CheckerManager &mgr) {
   mgr.registerChecker<UnreachableCodeChecker>();
 }
 
-bool ento::shouldRegisterUnreachableCodeChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterUnreachableCodeChecker(const LangOptions &LO) {
   return true;
 }

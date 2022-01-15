@@ -14,7 +14,6 @@
 #ifndef LLVM_CLANG_AST_TEMPLATEBASE_H
 #define LLVM_CLANG_AST_TEMPLATEBASE_H
 
-#include "clang/AST/DependenceFlags.h"
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/TemplateName.h"
 #include "clang/AST/Type.h"
@@ -35,17 +34,6 @@
 namespace llvm {
 
 class FoldingSetNodeID;
-
-// Provide PointerLikeTypeTraits for clang::Expr*, this default one requires a
-// full definition of Expr, but this file only sees a forward del because of
-// the dependency.
-template <> struct PointerLikeTypeTraits<clang::Expr *> {
-  static inline void *getAsVoidPointer(clang::Expr *P) { return P; }
-  static inline clang::Expr *getFromVoidPointer(void *P) {
-    return static_cast<clang::Expr *>(P);
-  }
-  static constexpr int NumLowBitsAvailable = 2;
-};
 
 } // namespace llvm
 
@@ -93,7 +81,8 @@ public:
     /// The template argument is an expression, and we've not resolved it to one
     /// of the other forms yet, either because it's dependent or because we're
     /// representing a non-canonical template argument (for instance, in a
-    /// TemplateSpecializationType).
+    /// TemplateSpecializationType). Also used to represent a non-dependent
+    /// __uuidof expression (a Microsoft extension).
     Expression,
 
     /// The template argument is actually a parameter pack. Arguments are stored
@@ -247,8 +236,6 @@ public:
   /// Determine whether this template argument has no value.
   bool isNull() const { return getKind() == Null; }
 
-  TemplateArgumentDependence getDependence() const;
-
   /// Whether this template argument is dependent on a template
   /// parameter such that its result can change from one instantiation to
   /// another.
@@ -389,8 +376,7 @@ public:
   TemplateArgument getPackExpansionPattern() const;
 
   /// Print this template argument to the given output stream.
-  void print(const PrintingPolicy &Policy, raw_ostream &Out,
-             bool IncludeType) const;
+  void print(const PrintingPolicy &Policy, raw_ostream &Out) const;
 
   /// Debugging aid that dumps the template argument.
   void dump(raw_ostream &Out) const;
@@ -405,51 +391,56 @@ public:
 /// Location information for a TemplateArgument.
 struct TemplateArgumentLocInfo {
 private:
-  struct TemplateTemplateArgLocInfo {
+  struct T {
     // FIXME: We'd like to just use the qualifier in the TemplateName,
     // but template arguments get canonicalized too quickly.
     NestedNameSpecifier *Qualifier;
     void *QualifierLocData;
-    SourceLocation TemplateNameLoc;
-    SourceLocation EllipsisLoc;
+    unsigned TemplateNameLoc;
+    unsigned EllipsisLoc;
   };
 
-  llvm::PointerUnion<TemplateTemplateArgLocInfo *, Expr *, TypeSourceInfo *>
-      Pointer;
-
-  TemplateTemplateArgLocInfo *getTemplate() const {
-    return Pointer.get<TemplateTemplateArgLocInfo *>();
-  }
+  union {
+    struct T Template;
+    Expr *Expression;
+    TypeSourceInfo *Declarator;
+  };
 
 public:
-  TemplateArgumentLocInfo() {}
-  TemplateArgumentLocInfo(TypeSourceInfo *Declarator) { Pointer = Declarator; }
+  constexpr TemplateArgumentLocInfo() : Template({nullptr, nullptr, 0, 0}) {}
 
-  TemplateArgumentLocInfo(Expr *E) { Pointer = E; }
-  // Ctx is used for allocation -- this case is unusually large and also rare,
-  // so we store the payload out-of-line.
-  TemplateArgumentLocInfo(ASTContext &Ctx, NestedNameSpecifierLoc QualifierLoc,
+  TemplateArgumentLocInfo(TypeSourceInfo *TInfo) : Declarator(TInfo) {}
+
+  TemplateArgumentLocInfo(Expr *E) : Expression(E) {}
+
+  TemplateArgumentLocInfo(NestedNameSpecifierLoc QualifierLoc,
                           SourceLocation TemplateNameLoc,
-                          SourceLocation EllipsisLoc);
-
-  TypeSourceInfo *getAsTypeSourceInfo() const {
-    return Pointer.get<TypeSourceInfo *>();
+                          SourceLocation EllipsisLoc) {
+    Template.Qualifier = QualifierLoc.getNestedNameSpecifier();
+    Template.QualifierLocData = QualifierLoc.getOpaqueData();
+    Template.TemplateNameLoc = TemplateNameLoc.getRawEncoding();
+    Template.EllipsisLoc = EllipsisLoc.getRawEncoding();
   }
 
-  Expr *getAsExpr() const { return Pointer.get<Expr *>(); }
+  TypeSourceInfo *getAsTypeSourceInfo() const {
+    return Declarator;
+  }
+
+  Expr *getAsExpr() const {
+    return Expression;
+  }
 
   NestedNameSpecifierLoc getTemplateQualifierLoc() const {
-    const auto *Template = getTemplate();
-    return NestedNameSpecifierLoc(Template->Qualifier,
-                                  Template->QualifierLocData);
+    return NestedNameSpecifierLoc(Template.Qualifier,
+                                  Template.QualifierLocData);
   }
 
   SourceLocation getTemplateNameLoc() const {
-    return getTemplate()->TemplateNameLoc;
+    return SourceLocation::getFromRawEncoding(Template.TemplateNameLoc);
   }
 
   SourceLocation getTemplateEllipsisLoc() const {
-    return getTemplate()->EllipsisLoc;
+    return SourceLocation::getFromRawEncoding(Template.EllipsisLoc);
   }
 };
 
@@ -460,7 +451,7 @@ class TemplateArgumentLoc {
   TemplateArgumentLocInfo LocInfo;
 
 public:
-  TemplateArgumentLoc() {}
+  constexpr TemplateArgumentLoc() {}
 
   TemplateArgumentLoc(const TemplateArgument &Argument,
                       TemplateArgumentLocInfo Opaque)
@@ -482,12 +473,12 @@ public:
            Argument.getKind() == TemplateArgument::Expression);
   }
 
-  TemplateArgumentLoc(ASTContext &Ctx, const TemplateArgument &Argument,
+  TemplateArgumentLoc(const TemplateArgument &Argument,
                       NestedNameSpecifierLoc QualifierLoc,
                       SourceLocation TemplateNameLoc,
                       SourceLocation EllipsisLoc = SourceLocation())
       : Argument(Argument),
-        LocInfo(Ctx, QualifierLoc, TemplateNameLoc, EllipsisLoc) {
+        LocInfo(QualifierLoc, TemplateNameLoc, EllipsisLoc) {
     assert(Argument.getKind() == TemplateArgument::Template ||
            Argument.getKind() == TemplateArgument::TemplateExpansion);
   }
@@ -513,8 +504,7 @@ public:
   }
 
   TypeSourceInfo *getTypeSourceInfo() const {
-    if (Argument.getKind() != TemplateArgument::Type)
-      return nullptr;
+    assert(Argument.getKind() == TemplateArgument::Type);
     return LocInfo.getAsTypeSourceInfo();
   }
 
@@ -647,7 +637,7 @@ public:
   }
 
   static const ASTTemplateArgumentListInfo *
-  Create(const ASTContext &C, const TemplateArgumentListInfo &List);
+  Create(ASTContext &C, const TemplateArgumentListInfo &List);
 };
 
 /// Represents an explicit template argument list in C++, e.g.,
@@ -676,21 +666,19 @@ struct alignas(void *) ASTTemplateKWAndArgsInfo {
   void initializeFrom(SourceLocation TemplateKWLoc,
                       const TemplateArgumentListInfo &List,
                       TemplateArgumentLoc *OutArgArray);
-  // FIXME: The parameter Deps is the result populated by this method, the
-  // caller doesn't need it since it is populated by computeDependence. remove
-  // it.
   void initializeFrom(SourceLocation TemplateKWLoc,
                       const TemplateArgumentListInfo &List,
-                      TemplateArgumentLoc *OutArgArray,
-                      TemplateArgumentDependence &Deps);
+                      TemplateArgumentLoc *OutArgArray, bool &Dependent,
+                      bool &InstantiationDependent,
+                      bool &ContainsUnexpandedParameterPack);
   void initializeFrom(SourceLocation TemplateKWLoc);
 
   void copyInto(const TemplateArgumentLoc *ArgArray,
                 TemplateArgumentListInfo &List) const;
 };
 
-const StreamingDiagnostic &operator<<(const StreamingDiagnostic &DB,
-                                      const TemplateArgument &Arg);
+const DiagnosticBuilder &operator<<(const DiagnosticBuilder &DB,
+                                    const TemplateArgument &Arg);
 
 inline TemplateSpecializationType::iterator
     TemplateSpecializationType::end() const {
@@ -710,11 +698,6 @@ inline const TemplateArgument &
 
 inline const TemplateArgument &
     DependentTemplateSpecializationType::getArg(unsigned Idx) const {
-  assert(Idx < getNumArgs() && "Template argument out of range");
-  return getArgs()[Idx];
-}
-
-inline const TemplateArgument &AutoType::getArg(unsigned Idx) const {
   assert(Idx < getNumArgs() && "Template argument out of range");
   return getArgs()[Idx];
 }

@@ -9,9 +9,9 @@
 #ifndef LLVM_LIB_CODEGEN_SAFESTACKLAYOUT_H
 #define LLVM_LIB_CODEGEN_SAFESTACKLAYOUT_H
 
+#include "SafeStackColoring.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Analysis/StackLifetime.h"
 
 namespace llvm {
 
@@ -27,10 +27,10 @@ class StackLayout {
   struct StackRegion {
     unsigned Start;
     unsigned End;
-    StackLifetime::LiveRange Range;
+    StackColoring::LiveRange Range;
 
     StackRegion(unsigned Start, unsigned End,
-                const StackLifetime::LiveRange &Range)
+                const StackColoring::LiveRange &Range)
         : Start(Start), End(End), Range(Range) {}
   };
 
@@ -40,7 +40,7 @@ class StackLayout {
   struct StackObject {
     const Value *Handle;
     unsigned Size, Alignment;
-    StackLifetime::LiveRange Range;
+    StackColoring::LiveRange Range;
   };
 
   SmallVector<StackObject, 8> StackObjects;
@@ -56,7 +56,7 @@ public:
   /// Add an object to the stack frame. Value pointer is opaque and used as a
   /// handle to retrieve the object's offset in the frame later.
   void addObject(const Value *V, unsigned Size, unsigned Alignment,
-                 const StackLifetime::LiveRange &Range);
+                 const StackColoring::LiveRange &Range);
 
   /// Run the layout computation for all previously added objects.
   void computeLayout();

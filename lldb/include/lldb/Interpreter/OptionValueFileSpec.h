@@ -6,10 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONVALUEFILESPEC_H
-#define LLDB_INTERPRETER_OPTIONVALUEFILESPEC_H
+#ifndef liblldb_OptionValueFileSpec_h_
+#define liblldb_OptionValueFileSpec_h_
 
-#include "lldb/Interpreter/CommandCompletions.h"
 #include "lldb/Interpreter/OptionValue.h"
 
 #include "lldb/Utility/FileSpec.h"
@@ -17,7 +16,7 @@
 
 namespace lldb_private {
 
-class OptionValueFileSpec : public Cloneable<OptionValueFileSpec, OptionValue> {
+class OptionValueFileSpec : public OptionValue {
 public:
   OptionValueFileSpec(bool resolve = true);
 
@@ -26,7 +25,7 @@ public:
   OptionValueFileSpec(const FileSpec &current_value,
                       const FileSpec &default_value, bool resolve = true);
 
-  ~OptionValueFileSpec() override = default;
+  ~OptionValueFileSpec() override {}
 
   // Virtual subclass pure virtual overrides
 
@@ -38,16 +37,22 @@ public:
   Status
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
+  Status
+  SetValueFromString(const char *,
+                     VarSetOperationType = eVarSetOperationAssign) = delete;
 
-  void Clear() override {
+  bool Clear() override {
     m_current_value = m_default_value;
     m_value_was_set = false;
     m_data_sp.reset();
     m_data_mod_time = llvm::sys::TimePoint<>();
+    return true;
   }
 
-  void AutoComplete(CommandInterpreter &interpreter,
-                    CompletionRequest &request) override;
+  lldb::OptionValueSP DeepCopy() const override;
+
+  size_t AutoComplete(CommandInterpreter &interpreter,
+                      CompletionRequest &request) override;
 
   // Subclass specific functions
 
@@ -75,10 +80,10 @@ protected:
   FileSpec m_default_value;
   lldb::DataBufferSP m_data_sp;
   llvm::sys::TimePoint<> m_data_mod_time;
-  uint32_t m_completion_mask = CommandCompletions::eDiskFileCompletion;
+  uint32_t m_completion_mask;
   bool m_resolve;
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONVALUEFILESPEC_H
+#endif // liblldb_OptionValueFileSpec_h_

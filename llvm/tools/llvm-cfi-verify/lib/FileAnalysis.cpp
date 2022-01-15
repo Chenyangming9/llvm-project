@@ -22,7 +22,6 @@
 #include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/COFF.h"
 #include "llvm/Object/ELFObjectFile.h"
@@ -179,7 +178,7 @@ bool FileAnalysis::willTrapOnCFIViolation(const Instr &InstrMeta) const {
   if (!MIA->evaluateBranch(InstrMeta.Instruction, InstrMeta.VMAddress,
                            InstrMeta.InstructionSize, Target))
     return false;
-  return TrapOnFailFunctionAddresses.contains(Target);
+  return TrapOnFailFunctionAddresses.count(Target) > 0;
 }
 
 bool FileAnalysis::canFallThrough(const Instr &InstrMeta) const {
@@ -274,8 +273,7 @@ Expected<DIInliningInfo>
 FileAnalysis::symbolizeInlinedCode(object::SectionedAddress Address) {
   assert(Symbolizer != nullptr && "Symbolizer is invalid.");
 
-  return Symbolizer->symbolizeInlinedCode(std::string(Object->getFileName()),
-                                          Address);
+  return Symbolizer->symbolizeInlinedCode(Object->getFileName(), Address);
 }
 
 CFIProtectionStatus
@@ -365,7 +363,7 @@ uint64_t FileAnalysis::indirectCFOperandClobber(const GraphResult &Graph) const 
 
 void FileAnalysis::printInstruction(const Instr &InstrMeta,
                                     raw_ostream &OS) const {
-  Printer->printInst(&InstrMeta.Instruction, 0, "", *SubtargetInfo.get(), OS);
+  Printer->printInst(&InstrMeta.Instruction, OS, "", *SubtargetInfo.get());
 }
 
 Error FileAnalysis::initialiseDisassemblyMembers() {
@@ -374,9 +372,7 @@ Error FileAnalysis::initialiseDisassemblyMembers() {
   MCPU = "";
   std::string ErrorString;
 
-  LLVMSymbolizer::Options Opt;
-  Opt.UseSymbolTable = false;
-  Symbolizer.reset(new LLVMSymbolizer(Opt));
+  Symbolizer.reset(new LLVMSymbolizer());
 
   ObjectTarget =
       TargetRegistry::lookupTarget(ArchName, ObjectTriple, ErrorString);
@@ -391,9 +387,7 @@ Error FileAnalysis::initialiseDisassemblyMembers() {
     return make_error<UnsupportedDisassembly>(
         "Failed to initialise RegisterInfo.");
 
-  MCTargetOptions MCOptions;
-  AsmInfo.reset(
-      ObjectTarget->createMCAsmInfo(*RegisterInfo, TripleName, MCOptions));
+  AsmInfo.reset(ObjectTarget->createMCAsmInfo(*RegisterInfo, TripleName));
   if (!AsmInfo)
     return make_error<UnsupportedDisassembly>("Failed to initialise AsmInfo.");
 
@@ -407,8 +401,7 @@ Error FileAnalysis::initialiseDisassemblyMembers() {
   if (!MII)
     return make_error<UnsupportedDisassembly>("Failed to initialise MII.");
 
-  Context.reset(new MCContext(Triple(TripleName), AsmInfo.get(),
-                              RegisterInfo.get(), SubtargetInfo.get()));
+  Context.reset(new MCContext(AsmInfo.get(), RegisterInfo.get(), &MOFI));
 
   Disassembler.reset(
       ObjectTarget->createMCDisassembler(*SubtargetInfo, *Context));
@@ -456,10 +449,9 @@ Error FileAnalysis::parseCodeSections() {
 
     // Avoid checking the PLT since it produces spurious failures on AArch64
     // when ignoring DWARF data.
-    Expected<StringRef> NameOrErr = Section.getName();
-    if (NameOrErr && *NameOrErr == ".plt")
+    StringRef SectionName;
+    if (!Section.getName(SectionName) && SectionName == ".plt")
       continue;
-    consumeError(NameOrErr.takeError());
 
     Expected<StringRef> Contents = Section.getContents();
     if (!Contents)
@@ -482,7 +474,7 @@ void FileAnalysis::parseSectionContents(ArrayRef<uint8_t> SectionBytes,
   for (uint64_t Byte = 0; Byte < SectionBytes.size();) {
     bool ValidInstruction =
         Disassembler->getInstruction(Instruction, InstructionSize,
-                                     SectionBytes.drop_front(Byte), 0,
+                                     SectionBytes.drop_front(Byte), 0, nulls(),
                                      outs()) == MCDisassembler::Success;
 
     Byte += InstructionSize;
@@ -519,9 +511,8 @@ void FileAnalysis::parseSectionContents(ArrayRef<uint8_t> SectionBytes,
 
     // Check if this instruction exists in the range of the DWARF metadata.
     if (!IgnoreDWARFFlag) {
-      auto LineInfo =
-          Symbolizer->symbolizeCode(std::string(Object->getFileName()),
-                                    {VMAddress, Address.SectionIndex});
+      auto LineInfo = Symbolizer->symbolizeCode(
+          Object->getFileName(), {VMAddress, Address.SectionIndex});
       if (!LineInfo) {
         handleAllErrors(LineInfo.takeError(), [](const ErrorInfoBase &E) {
           errs() << "Symbolizer failed to get line: " << E.message() << "\n";
@@ -529,7 +520,7 @@ void FileAnalysis::parseSectionContents(ArrayRef<uint8_t> SectionBytes,
         continue;
       }
 
-      if (LineInfo->FileName == DILineInfo::BadString)
+      if (LineInfo->FileName == "<invalid>")
         continue;
     }
 
@@ -561,7 +552,7 @@ Error FileAnalysis::parseSymbolTable() {
     auto SymNameOrErr = Sym.getName();
     if (!SymNameOrErr)
       consumeError(SymNameOrErr.takeError());
-    else if (TrapOnFailFunctions.contains(*SymNameOrErr)) {
+    else if (TrapOnFailFunctions.count(*SymNameOrErr) > 0) {
       auto AddrOrErr = Sym.getAddress();
       if (!AddrOrErr)
         consumeError(AddrOrErr.takeError());
@@ -571,21 +562,18 @@ Error FileAnalysis::parseSymbolTable() {
   }
   if (auto *ElfObject = dyn_cast<object::ELFObjectFileBase>(Object)) {
     for (const auto &Addr : ElfObject->getPltAddresses()) {
-      if (!Addr.first)
-        continue;
-      object::SymbolRef Sym(*Addr.first, Object);
+      object::SymbolRef Sym(Addr.first, Object);
       auto SymNameOrErr = Sym.getName();
       if (!SymNameOrErr)
         consumeError(SymNameOrErr.takeError());
-      else if (TrapOnFailFunctions.contains(*SymNameOrErr))
+      else if (TrapOnFailFunctions.count(*SymNameOrErr) > 0)
         TrapOnFailFunctionAddresses.insert(Addr.second);
     }
   }
   return Error::success();
 }
 
-UnsupportedDisassembly::UnsupportedDisassembly(StringRef Text)
-    : Text(std::string(Text)) {}
+UnsupportedDisassembly::UnsupportedDisassembly(StringRef Text) : Text(Text) {}
 
 char UnsupportedDisassembly::ID;
 void UnsupportedDisassembly::log(raw_ostream &OS) const {

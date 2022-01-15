@@ -15,7 +15,6 @@
 #include "clang/AST/CXXInheritance.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
-#include "clang/AST/StmtObjC.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/SourceManager.h"
@@ -35,12 +34,10 @@ static const FunctionProtoType *GetUnderlyingFunction(QualType T)
   return T->getAs<FunctionProtoType>();
 }
 
-/// HACK: 2014-11-14 libstdc++ had a bug where it shadows std::swap with a
-/// member swap function then tries to call std::swap unqualified from the
-/// exception specification of that function. This function detects whether
-/// we're in such a case and turns off delay-parsing of exception
-/// specifications. Libstdc++ 6.1 (released 2016-04-27) appears to have
-/// resolved it as side-effect of commit ddb63209a8d (2015-06-05).
+/// HACK: libstdc++ has a bug where it shadows std::swap with a member
+/// swap function then tries to call std::swap unqualified from the exception
+/// specification of that function. This function detects whether we're in
+/// such a case and turns off delay-parsing of exception specifications.
 bool Sema::isLibstdcxxEagerExceptionSpecHack(const Declarator &D) {
   auto *RD = dyn_cast<CXXRecordDecl>(CurContext);
 
@@ -83,16 +80,8 @@ ExprResult Sema::ActOnNoexceptSpec(SourceLocation NoexceptLoc,
                                    ExceptionSpecificationType &EST) {
   // FIXME: This is bogus, a noexcept expression is not a condition.
   ExprResult Converted = CheckBooleanCondition(NoexceptLoc, NoexceptExpr);
-  if (Converted.isInvalid()) {
-    EST = EST_NoexceptFalse;
-
-    // Fill in an expression of 'false' as a fixup.
-    auto *BoolExpr = new (Context)
-        CXXBoolLiteralExpr(false, Context.BoolTy, NoexceptExpr->getBeginLoc());
-    llvm::APSInt Value{1};
-    Value = 0;
-    return ConstantExpr::Create(Context, BoolExpr, APValue{Value});
-  }
+  if (Converted.isInvalid())
+    return Converted;
 
   if (Converted.get()->isValueDependent()) {
     EST = EST_DependentNoexcept;
@@ -101,7 +90,9 @@ ExprResult Sema::ActOnNoexceptSpec(SourceLocation NoexceptLoc,
 
   llvm::APSInt Result;
   Converted = VerifyIntegerConstantExpression(
-      Converted.get(), &Result, diag::err_noexcept_needs_constant_expression);
+      Converted.get(), &Result,
+      diag::err_noexcept_needs_constant_expression,
+      /*AllowFold*/ false);
   if (!Converted.isInvalid())
     EST = !Result ? EST_NoexceptFalse : EST_NoexceptTrue;
   return Converted;
@@ -158,22 +149,14 @@ bool Sema::CheckSpecifiedExceptionType(QualType &T, SourceRange Range) {
   // In Microsoft mode, downgrade this to a warning.
   unsigned DiagID = diag::err_incomplete_in_exception_spec;
   bool ReturnValueOnError = true;
-  if (getLangOpts().MSVCCompat) {
+  if (getLangOpts().MicrosoftExt) {
     DiagID = diag::ext_incomplete_in_exception_spec;
     ReturnValueOnError = false;
   }
   if (!(PointeeT->isRecordType() &&
-        PointeeT->castAs<RecordType>()->isBeingDefined()) &&
+        PointeeT->getAs<RecordType>()->isBeingDefined()) &&
       RequireCompleteType(Range.getBegin(), PointeeT, DiagID, Kind, Range))
     return ReturnValueOnError;
-
-  // The MSVC compatibility mode doesn't extend to sizeless types,
-  // so diagnose them separately.
-  if (PointeeT->isSizelessType() && Kind != 1) {
-    Diag(Range.getBegin(), diag::err_sizeless_in_exception_spec)
-        << (Kind == 2 ? 1 : 0) << PointeeT << Range;
-    return true;
-  }
 
   return false;
 }
@@ -221,7 +204,7 @@ Sema::ResolveExceptionSpec(SourceLocation Loc, const FunctionProtoType *FPT) {
 
   // Compute or instantiate the exception specification now.
   if (SourceFPT->getExceptionSpecType() == EST_Unevaluated)
-    EvaluateImplicitExceptionSpec(Loc, SourceDecl);
+    EvaluateImplicitExceptionSpec(Loc, cast<CXXMethodDecl>(SourceDecl));
   else
     InstantiateExceptionSpec(Loc, SourceDecl);
 
@@ -280,7 +263,8 @@ static bool hasImplicitExceptionSpec(FunctionDecl *Decl) {
   if (!Decl->getTypeSourceInfo())
     return isa<CXXDestructorDecl>(Decl);
 
-  auto *Ty = Decl->getTypeSourceInfo()->getType()->castAs<FunctionProtoType>();
+  const FunctionProtoType *Ty =
+    Decl->getTypeSourceInfo()->getType()->getAs<FunctionProtoType>();
   return !Ty->hasExceptionSpec();
 }
 
@@ -298,7 +282,7 @@ bool Sema::CheckEquivalentExceptionSpec(FunctionDecl *Old, FunctionDecl *New) {
 
   unsigned DiagID = diag::err_mismatched_exception_spec;
   bool ReturnValueOnError = true;
-  if (getLangOpts().MSVCCompat) {
+  if (getLangOpts().MicrosoftExt) {
     DiagID = diag::ext_mismatched_exception_spec;
     ReturnValueOnError = false;
   }
@@ -387,7 +371,7 @@ bool Sema::CheckEquivalentExceptionSpec(FunctionDecl *Old, FunctionDecl *New) {
         NewProto->getExtProtoInfo().withExceptionSpec(ESI)));
   }
 
-  if (getLangOpts().MSVCCompat && ESI.Type != EST_DependentNoexcept) {
+  if (getLangOpts().MicrosoftExt && ESI.Type != EST_DependentNoexcept) {
     // Allow missing exception specifications in redeclarations as an extension.
     DiagID = diag::ext_ms_missing_exception_specification;
     ReturnValueOnError = false;
@@ -489,14 +473,14 @@ bool Sema::CheckEquivalentExceptionSpec(
     return false;
 
   unsigned DiagID = diag::err_mismatched_exception_spec;
-  if (getLangOpts().MSVCCompat)
+  if (getLangOpts().MicrosoftExt)
     DiagID = diag::ext_mismatched_exception_spec;
   bool Result = CheckEquivalentExceptionSpecImpl(
       *this, PDiag(DiagID), PDiag(diag::note_previous_declaration),
       Old, OldLoc, New, NewLoc);
 
   // In Microsoft mode, mismatching exception specifications just cause a warning.
-  if (getLangOpts().MSVCCompat)
+  if (getLangOpts().MicrosoftExt)
     return false;
   return Result;
 }
@@ -975,32 +959,29 @@ bool Sema::CheckOverridingFunctionExceptionSpec(const CXXMethodDecl *New,
   }
 
   unsigned DiagID = diag::err_override_exception_spec;
-  if (getLangOpts().MSVCCompat)
+  if (getLangOpts().MicrosoftExt)
     DiagID = diag::ext_override_exception_spec;
   return CheckExceptionSpecSubset(PDiag(DiagID),
                                   PDiag(diag::err_deep_exception_specs_differ),
                                   PDiag(diag::note_overridden_virtual_function),
                                   PDiag(diag::ext_override_exception_spec),
-                                  Old->getType()->castAs<FunctionProtoType>(),
+                                  Old->getType()->getAs<FunctionProtoType>(),
                                   Old->getLocation(),
-                                  New->getType()->castAs<FunctionProtoType>(),
+                                  New->getType()->getAs<FunctionProtoType>(),
                                   New->getLocation());
 }
 
-static CanThrowResult canSubStmtsThrow(Sema &Self, const Stmt *S) {
+static CanThrowResult canSubExprsThrow(Sema &S, const Expr *E) {
   CanThrowResult R = CT_Cannot;
-  for (const Stmt *SubStmt : S->children()) {
-    if (!SubStmt)
-      continue;
-    R = mergeCanThrow(R, Self.canThrow(SubStmt));
+  for (const Stmt *SubStmt : E->children()) {
+    R = mergeCanThrow(R, S.canThrow(cast<Expr>(SubStmt)));
     if (R == CT_Can)
       break;
   }
   return R;
 }
 
-CanThrowResult Sema::canCalleeThrow(Sema &S, const Expr *E, const Decl *D,
-                                    SourceLocation Loc) {
+static CanThrowResult canCalleeThrow(Sema &S, const Expr *E, const Decl *D) {
   // As an extension, we assume that __attribute__((nothrow)) functions don't
   // throw.
   if (D && isa<FunctionDecl>(D) && D->hasAttr<NoThrowAttr>())
@@ -1009,7 +990,7 @@ CanThrowResult Sema::canCalleeThrow(Sema &S, const Expr *E, const Decl *D,
   QualType T;
 
   // In C++1z, just look at the function type of the callee.
-  if (S.getLangOpts().CPlusPlus17 && E && isa<CallExpr>(E)) {
+  if (S.getLangOpts().CPlusPlus17 && isa<CallExpr>(E)) {
     E = cast<CallExpr>(E)->getCallee();
     T = E->getType();
     if (T->isSpecificPlaceholderType(BuiltinType::BoundMember)) {
@@ -1046,40 +1027,11 @@ CanThrowResult Sema::canCalleeThrow(Sema &S, const Expr *E, const Decl *D,
   if (!FT)
     return CT_Can;
 
-  if (Loc.isValid() || (Loc.isInvalid() && E))
-    FT = S.ResolveExceptionSpec(Loc.isInvalid() ? E->getBeginLoc() : Loc, FT);
+  FT = S.ResolveExceptionSpec(E->getBeginLoc(), FT);
   if (!FT)
     return CT_Can;
 
   return FT->canThrow();
-}
-
-static CanThrowResult canVarDeclThrow(Sema &Self, const VarDecl *VD) {
-  CanThrowResult CT = CT_Cannot;
-
-  // Initialization might throw.
-  if (!VD->isUsableInConstantExpressions(Self.Context))
-    if (const Expr *Init = VD->getInit())
-      CT = mergeCanThrow(CT, Self.canThrow(Init));
-
-  // Destructor might throw.
-  if (VD->needsDestruction(Self.Context) == QualType::DK_cxx_destructor) {
-    if (auto *RD =
-            VD->getType()->getBaseElementTypeUnsafe()->getAsCXXRecordDecl()) {
-      if (auto *Dtor = RD->getDestructor()) {
-        CT = mergeCanThrow(
-            CT, Sema::canCalleeThrow(Self, nullptr, Dtor, VD->getLocation()));
-      }
-    }
-  }
-
-  // If this is a decomposition declaration, bindings might throw.
-  if (auto *DD = dyn_cast<DecompositionDecl>(VD))
-    for (auto *B : DD->bindings())
-      if (auto *HD = B->getHoldingVar())
-        CT = mergeCanThrow(CT, canVarDeclThrow(Self, HD));
-
-  return CT;
 }
 
 static CanThrowResult canDynamicCastThrow(const CXXDynamicCastExpr *DC) {
@@ -1116,13 +1068,13 @@ static CanThrowResult canTypeidThrow(Sema &S, const CXXTypeidExpr *DC) {
   return CT_Can;
 }
 
-CanThrowResult Sema::canThrow(const Stmt *S) {
+CanThrowResult Sema::canThrow(const Expr *E) {
   // C++ [expr.unary.noexcept]p3:
   //   [Can throw] if in a potentially-evaluated context the expression would
   //   contain:
-  switch (S->getStmtClass()) {
+  switch (E->getStmtClass()) {
   case Expr::ConstantExprClass:
-    return canThrow(cast<ConstantExpr>(S)->getSubExpr());
+    return canThrow(cast<ConstantExpr>(E)->getSubExpr());
 
   case Expr::CXXThrowExprClass:
     //   - a potentially evaluated throw-expression
@@ -1131,20 +1083,16 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   case Expr::CXXDynamicCastExprClass: {
     //   - a potentially evaluated dynamic_cast expression dynamic_cast<T>(v),
     //     where T is a reference type, that requires a run-time check
-    auto *CE = cast<CXXDynamicCastExpr>(S);
-    // FIXME: Properly determine whether a variably-modified type can throw.
-    if (CE->getType()->isVariablyModifiedType())
-      return CT_Can;
-    CanThrowResult CT = canDynamicCastThrow(CE);
+    CanThrowResult CT = canDynamicCastThrow(cast<CXXDynamicCastExpr>(E));
     if (CT == CT_Can)
       return CT;
-    return mergeCanThrow(CT, canSubStmtsThrow(*this, CE));
+    return mergeCanThrow(CT, canSubExprsThrow(*this, E));
   }
 
   case Expr::CXXTypeidExprClass:
     //   - a potentially evaluated typeid expression applied to a glvalue
     //     expression whose type is a polymorphic class type
-    return canTypeidThrow(*this, cast<CXXTypeidExpr>(S));
+    return canTypeidThrow(*this, cast<CXXTypeidExpr>(E));
 
     //   - a potentially evaluated call to a function, member function, function
     //     pointer, or member function pointer that does not have a non-throwing
@@ -1153,38 +1101,34 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   case Expr::CXXMemberCallExprClass:
   case Expr::CXXOperatorCallExprClass:
   case Expr::UserDefinedLiteralClass: {
-    const CallExpr *CE = cast<CallExpr>(S);
+    const CallExpr *CE = cast<CallExpr>(E);
     CanThrowResult CT;
-    if (CE->isTypeDependent())
+    if (E->isTypeDependent())
       CT = CT_Dependent;
     else if (isa<CXXPseudoDestructorExpr>(CE->getCallee()->IgnoreParens()))
       CT = CT_Cannot;
     else
-      CT = canCalleeThrow(*this, CE, CE->getCalleeDecl());
+      CT = canCalleeThrow(*this, E, CE->getCalleeDecl());
     if (CT == CT_Can)
       return CT;
-    return mergeCanThrow(CT, canSubStmtsThrow(*this, CE));
+    return mergeCanThrow(CT, canSubExprsThrow(*this, E));
   }
 
   case Expr::CXXConstructExprClass:
   case Expr::CXXTemporaryObjectExprClass: {
-    auto *CE = cast<CXXConstructExpr>(S);
-    // FIXME: Properly determine whether a variably-modified type can throw.
-    if (CE->getType()->isVariablyModifiedType())
-      return CT_Can;
-    CanThrowResult CT = canCalleeThrow(*this, CE, CE->getConstructor());
+    CanThrowResult CT = canCalleeThrow(*this, E,
+        cast<CXXConstructExpr>(E)->getConstructor());
     if (CT == CT_Can)
       return CT;
-    return mergeCanThrow(CT, canSubStmtsThrow(*this, CE));
+    return mergeCanThrow(CT, canSubExprsThrow(*this, E));
   }
 
-  case Expr::CXXInheritedCtorInitExprClass: {
-    auto *ICIE = cast<CXXInheritedCtorInitExpr>(S);
-    return canCalleeThrow(*this, ICIE, ICIE->getConstructor());
-  }
+  case Expr::CXXInheritedCtorInitExprClass:
+    return canCalleeThrow(*this, E,
+                          cast<CXXInheritedCtorInitExpr>(E)->getConstructor());
 
   case Expr::LambdaExprClass: {
-    const LambdaExpr *Lambda = cast<LambdaExpr>(S);
+    const LambdaExpr *Lambda = cast<LambdaExpr>(E);
     CanThrowResult CT = CT_Cannot;
     for (LambdaExpr::const_capture_init_iterator
              Cap = Lambda->capture_init_begin(),
@@ -1195,56 +1139,43 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   }
 
   case Expr::CXXNewExprClass: {
-    auto *NE = cast<CXXNewExpr>(S);
     CanThrowResult CT;
-    if (NE->isTypeDependent())
+    if (E->isTypeDependent())
       CT = CT_Dependent;
     else
-      CT = canCalleeThrow(*this, NE, NE->getOperatorNew());
+      CT = canCalleeThrow(*this, E, cast<CXXNewExpr>(E)->getOperatorNew());
     if (CT == CT_Can)
       return CT;
-    return mergeCanThrow(CT, canSubStmtsThrow(*this, NE));
+    return mergeCanThrow(CT, canSubExprsThrow(*this, E));
   }
 
   case Expr::CXXDeleteExprClass: {
-    auto *DE = cast<CXXDeleteExpr>(S);
     CanThrowResult CT;
-    QualType DTy = DE->getDestroyedType();
+    QualType DTy = cast<CXXDeleteExpr>(E)->getDestroyedType();
     if (DTy.isNull() || DTy->isDependentType()) {
       CT = CT_Dependent;
     } else {
-      CT = canCalleeThrow(*this, DE, DE->getOperatorDelete());
+      CT = canCalleeThrow(*this, E,
+                          cast<CXXDeleteExpr>(E)->getOperatorDelete());
       if (const RecordType *RT = DTy->getAs<RecordType>()) {
         const CXXRecordDecl *RD = cast<CXXRecordDecl>(RT->getDecl());
         const CXXDestructorDecl *DD = RD->getDestructor();
         if (DD)
-          CT = mergeCanThrow(CT, canCalleeThrow(*this, DE, DD));
+          CT = mergeCanThrow(CT, canCalleeThrow(*this, E, DD));
       }
       if (CT == CT_Can)
         return CT;
     }
-    return mergeCanThrow(CT, canSubStmtsThrow(*this, DE));
+    return mergeCanThrow(CT, canSubExprsThrow(*this, E));
   }
 
   case Expr::CXXBindTemporaryExprClass: {
-    auto *BTE = cast<CXXBindTemporaryExpr>(S);
     // The bound temporary has to be destroyed again, which might throw.
-    CanThrowResult CT =
-        canCalleeThrow(*this, BTE, BTE->getTemporary()->getDestructor());
+    CanThrowResult CT = canCalleeThrow(*this, E,
+      cast<CXXBindTemporaryExpr>(E)->getTemporary()->getDestructor());
     if (CT == CT_Can)
       return CT;
-    return mergeCanThrow(CT, canSubStmtsThrow(*this, BTE));
-  }
-
-  case Expr::PseudoObjectExprClass: {
-    auto *POE = cast<PseudoObjectExpr>(S);
-    CanThrowResult CT = CT_Cannot;
-    for (const Expr *E : POE->semantics()) {
-      CT = mergeCanThrow(CT, canThrow(E));
-      if (CT == CT_Can)
-        break;
-    }
-    return CT;
+    return mergeCanThrow(CT, canSubExprsThrow(*this, E));
   }
 
     // ObjC message sends are like function calls, but never have exception
@@ -1266,8 +1197,11 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
     // Some are simple:
   case Expr::CoawaitExprClass:
   case Expr::ConditionalOperatorClass:
+  case Expr::CompoundLiteralExprClass:
   case Expr::CoyieldExprClass:
-  case Expr::CXXRewrittenBinaryOperatorClass:
+  case Expr::CXXConstCastExprClass:
+  case Expr::CXXReinterpretCastExprClass:
+  case Expr::BuiltinBitCastExprClass:
   case Expr::CXXStdInitializerListExprClass:
   case Expr::DesignatedInitExprClass:
   case Expr::DesignatedInitUpdateExprClass:
@@ -1281,27 +1215,13 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   case Expr::ParenExprClass:
   case Expr::ParenListExprClass:
   case Expr::ShuffleVectorExprClass:
-  case Expr::StmtExprClass:
   case Expr::ConvertVectorExprClass:
   case Expr::VAArgExprClass:
-    return canSubStmtsThrow(*this, S);
-
-  case Expr::CompoundLiteralExprClass:
-  case Expr::CXXConstCastExprClass:
-  case Expr::CXXAddrspaceCastExprClass:
-  case Expr::CXXReinterpretCastExprClass:
-  case Expr::BuiltinBitCastExprClass:
-      // FIXME: Properly determine whether a variably-modified type can throw.
-    if (cast<Expr>(S)->getType()->isVariablyModifiedType())
-      return CT_Can;
-    return canSubStmtsThrow(*this, S);
+    return canSubExprsThrow(*this, E);
 
     // Some might be dependent for other reasons.
   case Expr::ArraySubscriptExprClass:
-  case Expr::MatrixSubscriptExprClass:
   case Expr::OMPArraySectionExprClass:
-  case Expr::OMPArrayShapingExprClass:
-  case Expr::OMPIteratorExprClass:
   case Expr::BinaryOperatorClass:
   case Expr::DependentCoawaitExprClass:
   case Expr::CompoundAssignOperatorClass:
@@ -1311,39 +1231,35 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   case Expr::ImplicitCastExprClass:
   case Expr::MaterializeTemporaryExprClass:
   case Expr::UnaryOperatorClass: {
-    // FIXME: Properly determine whether a variably-modified type can throw.
-    if (auto *CE = dyn_cast<CastExpr>(S))
-      if (CE->getType()->isVariablyModifiedType())
-        return CT_Can;
-    CanThrowResult CT =
-        cast<Expr>(S)->isTypeDependent() ? CT_Dependent : CT_Cannot;
-    return mergeCanThrow(CT, canSubStmtsThrow(*this, S));
+    CanThrowResult CT = E->isTypeDependent() ? CT_Dependent : CT_Cannot;
+    return mergeCanThrow(CT, canSubExprsThrow(*this, E));
   }
+
+    // FIXME: We should handle StmtExpr, but that opens a MASSIVE can of worms.
+  case Expr::StmtExprClass:
+    return CT_Can;
 
   case Expr::CXXDefaultArgExprClass:
-    return canThrow(cast<CXXDefaultArgExpr>(S)->getExpr());
+    return canThrow(cast<CXXDefaultArgExpr>(E)->getExpr());
 
   case Expr::CXXDefaultInitExprClass:
-    return canThrow(cast<CXXDefaultInitExpr>(S)->getExpr());
+    return canThrow(cast<CXXDefaultInitExpr>(E)->getExpr());
 
-  case Expr::ChooseExprClass: {
-    auto *CE = cast<ChooseExpr>(S);
-    if (CE->isTypeDependent() || CE->isValueDependent())
+  case Expr::ChooseExprClass:
+    if (E->isTypeDependent() || E->isValueDependent())
       return CT_Dependent;
-    return canThrow(CE->getChosenSubExpr());
-  }
+    return canThrow(cast<ChooseExpr>(E)->getChosenSubExpr());
 
   case Expr::GenericSelectionExprClass:
-    if (cast<GenericSelectionExpr>(S)->isResultDependent())
+    if (cast<GenericSelectionExpr>(E)->isResultDependent())
       return CT_Dependent;
-    return canThrow(cast<GenericSelectionExpr>(S)->getResultExpr());
+    return canThrow(cast<GenericSelectionExpr>(E)->getResultExpr());
 
     // Some expressions are always dependent.
   case Expr::CXXDependentScopeMemberExprClass:
   case Expr::CXXUnresolvedConstructExprClass:
   case Expr::DependentScopeDeclRefExprClass:
   case Expr::CXXFoldExprClass:
-  case Expr::RecoveryExprClass:
     return CT_Dependent;
 
   case Expr::AsTypeExprClass:
@@ -1358,6 +1274,7 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   case Expr::ObjCAvailabilityCheckExprClass:
   case Expr::OffsetOfExprClass:
   case Expr::PackExpansionExprClass:
+  case Expr::PseudoObjectExprClass:
   case Expr::SubstNonTypeTemplateParmExprClass:
   case Expr::SubstNonTypeTemplateParmPackExprClass:
   case Expr::FunctionParmPackExprClass:
@@ -1365,7 +1282,7 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   case Expr::UnresolvedLookupExprClass:
   case Expr::UnresolvedMemberExprClass:
   case Expr::TypoExprClass:
-    // FIXME: Many of the above can throw.
+    // FIXME: Can any of the above throw?  If so, when?
     return CT_Cannot;
 
   case Expr::AddrLabelExprClass:
@@ -1397,8 +1314,6 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   case Expr::SizeOfPackExprClass:
   case Expr::StringLiteralClass:
   case Expr::SourceLocExprClass:
-  case Expr::ConceptSpecializationExprClass:
-  case Expr::RequiresExprClass:
     // These expressions can never throw.
     return CT_Cannot;
 
@@ -1406,180 +1321,14 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   case Expr::MSPropertySubscriptExprClass:
     llvm_unreachable("Invalid class for expression");
 
-    // Most statements can throw if any substatement can throw.
-  case Stmt::AttributedStmtClass:
-  case Stmt::BreakStmtClass:
-  case Stmt::CapturedStmtClass:
-  case Stmt::CaseStmtClass:
-  case Stmt::CompoundStmtClass:
-  case Stmt::ContinueStmtClass:
-  case Stmt::CoreturnStmtClass:
-  case Stmt::CoroutineBodyStmtClass:
-  case Stmt::CXXCatchStmtClass:
-  case Stmt::CXXForRangeStmtClass:
-  case Stmt::DefaultStmtClass:
-  case Stmt::DoStmtClass:
-  case Stmt::ForStmtClass:
-  case Stmt::GCCAsmStmtClass:
-  case Stmt::GotoStmtClass:
-  case Stmt::IndirectGotoStmtClass:
-  case Stmt::LabelStmtClass:
-  case Stmt::MSAsmStmtClass:
-  case Stmt::MSDependentExistsStmtClass:
-  case Stmt::NullStmtClass:
-  case Stmt::ObjCAtCatchStmtClass:
-  case Stmt::ObjCAtFinallyStmtClass:
-  case Stmt::ObjCAtSynchronizedStmtClass:
-  case Stmt::ObjCAutoreleasePoolStmtClass:
-  case Stmt::ObjCForCollectionStmtClass:
-  case Stmt::OMPAtomicDirectiveClass:
-  case Stmt::OMPBarrierDirectiveClass:
-  case Stmt::OMPCancelDirectiveClass:
-  case Stmt::OMPCancellationPointDirectiveClass:
-  case Stmt::OMPCriticalDirectiveClass:
-  case Stmt::OMPDistributeDirectiveClass:
-  case Stmt::OMPDistributeParallelForDirectiveClass:
-  case Stmt::OMPDistributeParallelForSimdDirectiveClass:
-  case Stmt::OMPDistributeSimdDirectiveClass:
-  case Stmt::OMPFlushDirectiveClass:
-  case Stmt::OMPDepobjDirectiveClass:
-  case Stmt::OMPScanDirectiveClass:
-  case Stmt::OMPForDirectiveClass:
-  case Stmt::OMPForSimdDirectiveClass:
-  case Stmt::OMPMasterDirectiveClass:
-  case Stmt::OMPMasterTaskLoopDirectiveClass:
-  case Stmt::OMPMasterTaskLoopSimdDirectiveClass:
-  case Stmt::OMPOrderedDirectiveClass:
-  case Stmt::OMPCanonicalLoopClass:
-  case Stmt::OMPParallelDirectiveClass:
-  case Stmt::OMPParallelForDirectiveClass:
-  case Stmt::OMPParallelForSimdDirectiveClass:
-  case Stmt::OMPParallelMasterDirectiveClass:
-  case Stmt::OMPParallelMasterTaskLoopDirectiveClass:
-  case Stmt::OMPParallelMasterTaskLoopSimdDirectiveClass:
-  case Stmt::OMPParallelSectionsDirectiveClass:
-  case Stmt::OMPSectionDirectiveClass:
-  case Stmt::OMPSectionsDirectiveClass:
-  case Stmt::OMPSimdDirectiveClass:
-  case Stmt::OMPTileDirectiveClass:
-  case Stmt::OMPUnrollDirectiveClass:
-  case Stmt::OMPSingleDirectiveClass:
-  case Stmt::OMPTargetDataDirectiveClass:
-  case Stmt::OMPTargetDirectiveClass:
-  case Stmt::OMPTargetEnterDataDirectiveClass:
-  case Stmt::OMPTargetExitDataDirectiveClass:
-  case Stmt::OMPTargetParallelDirectiveClass:
-  case Stmt::OMPTargetParallelForDirectiveClass:
-  case Stmt::OMPTargetParallelForSimdDirectiveClass:
-  case Stmt::OMPTargetSimdDirectiveClass:
-  case Stmt::OMPTargetTeamsDirectiveClass:
-  case Stmt::OMPTargetTeamsDistributeDirectiveClass:
-  case Stmt::OMPTargetTeamsDistributeParallelForDirectiveClass:
-  case Stmt::OMPTargetTeamsDistributeParallelForSimdDirectiveClass:
-  case Stmt::OMPTargetTeamsDistributeSimdDirectiveClass:
-  case Stmt::OMPTargetUpdateDirectiveClass:
-  case Stmt::OMPTaskDirectiveClass:
-  case Stmt::OMPTaskgroupDirectiveClass:
-  case Stmt::OMPTaskLoopDirectiveClass:
-  case Stmt::OMPTaskLoopSimdDirectiveClass:
-  case Stmt::OMPTaskwaitDirectiveClass:
-  case Stmt::OMPTaskyieldDirectiveClass:
-  case Stmt::OMPTeamsDirectiveClass:
-  case Stmt::OMPTeamsDistributeDirectiveClass:
-  case Stmt::OMPTeamsDistributeParallelForDirectiveClass:
-  case Stmt::OMPTeamsDistributeParallelForSimdDirectiveClass:
-  case Stmt::OMPTeamsDistributeSimdDirectiveClass:
-  case Stmt::OMPInteropDirectiveClass:
-  case Stmt::OMPDispatchDirectiveClass:
-  case Stmt::OMPMaskedDirectiveClass:
-  case Stmt::ReturnStmtClass:
-  case Stmt::SEHExceptStmtClass:
-  case Stmt::SEHFinallyStmtClass:
-  case Stmt::SEHLeaveStmtClass:
-  case Stmt::SEHTryStmtClass:
-  case Stmt::SwitchStmtClass:
-  case Stmt::WhileStmtClass:
-    return canSubStmtsThrow(*this, S);
-
-  case Stmt::DeclStmtClass: {
-    CanThrowResult CT = CT_Cannot;
-    for (const Decl *D : cast<DeclStmt>(S)->decls()) {
-      if (auto *VD = dyn_cast<VarDecl>(D))
-        CT = mergeCanThrow(CT, canVarDeclThrow(*this, VD));
-
-      // FIXME: Properly determine whether a variably-modified type can throw.
-      if (auto *TND = dyn_cast<TypedefNameDecl>(D))
-        if (TND->getUnderlyingType()->isVariablyModifiedType())
-          return CT_Can;
-      if (auto *VD = dyn_cast<ValueDecl>(D))
-        if (VD->getType()->isVariablyModifiedType())
-          return CT_Can;
-    }
-    return CT;
-  }
-
-  case Stmt::IfStmtClass: {
-    auto *IS = cast<IfStmt>(S);
-    CanThrowResult CT = CT_Cannot;
-    if (const Stmt *Init = IS->getInit())
-      CT = mergeCanThrow(CT, canThrow(Init));
-    if (const Stmt *CondDS = IS->getConditionVariableDeclStmt())
-      CT = mergeCanThrow(CT, canThrow(CondDS));
-    CT = mergeCanThrow(CT, canThrow(IS->getCond()));
-
-    // For 'if constexpr', consider only the non-discarded case.
-    // FIXME: We should add a DiscardedStmt marker to the AST.
-    if (Optional<const Stmt *> Case = IS->getNondiscardedCase(Context))
-      return *Case ? mergeCanThrow(CT, canThrow(*Case)) : CT;
-
-    CanThrowResult Then = canThrow(IS->getThen());
-    CanThrowResult Else = IS->getElse() ? canThrow(IS->getElse()) : CT_Cannot;
-    if (Then == Else)
-      return mergeCanThrow(CT, Then);
-
-    // For a dependent 'if constexpr', the result is dependent if it depends on
-    // the value of the condition.
-    return mergeCanThrow(CT, IS->isConstexpr() ? CT_Dependent
-                                               : mergeCanThrow(Then, Else));
-  }
-
-  case Stmt::CXXTryStmtClass: {
-    auto *TS = cast<CXXTryStmt>(S);
-    // try /*...*/ catch (...) { H } can throw only if H can throw.
-    // Any other try-catch can throw if any substatement can throw.
-    const CXXCatchStmt *FinalHandler = TS->getHandler(TS->getNumHandlers() - 1);
-    if (!FinalHandler->getExceptionDecl())
-      return canThrow(FinalHandler->getHandlerBlock());
-    return canSubStmtsThrow(*this, S);
-  }
-
-  case Stmt::ObjCAtThrowStmtClass:
-    return CT_Can;
-
-  case Stmt::ObjCAtTryStmtClass: {
-    auto *TS = cast<ObjCAtTryStmt>(S);
-
-    // @catch(...) need not be last in Objective-C. Walk backwards until we
-    // see one or hit the @try.
-    CanThrowResult CT = CT_Cannot;
-    if (const Stmt *Finally = TS->getFinallyStmt())
-      CT = mergeCanThrow(CT, canThrow(Finally));
-    for (unsigned I = TS->getNumCatchStmts(); I != 0; --I) {
-      const ObjCAtCatchStmt *Catch = TS->getCatchStmt(I - 1);
-      CT = mergeCanThrow(CT, canThrow(Catch));
-      // If we reach a @catch(...), no earlier exceptions can escape.
-      if (Catch->hasEllipsis())
-        return CT;
-    }
-
-    // Didn't find an @catch(...). Exceptions from the @try body can escape.
-    return mergeCanThrow(CT, canThrow(TS->getTryBody()));
-  }
-
-  case Stmt::SYCLUniqueStableNameExprClass:
-    return CT_Cannot;
-  case Stmt::NoStmtClass:
-    llvm_unreachable("Invalid class for statement");
+#define STMT(CLASS, PARENT) case Expr::CLASS##Class:
+#define STMT_RANGE(Base, First, Last)
+#define LAST_STMT_RANGE(BASE, FIRST, LAST)
+#define EXPR(CLASS, PARENT)
+#define ABSTRACT_STMT(STMT)
+#include "clang/AST/StmtNodes.inc"
+  case Expr::NoStmtClass:
+    llvm_unreachable("Invalid class for expression");
   }
   llvm_unreachable("Bogus StmtClass");
 }

@@ -1,5 +1,4 @@
-# RUN: llvm-exegesis -mode=uops -opcode-name=BTR64mr -repetition-mode=duplicate | FileCheck %s
-# RUN: llvm-exegesis -mode=uops -opcode-name=BTR64mr -repetition-mode=loop | FileCheck %s
+# RUN: llvm-exegesis -mode=uops -opcode-name=BTR64mr | FileCheck %s
 
 CHECK:      mode:            uops
 CHECK-NEXT: key:

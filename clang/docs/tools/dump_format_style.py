@@ -42,7 +42,7 @@ class Option(object):
   def __str__(self):
     s = '**%s** (``%s``)\n%s' % (self.name, self.type,
                                  doxygen2rst(indent(self.comment, 2)))
-    if self.enum and self.enum.values:
+    if self.enum:
       s += indent('\n\nPossible values:\n\n%s\n' % self.enum, 2)
     if self.nested_struct:
       s += indent('\n\nNested configuration flags:\n\n%s\n' %self.nested_struct,
@@ -77,45 +77,25 @@ class Enum(object):
   def __str__(self):
     return '\n'.join(map(str, self.values))
 
-class NestedEnum(object):
-  def __init__(self, name, enumtype, comment, values):
-    self.name = name
-    self.comment = comment
-    self.values = values
-    self.type = enumtype
-
-  def __str__(self):
-    s = '\n* ``%s %s``\n%s' % (self.type, self.name,
-                                 doxygen2rst(indent(self.comment, 2)))
-    s += indent('\nPossible values:\n\n', 2)
-    s += indent('\n'.join(map(str, self.values)),2)
-    return s;
-
 class EnumValue(object):
-  def __init__(self, name, comment, config):
+  def __init__(self, name, comment):
     self.name = name
     self.comment = comment
-    self.config = config
 
   def __str__(self):
     return '* ``%s`` (in configuration: ``%s``)\n%s' % (
         self.name,
-        re.sub('.*_', '', self.config),
+        re.sub('.*_', '', self.name),
         doxygen2rst(indent(self.comment, 2)))
 
 def clean_comment_line(line):
-  match = re.match(r'^/// (?P<indent> +)?\\code(\{.(?P<lang>\w+)\})?$', line)
+  match = re.match(r'^/// \\code(\{.(\w+)\})?$', line)
   if match:
-    indent = match.group('indent')
-    if not indent:
-      indent = ''
-    lang = match.group('lang')
+    lang = match.groups()[1]
     if not lang:
       lang = 'c++'
-    return '\n%s.. code-block:: %s\n\n' % (indent, lang)
-
-  endcode_match = re.match(r'^/// +\\endcode$', line)
-  if endcode_match:
+    return '\n.. code-block:: %s\n\n' % lang
+  if line == '/// \\endcode':
     return ''
   return line[4:] + '\n'
 
@@ -149,7 +129,7 @@ def read_options(header):
         comment += clean_comment_line(line)
       elif line.startswith('enum'):
         state = State.InEnum
-        name = re.sub(r'enum\s+(\w+)\s*(:((\s*\w+)+)\s*)?\{', '\\1', line)
+        name = re.sub(r'enum\s+(\w+)\s*\{', '\\1', line)
         enum = Enum(name, comment)
       elif line.startswith('struct'):
         state = State.InNestedStruct
@@ -175,12 +155,7 @@ def read_options(header):
         comment += clean_comment_line(line)
       else:
         state = State.InNestedStruct
-        field_type, field_name = re.match(r'([<>:\w(,\s)]+)\s+(\w+);',line).groups()
-        if field_type in enums:
-            nested_struct.values.append(NestedEnum(field_name,field_type,comment,enums[field_type].values))
-        else:
-            nested_struct.values.append(NestedField(field_type + " " + field_name, comment))
-
+        nested_struct.values.append(NestedField(line.replace(';', ''), comment))
     elif state == State.InEnum:
       if line.startswith('///'):
         state = State.InEnumMemberComment
@@ -189,22 +164,13 @@ def read_options(header):
         state = State.InStruct
         enums[enum.name] = enum
       else:
-        # Enum member without documentation. Must be documented where the enum
-        # is used.
-        pass
+        raise Exception('Invalid format, expected enum field comment or };')
     elif state == State.InEnumMemberComment:
       if line.startswith('///'):
         comment += clean_comment_line(line)
       else:
         state = State.InEnum
-        val = line.replace(',', '')
-        pos = val.find(" // ")
-        if (pos != -1):
-            config = val[pos+4:]
-            val = val[:pos]
-        else:
-            config = val;
-        enum.values.append(EnumValue(val, comment,config))
+        enum.values.append(EnumValue(line.replace(',', ''), comment))
   if state != State.Finished:
     raise Exception('Not finished by the end of file')
 
@@ -232,4 +198,4 @@ contents = open(DOC_FILE).read()
 contents = substitute(contents, 'FORMAT_STYLE_OPTIONS', options_text)
 
 with open(DOC_FILE, 'wb') as output:
-  output.write(contents.encode())
+  output.write(contents)

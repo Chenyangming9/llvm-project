@@ -1,4 +1,4 @@
-//===-- DynamicLoaderMacOSXDYLD.cpp ---------------------------------------===//
+//===-- DynamicLoaderMacOSXDYLD.cpp -----------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,17 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DynamicLoaderMacOSXDYLD.h"
-#include "DynamicLoaderDarwin.h"
-#include "DynamicLoaderMacOS.h"
-#include "Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.h"
-#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/Breakpoint/StoppointCallbackContext.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/Section.h"
+#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/Function.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Target/ABI.h"
@@ -30,9 +26,14 @@
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/State.h"
 
+#include "DynamicLoaderDarwin.h"
+#include "DynamicLoaderMacOSXDYLD.h"
+
+#include "Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.h"
+
 //#define ENABLE_DEBUG_PRINTF // COMMENT THIS LINE OUT PRIOR TO CHECKIN
 #ifdef ENABLE_DEBUG_PRINTF
-#include <cstdio>
+#include <stdio.h>
 #define DEBUG_PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #else
 #define DEBUG_PRINTF(fmt, ...)
@@ -46,8 +47,6 @@
 
 using namespace lldb;
 using namespace lldb_private;
-
-LLDB_PLUGIN_DEFINE(DynamicLoaderMacOSXDYLD)
 
 // Create an instance of this class. This function is filled into the plugin
 // info class that gets handed out by the plugin factory and allows the lldb to
@@ -235,8 +234,7 @@ void DynamicLoaderMacOSXDYLD::DoInitialImageFetch() {
       ReadDYLDInfoFromMemoryAndSetNotificationCallback(0x7fff5fc00000ull);
     } else if (exe_arch.GetMachine() == llvm::Triple::arm ||
                exe_arch.GetMachine() == llvm::Triple::thumb ||
-               exe_arch.GetMachine() == llvm::Triple::aarch64 ||
-               exe_arch.GetMachine() == llvm::Triple::aarch64_32) {
+               exe_arch.GetMachine() == llvm::Triple::aarch64) {
       ReadDYLDInfoFromMemoryAndSetNotificationCallback(0x2fe00000);
     } else {
       ReadDYLDInfoFromMemoryAndSetNotificationCallback(0x8fe00000);
@@ -342,11 +340,8 @@ bool DynamicLoaderMacOSXDYLD::NotifyBreakpointHit(
     // Build up the value array to store the three arguments given above, then
     // get the values from the ABI:
 
-    TypeSystemClang *clang_ast_context =
-        ScratchTypeSystemClang::GetForTarget(process->GetTarget());
-    if (!clang_ast_context)
-      return false;
-
+    ClangASTContext *clang_ast_context =
+        process->GetTarget().GetScratchClangASTContext();
     ValueList argument_values;
     Value input_value;
 
@@ -355,7 +350,7 @@ bool DynamicLoaderMacOSXDYLD::NotifyBreakpointHit(
     CompilerType clang_uint32_type =
         clang_ast_context->GetBuiltinTypeForEncodingAndBitSize(
             lldb::eEncodingUint, 32);
-    input_value.SetValueType(Value::ValueType::Scalar);
+    input_value.SetValueType(Value::eValueTypeScalar);
     input_value.SetCompilerType(clang_uint32_type);
     //        input_value.SetContext (Value::eContextTypeClangType,
     //        clang_uint32_type);
@@ -481,17 +476,17 @@ bool DynamicLoaderMacOSXDYLD::ReadAllImageInfosStructure() {
       offset = 0;
       m_dyld_all_image_infos.version = data.GetU32(&offset);
       m_dyld_all_image_infos.dylib_info_count = data.GetU32(&offset);
-      m_dyld_all_image_infos.dylib_info_addr = data.GetAddress(&offset);
-      m_dyld_all_image_infos.notification = data.GetAddress(&offset);
+      m_dyld_all_image_infos.dylib_info_addr = data.GetPointer(&offset);
+      m_dyld_all_image_infos.notification = data.GetPointer(&offset);
       m_dyld_all_image_infos.processDetachedFromSharedRegion =
           data.GetU8(&offset);
       m_dyld_all_image_infos.libSystemInitialized = data.GetU8(&offset);
       // Adjust for padding.
       offset += addr_size - 2;
-      m_dyld_all_image_infos.dyldImageLoadAddress = data.GetAddress(&offset);
+      m_dyld_all_image_infos.dyldImageLoadAddress = data.GetPointer(&offset);
       if (m_dyld_all_image_infos.version >= 11) {
         offset += addr_size * 8;
-        uint64_t dyld_all_image_infos_addr = data.GetAddress(&offset);
+        uint64_t dyld_all_image_infos_addr = data.GetPointer(&offset);
 
         // When we started, we were given the actual address of the
         // all_image_infos struct (probably via TASK_DYLD_INFO) in memory -
@@ -530,7 +525,8 @@ bool DynamicLoaderMacOSXDYLD::AddModulesUsingImageInfosAddress(
     lldb::addr_t image_infos_addr, uint32_t image_infos_count) {
   ImageInfo::collection image_infos;
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
-  LLDB_LOGF(log, "Adding %d modules.\n", image_infos_count);
+  if (log)
+    log->Printf("Adding %d modules.\n", image_infos_count);
 
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
   std::lock_guard<std::recursive_mutex> baseclass_guard(GetMutex());
@@ -585,13 +581,14 @@ bool DynamicLoaderMacOSXDYLD::RemoveModulesUsingImageInfosAddress(
     return false;
   }
 
-  LLDB_LOGF(log, "Removing %d modules.", image_infos_count);
+  if (log)
+    log->Printf("Removing %d modules.", image_infos_count);
 
   ModuleList unloaded_module_list;
   for (uint32_t idx = 0; idx < image_infos.size(); ++idx) {
     if (log) {
-      LLDB_LOGF(log, "Removing module at address=0x%16.16" PRIx64 ".",
-                image_infos[idx].address);
+      log->Printf("Removing module at address=0x%16.16" PRIx64 ".",
+                  image_infos[idx].address);
       image_infos[idx].PutToLog(log);
     }
 
@@ -620,7 +617,7 @@ bool DynamicLoaderMacOSXDYLD::RemoveModulesUsingImageInfosAddress(
           unloaded_module_list.AppendIfNeeded(unload_image_module_sp);
         } else {
           if (log) {
-            LLDB_LOGF(log, "Could not find module for unloading info entry:");
+            log->Printf("Could not find module for unloading info entry:");
             image_infos[idx].PutToLog(log);
           }
         }
@@ -634,7 +631,7 @@ bool DynamicLoaderMacOSXDYLD::RemoveModulesUsingImageInfosAddress(
 
     if (pos == end) {
       if (log) {
-        LLDB_LOGF(log, "Could not find image_info entry for unloading image:");
+        log->Printf("Could not find image_info entry for unloading image:");
         image_infos[idx].PutToLog(log);
       }
     }
@@ -671,9 +668,9 @@ bool DynamicLoaderMacOSXDYLD::ReadImageInfos(
     for (size_t i = 0;
          i < image_infos.size() && info_data_ref.ValidOffset(info_data_offset);
          i++) {
-      image_infos[i].address = info_data_ref.GetAddress(&info_data_offset);
-      lldb::addr_t path_addr = info_data_ref.GetAddress(&info_data_offset);
-      image_infos[i].mod_date = info_data_ref.GetAddress(&info_data_offset);
+      image_infos[i].address = info_data_ref.GetPointer(&info_data_offset);
+      lldb::addr_t path_addr = info_data_ref.GetPointer(&info_data_offset);
+      image_infos[i].mod_date = info_data_ref.GetPointer(&info_data_offset);
 
       char raw_path[PATH_MAX];
       m_process->ReadCStringFromMemory(path_addr, raw_path, sizeof(raw_path),
@@ -728,13 +725,18 @@ bool DynamicLoaderMacOSXDYLD::InitializeFromAllImageInfos() {
     // DYLD_*_PATH pointed to an equivalent version.  We don't want it to stay
     // in the target's module list or it will confuse us, so unload it here.
     Target &target = m_process->GetTarget();
+    const ModuleList &target_modules = target.GetImages();
     ModuleList not_loaded_modules;
-    for (ModuleSP module_sp : target.GetImages().Modules()) {
+    std::lock_guard<std::recursive_mutex> guard(target_modules.GetMutex());
+
+    size_t num_modules = target_modules.GetSize();
+    for (size_t i = 0; i < num_modules; i++) {
+      ModuleSP module_sp = target_modules.GetModuleAtIndexUnlocked(i);
       if (!module_sp->IsLoadedInTarget(&target)) {
         if (log) {
           StreamString s;
-          module_sp->GetDescription(s.AsRawOstream());
-          LLDB_LOGF(log, "Unloading pre-run module: %s.", s.GetData());
+          module_sp->GetDescription(&s);
+          log->Printf("Unloading pre-run module: %s.", s.GetData());
         }
         not_loaded_modules.Append(module_sp);
       }
@@ -973,13 +975,12 @@ void DynamicLoaderMacOSXDYLD::PutToLog(Log *log) const {
 
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
   std::lock_guard<std::recursive_mutex> baseclass_guard(GetMutex());
-  LLDB_LOGF(log,
-            "dyld_all_image_infos = { version=%d, count=%d, addr=0x%8.8" PRIx64
-            ", notify=0x%8.8" PRIx64 " }",
-            m_dyld_all_image_infos.version,
-            m_dyld_all_image_infos.dylib_info_count,
-            (uint64_t)m_dyld_all_image_infos.dylib_info_addr,
-            (uint64_t)m_dyld_all_image_infos.notification);
+  log->Printf(
+      "dyld_all_image_infos = { version=%d, count=%d, addr=0x%8.8" PRIx64
+      ", notify=0x%8.8" PRIx64 " }",
+      m_dyld_all_image_infos.version, m_dyld_all_image_infos.dylib_info_count,
+      (uint64_t)m_dyld_all_image_infos.dylib_info_addr,
+      (uint64_t)m_dyld_all_image_infos.notification);
   size_t i;
   const size_t count = m_dyld_image_infos.size();
   if (count > 0) {
@@ -1114,20 +1115,12 @@ bool DynamicLoaderMacOSXDYLD::GetSharedCacheInformation(
   return false;
 }
 
-bool DynamicLoaderMacOSXDYLD::IsFullyInitialized() {
-  if (ReadAllImageInfosStructure())
-    return m_dyld_all_image_infos.libSystemInitialized;
-  return false;
-}
-
 void DynamicLoaderMacOSXDYLD::Initialize() {
   PluginManager::RegisterPlugin(GetPluginNameStatic(),
                                 GetPluginDescriptionStatic(), CreateInstance);
-  DynamicLoaderMacOS::Initialize();
 }
 
 void DynamicLoaderMacOSXDYLD::Terminate() {
-  DynamicLoaderMacOS::Terminate();
   PluginManager::UnregisterPlugin(CreateInstance);
 }
 

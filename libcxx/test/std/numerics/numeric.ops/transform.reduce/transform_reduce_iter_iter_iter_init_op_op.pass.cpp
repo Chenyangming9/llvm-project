@@ -7,11 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 // <numeric>
-// UNSUPPORTED: c++03, c++11, c++14
-// UNSUPPORTED: clang-8
-// UNSUPPORTED: gcc-9
+// UNSUPPORTED: c++98, c++03, c++11, c++14
 
-// Became constexpr in C++20
 // template <class InputIterator1, class InputIterator2, class T,
 //           class BinaryOperation1, class BinaryOperation2>
 //    T transform_reduce(InputIterator1 first1, InputIterator1 last1,
@@ -28,7 +25,7 @@
 #include "test_iterators.h"
 
 template <class Iter1, class Iter2, class T, class Op1, class Op2>
-TEST_CONSTEXPR_CXX20 void
+void
 test(Iter1 first1, Iter1 last1, Iter2 first2, T init, Op1 op1, Op2 op2, T x)
 {
     static_assert( std::is_same_v<T,
@@ -37,7 +34,7 @@ test(Iter1 first1, Iter1 last1, Iter2 first2, T init, Op1 op1, Op2 op2, T x)
 }
 
 template <class SIter, class UIter>
-TEST_CONSTEXPR_CXX20 void
+void
 test()
 {
     int ia[]          = {1, 2, 3, 4, 5, 6};
@@ -56,16 +53,14 @@ test()
 }
 
 template <typename T, typename Init>
-TEST_CONSTEXPR_CXX20 void
-test_return_type()
+void test_return_type()
 {
     T *p = nullptr;
     static_assert( std::is_same_v<Init,
        decltype(std::transform_reduce(p, p, p, Init{}, std::plus<>(), std::multiplies<>()))> );
 }
 
-TEST_CONSTEXPR_CXX20 void
-test_move_only_types()
+void test_move_only_types()
 {
     MoveOnly ia[] = {{1}, {2}, {3}};
     MoveOnly ib[] = {{1}, {2}, {3}};
@@ -75,8 +70,7 @@ test_move_only_types()
         [](const MoveOnly& lhs, const MoveOnly& rhs) { return MoveOnly{lhs.get() * rhs.get()}; }).get());
 }
 
-TEST_CONSTEXPR_CXX20 bool
-test()
+int main(int, char**)
 {
     test_return_type<char, int>();
     test_return_type<int, int>();
@@ -87,22 +81,22 @@ test()
     test_return_type<char, double>();
 
 //  All the iterator categories
-    test<cpp17_input_iterator        <const int*>, cpp17_input_iterator        <const unsigned int*> >();
-    test<cpp17_input_iterator        <const int*>, forward_iterator      <const unsigned int*> >();
-    test<cpp17_input_iterator        <const int*>, bidirectional_iterator<const unsigned int*> >();
-    test<cpp17_input_iterator        <const int*>, random_access_iterator<const unsigned int*> >();
+    test<input_iterator        <const int*>, input_iterator        <const unsigned int*> >();
+    test<input_iterator        <const int*>, forward_iterator      <const unsigned int*> >();
+    test<input_iterator        <const int*>, bidirectional_iterator<const unsigned int*> >();
+    test<input_iterator        <const int*>, random_access_iterator<const unsigned int*> >();
 
-    test<forward_iterator      <const int*>, cpp17_input_iterator        <const unsigned int*> >();
+    test<forward_iterator      <const int*>, input_iterator        <const unsigned int*> >();
     test<forward_iterator      <const int*>, forward_iterator      <const unsigned int*> >();
     test<forward_iterator      <const int*>, bidirectional_iterator<const unsigned int*> >();
     test<forward_iterator      <const int*>, random_access_iterator<const unsigned int*> >();
 
-    test<bidirectional_iterator<const int*>, cpp17_input_iterator        <const unsigned int*> >();
+    test<bidirectional_iterator<const int*>, input_iterator        <const unsigned int*> >();
     test<bidirectional_iterator<const int*>, forward_iterator      <const unsigned int*> >();
     test<bidirectional_iterator<const int*>, bidirectional_iterator<const unsigned int*> >();
     test<bidirectional_iterator<const int*>, random_access_iterator<const unsigned int*> >();
 
-    test<random_access_iterator<const int*>, cpp17_input_iterator        <const unsigned int*> >();
+    test<random_access_iterator<const int*>, input_iterator        <const unsigned int*> >();
     test<random_access_iterator<const int*>, forward_iterator      <const unsigned int*> >();
     test<random_access_iterator<const int*>, bidirectional_iterator<const unsigned int*> >();
     test<random_access_iterator<const int*>, random_access_iterator<const unsigned int*> >();
@@ -115,14 +109,5 @@ test()
 
     test_move_only_types();
 
-    return true;
-}
-
-int main(int, char**)
-{
-    test();
-#if TEST_STD_VER > 17
-    static_assert(test());
-#endif
-    return 0;
+  return 0;
 }

@@ -34,7 +34,7 @@ void MipsMCInstLower::Initialize(MCContext *C) {
 
 MCOperand MipsMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
                                               MachineOperandType MOTy,
-                                              int64_t Offset) const {
+                                              unsigned Offset) const {
   MCSymbolRefExpr::VariantKind Kind = MCSymbolRefExpr::VK_None;
   MipsMCExpr::MipsExprKind TargetKind = MipsMCExpr::MEK_None;
   bool IsGpOff = false;
@@ -161,7 +161,9 @@ MCOperand MipsMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
   const MCExpr *Expr = MCSymbolRefExpr::create(Symbol, Kind, *Ctx);
 
   if (Offset) {
-    // Note: Offset can also be negative
+    // Assume offset is never negative.
+    assert(Offset > 0);
+
     Expr = MCBinaryExpr::createAdd(Expr, MCConstantExpr::create(Offset, *Ctx),
                                    *Ctx);
   }
@@ -175,7 +177,7 @@ MCOperand MipsMCInstLower::LowerSymbolOperand(const MachineOperand &MO,
 }
 
 MCOperand MipsMCInstLower::LowerOperand(const MachineOperand &MO,
-                                        int64_t offset) const {
+                                        unsigned offset) const {
   MachineOperandType MOTy = MO.getType();
 
   switch (MOTy) {

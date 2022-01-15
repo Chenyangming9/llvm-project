@@ -1,12 +1,6 @@
 add_lldb_unittest(LLDBCoreTests
-  CommunicationTest.cpp
-  DumpDataExtractorTest.cpp
-  FormatEntityTest.cpp
   MangledTest.cpp
-  ModuleSpecTest.cpp
   RichManglingContextTest.cpp
-  SourceLocationSpecTest.cpp
-  SourceManagerTest.cpp
   StreamCallbackTest.cpp
   UniqueCStringMapTest.cpp
 
@@ -15,11 +9,14 @@ add_lldb_unittest(LLDBCoreTests
     lldbHost
     lldbSymbol
     lldbPluginObjectFileELF
-    lldbPluginObjectFileMachO
-    lldbPluginObjectFilePECOFF
-    lldbPluginSymbolFileSymtab
+    lldbPluginSymbolVendorELF
     lldbUtilityHelpers
     LLVMTestingSupport
   LINK_COMPONENTS
     Support
   )
+
+set(test_inputs
+  mangled-function-names.yaml
+  )
+add_unittest_inputs(LLDBCoreTests "${test_inputs}")

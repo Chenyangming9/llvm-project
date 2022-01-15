@@ -3,7 +3,11 @@
 # An important constraint of the build is that it only produces libraries
 # based on the ability of the host toolchain to target various platforms.
 
-cmake_minimum_required(VERSION 3.13.4)
+cmake_minimum_required(VERSION 3.4.3)
+
+if(POLICY CMP0075)
+  cmake_policy(SET CMP0075 NEW)
+endif()
 
 # Check if compiler-rt is built as a standalone project.
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR COMPILER_RT_STANDALONE_BUILD)
@@ -31,8 +35,6 @@ option(COMPILER_RT_BUILD_BUILTINS "Build builtins" ON)
 mark_as_advanced(COMPILER_RT_BUILD_BUILTINS)
 option(COMPILER_RT_BUILD_CRT "Build crtbegin.o/crtend.o" ON)
 mark_as_advanced(COMPILER_RT_BUILD_CRT)
-option(COMPILER_RT_CRT_USE_EH_FRAME_REGISTRY "Use eh_frame in crtbegin.o/crtend.o" ON)
-mark_as_advanced(COMPILER_RT_CRT_USE_EH_FRAME_REGISTRY)
 option(COMPILER_RT_BUILD_SANITIZERS "Build sanitizers" ON)
 mark_as_advanced(COMPILER_RT_BUILD_SANITIZERS)
 option(COMPILER_RT_BUILD_XRAY "Build xray" ON)
@@ -41,12 +43,8 @@ option(COMPILER_RT_BUILD_LIBFUZZER "Build libFuzzer" ON)
 mark_as_advanced(COMPILER_RT_BUILD_LIBFUZZER)
 option(COMPILER_RT_BUILD_PROFILE "Build profile runtime" ON)
 mark_as_advanced(COMPILER_RT_BUILD_PROFILE)
-option(COMPILER_RT_BUILD_MEMPROF "Build memory profiling runtime" ON)
-mark_as_advanced(COMPILER_RT_BUILD_MEMPROF)
 option(COMPILER_RT_BUILD_XRAY_NO_PREINIT "Build xray with no preinit patching" OFF)
 mark_as_advanced(COMPILER_RT_BUILD_XRAY_NO_PREINIT)
-option(COMPILER_RT_BUILD_ORC "Build ORC runtime" ON)
-mark_as_advanced(COMPILER_RT_BUILD_ORC)
 
 set(COMPILER_RT_ASAN_SHADOW_SCALE ""
     CACHE STRING "Override the shadow scale to be used in ASan runtime")
@@ -67,12 +65,8 @@ if (NOT COMPILER_RT_ASAN_SHADOW_SCALE STREQUAL "")
       -D${COMPILER_RT_ASAN_SHADOW_SCALE_DEFINITION})
 endif()
 
-if(FUCHSIA)
-  set(COMPILER_RT_HWASAN_WITH_INTERCEPTORS_DEFAULT OFF)
-else()
-  set(COMPILER_RT_HWASAN_WITH_INTERCEPTORS_DEFAULT ON)
-endif()
-set(COMPILER_RT_HWASAN_WITH_INTERCEPTORS ${COMPILER_RT_HWASAN_WITH_INTERCEPTORS_DEFAULT} CACHE BOOL "Enable libc interceptors in HWASan (testing mode)")
+set(COMPILER_RT_HWASAN_WITH_INTERCEPTORS ON CACHE BOOL
+    "Enable libc interceptors in HWASan (testing mode)")
 
 set(COMPILER_RT_BAREMETAL_BUILD OFF CACHE BOOL
   "Build for a bare-metal target.")
@@ -85,23 +79,16 @@ if (COMPILER_RT_STANDALONE_BUILD)
     set_target_properties(intrinsics_gen PROPERTIES FOLDER "Compiler-RT Misc")
   endif()
 
-  find_package(Python3 COMPONENTS Interpreter)
-  if(NOT Python3_Interpreter_FOUND)
-    message(WARNING "Python3 not found, using python2 as a fallback")
-    find_package(Python2 COMPONENTS Interpreter REQUIRED)
-    if(Python2_VERSION VERSION_LESS 2.7)
-      message(SEND_ERROR "Python 2.7 or newer is required")
-    endif()
-
-    # Treat python2 as python3
-    add_executable(Python3::Interpreter IMPORTED)
-    set_target_properties(Python3::Interpreter PROPERTIES
-      IMPORTED_LOCATION ${Python2_EXECUTABLE})
-    set(Python3_EXECUTABLE ${Python2_EXECUTABLE})
+  # Find Python interpreter.
+  include(FindPythonInterp)
+  if(NOT PYTHONINTERP_FOUND)
+    message(FATAL_ERROR "
+      Unable to find Python interpreter required testing. Please install Python
+      or specify the PYTHON_EXECUTABLE CMake variable.")
   endif()
 
   # Ensure that fat libraries are built correctly on Darwin
-  if(APPLE)
+  if(CMAKE_HOST_APPLE AND APPLE)
     include(UseLibtool)
   endif()
 
@@ -118,15 +105,15 @@ construct_compiler_rt_default_triple()
 if ("${COMPILER_RT_DEFAULT_TARGET_TRIPLE}" MATCHES ".*hf$")
   if (${COMPILER_RT_DEFAULT_TARGET_ARCH} MATCHES "^arm")
     set(COMPILER_RT_DEFAULT_TARGET_ARCH "armhf")
-    CHECK_SYMBOL_EXISTS (__thumb__ "" COMPILER_RT_ARM_THUMB)
   endif()
 endif()
 if ("${COMPILER_RT_DEFAULT_TARGET_TRIPLE}" MATCHES ".*android.*")
   set(ANDROID 1)
-  string(REGEX MATCH "-target(=| +)[^ ]+android[a-z]*([0-9]+)" ANDROID_API_LEVEL "${CMAKE_C_FLAGS}")
-  set(ANDROID_API_LEVEL ${CMAKE_MATCH_2})
 endif()
 pythonize_bool(ANDROID)
+
+set(ANDROID_NDK_VERSION 18
+    CACHE STRING "Set this to the Android NDK version that you are using")
 
 set(COMPILER_RT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(COMPILER_RT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
@@ -179,18 +166,14 @@ endif()
 
 option(SANITIZER_ALLOW_CXXABI "Allow use of C++ ABI details in ubsan" ON)
 
-set(SANITIZER_CAN_USE_CXXABI OFF)
+set(SANITIZE_CAN_USE_CXXABI OFF)
 if (cxxabi_supported AND SANITIZER_ALLOW_CXXABI)
   set(SANITIZER_CAN_USE_CXXABI ON)
 endif()
 pythonize_bool(SANITIZER_CAN_USE_CXXABI)
 
 macro(handle_default_cxx_lib var)
-  # Specifying -stdlib= in CMAKE_CXX_FLAGS overrides the defaults.
-  if (CMAKE_CXX_FLAGS MATCHES "-stdlib=([a-zA-Z+]*)")
-    set(${var}_LIBNAME "${CMAKE_MATCH_1}")
-    set(${var}_SYSTEM 1)
-  elseif (${var} STREQUAL "default")
+  if (${var} STREQUAL "default")
     if (APPLE OR CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
       set(${var}_LIBNAME "libc++")
       set(${var}_SYSTEM 1)
@@ -271,18 +254,14 @@ if(COMPILER_RT_ENABLE_WERROR)
   append_string_if(COMPILER_RT_HAS_WX_FLAG /WX CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
 endif()
 
-append_string_if(COMPILER_RT_HAS_STD_CXX14_FLAG -std=c++14 CMAKE_CXX_FLAGS)
+append_string_if(COMPILER_RT_HAS_STD_CXX11_FLAG -std=c++11 CMAKE_CXX_FLAGS)
 
 # Emulate C99 and C++11's __func__ for MSVC prior to 2013 CTP.
 if(NOT COMPILER_RT_HAS_FUNC_SYMBOL)
   add_definitions(-D__func__=__FUNCTION__)
 endif()
 
-# Provide some common commandline flags for Sanitizer runtimes.
-if("${ANDROID_API_LEVEL}" GREATER_EQUAL 29)
-  list(APPEND SANITIZER_COMMON_CFLAGS -fno-emulated-tls)
-  string(APPEND COMPILER_RT_TEST_COMPILER_CFLAGS " -fno-emulated-tls")
-endif()
+# Provide some common commmandline flags for Sanitizer runtimes.
 if(NOT WIN32)
   append_list_if(COMPILER_RT_HAS_FPIC_FLAG -fPIC SANITIZER_COMMON_CFLAGS)
 endif()
@@ -300,28 +279,12 @@ if(NOT COMPILER_RT_HAS_FVISIBILITY_HIDDEN_FLAG)
 endif()
 append_list_if(COMPILER_RT_HAS_FNO_LTO_FLAG -fno-lto SANITIZER_COMMON_CFLAGS)
 
-# By default do not instrument or use profdata for compiler-rt.
-if(NOT COMPILER_RT_ENABLE_PGO)
-  if(LLVM_PROFDATA_FILE AND COMPILER_RT_HAS_FNO_PROFILE_INSTR_USE_FLAG)
-    list(APPEND SANITIZER_COMMON_CFLAGS "-fno-profile-instr-use")
-  endif()
-  if(LLVM_BUILD_INSTRUMENTED MATCHES IR AND COMPILER_RT_HAS_FNO_PROFILE_GENERATE_FLAG)
-    list(APPEND SANITIZER_COMMON_CFLAGS "-fno-profile-generate")
-  elseif(LLVM_BUILD_INSTRUMENTED AND COMPILER_RT_HAS_FNO_PROFILE_INSTR_GENERATE_FLAG)
-    list(APPEND SANITIZER_COMMON_CFLAGS "-fno-profile-instr-generate")
-  endif()
-endif()
-
 # The following is a workaround for powerpc64le. This is the only architecture
 # that requires -fno-function-sections to work properly. If lacking, the ASan
-# Linux test function-sections-are-bad.cpp fails with the following error:
+# Linux test function-sections-are-bad.cc fails with the following error:
 # 'undefined symbol: __sanitizer_unaligned_load32'.
 if(DEFINED TARGET_powerpc64le_CFLAGS)
-  if(CMAKE_CXX_COMPILER_ID MATCHES "XL")
-    append("-qnofuncsect" TARGET_powerpc64le_CFLAGS)
-  else()
-    append_list_if(COMPILER_RT_HAS_FNO_FUNCTION_SECTIONS_FLAG -fno-function-sections TARGET_powerpc64le_CFLAGS)
-  endif()
+  append_list_if(COMPILER_RT_HAS_FNO_FUNCTION_SECTIONS_FLAG -fno-function-sections TARGET_powerpc64le_CFLAGS)
 endif()
 
 # The following is a workaround for s390x.  This avoids creation of "partial
@@ -350,25 +313,15 @@ if(MSVC)
   endif()
   append_list_if(COMPILER_RT_HAS_Oy_FLAG /Oy- SANITIZER_COMMON_CFLAGS)
   append_list_if(COMPILER_RT_HAS_GS_FLAG /GS- SANITIZER_COMMON_CFLAGS)
-
-  # Disable thread safe initialization for static locals. ASan shouldn't need
-  # it. Thread safe initialization assumes that the CRT has already been
-  # initialized, but ASan initializes before the CRT.
-  list(APPEND SANITIZER_COMMON_CFLAGS /Zc:threadSafeInit-)
+  # VS 2015 (version 1900) added support for thread safe static initialization.
+  # However, ASan interceptors run before CRT initialization, which causes the
+  # new thread safe code to crash. Disable this feature for now.
+  if (MSVC_VERSION GREATER 1899 OR "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+    list(APPEND SANITIZER_COMMON_CFLAGS /Zc:threadSafeInit-)
+  endif()
 endif()
 
 append_list_if(COMPILER_RT_DEBUG -DSANITIZER_DEBUG=1 SANITIZER_COMMON_CFLAGS)
-
-if(CMAKE_CXX_COMPILER_ID MATCHES Clang)
-  list(APPEND THREAD_SAFETY_FLAGS
-      "-Werror=thread-safety"
-      "-Werror=thread-safety-reference"
-      "-Werror=thread-safety-beta"
-  )
-  list(APPEND SANITIZER_COMMON_CFLAGS ${THREAD_SAFETY_FLAGS})
-  string(REPLACE ";" " " thread_safety_flags_space_sep "${THREAD_SAFETY_FLAGS}")
-  string(APPEND COMPILER_RT_TEST_COMPILER_CFLAGS " ${thread_safety_flags_space_sep}")
-endif()
 
 # If we're using MSVC,
 # always respect the optimization flags set by CMAKE_BUILD_TYPE instead.
@@ -383,12 +336,12 @@ if (NOT MSVC)
 endif()
 
 # Determine if we should restrict stack frame sizes.
-# Stack frames on PowerPC, Mips, SystemZ and in debug build can be much larger than
+# Stack frames on PowerPC and Mips and in debug biuld can be much larger than
 # anticipated.
 # FIXME: Fix all sanitizers and add -Wframe-larger-than to
 # SANITIZER_COMMON_FLAGS
 if(COMPILER_RT_HAS_WFRAME_LARGER_THAN_FLAG AND NOT COMPILER_RT_DEBUG
-   AND NOT ${COMPILER_RT_DEFAULT_TARGET_ARCH} MATCHES "powerpc|mips|s390x")
+   AND NOT ${COMPILER_RT_DEFAULT_TARGET_ARCH} MATCHES "powerpc|mips")
   set(SANITIZER_LIMIT_FRAME_SIZE TRUE)
 else()
   set(SANITIZER_LIMIT_FRAME_SIZE FALSE)
@@ -429,6 +382,7 @@ endif()
 append_list_if(COMPILER_RT_HAS_WGNU_FLAG -Wno-gnu SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WVARIADIC_MACROS_FLAG -Wno-variadic-macros SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WC99_EXTENSIONS_FLAG -Wno-c99-extensions SANITIZER_COMMON_CFLAGS)
+append_list_if(COMPILER_RT_HAS_WNON_VIRTUAL_DTOR_FLAG -Wno-non-virtual-dtor SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WD4146_FLAG /wd4146 SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WD4291_FLAG /wd4291 SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WD4391_FLAG /wd4391 SANITIZER_COMMON_CFLAGS)
@@ -442,6 +396,7 @@ append_list_if(COMPILER_RT_HAS_NODEFAULTLIBS_FLAG -nodefaultlibs SANITIZER_COMMO
 append_list_if(COMPILER_RT_HAS_Z_TEXT -Wl,-z,text SANITIZER_COMMON_LINK_FLAGS)
 
 if (COMPILER_RT_USE_BUILTINS_LIBRARY)
+  list(APPEND SANITIZER_COMMON_LINK_LIBS ${COMPILER_RT_BUILTINS_LIBRARY})
   string(REPLACE "-Wl,-z,defs" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
 else()
   if (ANDROID)
@@ -452,38 +407,11 @@ else()
 endif()
 
 append_list_if(COMPILER_RT_HAS_LIBC c SANITIZER_COMMON_LINK_LIBS)
+
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Fuchsia")
+  list(APPEND SANITIZER_COMMON_LINK_FLAGS -Wl,-z,defs,-z,now,-z,relro)
   list(APPEND SANITIZER_COMMON_LINK_LIBS zircon)
 endif()
-
-if("${CMAKE_SYSTEM_NAME}" STREQUAL "Fuchsia")
-  set(SANITIZER_NO_UNDEFINED_SYMBOLS_DEFAULT ON)
-else()
-  set(SANITIZER_NO_UNDEFINED_SYMBOLS_DEFAULT OFF)
-endif()
-option(SANITIZER_NO_UNDEFINED_SYMBOLS "Report error on unresolved symbol references" ${SANITIZER_NO_UNDEFINED_SYMBOLS_DEFAULT})
-if (SANITIZER_NO_UNDEFINED_SYMBOLS)
-  list(APPEND SANITIZER_COMMON_LINK_FLAGS -Wl,-z,defs)
-endif()
-
-# TODO: COMPILER_RT_COMMON_CFLAGS and COMPILER_RT_COMMON_LINK_FLAGS are
-# intended for use in non-sanitizer runtimes such as libFuzzer, profile or XRay,
-# move these higher to include common flags, then derive SANITIZER_COMMON_CFLAGS
-# and SANITIZER_COMMON_LINK_FLAGS from those and append sanitizer-specific flags.
-set(COMPILER_RT_COMMON_CFLAGS ${SANITIZER_COMMON_CFLAGS})
-set(COMPILER_RT_COMMON_LINK_FLAGS ${SANITIZER_COMMON_LINK_FLAGS})
-
-# We don't use the C++ standard library, so avoid including it by mistake.
-append_list_if(COMPILER_RT_HAS_NOSTDINCXX_FLAG -nostdinc++ SANITIZER_COMMON_CFLAGS)
-append_list_if(COMPILER_RT_HAS_NOSTDLIBXX_FLAG -nostdlib++ SANITIZER_COMMON_LINK_FLAGS)
-
-# Remove -stdlib= which is unused when passing -nostdinc++...
-string(REGEX MATCHALL "-stdlib=[a-zA-Z+]*" stdlib_flag "${CMAKE_CXX_FLAGS}")
-string(REGEX REPLACE "-stdlib=[a-zA-Z+]*" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-
-# ...we need it to build some runtimes and tests so readd it where appropriate.
-list(APPEND COMPILER_RT_COMMON_CFLAGS ${stdlib_flag})
-list(APPEND COMPILER_RT_COMMON_LINK_FLAGS ${stdlib_flag})
 
 macro(append_libcxx_libs var)
   if (${var}_INTREE)
@@ -517,54 +445,6 @@ elseif (SANITIZER_TEST_CXX_LIBNAME STREQUAL "libstdc++")
   append_list_if(COMPILER_RT_HAS_LIBSTDCXX stdc++ SANITIZER_TEST_CXX_LIBRARIES)
 endif()
 
-# TODO: There's a lot of duplication across lib/*/tests/CMakeLists.txt files,
-# move some of the common flags to COMPILER_RT_UNITTEST_CFLAGS.
-
-# Unittests need access to C++ standard library.
-string(APPEND COMPILER_RT_TEST_COMPILER_CFLAGS " ${stdlib_flag}")
-
-# When cross-compiling, COMPILER_RT_TEST_COMPILER_CFLAGS help in compilation
-# and linking of unittests.
-string(REPLACE " " ";" COMPILER_RT_UNITTEST_CFLAGS "${COMPILER_RT_TEST_COMPILER_CFLAGS}")
-set(COMPILER_RT_UNITTEST_LINK_FLAGS ${COMPILER_RT_UNITTEST_CFLAGS})
-
-# Unittests support.
-set(COMPILER_RT_GTEST_PATH ${LLVM_MAIN_SRC_DIR}/utils/unittest/googletest)
-set(COMPILER_RT_GTEST_SOURCE ${COMPILER_RT_GTEST_PATH}/src/gtest-all.cc)
-set(COMPILER_RT_GTEST_CFLAGS
-  -DGTEST_NO_LLVM_SUPPORT=1
-  -DGTEST_HAS_RTTI=0
-  -I${COMPILER_RT_GTEST_PATH}/include
-  -I${COMPILER_RT_GTEST_PATH}
-)
-if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
-  # FreeBSD has its pthread functions marked with thread safety annotations, but
-  # googletest is not compatible with such annotations. Disable the thread
-  # safety warnings-as-errors until googletest has been fixed.
-  list(APPEND NO_THREAD_SAFETY_FLAGS ${THREAD_SAFETY_FLAGS})
-  list(TRANSFORM NO_THREAD_SAFETY_FLAGS REPLACE "error=" "no-")
-  list(APPEND COMPILER_RT_GTEST_CFLAGS ${NO_THREAD_SAFETY_FLAGS})
-endif()
-
-# Mocking support.
-set(COMPILER_RT_GMOCK_PATH ${LLVM_MAIN_SRC_DIR}/utils/unittest/googlemock)
-set(COMPILER_RT_GMOCK_SOURCE ${COMPILER_RT_GMOCK_PATH}/src/gmock-all.cc)
-set(COMPILER_RT_GMOCK_CFLAGS
-  -DGTEST_NO_LLVM_SUPPORT=1
-  -DGTEST_HAS_RTTI=0
-  -I${COMPILER_RT_GMOCK_PATH}/include
-  -I${COMPILER_RT_GMOCK_PATH}
-)
-
-append_list_if(COMPILER_RT_DEBUG -DSANITIZER_DEBUG=1 COMPILER_RT_UNITTEST_CFLAGS)
-append_list_if(COMPILER_RT_HAS_WCOVERED_SWITCH_DEFAULT_FLAG -Wno-covered-switch-default COMPILER_RT_UNITTEST_CFLAGS)
-append_list_if(COMPILER_RT_HAS_WSUGGEST_OVERRIDE_FLAG -Wno-suggest-override COMPILER_RT_UNITTEST_CFLAGS)
-
-if(MSVC)
-  # gtest use a lot of stuff marked as deprecated on Windows.
-  list(APPEND COMPILER_RT_GTEST_CFLAGS -Wno-deprecated-declarations)
-endif()
-
 # Warnings to turn off for all libraries, not just sanitizers.
 append_string_if(COMPILER_RT_HAS_WUNUSED_PARAMETER_FLAG -Wno-unused-parameter CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
 
@@ -579,44 +459,29 @@ if (CMAKE_LINKER MATCHES "link.exe$")
   set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /IGNORE:4221")
 endif()
 
-if(${CMAKE_SYSTEM_NAME} MATCHES "AIX")
-  set(CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> -X32_64 qc <TARGET> <LINK_FLAGS> <OBJECTS>")
-  set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> -X32_64 qc <TARGET> <LINK_FLAGS> <OBJECTS>")
-  set(CMAKE_C_ARCHIVE_APPEND "<CMAKE_AR> -X32_64 q <TARGET> <LINK_FLAGS> <OBJECTS>")
-  set(CMAKE_CXX_ARCHIVE_APPEND "<CMAKE_AR> -X32_64 q <TARGET> <LINK_FLAGS> <OBJECTS>")
-  set(CMAKE_C_ARCHIVE_FINISH "<CMAKE_RANLIB> -X32_64 <TARGET>")
-  set(CMAKE_CXX_ARCHIVE_FINISH "<CMAKE_RANLIB> -X32_64 <TARGET>")
-endif()
-
 add_subdirectory(include)
 
 option(COMPILER_RT_USE_LIBCXX
   "Enable compiler-rt to use libc++ from the source tree" ON)
 if(COMPILER_RT_USE_LIBCXX)
-  if(LLVM_ENABLE_PROJECTS_USED)
-    # Don't use libcxx if LLVM_ENABLE_PROJECTS does not enable it.
-    set(COMPILER_RT_LIBCXX_PATH ${LLVM_EXTERNAL_LIBCXX_SOURCE_DIR})
-    set(COMPILER_RT_LIBCXXABI_PATH ${LLVM_EXTERNAL_LIBCXXABI_SOURCE_DIR})
-  else()
-    foreach(path IN ITEMS ${LLVM_MAIN_SRC_DIR}/projects/libcxx
-                          ${LLVM_MAIN_SRC_DIR}/runtimes/libcxx
-                          ${LLVM_MAIN_SRC_DIR}/../libcxx
-                          ${LLVM_EXTERNAL_LIBCXX_SOURCE_DIR})
-      if(IS_DIRECTORY ${path})
-        set(COMPILER_RT_LIBCXX_PATH ${path})
-        break()
-      endif()
-    endforeach()
-    foreach(path IN ITEMS ${LLVM_MAIN_SRC_DIR}/projects/libcxxabi
-                          ${LLVM_MAIN_SRC_DIR}/runtimes/libcxxabi
-                          ${LLVM_MAIN_SRC_DIR}/../libcxxabi
-                          ${LLVM_EXTERNAL_LIBCXXABI_SOURCE_DIR})
-      if(IS_DIRECTORY ${path})
-        set(COMPILER_RT_LIBCXXABI_PATH ${path})
-        break()
-      endif()
-    endforeach()
-  endif()
+  foreach(path IN ITEMS ${LLVM_MAIN_SRC_DIR}/projects/libcxx
+                        ${LLVM_MAIN_SRC_DIR}/runtimes/libcxx
+                        ${LLVM_MAIN_SRC_DIR}/../libcxx
+                        ${LLVM_EXTERNAL_LIBCXX_SOURCE_DIR})
+    if(IS_DIRECTORY ${path})
+      set(COMPILER_RT_LIBCXX_PATH ${path})
+      break()
+    endif()
+  endforeach()
+  foreach(path IN ITEMS ${LLVM_MAIN_SRC_DIR}/projects/libcxxabi
+                        ${LLVM_MAIN_SRC_DIR}/runtimes/libcxxabi
+                        ${LLVM_MAIN_SRC_DIR}/../libcxxabi
+                        ${LLVM_EXTERNAL_LIBCXXABI_SOURCE_DIR})
+    if(IS_DIRECTORY ${path})
+      set(COMPILER_RT_LIBCXXABI_PATH ${path})
+      break()
+    endif()
+  endforeach()
 endif()
 
 set(COMPILER_RT_LLD_PATH ${LLVM_MAIN_SRC_DIR}/tools/lld)
@@ -626,34 +491,22 @@ else()
   set(COMPILER_RT_LLD_PATH ${LLVM_MAIN_SRC_DIR}/../lld)
   if(EXISTS ${COMPILER_RT_LLD_PATH}/ AND LLVM_TOOL_LLD_BUILD)
     set(COMPILER_RT_HAS_LLD TRUE)
-  endif()
-endif()
-
-if(ANDROID)
-  set(COMPILER_RT_HAS_LLD TRUE)
-  set(COMPILER_RT_TEST_USE_LLD TRUE)
-  append_list_if(COMPILER_RT_HAS_FUSE_LD_LLD_FLAG -fuse-ld=lld SANITIZER_COMMON_LINK_FLAGS)
-  append_list_if(COMPILER_RT_HAS_LLD -fuse-ld=lld COMPILER_RT_UNITTEST_LINK_FLAGS)
-  if(COMPILER_RT_HAS_FUSE_LD_LLD_FLAG)
-    set(COMPILER_RT_HAS_GNU_VERSION_SCRIPT_COMPAT FALSE)
+  else()
+    set(COMPILER_RT_HAS_LLD FALSE)
   endif()
 endif()
 pythonize_bool(COMPILER_RT_HAS_LLD)
-pythonize_bool(COMPILER_RT_TEST_USE_LLD)
 
 add_subdirectory(lib)
 
 if(COMPILER_RT_INCLUDE_TESTS)
   add_subdirectory(unittests)
   add_subdirectory(test)
-  # Don't build llvm-lit for runtimes-build, it will clean up map_config.
-  if (COMPILER_RT_STANDALONE_BUILD AND NOT LLVM_RUNTIMES_BUILD)
+  if (COMPILER_RT_STANDALONE_BUILD)
     # If we have a valid source tree, generate llvm-lit into the bin directory.
     # The user can still choose to have the check targets *use* a different lit
     # by specifying -DLLVM_EXTERNAL_LIT, but we generate it regardless.
     if (EXISTS ${LLVM_MAIN_SRC_DIR}/utils/llvm-lit)
-      # Needed for lit support in standalone builds.
-      include(AddLLVM)
       add_subdirectory(${LLVM_MAIN_SRC_DIR}/utils/llvm-lit ${CMAKE_CURRENT_BINARY_DIR}/llvm-lit)
     elseif(NOT EXISTS ${LLVM_EXTERNAL_LIT})
       message(WARNING "Could not find LLVM source directory and LLVM_EXTERNAL_LIT does not"
@@ -661,5 +514,3 @@ if(COMPILER_RT_INCLUDE_TESTS)
     endif()
   endif()
 endif()
-
-add_subdirectory(tools)

@@ -13,9 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "VPlanVerifier.h"
-#include "VPlan.h"
 #include "llvm/ADT/DepthFirstIterator.h"
-#include "llvm/Support/CommandLine.h"
 
 #define DEBUG_TYPE "loop-vectorize"
 
@@ -65,7 +63,9 @@ static void verifyBlocksInRegion(const VPRegionBlock *Region) {
     for (const VPBlockBase *Succ : Successors) {
       // There must be a bi-directional link between block and successor.
       const auto &SuccPreds = Succ->getPredecessors();
-      assert(llvm::is_contained(SuccPreds, VPB) && "Missing predecessor link.");
+      assert(std::find(SuccPreds.begin(), SuccPreds.end(), VPB) !=
+                 SuccPreds.end() &&
+             "Missing predecessor link.");
       (void)SuccPreds;
     }
 
@@ -84,7 +84,9 @@ static void verifyBlocksInRegion(const VPRegionBlock *Region) {
 
       // There must be a bi-directional link between block and predecessor.
       const auto &PredSuccs = Pred->getSuccessors();
-      assert(llvm::is_contained(PredSuccs, VPB) && "Missing successor link.");
+      assert(std::find(PredSuccs.begin(), PredSuccs.end(), VPB) !=
+                 PredSuccs.end() &&
+             "Missing successor link.");
       (void)PredSuccs;
     }
   }

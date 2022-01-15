@@ -1,4 +1,4 @@
-//===-- ClangHost.cpp -----------------------------------------------------===//
+//===-- ClangHost.cpp -------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -30,10 +30,10 @@ static bool VerifyClangPath(const llvm::Twine &clang_path) {
   if (FileSystem::Instance().IsDirectory(clang_path))
     return true;
   Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
-  LLDB_LOGF(log,
-            "VerifyClangPath(): "
-            "failed to stat clang resource directory at \"%s\"",
-            clang_path.str().c_str());
+  if (log)
+    log->Printf("VerifyClangPath(): "
+                "failed to stat clang resource directory at \"%s\"",
+                clang_path.str().c_str());
   return false;
 }
 
@@ -67,10 +67,10 @@ static bool DefaultComputeClangResourceDirectory(FileSpec &lldb_shlib_spec,
     llvm::sys::path::native(relative_path);
     llvm::sys::path::append(clang_dir, relative_path);
     if (!verify || VerifyClangPath(clang_dir)) {
-      LLDB_LOG(log,
-               "DefaultComputeClangResourceDir: Setting ClangResourceDir "
-               "to \"{0}\", verify = {1}",
-               clang_dir.str(), verify ? "true" : "false");
+      if (log)
+        log->Printf("DefaultComputeClangResourceDir: Setting ClangResourceDir "
+                    "to \"%s\", verify = %s",
+                    clang_dir.str().str().c_str(), verify ? "true" : "false");
       file_spec.GetDirectory().SetString(clang_dir);
       FileSystem::Instance().Resolve(file_spec);
       return true;
@@ -137,12 +137,14 @@ bool lldb_private::ComputeClangResourceDirectory(FileSpec &lldb_shlib_spec,
         FileSystem::Instance().Resolve(file_spec);
         return true;
       }
+      raw_path = lldb_shlib_spec.GetPath();
     }
+    raw_path.resize(rev_it - r_end);
+  } else {
+    raw_path.resize(rev_it - r_end);
   }
 
   // Fall back to the Clang resource directory inside the framework.
-  raw_path = lldb_shlib_spec.GetPath();
-  raw_path.resize(rev_it - r_end);
   raw_path.append("LLDB.framework/Resources/Clang");
   file_spec.GetDirectory().SetString(raw_path.c_str());
   FileSystem::Instance().Resolve(file_spec);
@@ -158,8 +160,9 @@ FileSpec lldb_private::GetClangResourceDir() {
       ComputeClangResourceDirectory(lldb_file_spec, g_cached_resource_dir,
                                     true);
     Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
-    LLDB_LOGF(log, "GetClangResourceDir() => '%s'",
-              g_cached_resource_dir.GetPath().c_str());
+    if (log)
+      log->Printf("GetClangResourceDir() => '%s'",
+                  g_cached_resource_dir.GetPath().c_str());
   });
   return g_cached_resource_dir;
 }

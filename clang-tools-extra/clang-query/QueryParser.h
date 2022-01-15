@@ -43,13 +43,12 @@ private:
   template <typename T> struct LexOrCompleteWord;
 
   QueryRef parseSetBool(bool QuerySession::*Var);
-  QueryRef parseSetTraversalKind(TraversalKind QuerySession::*Var);
   template <typename QueryType> QueryRef parseSetOutputKind();
   QueryRef completeMatcherExpression();
 
   QueryRef endQuery(QueryRef Q);
 
-  /// Parse [\p Begin,\p End).
+  /// \brief Parse [\p Begin,\p End).
   ///
   /// \return A reference to the parsed query object, which may be an
   /// \c InvalidQuery if a parse error occurs.

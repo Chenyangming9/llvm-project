@@ -16,7 +16,6 @@
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/DynamicExtent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExprEngine.h"
 
 using namespace clang;
@@ -55,11 +54,12 @@ void ArrayBoundChecker::checkLocation(SVal l, bool isLoad, const Stmt* LoadS,
   ProgramStateRef state = C.getState();
 
   // Get the size of the array.
-  DefinedOrUnknownSVal ElementCount = getDynamicElementCount(
-      state, ER->getSuperRegion(), C.getSValBuilder(), ER->getValueType());
+  DefinedOrUnknownSVal NumElements
+    = C.getStoreManager().getSizeInElements(state, ER->getSuperRegion(),
+                                            ER->getValueType());
 
-  ProgramStateRef StInBound = state->assumeInBound(Idx, ElementCount, true);
-  ProgramStateRef StOutBound = state->assumeInBound(Idx, ElementCount, false);
+  ProgramStateRef StInBound = state->assumeInBound(Idx, NumElements, true);
+  ProgramStateRef StOutBound = state->assumeInBound(Idx, NumElements, false);
   if (StOutBound && !StInBound) {
     ExplodedNode *N = C.generateErrorNode(StOutBound);
     if (!N)
@@ -75,8 +75,7 @@ void ArrayBoundChecker::checkLocation(SVal l, bool isLoad, const Stmt* LoadS,
     // reference is outside the range.
 
     // Generate a report for this bug.
-    auto report =
-        std::make_unique<PathSensitiveBugReport>(*BT, BT->getDescription(), N);
+    auto report = llvm::make_unique<BugReport>(*BT, BT->getDescription(), N);
 
     report->addRange(LoadS->getSourceRange());
     C.emitReport(std::move(report));
@@ -92,6 +91,6 @@ void ento::registerArrayBoundChecker(CheckerManager &mgr) {
   mgr.registerChecker<ArrayBoundChecker>();
 }
 
-bool ento::shouldRegisterArrayBoundChecker(const CheckerManager &mgr) {
+bool ento::shouldRegisterArrayBoundChecker(const LangOptions &LO) {
   return true;
 }

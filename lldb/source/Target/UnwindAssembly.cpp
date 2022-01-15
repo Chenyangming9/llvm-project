@@ -1,4 +1,4 @@
-//===-- UnwindAssembly.cpp ------------------------------------------------===//
+//===-- UnwindAssembly.cpp --------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -29,3 +29,5 @@ UnwindAssemblySP UnwindAssembly::FindPlugin(const ArchSpec &arch) {
 }
 
 UnwindAssembly::UnwindAssembly(const ArchSpec &arch) : m_arch(arch) {}
+
+UnwindAssembly::~UnwindAssembly() = default;

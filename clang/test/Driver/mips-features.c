@@ -268,13 +268,13 @@
 // RUN: %clang -target mips-linux-gnu -### -c %s \
 // RUN:     -mno-xgot -mxgot 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-XGOT %s
-// CHECK-XGOT: "-target-feature" "+xgot"
+// CHECK-XGOT: "-mllvm" "-mxgot"
 //
 // -mno-xgot
 // RUN: %clang -target mips-linux-gnu -### -c %s \
 // RUN:     -mxgot -mno-xgot 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-NOXGOT %s
-// CHECK-NOXGOT: "-target-feature" "-xgot"
+// CHECK-NOXGOT-NOT: "-mllvm" "-mxgot"
 //
 // -mldc1-sdc1
 // RUN: %clang -target mips-linux-gnu -### -c %s \

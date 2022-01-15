@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_INTERPRETER_OPTIONGROUPBOOLEAN_H
-#define LLDB_INTERPRETER_OPTIONGROUPBOOLEAN_H
+#ifndef liblldb_OptionGroupBoolean_h_
+#define liblldb_OptionGroupBoolean_h_
 
 #include "lldb/Interpreter/OptionValueBoolean.h"
 #include "lldb/Interpreter/Options.h"
@@ -25,7 +25,7 @@ public:
                      const char *usage_text, bool default_value,
                      bool no_argument_toggle_default);
 
-  ~OptionGroupBoolean() override = default;
+  ~OptionGroupBoolean() override;
 
   llvm::ArrayRef<OptionDefinition> GetDefinitions() override {
     return llvm::ArrayRef<OptionDefinition>(&m_option_definition, 1);
@@ -33,6 +33,7 @@ public:
 
   Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
                         ExecutionContext *execution_context) override;
+  Status SetOptionValue(uint32_t, const char *, ExecutionContext *) = delete;
 
   void OptionParsingStarting(ExecutionContext *execution_context) override;
 
@@ -47,4 +48,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // LLDB_INTERPRETER_OPTIONGROUPBOOLEAN_H
+#endif // liblldb_OptionGroupBoolean_h_

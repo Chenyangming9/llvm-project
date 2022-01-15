@@ -9,7 +9,7 @@
 ...
 ---
 name:            fpext
-alignment:       4
+alignment:       2
 legalized:       true
 tracksRegLiveness: true
 body:             |
@@ -36,7 +36,7 @@ body:             |
 ...
 ---
 name:            fptrunc
-alignment:       4
+alignment:       2
 legalized:       true
 tracksRegLiveness: true
 body:             |

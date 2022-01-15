@@ -10,7 +10,7 @@
 
 // template <class StateT> class fpos
 
-// Subtraction with fpos
+// Subraction with fpos
 
 #include <ios>
 #include <cassert>

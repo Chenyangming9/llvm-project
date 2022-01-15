@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: no-exceptions
+// UNSUPPORTED: libcxxabi-no-exceptions
 
 #include <exception>
 #include <stdlib.h>
@@ -67,7 +67,7 @@ void f2()
     }
 }
 
-int main(int, char**)
+int main()
 {
     try
     {
@@ -81,6 +81,4 @@ int main(int, char**)
     }
     assert(A::count == 0);
     assert(B::count == 0);
-
-    return 0;
 }

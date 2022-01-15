@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SOURCE_PLUGINS_PROCESS_MINIDUMP_PROCESSMINIDUMP_H
-#define LLDB_SOURCE_PLUGINS_PROCESS_MINIDUMP_PROCESSMINIDUMP_H
+#ifndef liblldb_ProcessMinidump_h_
+#define liblldb_ProcessMinidump_h_
 
 #include "MinidumpParser.h"
 #include "MinidumpTypes.h"
 
-#include "lldb/Target/PostMortemProcess.h"
+#include "lldb/Target/Process.h"
 #include "lldb/Target/StopInfo.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/ConstString.h"
@@ -26,12 +26,11 @@ namespace lldb_private {
 
 namespace minidump {
 
-class ProcessMinidump : public PostMortemProcess {
+class ProcessMinidump : public Process {
 public:
   static lldb::ProcessSP CreateInstance(lldb::TargetSP target_sp,
                                         lldb::ListenerSP listener_sp,
-                                        const FileSpec *crash_file_path,
-                                        bool can_connect);
+                                        const FileSpec *crash_file_path);
 
   static void Initialize();
 
@@ -98,14 +97,10 @@ public:
 protected:
   void Clear();
 
-  bool DoUpdateThreadList(ThreadList &old_thread_list,
-                          ThreadList &new_thread_list) override;
+  bool UpdateThreadList(ThreadList &old_thread_list,
+                        ThreadList &new_thread_list) override;
 
   void ReadModuleList();
-
-  lldb::ModuleSP GetOrCreateModule(lldb_private::UUID minidump_uuid,
-                                   llvm::StringRef name,
-                                   lldb_private::ModuleSpec module_spec);
 
   JITLoaderList &GetJITLoaders() override;
 
@@ -113,15 +108,12 @@ private:
   FileSpec m_core_file;
   lldb::DataBufferSP m_core_data;
   llvm::ArrayRef<minidump::Thread> m_thread_list;
-  const minidump::ExceptionStream *m_active_exception;
+  const MinidumpExceptionStream *m_active_exception;
   lldb::CommandObjectSP m_command_sp;
   bool m_is_wow64;
-  llvm::Optional<MemoryRegionInfos> m_memory_regions;
-
-  void BuildMemoryRegions();
 };
 
 } // namespace minidump
 } // namespace lldb_private
 
-#endif // LLDB_SOURCE_PLUGINS_PROCESS_MINIDUMP_PROCESSMINIDUMP_H
+#endif // liblldb_ProcessMinidump_h_

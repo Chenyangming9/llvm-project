@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TARGET_EXECUTIONCONTEXTSCOPE_H
-#define LLDB_TARGET_EXECUTIONCONTEXTSCOPE_H
+#ifndef liblldb_ExecutionContextScope_h_
+#define liblldb_ExecutionContextScope_h_
 
 #include "lldb/lldb-private.h"
 
@@ -31,7 +31,7 @@ namespace lldb_private {
 /// context to allow functions that take a execution contexts to be called.
 class ExecutionContextScope {
 public:
-  virtual ~ExecutionContextScope() = default;
+  virtual ~ExecutionContextScope() {}
 
   virtual lldb::TargetSP CalculateTarget() = 0;
 
@@ -55,4 +55,4 @@ public:
 
 } // namespace lldb_private
 
-#endif // LLDB_TARGET_EXECUTIONCONTEXTSCOPE_H
+#endif // liblldb_ExecutionContextScope_h_

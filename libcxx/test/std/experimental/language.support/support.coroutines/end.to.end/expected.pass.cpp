@@ -7,54 +7,57 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++03, c++11
+// UNSUPPORTED: c++98, c++03, c++11
 
 #include <experimental/coroutine>
 #include <cassert>
-#include <memory>
 
 #include "test_macros.h"
 using namespace std::experimental;
 
-struct error_tag { };
+struct error {};
 
 template <typename T, typename Error = int>
 struct expected {
 
   struct Data {
-    Data() : val(), error() { }
-    Data(T v, Error e) : val(v), error(e) { }
     T val;
     Error error;
   };
-  std::shared_ptr<Data> data;
+  Data data;
 
-  expected(T val) : data(std::make_shared<Data>(val, Error())) {}
-  expected(error_tag, Error error) : data(std::make_shared<Data>(T(), error)) {}
-  expected(std::shared_ptr<Data> p) : data(p) {}
+  struct DataPtr {
+    Data *p;
+    ~DataPtr() { delete p; }
+  };
+
+  expected() {}
+  expected(T val) : data{std::move(val),{}} {}
+  expected(struct error, Error error) : data{{}, std::move(error)} {}
+  expected(DataPtr & p) : data{std::move(p.p->val), std::move(p.p->error)} {}
 
   struct promise_type {
-    std::shared_ptr<Data> data;
-    expected get_return_object() { data = std::make_shared<Data>(); return {data}; }
+    Data* data;
+    DataPtr get_return_object() { data = new Data{}; return {data}; }
     suspend_never initial_suspend() { return {}; }
-    suspend_never final_suspend() noexcept { return {}; }
-    void return_value(T v) { data->val = v; data->error = {}; }
+    suspend_never final_suspend() { return {}; }
+    void return_value(T v) { data->val = std::move(v); data->error = {};}
     void unhandled_exception() {}
   };
 
-  bool await_ready() { return !data->error; }
-  T await_resume() { return data->val; }
+  bool await_ready() { return !data.error; }
+  T await_resume() { return std::move(data.val); }
   void await_suspend(coroutine_handle<promise_type> h) {
-    h.promise().data->error = data->error;
+    h.promise().data->error =std::move(data.error);
     h.destroy();
   }
 
-  T const& value() { return data->val; }
-  Error const& error() { return data->error; }
+  T const& value() { return data.val; }
+  Error const& error() { return data.error; }
 };
 
 expected<int> g() { return {0}; }
-expected<int> h() { return {error_tag{}, 42}; }
+expected<int> h() { return {error{}, 42}; }
 
 extern "C" void print(int);
 

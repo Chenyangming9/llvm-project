@@ -34,16 +34,16 @@ namespace __sanitizer {
 // See http://www.cl.cam.ac.uk/~pes20/cpp/cpp0xmappings.html
 // for mappings of the memory model to different processors.
 
-inline void atomic_signal_fence(memory_order) {
+INLINE void atomic_signal_fence(memory_order) {
   __asm__ __volatile__("" ::: "memory");
 }
 
-inline void atomic_thread_fence(memory_order) {
+INLINE void atomic_thread_fence(memory_order) {
   __sync_synchronize();
 }
 
 template<typename T>
-inline typename T::Type atomic_fetch_add(volatile T *a,
+INLINE typename T::Type atomic_fetch_add(volatile T *a,
     typename T::Type v, memory_order mo) {
   (void)mo;
   DCHECK(!((uptr)a % sizeof(*a)));
@@ -51,7 +51,7 @@ inline typename T::Type atomic_fetch_add(volatile T *a,
 }
 
 template<typename T>
-inline typename T::Type atomic_fetch_sub(volatile T *a,
+INLINE typename T::Type atomic_fetch_sub(volatile T *a,
     typename T::Type v, memory_order mo) {
   (void)mo;
   DCHECK(!((uptr)a % sizeof(*a)));
@@ -59,7 +59,7 @@ inline typename T::Type atomic_fetch_sub(volatile T *a,
 }
 
 template<typename T>
-inline typename T::Type atomic_exchange(volatile T *a,
+INLINE typename T::Type atomic_exchange(volatile T *a,
     typename T::Type v, memory_order mo) {
   DCHECK(!((uptr)a % sizeof(*a)));
   if (mo & (memory_order_release | memory_order_acq_rel | memory_order_seq_cst))
@@ -71,7 +71,7 @@ inline typename T::Type atomic_exchange(volatile T *a,
 }
 
 template <typename T>
-inline bool atomic_compare_exchange_strong(volatile T *a, typename T::Type *cmp,
+INLINE bool atomic_compare_exchange_strong(volatile T *a, typename T::Type *cmp,
                                            typename T::Type xchg,
                                            memory_order mo) {
   typedef typename T::Type Type;
@@ -84,7 +84,7 @@ inline bool atomic_compare_exchange_strong(volatile T *a, typename T::Type *cmp,
 }
 
 template<typename T>
-inline bool atomic_compare_exchange_weak(volatile T *a,
+INLINE bool atomic_compare_exchange_weak(volatile T *a,
                                          typename T::Type *cmp,
                                          typename T::Type xchg,
                                          memory_order mo) {

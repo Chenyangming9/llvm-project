@@ -17,7 +17,6 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "test_iterators.h"
 
 #if TEST_STD_VER > 17
 TEST_CONSTEXPR bool test_constexpr() {
@@ -30,13 +29,9 @@ TEST_CONSTEXPR bool test_constexpr() {
 
 void test()
 {
-    typedef random_access_iterator<int *> RI;
     int i1[] = {0, 0};
     assert(std::is_heap_until(i1, i1) == i1);
     assert(std::is_heap_until(i1, i1+1) == i1+1);
-    assert(std::is_heap_until(RI(i1), RI(i1)) == RI(i1));
-    assert(std::is_heap_until(RI(i1), RI(i1+1)) == RI(i1+1));
-
     int i2[] = {0, 1};
     int i3[] = {1, 0};
     assert(std::is_heap_until(i1, i1+2) == i1+2);

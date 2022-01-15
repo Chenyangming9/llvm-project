@@ -1,7 +1,7 @@
 ; RUN: llc -verify-machineinstrs -filetype=asm -o - -mtriple=x86_64-unknown-linux-gnu < %s | FileCheck %s
 ; RUN: llc -verify-machineinstrs -filetype=asm -o - -mtriple=x86_64-darwin-unknown    < %s | FileCheck %s
 
-define dso_local i32 @callee() nounwind noinline uwtable "function-instrument"="xray-always" {
+define i32 @callee() nounwind noinline uwtable "function-instrument"="xray-always" {
 ; CHECK:       .p2align 1, 0x90
 ; CHECK-LABEL: Lxray_sled_0:
 ; CHECK:       .ascii "\353\t"
@@ -21,7 +21,7 @@ define dso_local i32 @callee() nounwind noinline uwtable "function-instrument"="
 ; CHECK:       .quad {{.*}}xray_sleds_start0
 ; CHECK-NEXT:  .quad {{.*}}xray_sleds_end0
 
-define dso_local i32 @caller() nounwind noinline uwtable "function-instrument"="xray-always" {
+define i32 @caller() nounwind noinline uwtable "function-instrument"="xray-always" {
 ; CHECK:       .p2align 1, 0x90
 ; CHECK-LABEL: Lxray_sled_2:
 ; CHECK:       .ascii "\353\t"

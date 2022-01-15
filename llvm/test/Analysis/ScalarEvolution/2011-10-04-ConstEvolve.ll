@@ -1,5 +1,4 @@
-; RUN: opt < %s -analyze -enable-new-pm=0 -scalar-evolution | FileCheck %s
-; RUN: opt < %s -disable-output "-passes=print<scalar-evolution>" 2>&1 | FileCheck %s
+; RUN: opt < %s -analyze -scalar-evolution | FileCheck %s
 
 ; Exercise getConstantEvolvingPHIOperands on an interesting loop.
 ; This should complete in milliseconds, not minutes.

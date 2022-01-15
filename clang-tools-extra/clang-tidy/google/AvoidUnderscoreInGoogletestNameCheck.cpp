@@ -13,15 +13,13 @@
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/MacroArgs.h"
-#include "clang/Lex/PPCallbacks.h"
-#include "clang/Lex/Preprocessor.h"
 
 namespace clang {
 namespace tidy {
 namespace google {
 namespace readability {
 
-constexpr llvm::StringLiteral KDisabledTestPrefix = "DISABLED_";
+constexpr llvm::StringLiteral kDisabledTestPrefix = "DISABLED_";
 
 // Determines whether the macro is a Googletest test macro.
 static bool isGoogletestTestMacro(StringRef MacroName) {
@@ -63,7 +61,7 @@ public:
 
     std::string TestNameMaybeDisabled = PP->getSpelling(*TestNameToken);
     StringRef TestName = TestNameMaybeDisabled;
-    TestName.consume_front(KDisabledTestPrefix);
+    TestName.consume_front(kDisabledTestPrefix);
     if (TestName.contains('_'))
       Check->diag(TestNameToken->getLocation(),
                   "avoid using \"_\" in test name \"%0\" according to "
@@ -81,7 +79,7 @@ private:
 void AvoidUnderscoreInGoogletestNameCheck::registerPPCallbacks(
     const SourceManager &SM, Preprocessor *PP, Preprocessor *ModuleExpanderPP) {
   PP->addPPCallbacks(
-      std::make_unique<AvoidUnderscoreInGoogletestNameCallback>(PP, this));
+      llvm::make_unique<AvoidUnderscoreInGoogletestNameCallback>(PP, this));
 }
 
 } // namespace readability

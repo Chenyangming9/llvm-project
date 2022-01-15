@@ -14,7 +14,7 @@
 #include "llvm/Analysis/DomTreeUpdater.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Analysis/PostDominators.h"
-#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/Support/GenericDomTree.h"
 #include <algorithm>
 #include <functional>
@@ -32,7 +32,8 @@ bool DomTreeUpdater::isUpdateValid(
   // Since isUpdateValid() must be called *after* the Terminator of From is
   // altered we can determine if the update is unnecessary for batch updates
   // or invalid for a single update.
-  const bool HasEdge = llvm::is_contained(successors(From), To);
+  const bool HasEdge = llvm::any_of(
+      successors(From), [To](const BasicBlock *B) { return B == To; });
 
   // If the IR does not match the update,
   // 1. In batch updates, this update is unnecessary.
@@ -166,7 +167,7 @@ bool DomTreeUpdater::hasPendingPostDomTreeUpdates() const {
 bool DomTreeUpdater::isBBPendingDeletion(llvm::BasicBlock *DelBB) const {
   if (Strategy == UpdateStrategy::Eager || DeletedBBs.empty())
     return false;
-  return DeletedBBs.contains(DelBB);
+  return DeletedBBs.count(DelBB) != 0;
 }
 
 // The DT and PDT require the nodes related to updates
@@ -232,8 +233,7 @@ void DomTreeUpdater::applyUpdates(ArrayRef<DominatorTree::UpdateType> Updates) {
     return;
 
   if (Strategy == UpdateStrategy::Lazy) {
-    PendUpdates.reserve(PendUpdates.size() + Updates.size());
-    for (const auto &U : Updates)
+    for (const auto U : Updates)
       if (!isSelfDominance(U))
         PendUpdates.push_back(U);
 
@@ -253,7 +253,7 @@ void DomTreeUpdater::applyUpdatesPermissive(
 
   SmallSet<std::pair<BasicBlock *, BasicBlock *>, 8> Seen;
   SmallVector<DominatorTree::UpdateType, 8> DeduplicatedUpdates;
-  for (const auto &U : Updates) {
+  for (const auto U : Updates) {
     auto Edge = std::make_pair(U.getFrom(), U.getTo());
     // Because it is illegal to submit updates that have already been applied
     // and updates to an edge need to be strictly ordered,
@@ -507,7 +507,7 @@ LLVM_DUMP_METHOD void DomTreeUpdater::dump() const {
 
   OS << "Pending DeletedBBs:\n";
   Index = 0;
-  for (const auto *BB : DeletedBBs) {
+  for (auto BB : DeletedBBs) {
     OS << "  " << Index << " : ";
     ++Index;
     if (BB->hasName())
@@ -519,7 +519,7 @@ LLVM_DUMP_METHOD void DomTreeUpdater::dump() const {
 
   OS << "Pending Callbacks:\n";
   Index = 0;
-  for (const auto &BB : Callbacks) {
+  for (auto BB : Callbacks) {
     OS << "  " << Index << " : ";
     ++Index;
     if (BB->hasName())

@@ -1,4 +1,4 @@
-//===-- LibCxxQueue.cpp ---------------------------------------------------===//
+//===-- LibCxxQueue.cpp -----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -38,21 +38,16 @@ public:
   }
 
 private:
-  // The lifetime of a ValueObject and all its derivative ValueObjects
-  // (children, clones, etc.) is managed by a ClusterManager. These
-  // objects are only destroyed when every shared pointer to any of them
-  // is destroyed, so we must not store a shared pointer to any ValueObject
-  // derived from our backend ValueObject (since we're in the same cluster).
-  ValueObject* m_container_sp = nullptr;
+  ValueObjectSP m_container_sp;
 };
 } // namespace
 
 bool QueueFrontEnd::Update() {
-  m_container_sp = nullptr;
+  m_container_sp.reset();
   ValueObjectSP c_sp = m_backend.GetChildMemberWithName(ConstString("c"), true);
   if (!c_sp)
     return false;
-  m_container_sp = c_sp->GetSyntheticValue().get();
+  m_container_sp = c_sp->GetSyntheticValue();
   return false;
 }
 

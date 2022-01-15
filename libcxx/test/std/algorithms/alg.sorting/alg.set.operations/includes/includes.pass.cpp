@@ -20,9 +20,21 @@
 #include "test_macros.h"
 #include "test_iterators.h"
 
+#if TEST_STD_VER > 17
+TEST_CONSTEXPR bool test_constexpr() {
+    int ia[] = {1, 2, 2, 3, 3, 3, 4, 4, 4, 4};
+    int ib[] = {2, 4};
+    int ic[] = {3, 3, 3, 3};
+
+    return  std::includes(std::begin(ia), std::end(ia), std::begin(ib), std::end(ib))
+        && !std::includes(std::begin(ia), std::end(ia), std::begin(ic), std::end(ic))
+           ;
+    }
+#endif
+
 template <class Iter1, class Iter2>
-TEST_CONSTEXPR_CXX20
-void test()
+void
+test()
 {
     int ia[] = {1, 2, 2, 3, 3, 3, 4, 4, 4, 4};
     const unsigned sa = sizeof(ia)/sizeof(ia[0]);
@@ -50,47 +62,41 @@ void test()
     assert(!std::includes(Iter1(ia), Iter1(ia+sa), Iter2(id), Iter2(id+4)));
 }
 
-TEST_CONSTEXPR_CXX20
-bool do_tests()
+int main(int, char**)
 {
-    test<cpp17_input_iterator<const int*>, cpp17_input_iterator<const int*> >();
-    test<cpp17_input_iterator<const int*>, forward_iterator<const int*> >();
-    test<cpp17_input_iterator<const int*>, bidirectional_iterator<const int*> >();
-    test<cpp17_input_iterator<const int*>, random_access_iterator<const int*> >();
-    test<cpp17_input_iterator<const int*>, const int*>();
+    test<input_iterator<const int*>, input_iterator<const int*> >();
+    test<input_iterator<const int*>, forward_iterator<const int*> >();
+    test<input_iterator<const int*>, bidirectional_iterator<const int*> >();
+    test<input_iterator<const int*>, random_access_iterator<const int*> >();
+    test<input_iterator<const int*>, const int*>();
 
-    test<forward_iterator<const int*>, cpp17_input_iterator<const int*> >();
+    test<forward_iterator<const int*>, input_iterator<const int*> >();
     test<forward_iterator<const int*>, forward_iterator<const int*> >();
     test<forward_iterator<const int*>, bidirectional_iterator<const int*> >();
     test<forward_iterator<const int*>, random_access_iterator<const int*> >();
     test<forward_iterator<const int*>, const int*>();
 
-    test<bidirectional_iterator<const int*>, cpp17_input_iterator<const int*> >();
+    test<bidirectional_iterator<const int*>, input_iterator<const int*> >();
     test<bidirectional_iterator<const int*>, forward_iterator<const int*> >();
     test<bidirectional_iterator<const int*>, bidirectional_iterator<const int*> >();
     test<bidirectional_iterator<const int*>, random_access_iterator<const int*> >();
     test<bidirectional_iterator<const int*>, const int*>();
 
-    test<random_access_iterator<const int*>, cpp17_input_iterator<const int*> >();
+    test<random_access_iterator<const int*>, input_iterator<const int*> >();
     test<random_access_iterator<const int*>, forward_iterator<const int*> >();
     test<random_access_iterator<const int*>, bidirectional_iterator<const int*> >();
     test<random_access_iterator<const int*>, random_access_iterator<const int*> >();
     test<random_access_iterator<const int*>, const int*>();
 
-    test<const int*, cpp17_input_iterator<const int*> >();
+    test<const int*, input_iterator<const int*> >();
     test<const int*, forward_iterator<const int*> >();
     test<const int*, bidirectional_iterator<const int*> >();
     test<const int*, random_access_iterator<const int*> >();
     test<const int*, const int*>();
 
-    return true;
-}
-
-int main(int, char**)
-{
-    do_tests();
 #if TEST_STD_VER > 17
-    static_assert(do_tests());
+   static_assert(test_constexpr());
 #endif
-    return 0;
+
+  return 0;
 }

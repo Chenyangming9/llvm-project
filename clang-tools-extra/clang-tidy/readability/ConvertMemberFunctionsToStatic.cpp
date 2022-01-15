@@ -13,7 +13,6 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Basic/SourceLocation.h"
-#include "clang/Lex/Lexer.h"
 
 using namespace clang::ast_matchers;
 
@@ -92,7 +91,7 @@ void ConvertMemberFunctionsToStatic::registerMatchers(MatchFinder *Finder) {
       this);
 }
 
-/// Obtain the original source code text from a SourceRange.
+/// \brief Obtain the original source code text from a SourceRange.
 static StringRef getStringFromRange(SourceManager &SourceMgr,
                                     const LangOptions &LangOpts,
                                     SourceRange Range) {

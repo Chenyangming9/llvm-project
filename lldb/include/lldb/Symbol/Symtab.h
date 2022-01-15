@@ -6,14 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_SYMBOL_SYMTAB_H
-#define LLDB_SYMBOL_SYMTAB_H
+#ifndef liblldb_Symtab_h_
+#define liblldb_Symtab_h_
 
 #include "lldb/Core/UniqueCStringMap.h"
 #include "lldb/Symbol/Symbol.h"
 #include "lldb/Utility/RangeMap.h"
 #include "lldb/lldb-private.h"
-#include <map>
 #include <mutex>
 #include <vector>
 
@@ -41,12 +40,8 @@ public:
   uint32_t AddSymbol(const Symbol &symbol);
   size_t GetNumSymbols() const;
   void SectionFileAddressesChanged();
-  void
-  Dump(Stream *s, Target *target, SortOrder sort_type,
-       Mangled::NamePreference name_preference = Mangled::ePreferDemangled);
-  void Dump(Stream *s, Target *target, std::vector<uint32_t> &indexes,
-            Mangled::NamePreference name_preference =
-                Mangled::ePreferDemangled) const;
+  void Dump(Stream *s, Target *target, SortOrder sort_type);
+  void Dump(Stream *s, Target *target, std::vector<uint32_t> &indexes) const;
   uint32_t GetIndexForSymbol(const Symbol *symbol) const;
   std::recursive_mutex &GetMutex() { return m_mutex; }
   Symbol *FindSymbolByID(lldb::user_id_t uid) const;
@@ -97,15 +92,15 @@ public:
       const RegularExpression &regex, lldb::SymbolType symbol_type,
       Debug symbol_debug_type, Visibility symbol_visibility,
       std::vector<uint32_t> &indexes);
-  void FindAllSymbolsWithNameAndType(ConstString name,
-                                     lldb::SymbolType symbol_type,
-                                     std::vector<uint32_t> &symbol_indexes);
-  void FindAllSymbolsWithNameAndType(ConstString name,
-                                     lldb::SymbolType symbol_type,
-                                     Debug symbol_debug_type,
-                                     Visibility symbol_visibility,
-                                     std::vector<uint32_t> &symbol_indexes);
-  void FindAllSymbolsMatchingRexExAndType(
+  size_t FindAllSymbolsWithNameAndType(ConstString name,
+                                       lldb::SymbolType symbol_type,
+                                       std::vector<uint32_t> &symbol_indexes);
+  size_t FindAllSymbolsWithNameAndType(ConstString name,
+                                       lldb::SymbolType symbol_type,
+                                       Debug symbol_debug_type,
+                                       Visibility symbol_visibility,
+                                       std::vector<uint32_t> &symbol_indexes);
+  size_t FindAllSymbolsMatchingRexExAndType(
       const RegularExpression &regex, lldb::SymbolType symbol_type,
       Debug symbol_debug_type, Visibility symbol_visibility,
       std::vector<uint32_t> &symbol_indexes);
@@ -117,8 +112,8 @@ public:
   Symbol *FindSymbolContainingFileAddress(lldb::addr_t file_addr);
   void ForEachSymbolContainingFileAddress(
       lldb::addr_t file_addr, std::function<bool(Symbol *)> const &callback);
-  void FindFunctionSymbols(ConstString name, uint32_t name_type_mask,
-                           SymbolContextList &sc_list);
+  size_t FindFunctionSymbols(ConstString name, uint32_t name_type_mask,
+                             SymbolContextList &sc_list);
   void CalculateSymbolSizes();
 
   void SortSymbolIndexesByValue(std::vector<uint32_t> &indexes,
@@ -144,29 +139,7 @@ protected:
   typedef std::vector<Symbol> collection;
   typedef collection::iterator iterator;
   typedef collection::const_iterator const_iterator;
-  class FileRangeToIndexMapCompare {
-  public:
-    FileRangeToIndexMapCompare(const Symtab &symtab) : m_symtab(symtab) {}
-    bool operator()(const uint32_t a_data, const uint32_t b_data) const {
-      return rank(a_data) > rank(b_data);
-    }
-
-  private:
-    // How much preferred is this symbol?
-    int rank(const uint32_t data) const {
-      const Symbol &symbol = *m_symtab.SymbolAtIndex(data);
-      if (symbol.IsExternal())
-        return 3;
-      if (symbol.IsWeak())
-        return 2;
-      if (symbol.IsDebug())
-        return 0;
-      return 1;
-    }
-    const Symtab &m_symtab;
-  };
-  typedef RangeDataVector<lldb::addr_t, lldb::addr_t, uint32_t, 0,
-                          FileRangeToIndexMapCompare>
+  typedef RangeDataVector<lldb::addr_t, lldb::addr_t, uint32_t>
       FileRangeToIndexMap;
   void InitNameIndexes();
   void InitAddressIndexes();
@@ -174,21 +147,15 @@ protected:
   ObjectFile *m_objfile;
   collection m_symbols;
   FileRangeToIndexMap m_file_addr_to_index;
-
-  /// Maps function names to symbol indices (grouped by FunctionNameTypes)
-  std::map<lldb::FunctionNameType, UniqueCStringMap<uint32_t>>
-      m_name_to_symbol_indices;
+  UniqueCStringMap<uint32_t> m_name_to_index;
+  UniqueCStringMap<uint32_t> m_basename_to_index;
+  UniqueCStringMap<uint32_t> m_method_to_index;
+  UniqueCStringMap<uint32_t> m_selector_to_index;
   mutable std::recursive_mutex
       m_mutex; // Provide thread safety for this symbol table
   bool m_file_addr_to_index_computed : 1, m_name_indexes_computed : 1;
 
 private:
-  UniqueCStringMap<uint32_t> &
-  GetNameToSymbolIndexMap(lldb::FunctionNameType type) {
-    auto map = m_name_to_symbol_indices.find(type);
-    assert(map != m_name_to_symbol_indices.end());
-    return map->second;
-  }
   bool CheckSymbolAtIndex(size_t idx, Debug symbol_debug_type,
                           Visibility symbol_visibility) const {
     switch (symbol_debug_type) {
@@ -219,26 +186,6 @@ private:
     return false;
   }
 
-  /// A helper function that looks up full function names.
-  ///
-  /// We generate unique names for synthetic symbols so that users can look
-  /// them up by name when needed. But because doing so is uncommon in normal
-  /// debugger use, we trade off some performance at lookup time for faster
-  /// symbol table building by detecting these symbols and generating their
-  /// names lazily, rather than adding them to the normal symbol indexes. This
-  /// function does the job of first consulting the name indexes, and if that
-  /// fails it extracts the information it needs from the synthetic name and
-  /// locates the symbol.
-  ///
-  /// @param[in] symbol_name The symbol name to search for.
-  ///
-  /// @param[out] indexes The vector if symbol indexes to update with results.
-  ///
-  /// @returns The number of indexes added to the index vector. Zero if no
-  /// matches were found.
-  uint32_t GetNameIndexes(ConstString symbol_name,
-                          std::vector<uint32_t> &indexes);
-
   void SymbolIndicesToSymbolContextList(std::vector<uint32_t> &symbol_indexes,
                                         SymbolContextList &sc_list);
 
@@ -251,10 +198,9 @@ private:
                             const char *decl_context,
                             const std::set<const char *> &class_contexts);
 
-  Symtab(const Symtab &) = delete;
-  const Symtab &operator=(const Symtab &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(Symtab);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_SYMBOL_SYMTAB_H
+#endif // liblldb_Symtab_h_

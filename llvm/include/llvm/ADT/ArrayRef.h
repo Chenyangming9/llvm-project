@@ -26,8 +26,6 @@
 
 namespace llvm {
 
-  template<typename T> struct DenseMapInfo;
-
   /// ArrayRef - Represent a constant reference to an array (0 or more elements
   /// consecutively in memory), i.e. a start pointer and a length.  It allows
   /// various APIs to take consecutive elements easily and conveniently.
@@ -40,19 +38,12 @@ namespace llvm {
   /// This is intended to be trivially copyable, so it should be passed by
   /// value.
   template<typename T>
-  class LLVM_GSL_POINTER LLVM_NODISCARD ArrayRef {
+  class LLVM_NODISCARD ArrayRef {
   public:
-    using value_type = T;
-    using pointer = value_type *;
-    using const_pointer = const value_type *;
-    using reference = value_type &;
-    using const_reference = const value_type &;
-    using iterator = const_pointer;
-    using const_iterator = const_pointer;
-    using reverse_iterator = std::reverse_iterator<iterator>;
-    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+    using iterator = const T *;
+    using const_iterator = const T *;
     using size_type = size_t;
-    using difference_type = ptrdiff_t;
+    using reverse_iterator = std::reverse_iterator<iterator>;
 
   private:
     /// The start of the array, in an external buffer.
@@ -106,45 +97,37 @@ namespace llvm {
     /*implicit*/ constexpr ArrayRef(const T (&Arr)[N]) : Data(Arr), Length(N) {}
 
     /// Construct an ArrayRef from a std::initializer_list.
-#if LLVM_GNUC_PREREQ(9, 0, 0)
-// Disable gcc's warning in this constructor as it generates an enormous amount
-// of messages. Anyone using ArrayRef should already be aware of the fact that
-// it does not do lifetime extension.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winit-list-lifetime"
-#endif
     /*implicit*/ ArrayRef(const std::initializer_list<T> &Vec)
     : Data(Vec.begin() == Vec.end() ? (T*)nullptr : Vec.begin()),
       Length(Vec.size()) {}
-#if LLVM_GNUC_PREREQ(9, 0, 0)
-#pragma GCC diagnostic pop
-#endif
 
     /// Construct an ArrayRef<const T*> from ArrayRef<T*>. This uses SFINAE to
     /// ensure that only ArrayRefs of pointers can be converted.
     template <typename U>
-    ArrayRef(const ArrayRef<U *> &A,
-             std::enable_if_t<std::is_convertible<U *const *, T const *>::value>
-                 * = nullptr)
-        : Data(A.data()), Length(A.size()) {}
+    ArrayRef(
+        const ArrayRef<U *> &A,
+        typename std::enable_if<
+           std::is_convertible<U *const *, T const *>::value>::type * = nullptr)
+      : Data(A.data()), Length(A.size()) {}
 
     /// Construct an ArrayRef<const T*> from a SmallVector<T*>. This is
     /// templated in order to avoid instantiating SmallVectorTemplateCommon<T>
     /// whenever we copy-construct an ArrayRef.
-    template <typename U, typename DummyT>
+    template<typename U, typename DummyT>
     /*implicit*/ ArrayRef(
-        const SmallVectorTemplateCommon<U *, DummyT> &Vec,
-        std::enable_if_t<std::is_convertible<U *const *, T const *>::value> * =
-            nullptr)
-        : Data(Vec.data()), Length(Vec.size()) {}
+      const SmallVectorTemplateCommon<U *, DummyT> &Vec,
+      typename std::enable_if<
+          std::is_convertible<U *const *, T const *>::value>::type * = nullptr)
+      : Data(Vec.data()), Length(Vec.size()) {
+    }
 
     /// Construct an ArrayRef<const T*> from std::vector<T*>. This uses SFINAE
     /// to ensure that only vectors of pointers can be converted.
-    template <typename U, typename A>
+    template<typename U, typename A>
     ArrayRef(const std::vector<U *, A> &Vec,
-             std::enable_if_t<std::is_convertible<U *const *, T const *>::value>
-                 * = 0)
-        : Data(Vec.data()), Length(Vec.size()) {}
+             typename std::enable_if<
+                 std::is_convertible<U *const *, T const *>::value>::type* = 0)
+      : Data(Vec.data()), Length(Vec.size()) {}
 
     /// @}
     /// @name Simple Operations
@@ -263,7 +246,7 @@ namespace llvm {
     /// The declaration here is extra complicated so that "arrayRef = {}"
     /// continues to select the move assignment operator.
     template <typename U>
-    std::enable_if_t<std::is_same<U, T>::value, ArrayRef<T>> &
+    typename std::enable_if<std::is_same<U, T>::value, ArrayRef<T>>::type &
     operator=(U &&Temporary) = delete;
 
     /// Disallow accidental assignment from a temporary.
@@ -271,7 +254,7 @@ namespace llvm {
     /// The declaration here is extra complicated so that "arrayRef = {}"
     /// continues to select the move assignment operator.
     template <typename U>
-    std::enable_if_t<std::is_same<U, T>::value, ArrayRef<T>> &
+    typename std::enable_if<std::is_same<U, T>::value, ArrayRef<T>>::type &
     operator=(std::initializer_list<U>) = delete;
 
     /// @}
@@ -306,17 +289,8 @@ namespace llvm {
   template<typename T>
   class LLVM_NODISCARD MutableArrayRef : public ArrayRef<T> {
   public:
-    using value_type = T;
-    using pointer = value_type *;
-    using const_pointer = const value_type *;
-    using reference = value_type &;
-    using const_reference = const value_type &;
-    using iterator = pointer;
-    using const_iterator = const_pointer;
+    using iterator = T *;
     using reverse_iterator = std::reverse_iterator<iterator>;
-    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-    using size_type = size_t;
-    using difference_type = ptrdiff_t;
 
     /// Construct an empty MutableArrayRef.
     /*implicit*/ MutableArrayRef() = default;
@@ -324,17 +298,17 @@ namespace llvm {
     /// Construct an empty MutableArrayRef from None.
     /*implicit*/ MutableArrayRef(NoneType) : ArrayRef<T>() {}
 
-    /// Construct a MutableArrayRef from a single element.
+    /// Construct an MutableArrayRef from a single element.
     /*implicit*/ MutableArrayRef(T &OneElt) : ArrayRef<T>(OneElt) {}
 
-    /// Construct a MutableArrayRef from a pointer and length.
+    /// Construct an MutableArrayRef from a pointer and length.
     /*implicit*/ MutableArrayRef(T *data, size_t length)
       : ArrayRef<T>(data, length) {}
 
-    /// Construct a MutableArrayRef from a range.
+    /// Construct an MutableArrayRef from a range.
     MutableArrayRef(T *begin, T *end) : ArrayRef<T>(begin, end) {}
 
-    /// Construct a MutableArrayRef from a SmallVector.
+    /// Construct an MutableArrayRef from a SmallVector.
     /*implicit*/ MutableArrayRef(SmallVectorImpl<T> &Vec)
     : ArrayRef<T>(Vec) {}
 
@@ -342,12 +316,12 @@ namespace llvm {
     /*implicit*/ MutableArrayRef(std::vector<T> &Vec)
     : ArrayRef<T>(Vec) {}
 
-    /// Construct a MutableArrayRef from a std::array
+    /// Construct an ArrayRef from a std::array
     template <size_t N>
     /*implicit*/ constexpr MutableArrayRef(std::array<T, N> &Arr)
         : ArrayRef<T>(Arr) {}
 
-    /// Construct a MutableArrayRef from a C array.
+    /// Construct an MutableArrayRef from a C array.
     template <size_t N>
     /*implicit*/ constexpr MutableArrayRef(T (&Arr)[N]) : ArrayRef<T>(Arr) {}
 
@@ -507,12 +481,6 @@ namespace llvm {
     return Vec;
   }
 
-  /// Construct an ArrayRef from a std::array.
-  template <typename T, std::size_t N>
-  ArrayRef<T> makeArrayRef(const std::array<T, N> &Arr) {
-    return Arr;
-  }
-
   /// Construct an ArrayRef from an ArrayRef (no-op) (const)
   template <typename T> ArrayRef<T> makeArrayRef(const ArrayRef<T> &Vec) {
     return Vec;
@@ -550,18 +518,8 @@ namespace llvm {
     return LHS.equals(RHS);
   }
 
-  template <typename T>
-  inline bool operator==(SmallVectorImpl<T> &LHS, ArrayRef<T> RHS) {
-    return ArrayRef<T>(LHS).equals(RHS);
-  }
-
-  template <typename T>
+  template<typename T>
   inline bool operator!=(ArrayRef<T> LHS, ArrayRef<T> RHS) {
-    return !(LHS == RHS);
-  }
-
-  template <typename T>
-  inline bool operator!=(SmallVectorImpl<T> &LHS, ArrayRef<T> RHS) {
     return !(LHS == RHS);
   }
 
@@ -570,35 +528,6 @@ namespace llvm {
   template <typename T> hash_code hash_value(ArrayRef<T> S) {
     return hash_combine_range(S.begin(), S.end());
   }
-
-  // Provide DenseMapInfo for ArrayRefs.
-  template <typename T> struct DenseMapInfo<ArrayRef<T>> {
-    static inline ArrayRef<T> getEmptyKey() {
-      return ArrayRef<T>(
-          reinterpret_cast<const T *>(~static_cast<uintptr_t>(0)), size_t(0));
-    }
-
-    static inline ArrayRef<T> getTombstoneKey() {
-      return ArrayRef<T>(
-          reinterpret_cast<const T *>(~static_cast<uintptr_t>(1)), size_t(0));
-    }
-
-    static unsigned getHashValue(ArrayRef<T> Val) {
-      assert(Val.data() != getEmptyKey().data() &&
-             "Cannot hash the empty key!");
-      assert(Val.data() != getTombstoneKey().data() &&
-             "Cannot hash the tombstone key!");
-      return (unsigned)(hash_value(Val));
-    }
-
-    static bool isEqual(ArrayRef<T> LHS, ArrayRef<T> RHS) {
-      if (RHS.data() == getEmptyKey().data())
-        return LHS.data() == getEmptyKey().data();
-      if (RHS.data() == getTombstoneKey().data())
-        return LHS.data() == getTombstoneKey().data();
-      return LHS == RHS;
-    }
-  };
 
 } // end namespace llvm
 

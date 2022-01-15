@@ -8,18 +8,17 @@
 //
 // This file is a part of AddressSanitizer, an address sanity checker.
 //
-// ASan-private header for asan_allocator.cpp.
+// ASan-private header for asan_allocator.cc.
 //===----------------------------------------------------------------------===//
 
 #ifndef ASAN_ALLOCATOR_H
 #define ASAN_ALLOCATOR_H
 
 #include "asan_flags.h"
-#include "asan_interceptors.h"
 #include "asan_internal.h"
+#include "asan_interceptors.h"
 #include "sanitizer_common/sanitizer_allocator.h"
 #include "sanitizer_common/sanitizer_list.h"
-#include "sanitizer_common/sanitizer_platform.h"
 
 namespace __asan {
 
@@ -29,7 +28,7 @@ enum AllocType {
   FROM_NEW_BR = 3   // Memory block came from operator new [ ]
 };
 
-class AsanChunk;
+struct AsanChunk;
 
 struct AllocatorOptions {
   u32 quarantine_size_mb;
@@ -133,10 +132,6 @@ typedef DefaultSizeClassMap SizeClassMap;
 const uptr kAllocatorSpace =  ~(uptr)0;
 const uptr kAllocatorSize  =  0x2000000000ULL;  // 128G.
 typedef VeryCompactSizeClassMap SizeClassMap;
-#elif SANITIZER_RISCV64
-const uptr kAllocatorSpace = ~(uptr)0;
-const uptr kAllocatorSize = 0x2000000000ULL;  // 128G.
-typedef VeryDenseSizeClassMap SizeClassMap;
 # elif defined(__aarch64__)
 // AArch64/SANITIZER_CAN_USE_ALLOCATOR64 is only for 42-bit VMA
 // so no need to different values for different VMA.
@@ -176,7 +171,7 @@ template <typename AddressSpaceViewTy>
 struct AP32 {
   static const uptr kSpaceBeg = 0;
   static const u64 kSpaceSize = SANITIZER_MMAP_RANGE_SIZE;
-  static const uptr kMetadataSize = 0;
+  static const uptr kMetadataSize = 16;
   typedef __asan::SizeClassMap SizeClassMap;
   static const uptr kRegionSizeLog = 20;
   using AddressSpaceView = AddressSpaceViewTy;

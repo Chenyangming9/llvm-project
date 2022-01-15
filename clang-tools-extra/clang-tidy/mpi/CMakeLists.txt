@@ -1,7 +1,4 @@
-set(LLVM_LINK_COMPONENTS
-  FrontendOpenMP
-  Support
-  )
+set(LLVM_LINK_COMPONENTS support)
 
 add_clang_library(clangTidyMPIModule
   BufferDerefCheck.cpp
@@ -9,20 +6,13 @@ add_clang_library(clangTidyMPIModule
   TypeMismatchCheck.cpp
 
   LINK_LIBS
-  clangTidy
-  clangTidyUtils
-
-  DEPENDS
-  omp_gen
-  )
-
-clang_target_link_libraries(clangTidyMPIModule
-  PRIVATE
   clangAnalysis
   clangAST
   clangASTMatchers
   clangBasic
   clangLex
+  clangTidy
+  clangTidyUtils
   clangTooling
   clangStaticAnalyzerCheckers
   )

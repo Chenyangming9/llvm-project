@@ -1,9 +1,3 @@
-add_llvm_component_library(LLVMARCInfo
+add_llvm_library(LLVMARCInfo
   ARCTargetInfo.cpp
-
-  LINK_COMPONENTS
-  Support
-
-  ADD_TO_COMPONENT
-  ARC
   )

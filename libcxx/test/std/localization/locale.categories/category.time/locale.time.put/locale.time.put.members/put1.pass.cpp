@@ -15,7 +15,6 @@
 
 #include <locale>
 #include <cassert>
-#include <ios>
 #include "test_macros.h"
 #include "test_iterators.h"
 

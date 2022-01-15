@@ -7,7 +7,6 @@ unittest("IPOTests") {
     "//llvm/lib/Transforms/IPO",
   ]
   sources = [
-    "AttributorTest.cpp",
     "LowerTypeTests.cpp",
     "WholeProgramDevirt.cpp",
   ]

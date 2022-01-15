@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Support/Windows/WindowsSupport.h"
+#include "WindowsSupport.h"
 #include <cstdio>
 #include <string>
 

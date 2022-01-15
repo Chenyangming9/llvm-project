@@ -47,7 +47,7 @@ Error loadNaiveFormatLog(StringRef Data, bool IsLittleEndian,
         std::make_error_code(std::errc::invalid_argument));
 
   DataExtractor Reader(Data, IsLittleEndian, 8);
-  uint64_t OffsetPtr = 0;
+  uint32_t OffsetPtr = 0;
   auto FileHeaderOrError = readBinaryFormatHeader(Reader, OffsetPtr);
   if (!FileHeaderOrError)
     return FileHeaderOrError.takeError();
@@ -67,14 +67,13 @@ Error loadNaiveFormatLog(StringRef Data, bool IsLittleEndian,
     if (!Reader.isValidOffsetForDataOfSize(OffsetPtr, 32))
       return createStringError(
           std::make_error_code(std::errc::executable_format_error),
-          "Not enough bytes to read a full record at offset %" PRId64 ".",
-          OffsetPtr);
+          "Not enough bytes to read a full record at offset %d.", OffsetPtr);
     auto PreReadOffset = OffsetPtr;
     auto RecordType = Reader.getU16(&OffsetPtr);
     if (OffsetPtr == PreReadOffset)
       return createStringError(
           std::make_error_code(std::errc::executable_format_error),
-          "Failed reading record type at offset %" PRId64 ".", OffsetPtr);
+          "Failed reading record type at offset %d.", OffsetPtr);
 
     switch (RecordType) {
     case 0: { // Normal records.
@@ -87,15 +86,14 @@ Error loadNaiveFormatLog(StringRef Data, bool IsLittleEndian,
       if (OffsetPtr == PreReadOffset)
         return createStringError(
             std::make_error_code(std::errc::executable_format_error),
-            "Failed reading CPU field at offset %" PRId64 ".", OffsetPtr);
+            "Failed reading CPU field at offset %d.", OffsetPtr);
 
       PreReadOffset = OffsetPtr;
       auto Type = Reader.getU8(&OffsetPtr);
       if (OffsetPtr == PreReadOffset)
         return createStringError(
             std::make_error_code(std::errc::executable_format_error),
-            "Failed reading record type field at offset %" PRId64 ".",
-            OffsetPtr);
+            "Failed reading record type field at offset %d.", OffsetPtr);
 
       switch (Type) {
       case 0:
@@ -113,7 +111,7 @@ Error loadNaiveFormatLog(StringRef Data, bool IsLittleEndian,
       default:
         return createStringError(
             std::make_error_code(std::errc::executable_format_error),
-            "Unknown record type '%d' at offset %" PRId64 ".", Type, OffsetPtr);
+            "Unknown record type '%d' at offset %d.", Type, OffsetPtr);
       }
 
       PreReadOffset = OffsetPtr;
@@ -121,29 +119,28 @@ Error loadNaiveFormatLog(StringRef Data, bool IsLittleEndian,
       if (OffsetPtr == PreReadOffset)
         return createStringError(
             std::make_error_code(std::errc::executable_format_error),
-            "Failed reading function id field at offset %" PRId64 ".",
-            OffsetPtr);
+            "Failed reading function id field at offset %d.", OffsetPtr);
 
       PreReadOffset = OffsetPtr;
       Record.TSC = Reader.getU64(&OffsetPtr);
       if (OffsetPtr == PreReadOffset)
         return createStringError(
             std::make_error_code(std::errc::executable_format_error),
-            "Failed reading TSC field at offset %" PRId64 ".", OffsetPtr);
+            "Failed reading TSC field at offset %d.", OffsetPtr);
 
       PreReadOffset = OffsetPtr;
       Record.TId = Reader.getU32(&OffsetPtr);
       if (OffsetPtr == PreReadOffset)
         return createStringError(
             std::make_error_code(std::errc::executable_format_error),
-            "Failed reading thread id field at offset %" PRId64 ".", OffsetPtr);
+            "Failed reading thread id field at offset %d.", OffsetPtr);
 
       PreReadOffset = OffsetPtr;
       Record.PId = Reader.getU32(&OffsetPtr);
       if (OffsetPtr == PreReadOffset)
         return createStringError(
             std::make_error_code(std::errc::executable_format_error),
-            "Failed reading process id at offset %" PRId64 ".", OffsetPtr);
+            "Failed reading process id at offset %d.", OffsetPtr);
 
       break;
     }
@@ -158,23 +155,21 @@ Error loadNaiveFormatLog(StringRef Data, bool IsLittleEndian,
       if (OffsetPtr == PreReadOffset)
         return createStringError(
             std::make_error_code(std::errc::executable_format_error),
-            "Failed reading function id field at offset %" PRId64 ".",
-            OffsetPtr);
+            "Failed reading function id field at offset %d.", OffsetPtr);
 
       PreReadOffset = OffsetPtr;
       auto TId = Reader.getU32(&OffsetPtr);
       if (OffsetPtr == PreReadOffset)
         return createStringError(
             std::make_error_code(std::errc::executable_format_error),
-            "Failed reading thread id field at offset %" PRId64 ".", OffsetPtr);
+            "Failed reading thread id field at offset %d.", OffsetPtr);
 
       PreReadOffset = OffsetPtr;
       auto PId = Reader.getU32(&OffsetPtr);
       if (OffsetPtr == PreReadOffset)
         return createStringError(
             std::make_error_code(std::errc::executable_format_error),
-            "Failed reading process id field at offset %" PRId64 ".",
-            OffsetPtr);
+            "Failed reading process id field at offset %d.", OffsetPtr);
 
       // Make a check for versions above 3 for the Pid field
       if (Record.FuncId != FuncId || Record.TId != TId ||
@@ -183,7 +178,7 @@ Error loadNaiveFormatLog(StringRef Data, bool IsLittleEndian,
             std::make_error_code(std::errc::executable_format_error),
             "Corrupted log, found arg payload following non-matching "
             "function+thread record. Record for function %d != %d at offset "
-            "%" PRId64 ".",
+            "%d",
             Record.FuncId, FuncId, OffsetPtr);
 
       PreReadOffset = OffsetPtr;
@@ -191,8 +186,7 @@ Error loadNaiveFormatLog(StringRef Data, bool IsLittleEndian,
       if (OffsetPtr == PreReadOffset)
         return createStringError(
             std::make_error_code(std::errc::executable_format_error),
-            "Failed reading argument payload at offset %" PRId64 ".",
-            OffsetPtr);
+            "Failed reading argument payload at offset %d.", OffsetPtr);
 
       Record.CallArgs.push_back(Arg);
       break;
@@ -200,8 +194,7 @@ Error loadNaiveFormatLog(StringRef Data, bool IsLittleEndian,
     default:
       return createStringError(
           std::make_error_code(std::errc::executable_format_error),
-          "Unknown record type '%d' at offset %" PRId64 ".", RecordType,
-          OffsetPtr);
+          "Unknown record type '%d' at offset %d.", RecordType, OffsetPtr);
     }
     // Advance the offset pointer enough bytes to align to 32-byte records for
     // basic mode logs.
@@ -272,7 +265,7 @@ Error loadFDRLog(StringRef Data, bool IsLittleEndian,
                              "Not enough bytes for an XRay FDR log.");
   DataExtractor DE(Data, IsLittleEndian, 8);
 
-  uint64_t OffsetPtr = 0;
+  uint32_t OffsetPtr = 0;
   auto FileHeaderOrError = readBinaryFormatHeader(DE, OffsetPtr);
   if (!FileHeaderOrError)
     return FileHeaderOrError.takeError();
@@ -410,7 +403,6 @@ Expected<Trace> llvm::xray::loadTraceFile(StringRef Filename, bool Sort) {
   auto TraceOrError = loadTrace(LittleEndianDE, Sort);
   if (!TraceOrError) {
     DataExtractor BigEndianDE(Data, false, 8);
-    consumeError(TraceOrError.takeError());
     TraceOrError = loadTrace(BigEndianDE, Sort);
   }
   return TraceOrError;
@@ -432,7 +424,7 @@ Expected<Trace> llvm::xray::loadTrace(const DataExtractor &DE, bool Sort) {
   // Only if we can't load either the binary or the YAML format will we yield an
   // error.
   DataExtractor HeaderExtractor(DE.getData(), DE.isLittleEndian(), 8);
-  uint64_t OffsetPtr = 0;
+  uint32_t OffsetPtr = 0;
   uint16_t Version = HeaderExtractor.getU16(&OffsetPtr);
   uint16_t Type = HeaderExtractor.getU16(&OffsetPtr);
 

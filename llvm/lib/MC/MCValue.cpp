@@ -54,5 +54,8 @@ MCSymbolRefExpr::VariantKind MCValue::getAccessVariant() const {
   if (!A)
     return MCSymbolRefExpr::VK_None;
 
-  return A->getKind();
+  MCSymbolRefExpr::VariantKind Kind = A->getKind();
+  if (Kind == MCSymbolRefExpr::VK_WEAKREF)
+    return MCSymbolRefExpr::VK_None;
+  return Kind;
 }

@@ -6,10 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_DATAFORMATTERS_TYPESUMMARY_H
-#define LLDB_DATAFORMATTERS_TYPESUMMARY_H
+#ifndef lldb_TypeSummary_h_
+#define lldb_TypeSummary_h_
 
-#include <cstdint>
+#include <stdint.h>
 
 #include <functional>
 #include <memory>
@@ -38,8 +38,8 @@ public:
   TypeSummaryOptions &SetCapping(lldb::TypeSummaryCapping);
 
 private:
-  lldb::LanguageType m_lang = lldb::eLanguageTypeUnknown;
-  lldb::TypeSummaryCapping m_capping = lldb::eTypeSummaryCapped;
+  lldb::LanguageType m_lang;
+  lldb::TypeSummaryCapping m_capping;
 };
 
 class TypeSummaryImpl {
@@ -52,7 +52,7 @@ public:
 
   class Flags {
   public:
-    Flags() = default;
+    Flags() : m_flags(lldb::eTypeOptionCascade) {}
 
     Flags(const Flags &other) : m_flags(other.m_flags) {}
 
@@ -196,7 +196,7 @@ public:
     void SetValue(uint32_t value) { m_flags = value; }
 
   private:
-    uint32_t m_flags = lldb::eTypeOptionCascade;
+    uint32_t m_flags;
   };
 
   bool Cascades() const { return m_flags.GetCascades(); }
@@ -270,8 +270,7 @@ protected:
 
 private:
   Kind m_kind;
-  TypeSummaryImpl(const TypeSummaryImpl &) = delete;
-  const TypeSummaryImpl &operator=(const TypeSummaryImpl &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(TypeSummaryImpl);
 };
 
 // simple string-based summaries, using ${var to show data
@@ -298,8 +297,7 @@ struct StringSummaryFormat : public TypeSummaryImpl {
   }
 
 private:
-  StringSummaryFormat(const StringSummaryFormat &) = delete;
-  const StringSummaryFormat &operator=(const StringSummaryFormat &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(StringSummaryFormat);
 };
 
 // summaries implemented via a C++ function
@@ -322,7 +320,7 @@ struct CXXFunctionSummaryFormat : public TypeSummaryImpl {
 
   const char *GetTextualInfo() const { return m_description.c_str(); }
 
-  void SetBackendFunction(Callback cb_func) { m_impl = std::move(cb_func); }
+  void SetBackendFunction(Callback cb_func) { m_impl = cb_func; }
 
   void SetTextualInfo(const char *descr) {
     if (descr)
@@ -343,9 +341,7 @@ struct CXXFunctionSummaryFormat : public TypeSummaryImpl {
   typedef std::shared_ptr<CXXFunctionSummaryFormat> SharedPointer;
 
 private:
-  CXXFunctionSummaryFormat(const CXXFunctionSummaryFormat &) = delete;
-  const CXXFunctionSummaryFormat &
-  operator=(const CXXFunctionSummaryFormat &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(CXXFunctionSummaryFormat);
 };
 
 // Python-based summaries, running script code to show data
@@ -391,9 +387,8 @@ struct ScriptSummaryFormat : public TypeSummaryImpl {
   typedef std::shared_ptr<ScriptSummaryFormat> SharedPointer;
 
 private:
-  ScriptSummaryFormat(const ScriptSummaryFormat &) = delete;
-  const ScriptSummaryFormat &operator=(const ScriptSummaryFormat &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(ScriptSummaryFormat);
 };
 } // namespace lldb_private
 
-#endif // LLDB_DATAFORMATTERS_TYPESUMMARY_H
+#endif // lldb_TypeSummary_h_

@@ -26,13 +26,13 @@ NVPTXTargetStreamer::~NVPTXTargetStreamer() = default;
 
 void NVPTXTargetStreamer::outputDwarfFileDirectives() {
   for (const std::string &S : DwarfFiles)
-    getStreamer().emitRawText(S.data());
+    getStreamer().EmitRawText(S.data());
   DwarfFiles.clear();
 }
 
 void NVPTXTargetStreamer::closeLastSection() {
   if (HasSections)
-    getStreamer().emitRawText("\t}");
+    getStreamer().EmitRawText("\t}");
 }
 
 void NVPTXTargetStreamer::emitDwarfFileDirective(StringRef Directive) {
@@ -94,8 +94,7 @@ void NVPTXTargetStreamer::changeSection(const MCSection *CurSection,
     outputDwarfFileDirectives();
     OS << "\t.section";
     Section->PrintSwitchToSection(*getStreamer().getContext().getAsmInfo(),
-                                  getStreamer().getContext().getTargetTriple(),
-                                  OS, SubSection);
+                                  FI->getTargetTriple(), OS, SubSection);
     // DWARF sections are enclosed into braces - emit the open one.
     OS << "\t{\n";
     HasSections = true;
@@ -129,7 +128,7 @@ void NVPTXTargetStreamer::emitRawBytes(StringRef Data) {
       if (Label == Directive)
         Label = ",";
     }
-    Streamer.emitRawText(OS.str());
+    Streamer.EmitRawText(OS.str());
   }
 #endif
 }

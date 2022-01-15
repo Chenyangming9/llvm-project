@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLDB_TARGET_THREADPLANCALLFUNCTION_H
-#define LLDB_TARGET_THREADPLANCALLFUNCTION_H
+#ifndef liblldb_ThreadPlanCallFunction_h_
+#define liblldb_ThreadPlanCallFunction_h_
 
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadPlan.h"
@@ -81,7 +81,7 @@ public:
   // stop reason. But if something bad goes wrong, it is nice to be able to
   // tell the user what really happened.
 
-  virtual lldb::StopInfoSP GetRealStopInfo() {
+  lldb::StopInfoSP GetRealStopInfo() override {
     if (m_real_stop_info_sp)
       return m_real_stop_info_sp;
     else
@@ -90,7 +90,7 @@ public:
 
   lldb::addr_t GetStopAddress() { return m_stop_address; }
 
-  void RestoreThreadState() override;
+  bool RestoreThreadState() override;
 
   void ThreadDestroyed() override { m_takedown_done = true; }
 
@@ -146,11 +146,9 @@ protected:
 
 private:
   CompilerType m_return_type;
-  ThreadPlanCallFunction(const ThreadPlanCallFunction &) = delete;
-  const ThreadPlanCallFunction &
-  operator=(const ThreadPlanCallFunction &) = delete;
+  DISALLOW_COPY_AND_ASSIGN(ThreadPlanCallFunction);
 };
 
 } // namespace lldb_private
 
-#endif // LLDB_TARGET_THREADPLANCALLFUNCTION_H
+#endif // liblldb_ThreadPlanCallFunction_h_
