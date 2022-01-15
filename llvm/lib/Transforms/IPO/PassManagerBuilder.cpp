@@ -246,9 +246,17 @@ PassManagerBuilder::PassManagerBuilder() {
     PerformThinLTO = EnablePerformThinLTO;
     DivergentTarget = false;
     CallGraphProfile = true;
+    
+    // Initialization of the global cryptographically
+    // secure pseudo-random generator
+   if(!AesSeed.empty()) {
+       if(!llvm::cryptoutils->prng_seed(AesSeed.c_str()))
+           exit(1);
+   }
+
 }
 
-PassManagerBuilder::~PassManagerBuilder() {
+PassManagerBuilder::~PassManagerBuilder() {   
   delete LibraryInfo;
   delete Inliner;
 }
