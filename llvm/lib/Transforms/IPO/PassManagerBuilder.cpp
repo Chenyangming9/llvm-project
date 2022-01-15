@@ -246,7 +246,7 @@ PassManagerBuilder::PassManagerBuilder() {
     PerformThinLTO = EnablePerformThinLTO;
     DivergentTarget = false;
     CallGraphProfile = true;
-    
+
     // Initialization of the global cryptographically
     // secure pseudo-random generator
    if(!AesSeed.empty()) {
