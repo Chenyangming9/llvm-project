@@ -52,6 +52,13 @@
 #include "llvm/Transforms/Vectorize/SLPVectorizer.h"
 #include "llvm/Transforms/Vectorize/VectorCombine.h"
 
+#include "llvm/CryptoUtils.h"
+#include "llvm/Transforms/Obfuscation/BogusControlFlow.h"
+#include "llvm/Transforms/Obfuscation/Flattening.h"
+#include "llvm/Transforms/Obfuscation/Split.h"
+#include "llvm/Transforms/Obfuscation/StringObfuscation.h"
+#include "llvm/Transforms/Obfuscation/Substitution.h"
+
 using namespace llvm;
 
 namespace llvm {
@@ -187,6 +194,25 @@ cl::opt<AttributorRunOption> AttributorRun(
                           "enable call graph SCC attributor runs"),
                clEnumValN(AttributorRunOption::NONE, "none",
                           "disable attributor runs")));
+
+// Flags for obfuscation
+static cl::opt<bool> Flattening("fla", cl::init(false),
+                                cl::desc("Enable the flattening pass"));
+
+static cl::opt<bool> BogusControlFlow("bcf", cl::init(false),
+                                      cl::desc("Enable bogus control flow"));
+
+static cl::opt<bool> Substitution("sub", cl::init(false),
+                                  cl::desc("Enable instruction substitutions"));
+
+static cl::opt<std::string> AesSeed("aesSeed", cl::init(""),
+                                    cl::desc("seed for the AES-CTR PRNG"));
+
+static cl::opt<bool> Split("split", cl::init(false),
+                           cl::desc("Enable basic block splitting"));
+
+static cl::opt<bool> StringObf("sobf", cl::init(false),
+                               cl::desc("Enable the string obfuscation"));
 
 extern cl::opt<bool> EnableKnowledgeRetention;
 } // namespace llvm
@@ -669,6 +695,16 @@ void PassManagerBuilder::populateModulePassManager(
 
   // Allow forcing function attributes as a debugging and tuning aid.
   MPM.add(createForceFunctionAttrsLegacyPass());
+
+    MPM.add(createSplitBasicBlock(Split));
+    MPM.add(createBogus(BogusControlFlow));
+    if (Flattening) {
+        // Lower switch
+        MPM.add(createLowerSwitchPass());
+    }
+    MPM.add(createFlattening(Flattening));
+    MPM.add(createSubstitution(Substitution));
+    MPM.add(createStringObfuscation(StringObf));
 
   // If all optimizations are disabled, just run the always-inline pass and,
   // if enabled, the function merging pass.
