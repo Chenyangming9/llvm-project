@@ -73,3 +73,4 @@ llvm/cmake-build-release
 llvm/cmake-build-release-bak
 build_release
 build_release_make
+build_*
