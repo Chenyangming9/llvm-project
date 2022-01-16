@@ -58,6 +58,7 @@
 #include "llvm/Transforms/Obfuscation/Split.h"
 #include "llvm/Transforms/Obfuscation/StringObfuscation.h"
 #include "llvm/Transforms/Obfuscation/Substitution.h"
+#include "llvm/Transforms/DcPass2Clang.h"
 
 using namespace llvm;
 
@@ -213,7 +214,8 @@ static cl::opt<bool> Split("split", cl::init(false),
 
 static cl::opt<bool> StringObf("sobf", cl::init(false),
                                cl::desc("Enable the string obfuscation"));
-
+static cl::opt<bool> DcPass2Clang("dc2clang", cl::init(false),
+                               cl::desc("dc test print func names"));
 extern cl::opt<bool> EnableKnowledgeRetention;
 } // namespace llvm
 
@@ -713,7 +715,10 @@ void PassManagerBuilder::populateModulePassManager(
     MPM.add(createFlattening(Flattening));
     MPM.add(createSubstitution(Substitution));
     MPM.add(createStringObfuscation(StringObf));
-
+   //MPM.add(createDcPass2Clang(DcPass2Clang));
+    if(DcPass2Clang){
+        MPM.add(createDcPass2Clang());
+    }
   // If all optimizations are disabled, just run the always-inline pass and,
   // if enabled, the function merging pass.
   if (OptLevel == 0) {
