@@ -1,3 +1,6 @@
+#简短说明
+对 llvm13.x 中集成 ollvm 功能和 llvm12.x 一样，代码可以完全 ollvm12.x 拿过来。但是使用时，除了加 混淆参数（如：-mllvm -fla）外，还需另外加上编译选项 -fno-experimental-new-pass-manager 才能让混淆生效（这个是本人卡了好几天的坑）。
+
 # The LLVM Compiler Infrastructure
 
 This directory and its sub-directories contain source code for LLVM,
